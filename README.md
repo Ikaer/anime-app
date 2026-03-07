@@ -36,10 +36,12 @@ docker-compose up -d
 
 Copy `.env.example` to `.env.local` and fill in:
 - `MAL_CLIENT_ID` — MyAnimeList API client ID ([get one here](https://myanimelist.net/apiconfig))
-- `MAL_REDIRECT_URI` — OAuth redirect URI
+- `MAL_REDIRECT_URI` — OAuth redirect URI (should match what you set in MAL API config, e.g., `http://[NAS_IP]:12350/api/auth/callback`)
 - `CRON_SECRET` — secret for cron job authentication
+optional;
+- `BUILD_VERSION` — ideal to force cache busting 
 
 ## Access
 
-Once deployed, access at: `http://[NAS_IP]:12344`
+Once deployed, access at: `http://[NAS_IP]:12350`
 
