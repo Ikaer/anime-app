@@ -1,0 +1,283 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: var(--bg-secondary);
+  overflow-y: auto;
+}
+
+.topRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid #444;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  box-sizing: border-box;
+}
+
+.layoutSelector {
+  display: flex;
+  gap:0.5rem;
+}
+
+.layoutBtn {
+  flex:1;
+}
+
+
+
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.searchInput::placeholder {
+  color: #888;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.button,
+.viewButton {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button:hover:not(:disabled) {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-primary-hover);
+}
+
+.connectButton {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.connectButton:hover:not(:disabled) {
+  background-color: var(--accent-primary-hover);
+}
+
+.disconnectButton {
+  background-color: #dc2626;
+  border-color: #dc2626;
+  color: white;
+}
+
+.disconnectButton:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.connectedAccount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.buttonGroup .button {
+  flex: 1;
+  text-align: center;
+}
+
+.error {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+.viewList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.viewButton {
+  width: 100%;
+}
+
+.activeView {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+  font-weight: 700;
+}
+
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.checkboxLabel input {
+  margin-right: 0.5rem;
+}
+
+.statsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.evolutionSelector {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.evolutionSelector select {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+}
+
+.displayOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.displayLabel {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.imageSizeButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sizeButton {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.sizeButton:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-primary-hover);
+}
+
+.activeSizeButton {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+  font-weight: 700;
+}
+
+.columnsVisibility {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.columnsLabel {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.columnCheckboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.columnCheckboxes .checkboxLabel {
+  font-size: 0.85rem;
+}
+
+.scoreRangeInputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.scoreInput {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.scoreInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.rangeSeparator {
+  color: var(--text-secondary);
+  font-weight: 500;
+}

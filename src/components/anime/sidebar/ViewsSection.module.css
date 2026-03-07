@@ -1,0 +1,14 @@
+.viewsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.viewButton {
+  text-align: left;
+  width: 100%;
+}
+
+.viewButton:hover {
+  border-color: var(--accent-primary);
+}

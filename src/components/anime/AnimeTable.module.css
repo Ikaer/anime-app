@@ -1,0 +1,517 @@
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid #374151;
+  border-radius: 8px;
+  background: #1f2937;
+  /* Improve scrolling behavior for high zoom */
+  scroll-behavior: smooth;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem;
+  background: #111827;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  border: 1px solid #374151;
+  border-bottom: none;
+}
+
+.evolutionSelectorContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.animeTable {
+  width: 100%;
+  border-collapse: collapse;
+  background: #1f2937;
+  color: #f9fafb;
+  table-layout: auto;
+  /* Allow flexible column sizing for responsive behavior */
+  min-width: 1200px;
+  /* Ensure minimum width for proper layout */
+}
+
+.animeTable th,
+.animeTable td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #374151;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.animeTable th {
+  background: #111827;
+  font-weight: 600;
+  color: #d1d5db;
+  position: sticky;
+  top: 0;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  background: #1f2937;
+}
+
+.imageCell {
+  width: 4rem;
+  /* Use rem units for better zoom scaling */
+  min-width: 4rem;
+  text-align: center;
+}
+
+.imageCellOriginal {
+  width: auto;
+  min-width: 0;
+}
+
+.animeImage {
+  object-fit: cover;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.imageSize0 {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+}
+
+.imageSize1 {
+  width: 80px;
+  height: 112px;
+}
+
+.imageSize2 {
+  width: 160px;
+  height: 224px;
+}
+
+.imageSize3 {
+  width: 225px;
+  height: 315px;
+}
+
+
+
+.noImage {
+  width: 80px;
+  height: 112px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  transition: all 0.2s ease;
+}
+
+.titleCell {
+  min-width: 12rem;
+  /* Use rem for better scaling */
+  max-width: 20rem;
+  width: 20%;
+}
+
+.primaryTitle {
+  font-weight: 500;
+  color: #f9fafb;
+}
+
+.altTitle {
+  font-size: 0.85rem;
+  color: #d1d5db;
+  /* Between primary title and genres */
+  margin-top: 0.15rem;
+  font-weight: 400;
+}
+
+.japaneseTitle {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+}
+
+.scoreCell {
+  width: 5rem;
+  /* Use rem for better scaling */
+  min-width: 5rem;
+  text-align: center;
+}
+
+.score {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.score10 {
+  background: var(--score-10);
+  color: #ffffff;
+}
+
+.score9 {
+  background: var(--score-9);
+  color: #ffffff;
+}
+
+.score8 {
+  background: var(--score-8);
+  color: #064e3b;
+}
+
+.score7 {
+  background: var(--score-7);
+  color: #1a2e05;
+}
+
+.score6 {
+  background: var(--score-6);
+  color: #422006;
+}
+
+.score5 {
+  background: var(--score-5);
+  color: #451a03;
+}
+
+.score4 {
+  background: var(--score-4);
+  color: #431407;
+}
+
+.score3 {
+  background: var(--score-3);
+  color: #ffffff;
+}
+
+.score2 {
+  background: var(--score-2);
+  color: #ffffff;
+}
+
+.score1 {
+  background: var(--score-1);
+  color: #ffffff;
+}
+
+.scoreNA {
+  background: var(--score-na);
+  color: #ffffff;
+}
+
+.statusCell {
+  width: 8rem;
+  /* Use rem for better scaling */
+  min-width: 8rem;
+}
+
+.malStatusCell {
+  width: 8rem;
+  /* Use rem for better scaling */
+  min-width: 8rem;
+  text-align: center;
+}
+
+.malScoreCell {
+  width: 5rem;
+  /* Use rem for better scaling */
+  min-width: 5rem;
+  text-align: center;
+}
+
+.malEpisodesCell {
+  width: 6rem;
+  /* Use rem for better scaling */
+  min-width: 6rem;
+  text-align: center;
+}
+
+.malEpisodes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status.currentlyAiring {
+  background: #047857;
+  color: #d1fae5;
+}
+
+.status.finishedAiring {
+  background: #4338ca;
+  color: #e0e7ff;
+}
+
+.status.notYetAired {
+  background: #d97706;
+  color: #fef3c7;
+}
+
+.malStatus {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  width: 100%;
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: #f9fafb;
+}
+
+.malStatus.watching {
+  background: #3b82f6;
+  color: white;
+}
+
+.malStatus.completed {
+  background: #10b981;
+  color: white;
+}
+
+.malStatus.onHold {
+  background: #f59e0b;
+  color: white;
+}
+
+.malStatus.dropped {
+  background: #ef4444;
+  color: white;
+}
+
+.malStatus.planToWatch {
+  background: #8b5cf6;
+  color: white;
+}
+
+.episodesCell {
+  width: 5rem;
+  /* Use rem for better scaling */
+  min-width: 5rem;
+  text-align: center;
+}
+
+.seasonCell {
+  width: 7rem;
+  /* Use rem for better scaling */
+  min-width: 7rem;
+  text-align: center;
+  font-size: 0.875rem;
+}
+
+.genresCell {
+  max-width: 10rem;
+  /* Use rem for better scaling */
+  min-width: 8rem;
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+
+.linksCell {
+  width: 12rem;
+  /* Use rem for better scaling */
+  min-width: 12rem;
+}
+
+
+
+
+
+
+.justWatchIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 3rem;
+  color: #9ca3af;
+}
+
+.malScore {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+  min-width: 40px;
+  width: 100%;
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: #f9fafb;
+}
+
+.malScore.editable {
+  background: #374151;
+  border: 1px solid #4b5563;
+  cursor: pointer;
+  color: #f9fafb;
+}
+
+.malScore.editable:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+}
+
+.episodeCounter {
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  color: #f9fafb;
+  font-size: 0.875rem;
+  min-width: 30px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.episodeCounter:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+}
+
+
+
+/* Actions button group for proper alignment */
+.actionsButtonGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  /* Reduced gap to fit more buttons */
+  flex-wrap: wrap;
+  /* Allow wrapping for high zoom scenarios */
+  justify-content: flex-start;
+}
+
+/* Override margin for buttons inside button group */
+.actionsButtonGroup button,
+.actionsButtonGroup a {
+  margin-right: 0 !important;
+  flex-shrink: 0;
+  /* Prevent buttons from shrinking */
+  min-width: fit-content;
+  /* Ensure buttons maintain their size */
+}
+
+/* Responsive improvements for high zoom scenarios (300% zoom on 4K displays) */
+@media (max-width: 1600px) {
+  .animeTable {
+    min-width: 1000px;
+    /* Reduce minimum width for smaller viewports */
+  }
+
+  .titleCell {
+    max-width: 15rem;
+    /* Reduce max width for title */
+  }
+
+  .genresCell {
+    max-width: 8rem;
+    /* Reduce genres column width */
+  }
+}
+
+/* For very high zoom levels or smaller screens */
+@media (max-width: 1200px) {
+  .animeTable {
+    min-width: 800px;
+    /* Further reduce minimum width */
+    font-size: 0.875rem;
+    /* Slightly smaller text for better fit */
+  }
+
+  .animeTable th,
+  .animeTable td {
+    padding: 0.5rem;
+    /* Reduce padding for more compact layout */
+  }
+
+  .actionsButtonGroup {
+    gap: 0.125rem;
+    /* Even smaller gap between buttons */
+  }
+}
+
+.evolutionPeriodSelector {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin-left: 8px;
+}
+
+.genresInTitle {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+}
+
+.meCell {
+  width: 8rem;
+  min-width: 8rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.meCell>div {
+  margin-bottom: 4px;
+}
+
+.meCell>div:last-child {
+  margin-bottom: 0;
+}
+
+.meCell>*+* {
+  margin-top: 0.5rem;
+}
+
+.metric {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+
+.change {
+  font-weight: bold;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.increase {
+  color: #4caf50;
+  /* Green */
+}
+
+.decrease {
+  color: #f44336;
+  /* Red */
+}
+
+.neutral {
+  color: var(--text-secondary);
+}

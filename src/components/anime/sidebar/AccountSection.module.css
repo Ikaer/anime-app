@@ -1,0 +1,25 @@
+.accountsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.connectedAccount {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.connectedAccount span {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  padding: 8px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}

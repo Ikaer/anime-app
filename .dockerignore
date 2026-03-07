@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*.local
+.DS_Store
+*.tgz
+*.tar.gz
+.git
+.gitignore
+README.md
+docs/
+# Keep public directory for static assets
+!public/

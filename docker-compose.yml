@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  anime-tracker:
+    image: anime-tracker:${BUILD_VERSION:-latest}
+    build: 
+      context: .
+      args:
+        - BUILD_DATE=2025-07-14-v4
+    ports:
+      - "12350:3000"
+    volumes:
+      - /volume4/root4/AppData/AnimeTracker/data:/app/data
+      - /volume4/root4/AppData/AnimeTracker/logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - DATA_PATH=/app/data
+      - LOGS_PATH=/app/logs
+      - CRON_SECRET=mysecretcronjobkey # Change this in production
+    restart: unless-stopped
+    container_name: anime-tracker
+    user: "0:0"
+
+  cron:
+    image: alpine:latest
+    depends_on:
+      - anime-tracker
+    command: >
+      sh -c "apk add --no-cache curl && printf '0 2 * * * curl -X POST -H \"Authorization: Bearer mysecretcronjobkey\" -H \"Content-Type: application/json\" -d \"{\\\"origin\\\":\\\"docker cron job\\\"}\" http://anime-tracker:3000/api/anime/cron-sync\n' > /etc/crontabs/root && crond -f -d 8"
+    restart: unless-stopped
+    container_name: anime-tracker-cron

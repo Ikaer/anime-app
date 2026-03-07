@@ -1,0 +1,41 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.chipActive {
+  background: #374151;
+  border-color: #4B5563;
+}
+.chipsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.addRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.remove {
+  margin-left: 6px;
+  opacity: 0.8;
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-width: auto;
+}

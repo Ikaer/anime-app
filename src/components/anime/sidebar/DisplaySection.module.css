@@ -1,0 +1,30 @@
+.displaySection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.label {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.sizeButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.sizeButton {
+  flex: 1;
+}
+
+.sizeButton:hover {
+  border-color: var(--accent-primary);
+}
+
+.activeSizeButton {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}

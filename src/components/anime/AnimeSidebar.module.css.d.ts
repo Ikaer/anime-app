@@ -1,0 +1,35 @@
+declare const styles: {
+  readonly "activeSizeButton": string;
+  readonly "activeView": string;
+  readonly "button": string;
+  readonly "buttonGroup": string;
+  readonly "checkboxLabel": string;
+  readonly "columnCheckboxes": string;
+  readonly "columnsLabel": string;
+  readonly "columnsVisibility": string;
+  readonly "connectButton": string;
+  readonly "connectedAccount": string;
+  readonly "disconnectButton": string;
+  readonly "displayLabel": string;
+  readonly "displayOptions": string;
+  readonly "error": string;
+  readonly "evolutionSelector": string;
+  readonly "filterGroup": string;
+  readonly "imageSizeButtons": string;
+  readonly "layoutBtn": string;
+  readonly "layoutSelector": string;
+  readonly "rangeSeparator": string;
+  readonly "scoreInput": string;
+  readonly "scoreRangeInputs": string;
+  readonly "searchInput": string;
+  readonly "section": string;
+  readonly "sectionTitle": string;
+  readonly "sidebar": string;
+  readonly "sizeButton": string;
+  readonly "statsContainer": string;
+  readonly "topRow": string;
+  readonly "viewButton": string;
+  readonly "viewList": string;
+};
+export = styles;
+
