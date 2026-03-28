@@ -130,7 +130,10 @@ export default function AnimeCardView({
 
     return (
         <div className={styles.cardGrid}>
-            {animes.map((anime) => (
+            {animes.map((anime) => {
+                const hasPendingChanges = pendingUpdates.has(anime.id);
+
+                return (
                 <div key={anime.id} className={styles.card}>
                     <div className={styles.imageContainer}>
                         {anime.main_picture?.large || anime.main_picture?.medium ? (
@@ -224,15 +227,15 @@ export default function AnimeCardView({
                                             </Button>
                                     </div>
                                 </div>
-                                {pendingUpdates.has(anime.id) && (
-                                        <Button
-                                            variant="primary"
-                                            size="xs"
-                                            onClick={() => handleUpdateMAL(anime.id)}
-                                        >
-                                            Update MAL
-                                        </Button>
-                                )}
+                                <Button
+                                    variant="primary"
+                                    size="xs"
+                                    onClick={() => handleUpdateMAL(anime.id)}
+                                    disabled={!hasPendingChanges}
+                                    title={hasPendingChanges ? 'Apply pending MAL changes' : 'Change status/score/episodes to enable'}
+                                >
+                                    Update MAL
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -276,7 +279,8 @@ export default function AnimeCardView({
                         </div>
                     </div>
                 </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
