@@ -23,6 +23,12 @@ export default function Layout({ children }: LayoutProps) {
               >
                 Anime
               </Link>
+              <Link
+                href="/rate"
+                className={`nav-link ${router.pathname === '/rate' ? 'active' : ''}`}
+              >
+                Rating Calculator
+              </Link>
             </nav>
           </div>
         </div>
