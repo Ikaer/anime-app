@@ -21,7 +21,11 @@ There are no tests in this project.
 
 All filter and display state lives in the URL query string. The `useAnimeUrlState` hook in [src/hooks/useAnimeUrlState.ts](src/hooks/useAnimeUrlState.ts) parses the URL into `filters` and `display` objects, and exposes updaters that call `router.push`. `applyPreset` replaces filter state while preserving persistent UI keys (layout, imageSize, etc.). Empty URLs are redirected to a default preset.
 
-URL encoding/decoding and the preset logic live in [src/lib/animeUrlParams.ts](src/lib/animeUrlParams.ts).
+URL encoding/decoding and the preset logic (`VIEW_PRESETS`) live in [src/lib/animeUrlParams.ts](src/lib/animeUrlParams.ts).
+
+`minScore`/`maxScore` filter MAL's `mean` score, NOT the user's personal score (`my_list_status.score`).
+
+Adding a new filter dimension touches ~6 spots: `AnimeFiltersState` + `DEFAULT_FILTERS` + `PARAM_KEYS` + encode/decode in `animeUrlParams.ts`, the `filters` memo in `useAnimeUrlState.ts`, request-param building in `index.tsx`, the handler in `api/anime/animes/index.ts`, and the `AnimeListResponse.filters` echo type.
 
 ### Data storage: JSON files, no database
 
