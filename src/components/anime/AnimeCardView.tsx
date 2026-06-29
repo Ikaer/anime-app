@@ -31,10 +31,23 @@ export default function AnimeCardView({
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const copyToClipboard = useCallback((text: string, key: string) => {
-        navigator.clipboard.writeText(text).then(() => {
+        const done = () => {
             setCopiedKey(key);
             setTimeout(() => setCopiedKey(null), 1500);
-        });
+        };
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(done);
+        } else {
+            const el = document.createElement('textarea');
+            el.value = text;
+            el.style.position = 'fixed';
+            el.style.opacity = '0';
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            done();
+        }
     }, []);
 
     if (animes.length === 0) {

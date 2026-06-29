@@ -78,3 +78,6 @@ import { ... } from '@/lib/animeUrlParams';
 ### Docker deployment
 
 Multi-stage build, `next build --output standalone`, port `12344:3000`. Volume mounts for `/app/data` and `/app/logs`. See [Dockerfile](Dockerfile) and [docker-compose.yml](docker-compose.yml).
+
+### Browser API constraints (production)
+The NAS serves the app over HTTP (not HTTPS). Secure-context-only APIs (`navigator.clipboard`, etc.) are unavailable in production but work on localhost. Always provide a `document.execCommand` fallback for clipboard operations.
