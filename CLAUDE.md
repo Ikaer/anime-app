@@ -30,8 +30,9 @@ All data is stored as JSON files under `DATA_PATH` (env var, defaults to `/app/d
 - `animes_extensions.json` — user extensions (providers, notes) keyed by anime ID
 - `animes_hidden.json` — array of hidden anime IDs
 - `mal_auth.json` — OAuth token + user data
+- `sync_checkpoint.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`)
 
-[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 60s in-process cache on `getAnimeWithExtensions()`. Invalidate by calling `loadAnimes()` after mutations.
+[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 10-min in-process cache on `getAnimeWithExtensions()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveMALAnime`, `saveAnimeExtensions`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness.
 
 ### CSS Modules with generated typings
 
@@ -48,6 +49,7 @@ All component styles use CSS Modules (`ComponentName.module.css`). Type definiti
 
 - `/api/anime/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)
 - `/api/anime/big-sync` — full seasonal sync, fetches 8 years of seasons + upcoming ranking via MAL API, SSE progress streaming
+- `/api/anime/historical-crawl` — GET returns crawl stats; POST runs a 5-season batch crawl going back to 1960. Uses a module-level lock to prevent concurrent runs. Cron-sync also calls this directly from lib after triggering big-sync.
 - `/api/anime/cron-sync` — cron-triggered, authenticated via `CRON_SECRET` header
 
 ### Environment variables
@@ -59,6 +61,10 @@ All component styles use CSS Modules (`ComponentName.module.css`). Type definiti
 | `MAL_CLIENT_ID` | MyAnimeList OAuth app client ID |
 | `MAL_REDIRECT_URI` | OAuth redirect URI |
 | `CRON_SECRET` | Auth token for cron-sync endpoint |
+
+### Client components importing from `@/lib/anime`
+
+`@/lib/anime` uses Node.js `fs`/`path` and must never be bundled client-side. When a client component needs a type from it, use `import type { ... } from '@/lib/anime'` — the `type` keyword ensures the import is erased at compile time and the module is never included in the browser bundle.
 
 ### Import aliases
 
