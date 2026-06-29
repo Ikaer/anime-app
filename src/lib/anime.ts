@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeExtension, AnimeWithExtensions, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus } from '@/models/anime';
+import { MALAnime, AnimeWithExtensions, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus } from '@/models/anime';
 // Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
 // User preferences removed - all state now controlled via URL
 
@@ -8,7 +8,6 @@ const DATA_PATH = process.env.DATA_PATH || '/app/data';
 
 // File paths
 const ANIME_MAL_FILE = path.join(DATA_PATH, 'animes_MAL.json');
-const ANIME_EXTENSIONS_FILE = path.join(DATA_PATH, 'animes_extensions.json');
 const ANIME_HIDDEN_FILE = path.join(DATA_PATH, 'animes_hidden.json');
 const MAL_AUTH_FILE = path.join(DATA_PATH, 'mal_auth.json');
 
@@ -85,33 +84,6 @@ export function upsertMALAnime(newAnime: MALAnime[]): void {
   saveMALAnime(existingAnime);
 }
 
-// Extension data operations
-export function getAllAnimeExtensions(): Record<string, AnimeExtension> {
-  return readJsonFile(ANIME_EXTENSIONS_FILE, {});
-}
-
-export function saveAnimeExtensions(extensions: Record<string, AnimeExtension>): void {
-  writeJsonFile(ANIME_EXTENSIONS_FILE, extensions);
-  cachedAnime = null;
-}
-
-export function getAnimeExtension(malId: string): AnimeExtension | null {
-  const extensions = getAllAnimeExtensions();
-  return extensions[malId] || null;
-}
-
-export function saveAnimeExtension(malId: string, extension: AnimeExtension): void {
-  const extensions = getAllAnimeExtensions();
-  extensions[malId] = extension;
-  saveAnimeExtensions(extensions);
-}
-
-export function deleteAnimeExtension(malId: string): void {
-  const extensions = getAllAnimeExtensions();
-  delete extensions[malId];
-  saveAnimeExtensions(extensions);
-}
-
 // Combined data operations
 let cachedAnime: AnimeWithExtensions[] | null = null;
 let lastCacheTime = 0;
@@ -123,11 +95,9 @@ export function getAnimeWithExtensions(): AnimeWithExtensions[] {
     return cachedAnime;
   }
   const malAnime = getAllMALAnime();
-  const extensions = getAllAnimeExtensions();
   const hiddenIds = getHiddenAnimeIds();
   cachedAnime = Object.values(malAnime).map(anime => ({
     ...anime,
-    extensions: extensions[anime.id.toString()],
     hidden: hiddenIds.includes(anime.id)
   }));
   lastCacheTime = now;

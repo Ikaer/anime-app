@@ -87,20 +87,8 @@ export interface Studio {
   name: string;
 }
 
-// User extension data
-export interface AnimeProvider {
-  name: string;
-  url: string;
-}
-
-export interface AnimeExtension {
-  providers: AnimeProvider[];
-  notes: string;
-}
-
 // Combined data for display
 export interface AnimeWithExtensions extends MALAnime {
-  extensions?: AnimeExtension;
   hidden?: boolean;
 }
 

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { AnimeWithExtensions, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
-import { detectProviderFromUrl, getProviderLogoPath, generateGoogleORQuery, generateJustWatchQuery } from '@/lib/providers';
+import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { formatSeason, formatUserStatus } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
 import styles from './AnimeTable.module.css';
@@ -432,7 +432,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       variant="primary-positive"
                       size="xs"
                       square
-                      title="Search providers manually on Google"
+                      title="Search this anime on Google"
                     >
                       🔍
                     </Button>

@@ -27,12 +27,11 @@ URL encoding/decoding and the preset logic live in [src/lib/animeUrlParams.ts](s
 
 All data is stored as JSON files under `DATA_PATH` (env var, defaults to `/app/data`):
 - `animes_MAL.json` — MAL API data keyed by anime ID
-- `animes_extensions.json` — user extensions (providers, notes) keyed by anime ID
 - `animes_hidden.json` — array of hidden anime IDs
 - `mal_auth.json` — OAuth token + user data
 - `sync_checkpoint.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`)
 
-[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 10-min in-process cache on `getAnimeWithExtensions()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveMALAnime`, `saveAnimeExtensions`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness.
+[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 10-min in-process cache on `getAnimeWithExtensions()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveMALAnime`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness.
 
 ### CSS Modules with generated typings
 

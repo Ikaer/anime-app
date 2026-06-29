@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeWithExtensions, ImageSize, StatsColumn, VisibleColumns } from '@/models/anime';
 import {  formatUserStatus } from '@/lib/animeUtils';
-import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/providers';
+import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { Button } from '@/components/shared';
 import styles from './AnimeCardView.module.css';
 

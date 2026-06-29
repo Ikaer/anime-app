@@ -26,7 +26,7 @@ src/
 │   ├── anime.ts          # MAL data, sync, auth (server-side)
 │   ├── animeUtils.ts     # Anime filtering & sorting logic
 │   ├── animeUrlParams.ts # URL state parsing
-│   └── providers.ts      # Streaming provider definitions
+│   └── searchLinks.ts    # Google/JustWatch search-link generators
 └── styles/
     └── globals.css       # Global theme (CSS custom properties)
 ```
@@ -67,16 +67,12 @@ import { Button, CollapsibleSection } from '@/components/shared';
 ### API Routes
 All under `/api/anime/`:
 - `/api/anime/animes` — list/search anime
-- `/api/anime/animes/[id]` — single anime operations
-- `/api/anime/animes/[id]/extensions` — user extensions (providers, notes)
 - `/api/anime/animes/[id]/hide` — hide/unhide anime
 - `/api/anime/animes/[id]/mal-status` — update MAL watch status
-- `/api/anime/animes/[id]/providers` — streaming providers
 - `/api/anime/auth` — MAL OAuth flow
 - `/api/anime/sync` — manual sync
 - `/api/anime/big-sync` — full seasonal sync
 - `/api/anime/cron-sync` — cron-triggered sync
-- `/api/anime/discover-providers` — provider discovery
 
 ## Environment & Deployment
 
