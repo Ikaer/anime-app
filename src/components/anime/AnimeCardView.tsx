@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeWithExtensions, ImageSize, StatsColumn, VisibleColumns } from '@/models/anime';
 import {  formatUserStatus } from '@/lib/animeUtils';
@@ -28,6 +28,14 @@ export default function AnimeCardView({
     onHideToggle
 }: AnimeCardViewProps) {
     const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
+    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+    const copyToClipboard = useCallback((text: string, key: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopiedKey(key);
+            setTimeout(() => setCopiedKey(null), 1500);
+        });
+    }, []);
 
     if (animes.length === 0) {
         return (
@@ -240,9 +248,45 @@ export default function AnimeCardView({
                         </div>
                     </div>
                     <div className={styles.cardContent}>
-                        <div className={styles.title} title={anime.title}>{anime.title}</div>
+                        <div className={styles.titleRow}>
+                            <span className={styles.title} title={anime.title}>{anime.title}</span>
+                            <button
+                                className={`${styles.copyBtn} ${copiedKey === `${anime.id}-title` ? styles.copyBtnCopied : ''}`}
+                                onClick={() => copyToClipboard(anime.title, `${anime.id}-title`)}
+                                title="Copier le titre"
+                            >
+                                {copiedKey === `${anime.id}-title` ? (
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                ) : (
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                    </svg>
+                                )}
+                            </button>
+                        </div>
                         {anime.alternative_titles?.en && anime.alternative_titles.en !== anime.title && (
-                            <div className={styles.altTitle}>{anime.alternative_titles.en}</div>
+                            <div className={styles.titleRow}>
+                                <span className={styles.altTitle}>{anime.alternative_titles.en}</span>
+                                <button
+                                    className={`${styles.copyBtn} ${copiedKey === `${anime.id}-alt` ? styles.copyBtnCopied : ''}`}
+                                    onClick={() => copyToClipboard(anime.alternative_titles!.en!, `${anime.id}-alt`)}
+                                    title="Copier le titre alternatif"
+                                >
+                                    {copiedKey === `${anime.id}-alt` ? (
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                    ) : (
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
                         )}
                         <div className={styles.infoRow}>
                             {getDisplayStatus(anime) && (

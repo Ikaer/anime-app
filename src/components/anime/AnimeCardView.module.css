@@ -70,6 +70,13 @@
     gap: 0.5rem;
 }
 
+.titleRow {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.3rem;
+    margin-bottom: 0.25rem;
+}
+
 .title {
     font-weight: 700;
     font-size: 1.1rem;
@@ -80,7 +87,8 @@
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    margin-bottom: 0.25rem;
+    flex: 1;
+    min-width: 0;
 }
 
 .altTitle {
@@ -91,6 +99,36 @@
     line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    flex: 1;
+    min-width: 0;
+}
+
+.copyBtn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    color: var(--text-secondary);
+    opacity: 0;
+    transition: opacity 0.2s ease, color 0.2s ease;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+    margin-top: 2px;
+}
+
+.card:hover .copyBtn {
+    opacity: 1;
+}
+
+.copyBtn:hover {
+    color: var(--accent-primary);
+}
+
+.copyBtnCopied {
+    color: #10b981 !important;
+    opacity: 1 !important;
 }
 
 .infoRow {

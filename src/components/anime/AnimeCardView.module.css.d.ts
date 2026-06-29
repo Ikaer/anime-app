@@ -8,6 +8,8 @@ declare const styles: {
   readonly "cardContent": string;
   readonly "cardGrid": string;
   readonly "completed": string;
+  readonly "copyBtn": string;
+  readonly "copyBtnCopied": string;
   readonly "currentlyAiring": string;
   readonly "dropped": string;
   readonly "emptyState": string;
@@ -43,6 +45,7 @@ declare const styles: {
   readonly "searchBtn": string;
   readonly "status": string;
   readonly "title": string;
+  readonly "titleRow": string;
   readonly "topActions": string;
   readonly "watching": string;
 };
