@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeWithExtensions, ImageSize, StatsColumn, VisibleColumns } from '@/models/anime';
+import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns } from '@/models/anime';
 import {  formatUserStatus } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { Button } from '@/components/shared';
@@ -13,7 +13,7 @@ interface MALStatusUpdate {
 }
 
 interface AnimeCardViewProps {
-    animes: AnimeWithExtensions[];
+    animes: AnimeForDisplay[];
     imageSize: ImageSize;
     visibleColumns: VisibleColumns;
     onUpdateMALStatus?: (animeId: number, updates: MALStatusUpdate) => void;
@@ -80,29 +80,29 @@ export default function AnimeCardView({
         }
     };
 
-    const handleManualSearch = (anime: AnimeWithExtensions) => {
+    const handleManualSearch = (anime: AnimeForDisplay) => {
         const searchTitle = anime.alternative_titles?.en || anime.title;
         const googleUrl = generateGoogleORQuery(searchTitle);
         window.open(googleUrl, '_blank');
     };
 
-    const handleJustWatchSearch = (anime: AnimeWithExtensions) => {
+    const handleJustWatchSearch = (anime: AnimeForDisplay) => {
         const searchTitle = anime.alternative_titles?.en || anime.title;
         const justWatchUrl = generateJustWatchQuery(searchTitle);
         window.open(justWatchUrl, '_blank');
     };
 
-    const getDisplayStatus = (anime: AnimeWithExtensions) => {
+    const getDisplayStatus = (anime: AnimeForDisplay) => {
         const updates = pendingUpdates.get(anime.id);
         return updates?.status ?? anime.my_list_status?.status ?? '';
     };
 
-    const getDisplayScore = (anime: AnimeWithExtensions) => {
+    const getDisplayScore = (anime: AnimeForDisplay) => {
         const updates = pendingUpdates.get(anime.id);
         return updates?.score ?? anime.my_list_status?.score ?? 0;
     };
 
-    const getDisplayEpisodes = (anime: AnimeWithExtensions) => {
+    const getDisplayEpisodes = (anime: AnimeForDisplay) => {
         const updates = pendingUpdates.get(anime.id);
         return updates?.num_episodes_watched ?? anime.my_list_status?.num_episodes_watched ?? 0;
     };

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import { AnimeWithExtensions, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
+import { AnimeForDisplay, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { formatSeason, formatUserStatus } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
@@ -38,7 +38,7 @@ interface MALStatusUpdate {
 }
 
 interface AnimeTableProps {
-  animes: AnimeWithExtensions[];
+  animes: AnimeForDisplay[];
   imageSize: ImageSize;
   visibleColumns: VisibleColumns;
   sortColumn: SortColumn;
@@ -112,13 +112,13 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
 
   // Sorting is controlled by parent via props; no header click sorting here.
 
-  const handleManualSearch = (anime: AnimeWithExtensions) => {
+  const handleManualSearch = (anime: AnimeForDisplay) => {
     const searchTitle = anime.alternative_titles?.en || anime.title;
     const googleUrl = generateGoogleORQuery(searchTitle);
     window.open(googleUrl, '_blank');
   };
 
-  const handleJustWatchSearch = (anime: AnimeWithExtensions) => {
+  const handleJustWatchSearch = (anime: AnimeForDisplay) => {
     const searchTitle = anime.alternative_titles?.en || anime.title;
     const justWatchUrl = generateJustWatchQuery(searchTitle);
     window.open(justWatchUrl, '_blank');
@@ -160,17 +160,17 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     }
   };
 
-  const getDisplayStatus = (anime: AnimeWithExtensions) => {
+  const getDisplayStatus = (anime: AnimeForDisplay) => {
     const updates = pendingUpdates.get(anime.id);
     return updates?.status ?? anime.my_list_status?.status ?? '';
   };
 
-  const getDisplayScore = (anime: AnimeWithExtensions) => {
+  const getDisplayScore = (anime: AnimeForDisplay) => {
     const updates = pendingUpdates.get(anime.id);
     return updates?.score ?? anime.my_list_status?.score ?? 0;
   };
 
-  const getDisplayEpisodes = (anime: AnimeWithExtensions) => {
+  const getDisplayEpisodes = (anime: AnimeForDisplay) => {
     const updates = pendingUpdates.get(anime.id);
     return updates?.num_episodes_watched ?? anime.my_list_status?.num_episodes_watched ?? 0;
   };
@@ -225,7 +225,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     return new Date(dateString).toLocaleDateString();
   };
 
-  const getEnglishTitle = (anime: AnimeWithExtensions) => {
+  const getEnglishTitle = (anime: AnimeForDisplay) => {
     return anime.alternative_titles?.en || anime.title;
   };
 
@@ -240,7 +240,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   };
 
   const renderMetric = (
-    anime: AnimeWithExtensions,
+    anime: AnimeForDisplay,
     metric: 'rank' | 'popularity' | 'num_list_users' | 'num_scoring_users' | 'mean'
   ) => {
     let latestValue: number | undefined;

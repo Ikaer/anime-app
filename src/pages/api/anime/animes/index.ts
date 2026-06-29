@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAnimeWithExtensions } from '@/lib/anime';
-import { AnimeWithExtensions, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
+import { getAnimeForDisplay } from '@/lib/anime';
+import { AnimeForDisplay, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -27,7 +27,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     } = req.query;
 
     // Start from full dataset
-    let animeList = getAnimeWithExtensions();
+    let animeList = getAnimeForDisplay();
 
     // Pagination settings
     let pageLimit: number | 'all' = 200;
@@ -204,7 +204,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       animeList = animeList.map(anime => {
         // Keep genres and alternative_titles (english alt title needed for listing)
         const { synopsis, studios, source, rating, background, related_anime, related_manga, recommendations, ...rest } = anime as any;
-        return rest as AnimeWithExtensions;
+        return rest as AnimeForDisplay;
       });
     }
 

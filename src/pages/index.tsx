@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
-import { AnimeWithExtensions, MALAuthState, UserAnimeStatus, StatsColumn } from '@/models/anime';
+import { AnimeForDisplay, MALAuthState, UserAnimeStatus, StatsColumn } from '@/models/anime';
 import type { HistoricalCrawlStats } from '@/lib/anime';
 import { useAnimeUrlState } from '@/hooks';
 
@@ -23,7 +23,7 @@ export default function AnimePage() {
   const [historicalStats, setHistoricalStats] = useState<HistoricalCrawlStats | null>(null);
 
   // Data state
-  const [animes, setAnimes] = useState<AnimeWithExtensions[]>([]);
+  const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 

@@ -1,5 +1,5 @@
 // Utility function to format season display with nice labels and colors
-import { AnimeView, CalendarAnimeView, AnimeWithExtensions, UserAnimeStatus, SortColumn, SortDirection } from "@/models/anime";
+import { AnimeView, CalendarAnimeView, AnimeForDisplay, UserAnimeStatus, SortColumn, SortDirection } from "@/models/anime";
 
 export const formatSeason = (year: number, season: string) => {
   const seasonMap: Record<string, { label: string; color: string }> = {

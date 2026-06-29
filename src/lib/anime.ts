@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeWithExtensions, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus } from '@/models/anime';
 // Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
 // User preferences removed - all state now controlled via URL
 
@@ -85,11 +85,11 @@ export function upsertMALAnime(newAnime: MALAnime[]): void {
 }
 
 // Combined data operations
-let cachedAnime: AnimeWithExtensions[] | null = null;
+let cachedAnime: AnimeForDisplay[] | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 10 * 60_000; // 10 min
 
-export function getAnimeWithExtensions(): AnimeWithExtensions[] {
+export function getAnimeForDisplay(): AnimeForDisplay[] {
   const now = Date.now();
   if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
     return cachedAnime;

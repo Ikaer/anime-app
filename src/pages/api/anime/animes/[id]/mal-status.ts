@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllMALAnime, saveMALAnime, getMALAuthData } from '@/lib/anime';
-import { AnimeWithExtensions, MALAuthData } from '@/models/anime';
+import { AnimeForDisplay, MALAuthData } from '@/models/anime';
 
 interface MALStatusUpdate {
   status?: string;

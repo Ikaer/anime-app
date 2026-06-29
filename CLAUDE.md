@@ -31,7 +31,7 @@ All data is stored as JSON files under `DATA_PATH` (env var, defaults to `/app/d
 - `mal_auth.json` — OAuth token + user data
 - `sync_checkpoint.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`)
 
-[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 10-min in-process cache on `getAnimeWithExtensions()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveMALAnime`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness.
+[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 10-min in-process cache on `getAnimeForDisplay()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveMALAnime`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness.
 
 ### CSS Modules with generated typings
 
@@ -40,7 +40,7 @@ All component styles use CSS Modules (`ComponentName.module.css`). Type definiti
 ### Key data flow
 
 1. `index.tsx` fetches `/api/anime/animes` with filter params derived from the URL state
-2. API handler at [src/pages/api/anime/animes/index.ts](src/pages/api/anime/animes/index.ts) calls `getAnimeWithExtensions()` then applies filtering/sorting via [src/lib/animeUtils.ts](src/lib/animeUtils.ts)
+2. API handler at [src/pages/api/anime/animes/index.ts](src/pages/api/anime/animes/index.ts) calls `getAnimeForDisplay()` then applies filtering/sorting via [src/lib/animeUtils.ts](src/lib/animeUtils.ts)
 3. Results render in `AnimeTable` (table layout) or `AnimeCardView` (card layout), both inside `AnimePageLayout` with `AnimeSidebar`
 4. Sidebar sections in [src/components/anime/sidebar/](src/components/anime/sidebar/) drive URL updates via callbacks passed down from `index.tsx`
 

@@ -1,6 +1,6 @@
 /**
  * Anime-related interfaces and types
- * Based on MyAnimeList API structure and user extensions
+ * Based on MyAnimeList API structure
  */
 
 import { LiteralSubset } from "../shared";
@@ -88,7 +88,7 @@ export interface Studio {
 }
 
 // Combined data for display
-export interface AnimeWithExtensions extends MALAnime {
+export interface AnimeForDisplay extends MALAnime {
   hidden?: boolean;
 }
 
@@ -256,7 +256,7 @@ export interface AnimeUserPreferences {
 
 // API response model for anime list endpoint
 export interface AnimeListResponse {
-  animes: AnimeWithExtensions[];
+  animes: AnimeForDisplay[];
   total: number;
   // Filters echoed back as strings as they appear in query for traceability
   filters: {
