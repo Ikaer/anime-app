@@ -78,6 +78,9 @@ export default function AnimePage() {
       // Hidden
       params.set('hidden', filters.hiddenOnly ? 'true' : 'false');
 
+      // Unrated only (completed but not yet scored)
+      if (filters.unratedOnly) params.set('unrated', 'true');
+
       // Score range
       if (filters.minScore !== null) params.set('minScore', filters.minScore.toString());
       if (filters.maxScore !== null) params.set('maxScore', filters.maxScore.toString());

@@ -264,6 +264,7 @@ export interface AnimeListResponse {
     season: string | null;
     mediaType: string | null;
     hidden: string | null;
+    unrated: string | null;
     genres: string | null;
     status: string | null;
     minScore: string | null;

@@ -19,7 +19,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       season,
       mediaType,
       hidden,
-      sortBy = 'mean', 
+      unrated,
+      sortBy = 'mean',
       sortDir = 'desc',
       limit,
       offset,
@@ -93,6 +94,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         const isHidden = anime.hidden === true;
         return showHidden ? isHidden : !isHidden;
       });
+    }
+
+    // Apply unrated filter (in list but score is 0 / never scored)
+    if (unrated !== undefined && typeof unrated === 'string' && unrated.toLowerCase() === 'true') {
+      animeList = animeList.filter(anime => !anime.my_list_status?.score);
     }
 
     // Apply search filter
@@ -217,6 +223,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         season: (typeof season === 'string' ? season : null),
         mediaType: (typeof mediaType === 'string' ? mediaType : null),
         hidden: (typeof hidden === 'string' ? hidden : null),
+        unrated: (typeof unrated === 'string' ? unrated : null),
         genres: (typeof genres === 'string' ? genres : null),
         status: (typeof status === 'string' ? status : null),
         minScore: (typeof minScore === 'string' ? minScore : null),

@@ -30,6 +30,7 @@ export interface AnimeFiltersState {
   seasons: SeasonInfo[];
   mediaTypes: string[];
   hiddenOnly: boolean;
+  unratedOnly: boolean;
   minScore: number | null;
   maxScore: number | null;
   sortBy: SortColumn;
@@ -158,6 +159,7 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   seasons: [],
   mediaTypes: [],
   hiddenOnly: false,
+  unratedOnly: false,
   minScore: null,
   maxScore: null,
   sortBy: 'mean',
@@ -192,6 +194,7 @@ const PARAM_KEYS = {
   seasons: 'sn',
   mediaType: 'mt',
   hidden: 'h',
+  unrated: 'ur',
   minScore: 'min',
   maxScore: 'max',
   sort: 'so',
@@ -275,6 +278,10 @@ export function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLS
 
   if (filters.hiddenOnly) {
     params.set(PARAM_KEYS.hidden, '1');
+  }
+
+  if (filters.unratedOnly) {
+    params.set(PARAM_KEYS.unrated, '1');
   }
 
   if (filters.minScore !== null && filters.minScore !== undefined) {
@@ -425,6 +432,7 @@ export function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     seasons: decodeSeasons(params.get(PARAM_KEYS.seasons)),
     mediaTypes: decodeMediaTypes(params.get(PARAM_KEYS.mediaType)),
     hiddenOnly: params.get(PARAM_KEYS.hidden) === '1',
+    unratedOnly: params.get(PARAM_KEYS.unrated) === '1',
     minScore: params.has(PARAM_KEYS.minScore) ? parseFloat(params.get(PARAM_KEYS.minScore)!) : null,
     maxScore: params.has(PARAM_KEYS.maxScore) ? parseFloat(params.get(PARAM_KEYS.maxScore)!) : null,
     sortBy: CODE_TO_SORT[params.get(PARAM_KEYS.sort) || ''] || DEFAULT_FILTERS.sortBy,
@@ -559,6 +567,17 @@ export const VIEW_PRESETS: PresetConfig[] = [
     description: 'Completed shows',
     getState: () => ({
       statusFilters: ['completed'],
+      sortBy: 'title',
+      sortDir: 'asc',
+    }),
+  },
+  {
+    key: 'to_rate',
+    label: 'To Rate',
+    description: 'Completed shows you haven\'t scored yet',
+    getState: () => ({
+      statusFilters: ['completed'],
+      unratedOnly: true,
       sortBy: 'title',
       sortDir: 'asc',
     }),
