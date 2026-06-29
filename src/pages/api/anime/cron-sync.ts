@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid } from '@/lib/anime';
+import { getMALAuthData, isMALTokenValid, performHistoricalCrawl } from '@/lib/anime';
 
 // This is a simplified version of the big-sync trigger
 // It doesn't handle the SSE part, as it's meant for an automated cron job
@@ -50,7 +50,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     await startBigSync();
-    res.status(200).json({ message: 'Cron sync process initiated successfully.' });
+
+    // Crawl a small batch of historical seasons after big-sync fires
+    const crawlResult = await performHistoricalCrawl(token.access_token);
+    console.log(
+      `Historical crawl: ${crawlResult.processedSeasons} seasons, ${crawlResult.syncedCount} anime, ${crawlResult.stats.remaining} remaining`
+    );
+
+    res.status(200).json({
+      message: 'Cron sync process initiated successfully.',
+      historicalCrawl: {
+        processedSeasons: crawlResult.processedSeasons,
+        syncedCount: crawlResult.syncedCount,
+        remaining: crawlResult.stats.remaining,
+      },
+    });
   } catch (error) {
     console.error('Cron sync handler failed:', error);
     res.status(500).json({ 

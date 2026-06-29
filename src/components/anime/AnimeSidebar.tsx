@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from './AnimeSidebar.module.css';
 import { MALAuthState, UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
+import type { HistoricalCrawlStats } from '@/lib/anime';
 import { SeasonInfo } from './SeasonSelector';
 import { Button, CollapsibleSection } from '@/components/shared';
 import {
@@ -24,9 +25,12 @@ interface AnimeSidebarProps {
   // Sync
   isSyncing: boolean;
   isBigSyncing: boolean;
+  isHistoricalCrawling: boolean;
   syncError: string;
+  historicalStats: HistoricalCrawlStats | null;
   onSync: () => void;
   onBigSync: () => void;
+  onHistoricalCrawl: () => void;
 
   // Display
   imageSize: ImageSize;
@@ -70,7 +74,7 @@ interface AnimeSidebarProps {
 
 const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   authState, isAuthLoading, authError, onConnect, onDisconnect,
-  isSyncing, isBigSyncing, syncError, onSync, onBigSync,
+  isSyncing, isBigSyncing, isHistoricalCrawling, syncError, historicalStats, onSync, onBigSync, onHistoricalCrawl,
   imageSize, onImageSizeChange,
   statusFilters, onStatusFilterChange,
   searchQuery, onSearchChange,
@@ -143,9 +147,12 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           authState={authState}
           isSyncing={isSyncing}
           isBigSyncing={isBigSyncing}
+          isHistoricalCrawling={isHistoricalCrawling}
           syncError={syncError}
+          historicalStats={historicalStats}
           onSync={onSync}
           onBigSync={onBigSync}
+          onHistoricalCrawl={onHistoricalCrawl}
         />
       </CollapsibleSection>
 

@@ -54,6 +54,7 @@ export function addHiddenAnimeId(animeId: number): void {
   if (!hiddenIds.includes(animeId)) {
     hiddenIds.push(animeId);
     writeJsonFile(ANIME_HIDDEN_FILE, hiddenIds);
+    cachedAnime = null;
   }
 }
 
@@ -61,6 +62,7 @@ export function removeHiddenAnimeId(animeId: number): void {
   let hiddenIds = getHiddenAnimeIds();
   hiddenIds = hiddenIds.filter(id => id !== animeId);
   writeJsonFile(ANIME_HIDDEN_FILE, hiddenIds);
+  cachedAnime = null;
 }
 
 // MAL Anime data operations
@@ -70,6 +72,7 @@ export function getAllMALAnime(): Record<string, MALAnime> {
 
 export function saveMALAnime(animeData: Record<string, MALAnime>): void {
   writeJsonFile(ANIME_MAL_FILE, animeData);
+  cachedAnime = null;
 }
 
 export function upsertMALAnime(newAnime: MALAnime[]): void {
@@ -89,6 +92,7 @@ export function getAllAnimeExtensions(): Record<string, AnimeExtension> {
 
 export function saveAnimeExtensions(extensions: Record<string, AnimeExtension>): void {
   writeJsonFile(ANIME_EXTENSIONS_FILE, extensions);
+  cachedAnime = null;
 }
 
 export function getAnimeExtension(malId: string): AnimeExtension | null {
@@ -111,7 +115,7 @@ export function deleteAnimeExtension(malId: string): void {
 // Combined data operations
 let cachedAnime: AnimeWithExtensions[] | null = null;
 let lastCacheTime = 0;
-const CACHE_TTL_MS = 60_000; // 60s
+const CACHE_TTL_MS = 10 * 60_000; // 10 min
 
 export function getAnimeWithExtensions(): AnimeWithExtensions[] {
   const now = Date.now();
@@ -318,6 +322,147 @@ export function updatePersonalStatusBatch(
   }
 
   return stats;
+}
+
+// Historical crawl checkpoint
+
+const SYNC_CHECKPOINT_FILE = path.join(DATA_PATH, 'sync_checkpoint.json');
+const HISTORICAL_CRAWL_OLDEST_YEAR = 1960;
+const HISTORICAL_CRAWL_BATCH_SIZE = 5;
+const HISTORICAL_CRAWL_CONSECUTIVE_EMPTY_STOP = 8;
+
+// Module-level lock to prevent concurrent historical crawl runs
+let isHistoricalCrawlRunning = false;
+
+interface SyncCheckpoint {
+  syncedSeasons: string[];
+}
+
+export function getSyncCheckpoint(): SyncCheckpoint {
+  return readJsonFile<SyncCheckpoint>(SYNC_CHECKPOINT_FILE, { syncedSeasons: [] });
+}
+
+function markSeasonsSynced(seasons: string[]): void {
+  const checkpoint = getSyncCheckpoint();
+  const set = new Set(checkpoint.syncedSeasons);
+  seasons.forEach(s => set.add(s));
+  writeJsonFile(SYNC_CHECKPOINT_FILE, { syncedSeasons: Array.from(set) });
+}
+
+export interface HistoricalCrawlStats {
+  synced: number;
+  remaining: number;
+  total: number;
+  oldestSyncedYear: number | null;
+}
+
+export function getHistoricalCrawlStats(): HistoricalCrawlStats {
+  const currentYear = new Date().getFullYear();
+  const cutoffYear = currentYear - 9; // seasons older than big-sync's 8-year window
+  const allSeasons: string[] = [];
+  for (let year = cutoffYear; year >= HISTORICAL_CRAWL_OLDEST_YEAR; year--) {
+    for (const s of ['fall', 'summer', 'spring', 'winter']) {
+      allSeasons.push(`${year}-${s}`);
+    }
+  }
+  const syncedSet = new Set(getSyncCheckpoint().syncedSeasons);
+  const synced = allSeasons.filter(s => syncedSet.has(s)).length;
+  const remaining = allSeasons.length - synced;
+  const syncedYears = allSeasons
+    .filter(s => syncedSet.has(s))
+    .map(s => parseInt(s.split('-')[0], 10));
+  const oldestSyncedYear = syncedYears.length > 0 ? Math.min(...syncedYears) : null;
+  return { synced, remaining, total: allSeasons.length, oldestSyncedYear };
+}
+
+function getNextHistoricalBatch(batchSize: number): Array<{ year: number; season: string }> {
+  const currentYear = new Date().getFullYear();
+  const cutoffYear = currentYear - 9;
+  const syncedSet = new Set(getSyncCheckpoint().syncedSeasons);
+  const batch: Array<{ year: number; season: string }> = [];
+  outer: for (let year = cutoffYear; year >= HISTORICAL_CRAWL_OLDEST_YEAR; year--) {
+    for (const season of ['fall', 'summer', 'spring', 'winter']) {
+      if (!syncedSet.has(`${year}-${season}`)) {
+        batch.push({ year, season });
+        if (batch.length >= batchSize) break outer;
+      }
+    }
+  }
+  return batch;
+}
+
+export interface HistoricalCrawlResult {
+  success: boolean;
+  alreadyRunning: boolean;
+  syncedCount: number;
+  processedSeasons: number;
+  stats: HistoricalCrawlStats;
+  error?: string;
+}
+
+export async function performHistoricalCrawl(
+  accessToken: string,
+  batchSize: number = HISTORICAL_CRAWL_BATCH_SIZE
+): Promise<HistoricalCrawlResult> {
+  if (isHistoricalCrawlRunning) {
+    return { success: false, alreadyRunning: true, syncedCount: 0, processedSeasons: 0, stats: getHistoricalCrawlStats() };
+  }
+
+  isHistoricalCrawlRunning = true;
+  try {
+    const batch = getNextHistoricalBatch(batchSize);
+    if (batch.length === 0) {
+      return { success: true, alreadyRunning: false, syncedCount: 0, processedSeasons: 0, stats: getHistoricalCrawlStats() };
+    }
+
+    const allAnime: MALAnime[] = [];
+    const syncedKeys: string[] = [];
+    let consecutiveEmpty = 0;
+
+    for (const { year, season } of batch) {
+      const anime = await fetchSeasonalAnime(accessToken, year, season);
+      if (anime.length === 0) {
+        consecutiveEmpty++;
+      } else {
+        consecutiveEmpty = 0;
+        allAnime.push(...anime);
+      }
+      // Always mark as synced even if empty (empty = no anime that season on MAL)
+      syncedKeys.push(`${year}-${season}`);
+
+      if (consecutiveEmpty >= HISTORICAL_CRAWL_CONSECUTIVE_EMPTY_STOP) {
+        // Mark remaining batch items synced too so we skip past the dead zone
+        break;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    if (allAnime.length > 0) {
+      upsertMALAnime(allAnime);
+    }
+    markSeasonsSynced(syncedKeys);
+
+    return {
+      success: true,
+      alreadyRunning: false,
+      syncedCount: allAnime.length,
+      processedSeasons: syncedKeys.length,
+      stats: getHistoricalCrawlStats(),
+    };
+  } catch (error) {
+    console.error('Historical crawl error:', error);
+    return {
+      success: false,
+      alreadyRunning: false,
+      syncedCount: 0,
+      processedSeasons: 0,
+      stats: getHistoricalCrawlStats(),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  } finally {
+    isHistoricalCrawlRunning = false;
+  }
 }
 
 // Big Sync functionality

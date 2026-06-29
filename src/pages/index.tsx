@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
 import { AnimeWithExtensions, MALAuthState, UserAnimeStatus, StatsColumn } from '@/models/anime';
+import type { HistoricalCrawlStats } from '@/lib/anime';
 import { useAnimeUrlState } from '@/hooks';
 
 export default function AnimePage() {
@@ -17,12 +18,23 @@ export default function AnimePage() {
   // Sync state (not URL-controlled)
   const [isSyncing, setIsSyncing] = useState(false);
   const [isBigSyncing, setIsBigSyncing] = useState(false);
+  const [isHistoricalCrawling, setIsHistoricalCrawling] = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [historicalStats, setHistoricalStats] = useState<HistoricalCrawlStats | null>(null);
 
   // Data state
   const [animes, setAnimes] = useState<AnimeWithExtensions[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const fetchHistoricalStats = async () => {
+    try {
+      const res = await fetch('/api/anime/historical-crawl');
+      if (res.ok) setHistoricalStats(await res.json());
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
 
   const checkAuthStatus = async () => {
     try {
@@ -90,9 +102,10 @@ export default function AnimePage() {
     }
   }, [filters]);
 
-  // Check auth status on mount
+  // Check auth status and historical stats on mount
   useEffect(() => {
     checkAuthStatus();
+    fetchHistoricalStats();
   }, []);
 
   // Handle OAuth callback
@@ -179,6 +192,23 @@ export default function AnimePage() {
       setSyncError('Failed to start big sync.');
     } finally {
       setIsBigSyncing(false);
+    }
+  };
+
+  const handleHistoricalCrawl = async () => {
+    if (!authState.isAuthenticated) return;
+    setIsHistoricalCrawling(true);
+    setSyncError('');
+    try {
+      const res = await fetch('/api/anime/historical-crawl', { method: 'POST' });
+      if (!res.ok) throw new Error('Historical crawl failed');
+      const data = await res.json();
+      setHistoricalStats(data.stats);
+      loadAnimes();
+    } catch {
+      setSyncError('Failed to run historical crawl.');
+    } finally {
+      setIsHistoricalCrawling(false);
     }
   };
 
@@ -290,9 +320,12 @@ export default function AnimePage() {
       onDisconnect={handleDisconnect}
       isSyncing={isSyncing}
       isBigSyncing={isBigSyncing}
+      isHistoricalCrawling={isHistoricalCrawling}
       syncError={syncError}
+      historicalStats={historicalStats}
       onSync={handleSync}
       onBigSync={handleBigSync}
+      onHistoricalCrawl={handleHistoricalCrawl}
       imageSize={display.imageSize}
       onImageSizeChange={handleImageSizeChange}
       statusFilters={filters.statusFilters}
