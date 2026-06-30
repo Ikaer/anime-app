@@ -35,6 +35,11 @@ export interface AnimeFiltersState {
   maxScore: number | null;
   sortBy: SortColumn;
   sortDir: SortDirection;
+  // Recommendations feed marker (dedicated path, not filter-expressible).
+  // null = normal /api/anime/animes path.
+  view: 'for_you' | 'dismissed' | null;
+  nicheMode: boolean;
+  threshold: number | null;
 }
 
 export interface AnimeDisplayState {
@@ -118,6 +123,7 @@ const SIDEBAR_TO_CODE: Record<string, string> = {
   account: 'a',
   sync: 'sy',
   views: 'v',
+  recos: 're',
   display: 'd',
   filters: 'f',
   sort: 'so',
@@ -147,6 +153,7 @@ const DEFAULT_SIDEBAR_EXPANDED: Record<string, boolean> = {
   account: true,
   sync: true,
   views: true,
+  recos: true,
   display: true,
   filters: true,
   sort: true,
@@ -164,6 +171,9 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   maxScore: null,
   sortBy: 'mean',
   sortDir: 'desc',
+  view: null,
+  nicheMode: false,
+  threshold: null,
 };
 
 export const DEFAULT_DISPLAY: AnimeDisplayState = {
@@ -199,6 +209,10 @@ const PARAM_KEYS = {
   maxScore: 'max',
   sort: 'so',
   direction: 'd',
+  // Recommendations feed
+  view: 'vw',
+  nicheMode: 'niche',
+  threshold: 'thr',
   // Display
   imageSize: 'img',
   columns: 'cols',
@@ -298,6 +312,18 @@ export function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLS
 
   if (filters.sortDir) {
     params.set(PARAM_KEYS.direction, DIR_TO_CODE[filters.sortDir]);
+  }
+
+  if (filters.view) {
+    params.set(PARAM_KEYS.view, filters.view);
+  }
+
+  if (filters.nicheMode) {
+    params.set(PARAM_KEYS.nicheMode, '1');
+  }
+
+  if (filters.threshold !== null && filters.threshold !== undefined) {
+    params.set(PARAM_KEYS.threshold, filters.threshold.toString());
   }
 
   return params;
@@ -409,6 +435,7 @@ function decodeSidebarExpanded(value: string | null): Record<string, boolean> {
     account: false,
     sync: false,
     views: false,
+    recos: false,
     display: false,
     filters: false,
     sort: false,
@@ -437,7 +464,15 @@ export function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     maxScore: params.has(PARAM_KEYS.maxScore) ? parseFloat(params.get(PARAM_KEYS.maxScore)!) : null,
     sortBy: CODE_TO_SORT[params.get(PARAM_KEYS.sort) || ''] || DEFAULT_FILTERS.sortBy,
     sortDir: CODE_TO_DIR[params.get(PARAM_KEYS.direction) || ''] || DEFAULT_FILTERS.sortDir,
+    view: decodeView(params.get(PARAM_KEYS.view)),
+    nicheMode: params.get(PARAM_KEYS.nicheMode) === '1',
+    threshold: params.has(PARAM_KEYS.threshold) ? parseInt(params.get(PARAM_KEYS.threshold)!, 10) : null,
   };
+}
+
+function decodeView(value: string | null): 'for_you' | 'dismissed' | null {
+  if (value === 'for_you' || value === 'dismissed') return value;
+  return null;
 }
 
 export function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
@@ -495,6 +530,16 @@ export const PERSISTENT_UI_KEYS: (keyof AnimeUrlState)[] = [
 ];
 
 export const VIEW_PRESETS: PresetConfig[] = [
+  {
+    key: 'for_you',
+    label: 'Pour toi',
+    description: 'Recommandations personnalisées (titres non vus)',
+    getState: () => ({
+      view: 'for_you',
+      sortBy: 'mean',
+      sortDir: 'desc',
+    }),
+  },
   {
     key: 'new_season_strict',
     label: 'New Season (Strict)',

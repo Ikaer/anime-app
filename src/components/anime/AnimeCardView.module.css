@@ -260,6 +260,14 @@
     background: var(--score-na);
 }
 
+.recoHint {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
 .actions {
     display: flex;
     gap: 0.5rem;

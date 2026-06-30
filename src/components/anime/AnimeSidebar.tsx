@@ -9,6 +9,7 @@ import {
   AccountSection,
   DataSyncSection,
   ViewsSection,
+  RecommendationsSection,
   DisplaySection,
   FiltersSection,
   StatsSection
@@ -70,6 +71,18 @@ interface AnimeSidebarProps {
   // Layout
   layout: AnimeLayoutType;
   onLayoutChange: (l: AnimeLayoutType) => void;
+
+  // Recommendations
+  isRefreshingRecos: boolean;
+  recoProgress: string;
+  recoLastRefresh: string | null;
+  recoError: string;
+  nicheMode: boolean;
+  threshold: number | null;
+  onRefreshRecos: () => void;
+  onNicheModeChange: (v: boolean) => void;
+  onThresholdChange: (v: number | null) => void;
+  onShowDismissed: () => void;
 }
 
 const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
@@ -88,6 +101,8 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   sidebarExpanded, onSidebarExpandedChange,
   sortBy, sortDir, onSortByChange, onSortDirChange,
   layout, onLayoutChange,
+  isRefreshingRecos, recoProgress, recoLastRefresh, recoError, nicheMode, threshold,
+  onRefreshRecos, onNicheModeChange, onThresholdChange, onShowDismissed,
 }) => {
   // Section toggle now uses URL state
   const toggle = (key: string) => {
@@ -162,6 +177,26 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
         onToggle={() => toggle('views')}
       >
         <ViewsSection />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Recommandations"
+        isExpanded={sidebarExpanded.recos}
+        onToggle={() => toggle('recos')}
+      >
+        <RecommendationsSection
+          authState={authState}
+          isRefreshingRecos={isRefreshingRecos}
+          recoProgress={recoProgress}
+          recoLastRefresh={recoLastRefresh}
+          recoError={recoError}
+          nicheMode={nicheMode}
+          threshold={threshold}
+          onRefreshRecos={onRefreshRecos}
+          onNicheModeChange={onNicheModeChange}
+          onThresholdChange={onThresholdChange}
+          onShowDismissed={onShowDismissed}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection

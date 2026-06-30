@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns } from '@/models/anime';
+import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta } from '@/models/anime';
 import {  formatUserStatus } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { Button } from '@/components/shared';
@@ -12,12 +12,26 @@ interface MALStatusUpdate {
     num_episodes_watched?: number;
 }
 
+type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
+
 interface AnimeCardViewProps {
-    animes: AnimeForDisplay[];
+    animes: RecoCard[];
     imageSize: ImageSize;
     visibleColumns: VisibleColumns;
     onUpdateMALStatus?: (animeId: number, updates: MALStatusUpdate) => void;
     onHideToggle?: (animeId: number, hide: boolean) => void;
+    onDismiss?: (animeId: number, dismiss: boolean) => void;
+    /** 'feed' = show "écarter"; 'dismissed' = show "remettre"; null = neither. */
+    dismissMode?: 'feed' | 'dismissed' | null;
+}
+
+function formatRecoHint(meta: RecoMeta): string {
+    if (meta.topSeeds.length > 0) {
+        const top = meta.topSeeds[0];
+        return `Recommandé par les fans de ${top.title} · ${top.backers}`;
+    }
+    if (meta.fromSuggestions) return 'Suggéré pour toi';
+    return '';
 }
 
 export default function AnimeCardView({
@@ -25,7 +39,9 @@ export default function AnimeCardView({
     imageSize,
     visibleColumns,
     onUpdateMALStatus,
-    onHideToggle
+    onHideToggle,
+    onDismiss,
+    dismissMode
 }: AnimeCardViewProps) {
     const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -314,6 +330,9 @@ export default function AnimeCardView({
                                 </span>
                             )}
                         </div>
+                        {anime.recoMeta && formatRecoHint(anime.recoMeta) && (
+                            <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta)}</div>
+                        )}
                         <div className={styles.actions}>
                             <Button
                                 href={`https://myanimelist.net/anime/${anime.id}`}
@@ -325,14 +344,34 @@ export default function AnimeCardView({
                             >
                                 MAL
                             </Button>
-                            <Button
-                                onClick={() => onHideToggle?.(anime.id, !anime.hidden)}
-                                variant={anime.hidden ? 'primary-positive' : 'primary-negative'}
-                                size="xs"
-                                className={styles.actionButton}
-                            >
-                                {anime.hidden ? 'Unhide' : 'Hide'}
-                            </Button>
+                            {dismissMode === 'dismissed' ? (
+                                <Button
+                                    onClick={() => onDismiss?.(anime.id, false)}
+                                    variant="primary-positive"
+                                    size="xs"
+                                    className={styles.actionButton}
+                                >
+                                    ↩ Remettre
+                                </Button>
+                            ) : dismissMode === 'feed' ? (
+                                <Button
+                                    onClick={() => onDismiss?.(anime.id, true)}
+                                    variant="primary-negative"
+                                    size="xs"
+                                    className={styles.actionButton}
+                                >
+                                    ✕ Écarter
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={() => onHideToggle?.(anime.id, !anime.hidden)}
+                                    variant={anime.hidden ? 'primary-positive' : 'primary-negative'}
+                                    size="xs"
+                                    className={styles.actionButton}
+                                >
+                                    {anime.hidden ? 'Unhide' : 'Hide'}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>

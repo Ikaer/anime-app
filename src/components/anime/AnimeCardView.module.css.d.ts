@@ -30,6 +30,7 @@ declare const styles: {
   readonly "planToWatch": string;
   readonly "pulse": string;
   readonly "pulsingDot": string;
+  readonly "recoHint": string;
   readonly "score": string;
   readonly "score1": string;
   readonly "score10": string;
