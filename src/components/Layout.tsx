@@ -24,6 +24,12 @@ export default function Layout({ children }: LayoutProps) {
                 Anime
               </Link>
               <Link
+                href="/recommendations"
+                className={`nav-link ${router.pathname === '/recommendations' ? 'active' : ''}`}
+              >
+                ✨ Pour toi
+              </Link>
+              <Link
                 href="/rate"
                 className={`nav-link ${router.pathname === '/rate' ? 'active' : ''}`}
               >
