@@ -8,7 +8,7 @@
  */
 
 import { useRouter } from 'next/router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageSize } from '@/models/anime';
 
 export interface RecoUrlState {
@@ -92,6 +92,14 @@ export interface UseRecommendationsUrlStateReturn {
 export function useRecommendationsUrlState(): UseRecommendationsUrlStateReturn {
   const router = useRouter();
 
+  // Deterministic across SSR + first client render (starts false on both) to
+  // avoid a hydration mismatch; flips true only after mount once the router is
+  // ready. Mirrors useAnimeUrlState's readiness pattern.
+  const [isReady, setIsReady] = useState(false);
+  useEffect(() => {
+    if (router.isReady) setIsReady(true);
+  }, [router.isReady]);
+
   const queryString = useMemo(() => {
     if (!router.isReady) return '';
     const params = new URLSearchParams();
@@ -112,7 +120,7 @@ export function useRecommendationsUrlState(): UseRecommendationsUrlStateReturn {
     router.push(encode(next), undefined, { shallow: true });
   }, [state, router]);
 
-  return { state, update, isReady: router.isReady };
+  return { state, update, isReady };
 }
 
 export default useRecommendationsUrlState;
