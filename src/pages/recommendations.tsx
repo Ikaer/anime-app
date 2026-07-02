@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import { useRouter } from 'next/router';
 import { AnimePageLayout, AnimeCardView } from '@/components/anime';
 import {
   AccountSection,
@@ -16,7 +15,6 @@ import { useRecommendationsUrlState } from '@/hooks';
 type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
 
 export default function RecommendationsPage() {
-  const router = useRouter();
   const { state, update, isReady } = useRecommendationsUrlState();
 
   // Auth (needed to gate the refresh button).
@@ -176,10 +174,6 @@ export default function RecommendationsPage() {
 
   const sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
-      <Button variant="secondary" size="xs" onClick={() => router.push('/')}>
-        ← Retour à la liste
-      </Button>
-
       <CollapsibleSection title="Account" isExpanded={expanded.account} onToggle={() => toggle('account')}>
         <AccountSection
           authState={authState}
