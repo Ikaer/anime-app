@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/anime';
+import { applyNarrowingFilters } from '@/lib/animeUtils';
 import { AnimeForDisplay, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -78,14 +79,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    // Apply media type filter (NEW)
-    if (mediaType && typeof mediaType === 'string') {
-      const typeList = mediaType.split(',').map(t => t.trim().toLowerCase());
-      animeList = animeList.filter(anime =>
-        typeList.includes((anime.media_type || '').toLowerCase())
-      );
-    }
-
+    // Media type + search + score range are shared with the recommendations feed.
+    animeList = applyNarrowingFilters(animeList, {
+      mediaTypes: typeof mediaType === 'string' && mediaType.trim() !== ''
+        ? mediaType.split(',').map(t => t.trim()).filter(Boolean)
+        : undefined,
+      search: typeof search === 'string' ? search : undefined,
+      minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
+      maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
+    });
 
     // Apply hidden filter (NEW)
     if (hidden !== undefined && typeof hidden === 'string') {
@@ -99,17 +101,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // Apply unrated filter (in list but score is 0 / never scored)
     if (unrated !== undefined && typeof unrated === 'string' && unrated.toLowerCase() === 'true') {
       animeList = animeList.filter(anime => !anime.my_list_status?.score);
-    }
-
-    // Apply search filter
-    if (search && typeof search === 'string') {
-      const searchTerm = search.toLowerCase();
-      animeList = animeList.filter(anime => 
-        (anime.title || '').toLowerCase().includes(searchTerm) ||
-        (anime.alternative_titles?.en || '').toLowerCase().includes(searchTerm)
-        // Synopsis search commented out - too noisy without relevance ranking
-        // || (anime.synopsis || '').toLowerCase().includes(searchTerm)
-      );
     }
 
     // Apply genre filter
@@ -130,26 +121,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         }
         return statusList.includes(userStatus);
       });
-    }
-
-    // Apply minimum score filter
-    if (minScore && typeof minScore === 'string') {
-      const minScoreNum = parseFloat(minScore);
-      if (!isNaN(minScoreNum)) {
-        animeList = animeList.filter(anime =>
-          anime.mean && anime.mean >= minScoreNum
-        );
-      }
-    }
-
-    // Apply maximum score filter (NEW)
-    if (maxScore && typeof maxScore === 'string') {
-      const maxScoreNum = parseFloat(maxScore);
-      if (!isNaN(maxScoreNum)) {
-        animeList = animeList.filter(anime =>
-          anime.mean && anime.mean <= maxScoreNum
-        );
-      }
     }
 
     // Apply sorting

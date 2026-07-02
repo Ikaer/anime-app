@@ -48,6 +48,12 @@ All component styles use CSS Modules (`ComponentName.module.css`). Type definiti
 3. Results render in `AnimeTable` (table layout) or `AnimeCardView` (card layout), both inside `AnimePageLayout` with `AnimeSidebar`
 4. Sidebar sections in [src/components/anime/sidebar/](src/components/anime/sidebar/) drive URL updates via callbacks passed down from `index.tsx`
 
+### "Pour toi" recommendations — a dedicated page, NOT a view
+
+The recommendation feed is a **computed candidate set + affinity ranking**, which is not expressible as a filter combination. It therefore lives on its own route [src/pages/recommendations.tsx](src/pages/recommendations.tsx) with its own URL state ([useRecommendationsUrlState](src/hooks/useRecommendationsUrlState.ts)) — it does **not** pollute `AnimeFiltersState`/`VIEW_PRESETS`. The page composes the existing sidebar section components (Account, Recommendations, RecoFilters, Display) directly rather than reusing the monolithic `AnimeSidebar`.
+
+Ranking + fetch logic is in [src/lib/recommendations.ts](src/lib/recommendations.ts); endpoints under `src/pages/api/anime/recommendations/` (GET feed, POST refresh via SSE, POST/DELETE dismiss). The *narrowing* filters that DO apply to the feed (media type, search, `mean` score range) go through the shared `applyNarrowingFilters` in [src/lib/animeUtils.ts](src/lib/animeUtils.ts) — the same function the main `/api/anime/animes` handler uses, so there is one filter implementation, not two. Status filter and sort do NOT apply (replaced by the hard "unseen" filter and affinity ranking).
+
 ### MAL sync
 
 - `/api/anime/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)

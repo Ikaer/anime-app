@@ -27,12 +27,6 @@ export default function AnimePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Recommendations state (not URL-controlled)
-  const [isRefreshingRecos, setIsRefreshingRecos] = useState(false);
-  const [recoProgress, setRecoProgress] = useState('');
-  const [recoLastRefresh, setRecoLastRefresh] = useState<string | null>(null);
-  const [recoError, setRecoError] = useState('');
-
   const fetchHistoricalStats = async () => {
     try {
       const res = await fetch('/api/anime/historical-crawl');
@@ -60,27 +54,6 @@ export default function AnimePage() {
     try {
       setIsLoading(true);
       setError('');
-
-      // Recommendations feed paths (dedicated, outside the filter pipeline).
-      if (filters.view === 'for_you' || filters.view === 'dismissed') {
-        const recoParams = new URLSearchParams();
-        if (filters.view === 'dismissed') {
-          recoParams.set('dismissed', 'true');
-        } else {
-          if (filters.nicheMode) recoParams.set('nicheMode', 'true');
-          if (filters.threshold !== null) recoParams.set('threshold', filters.threshold.toString());
-        }
-        const recoRes = await fetch(`/api/anime/recommendations?${recoParams.toString()}`);
-        if (recoRes.ok) {
-          const data = await recoRes.json();
-          setAnimes(data.animes || []);
-          if (filters.view === 'for_you') setRecoLastRefresh(data.lastRefresh ?? null);
-        } else {
-          const errorData = await recoRes.json().catch(() => ({}));
-          setError(errorData.error || 'Failed to load recommendations');
-        }
-        return;
-      }
 
       const params = new URLSearchParams();
 
@@ -339,77 +312,6 @@ export default function AnimePage() {
     }
   };
 
-  // Recommendations handlers
-  const handleRefreshRecos = async () => {
-    if (!authState.isAuthenticated) return;
-    setIsRefreshingRecos(true);
-    setRecoError('');
-    setRecoProgress('Starting refresh...');
-    try {
-      const startParams = new URLSearchParams();
-      if (filters.nicheMode) startParams.set('nicheMode', 'true');
-      if (filters.threshold !== null) startParams.set('threshold', filters.threshold.toString());
-      const res = await fetch(`/api/anime/recommendations/refresh?${startParams.toString()}`, { method: 'POST' });
-      if (!res.ok) throw new Error('Failed to start refresh');
-      const { syncId } = await res.json();
-
-      // Stream progress over SSE (works over plain HTTP — not a secure-context API).
-      const es = new EventSource(`/api/anime/recommendations/refresh?syncId=${syncId}`);
-      es.onmessage = (event) => {
-        const p = JSON.parse(event.data);
-        if (p.message) setRecoProgress(p.message);
-        if (p.type === 'complete') {
-          es.close();
-          setIsRefreshingRecos(false);
-          setRecoProgress('');
-          loadAnimes();
-        } else if (p.type === 'error') {
-          es.close();
-          setIsRefreshingRecos(false);
-          setRecoProgress('');
-          setRecoError(p.details || p.error || 'Refresh failed');
-        }
-      };
-      es.onerror = () => {
-        es.close();
-        setIsRefreshingRecos(false);
-      };
-    } catch {
-      setRecoError('Failed to start recommendations refresh.');
-      setIsRefreshingRecos(false);
-      setRecoProgress('');
-    }
-  };
-
-  const handleDismissToggle = async (animeId: number, dismiss: boolean) => {
-    try {
-      const response = await fetch(`/api/anime/recommendations/dismiss/${animeId}`, {
-        method: dismiss ? 'POST' : 'DELETE',
-      });
-      if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.id !== animeId));
-      } else {
-        setError(`Failed to ${dismiss ? 'dismiss' : 'restore'} recommendation.`);
-      }
-    } catch {
-      setError(`Failed to ${dismiss ? 'dismiss' : 'restore'} recommendation.`);
-    }
-  };
-
-  const handleThresholdChange = (threshold: number | null) => {
-    updateFilters({ threshold });
-  };
-
-  const handleNicheModeChange = (nicheMode: boolean) => {
-    updateFilters({ nicheMode });
-  };
-
-  const handleShowDismissed = () => {
-    updateFilters({ view: 'dismissed' });
-  };
-
-  // View preset navigation is now handled by ViewsSection via router.push
-
   const sidebar = (
     <AnimeSidebar
       authState={authState}
@@ -452,16 +354,6 @@ export default function AnimePage() {
       onSortDirChange={handleSortDirChange}
       layout={display.layout}
       onLayoutChange={handleLayoutChange}
-      isRefreshingRecos={isRefreshingRecos}
-      recoProgress={recoProgress}
-      recoLastRefresh={recoLastRefresh}
-      recoError={recoError}
-      nicheMode={filters.nicheMode}
-      threshold={filters.threshold}
-      onRefreshRecos={handleRefreshRecos}
-      onNicheModeChange={handleNicheModeChange}
-      onThresholdChange={handleThresholdChange}
-      onShowDismissed={handleShowDismissed}
     />
   );
 
@@ -482,15 +374,13 @@ export default function AnimePage() {
           <div className="table-container">
             {!isReady || isLoading ? (
               <div className="loading-state">Loading...</div>
-            ) : (display.layout === 'card' || filters.view === 'for_you' || filters.view === 'dismissed') ? (
+            ) : display.layout === 'card' ? (
               <AnimeCardView
                 animes={animes}
                 imageSize={display.imageSize}
                 visibleColumns={display.visibleColumns}
                 onUpdateMALStatus={handleUpdateMALStatus}
                 onHideToggle={handleHideToggle}
-                onDismiss={handleDismissToggle}
-                dismissMode={filters.view === 'dismissed' ? 'dismissed' : filters.view === 'for_you' ? 'feed' : null}
               />
             ) : (
               <AnimeTable

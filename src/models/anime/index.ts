@@ -149,7 +149,7 @@ export type MediaType = 'tv' | 'movie' | 'ona' | 'ova' | 'special' | 'music';
 
 // View types
 export type AnimeLayoutType = 'table' | 'card';
-export type AnimeView = 'new_season' | 'new_season_strict' | 'next_season' | 'find_shows' | 'watching' | 'completed' | 'hidden' | 'dropped' | 'on_hold' | 'plan_to_watch' | 'for_you';
+export type AnimeView = 'new_season' | 'new_season_strict' | 'next_season' | 'find_shows' | 'watching' | 'completed' | 'hidden' | 'dropped' | 'on_hold' | 'plan_to_watch';
 
 // Recommendation match metadata attached to each card in the "Pour toi" feed.
 export interface RecoMeta {
@@ -172,7 +172,6 @@ export class AnimeViewHelper {
     dropped: 'dropped',
     on_hold: 'on_hold',
     plan_to_watch: 'plan_to_watch',
-    for_you: 'for_you'
   }
   private _exhausterCalendar: { [key in CalendarAnimeView]: CalendarAnimeView } = {
     new_season_strict: 'new_season_strict',

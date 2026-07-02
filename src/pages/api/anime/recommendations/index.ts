@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { computeFeed, getDismissedAnime, getRecommendationsData } from '@/lib/recommendations';
+import { applyNarrowingFilters } from '@/lib/animeUtils';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -8,11 +9,21 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { nicheMode, threshold, dismissed } = req.query;
+    const { nicheMode, threshold, dismissed, mediaType, search, minScore, maxScore } = req.query;
 
-    // "Écartés" view: list of dismissed anime (no ranking).
+    // Narrowing filters shared with /api/anime/animes (media type / search / mean range).
+    const narrowing = {
+      mediaTypes: typeof mediaType === 'string' && mediaType.trim() !== ''
+        ? mediaType.split(',').map(t => t.trim()).filter(Boolean)
+        : undefined,
+      search: typeof search === 'string' ? search : undefined,
+      minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
+      maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
+    };
+
+    // "Écartés" view: list of dismissed anime (no ranking, same narrowing).
     if (typeof dismissed === 'string' && dismissed.toLowerCase() === 'true') {
-      const animes = getDismissedAnime();
+      const animes = applyNarrowingFilters(getDismissedAnime(), narrowing);
       return res.json({ animes, total: animes.length, dismissed: true });
     }
 
@@ -22,7 +33,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       : null;
 
     const data = getRecommendationsData();
-    const animes = computeFeed({ nicheMode: niche, threshold: Number.isFinite(thr as number) ? thr : null });
+    const ranked = computeFeed({ nicheMode: niche, threshold: Number.isFinite(thr as number) ? thr : null });
+    const animes = applyNarrowingFilters(ranked, narrowing);
 
     res.json({
       animes,

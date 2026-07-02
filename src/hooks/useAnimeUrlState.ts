@@ -147,9 +147,6 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
     maxScore: currentState.maxScore,
     sortBy: currentState.sortBy,
     sortDir: currentState.sortDir,
-    view: currentState.view,
-    nicheMode: currentState.nicheMode,
-    threshold: currentState.threshold,
   }), [currentState]);
 
   // Memoize display to prevent unnecessary re-renders

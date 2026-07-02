@@ -1,3 +1,53 @@
+import type { AnimeForDisplay } from '@/models/anime';
+
+// ============================================================================
+// Narrowing filters (shared by /api/anime/animes and /api/anime/recommendations)
+// ============================================================================
+
+export interface NarrowingFilters {
+  mediaTypes?: string[];
+  search?: string;
+  minScore?: number | null;
+  maxScore?: number | null;
+}
+
+/**
+ * Apply the "narrowing" filter dimensions that make sense on any anime list —
+ * including the ranked recommendations feed. Deliberately excludes status,
+ * season, hidden and sort (those are page-specific). `minScore`/`maxScore`
+ * filter MAL's `mean` (not the personal score), matching CLAUDE.md.
+ * Generic over the item type so extra fields (e.g. `recoMeta`) survive.
+ */
+export function applyNarrowingFilters<T extends AnimeForDisplay>(
+  items: T[],
+  f: NarrowingFilters
+): T[] {
+  let out = items;
+
+  if (f.mediaTypes && f.mediaTypes.length > 0) {
+    const wanted = f.mediaTypes.map(t => t.toLowerCase());
+    out = out.filter(a => wanted.includes((a.media_type || '').toLowerCase()));
+  }
+
+  if (f.search && f.search.trim()) {
+    const term = f.search.toLowerCase();
+    out = out.filter(a =>
+      (a.title || '').toLowerCase().includes(term) ||
+      (a.alternative_titles?.en || '').toLowerCase().includes(term)
+    );
+  }
+
+  if (f.minScore != null && Number.isFinite(f.minScore)) {
+    out = out.filter(a => !!a.mean && a.mean >= f.minScore!);
+  }
+
+  if (f.maxScore != null && Number.isFinite(f.maxScore)) {
+    out = out.filter(a => !!a.mean && a.mean <= f.maxScore!);
+  }
+
+  return out;
+}
+
 // Utility function to format season display with nice labels and colors
 
 export const formatSeason = (year: number, season: string) => {
