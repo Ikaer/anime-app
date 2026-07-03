@@ -9,13 +9,16 @@
 
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ImageSize } from '@/models/anime';
+import { ImageSize, SourceWeights } from '@/models/anime';
+import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/recoWeights';
 
 export interface RecoUrlState {
   /** Engine: include 2-hop edges (damped) in the ranking. */
   nicheMode: boolean;
   /** Engine: ranking-time seed threshold override (null = stored default). */
   threshold: number | null;
+  /** Engine: per-source weights (resolved — defaults merged with URL overrides). */
+  weights: SourceWeights;
   /** Sub-view: show the "Écartés" (dismissed) list instead of the feed. */
   dismissed: boolean;
   /** Narrowing filters (shared semantics with the main list). */
@@ -30,6 +33,7 @@ export interface RecoUrlState {
 export const RECO_DEFAULTS: RecoUrlState = {
   nicheMode: false,
   threshold: null,
+  weights: DEFAULT_WEIGHTS,
   dismissed: false,
   mediaTypes: [],
   search: '',
@@ -41,6 +45,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
 const KEYS = {
   niche: 'niche',
   threshold: 'thr',
+  weights: 'w',
   dismissed: 'dis',
   mediaType: 'mt',
   search: 'q',
@@ -58,6 +63,7 @@ function decode(params: URLSearchParams): RecoUrlState {
   return {
     nicheMode: params.get(KEYS.niche) === '1',
     threshold: num(params.get(KEYS.threshold)),
+    weights: resolveWeights(parseSourceWeights(params.get(KEYS.weights))),
     dismissed: params.get(KEYS.dismissed) === '1',
     mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
     search: params.get(KEYS.search) || '',
@@ -73,13 +79,15 @@ function encode(state: RecoUrlState): string {
   const params = new URLSearchParams();
   if (state.nicheMode) params.set(KEYS.niche, '1');
   if (state.threshold !== null) params.set(KEYS.threshold, String(state.threshold));
+  const wStr = encodeSourceWeights(state.weights);
+  if (wStr) params.set(KEYS.weights, wStr);
   if (state.dismissed) params.set(KEYS.dismissed, '1');
   if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
   if (state.search) params.set(KEYS.search, state.search);
   if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
   if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
   if (state.imageSize !== RECO_DEFAULTS.imageSize) params.set(KEYS.imageSize, String(state.imageSize));
-  const qs = params.toString().replace(/%2C/g, ',');
+  const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';
 }
 

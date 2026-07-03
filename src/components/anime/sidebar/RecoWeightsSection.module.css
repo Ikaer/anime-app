@@ -1,0 +1,42 @@
+.weightsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.weightRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weightHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.weightLabel {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.weightValue {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.slider {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.weightHint {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.2;
+}

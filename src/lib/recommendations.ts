@@ -12,8 +12,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeForDisplay, RecoMeta } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
+import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
 const RECOMMENDATIONS_FILE = path.join(DATA_PATH, 'recommendations_MAL.json');
@@ -28,24 +29,11 @@ export const TUNING = {
   DEFAULT_SEED_THRESHOLD: 8,
   /** Damping λ applied to hop=2 edges (affinity *= λ^(hop-1)). */
   NICHE_DAMPING: 0.3,
-  /** Flat affinity boost for candidates present in MAL personal suggestions. */
-  SUGGESTION_BOOST: 50,
-  /** Popularity penalty floor: log10 input is clamped to >= this (avoids log10(0)). */
+  /** Popularity floor: log10 input is clamped to >= this (avoids log10(0)). */
   POPULARITY_FLOOR: 10,
-  /**
-   * Gentleness of the niche/popularity penalty: score /= (1 + K * log10(users)).
-   * Lower K = milder penalty. At K=0.2 an obscure (~1k users) title gets only a
-   * ~1.35x edge over a mega-popular one, vs the runaway ~1.9x of a raw 1/log10
-   * divisor — niche is nudged, not allowed to dominate.
-   */
-  POPULARITY_PENALTY_K: 0.2,
   /** A personal score <= this marks an anime as "rejected" (negative profile). */
   NEGATIVE_SCORE_THRESHOLD: 5,
-  /** Max multiplicative penalty from the negative profile (0..1). */
-  NEGATIVE_PENALTY_MAX: 0.6,
-  /** Strength of the positive genre/studio affinity booster. */
-  GENRE_STUDIO_ALPHA: 0.5,
-  /** Relative weight of genre vs studio overlap in a taste profile match. */
+  /** Relative weight of genre vs studio overlap in the rejection profile match. */
   GENRE_WEIGHT: 0.6,
   STUDIO_WEIGHT: 0.4,
   /** How many top seeds to surface per candidate for the match hint. */
@@ -57,6 +45,73 @@ export const TUNING = {
   /** Max retries on HTTP 429 before giving up on a single call. */
   MAX_429_RETRIES: 4,
 } as const;
+
+/** Metadata fields exposed as taste-profile sources, with their value extractor. */
+type MetaField = 'genre' | 'studio' | 'nsfw' | 'rating';
+type FieldValue = string | number;
+
+const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> = {
+  genre: a => (a.genres || []).map(g => g.name),
+  studio: a => (a.studios || []).map(s => s.id),
+  nsfw: a => (a.nsfw ? [a.nsfw] : []),
+  rating: a => (a.rating ? [a.rating] : []),
+};
+
+/**
+ * Inverse document frequency per value of a discrete field, over the whole
+ * corpus: `log(N / (1 + df))`. Rare studios / ratings get a high weight, so a
+ * shared `rx` rating or an obscure studio counts far more than a ubiquitous
+ * `pg_13`. This is the lever that makes low- and high-cardinality fields
+ * (rating ~6 values vs studios ~1000) comparable.
+ */
+function computeIdf(all: AnimeForDisplay[], extract: (a: AnimeForDisplay) => FieldValue[]): Map<FieldValue, number> {
+  const df = new Map<FieldValue, number>();
+  for (const a of all) {
+    for (const v of new Set(extract(a))) df.set(v, (df.get(v) || 0) + 1);
+  }
+  const N = all.length;
+  const idf = new Map<FieldValue, number>();
+  df.forEach((count, v) => idf.set(v, Math.log(N / (1 + count))));
+  return idf;
+}
+
+interface FieldProfile {
+  /** value -> taste weight in [0,1] (seed-weighted × IDF, normalized to max 1). */
+  weights: Map<FieldValue, number>;
+  extract: (a: AnimeForDisplay) => FieldValue[];
+}
+
+/** Build an IDF-scaled taste profile for one field from weighted seed animes. */
+function buildFieldProfile(
+  animes: AnimeForDisplay[],
+  weightFn: (a: AnimeForDisplay) => number,
+  extract: (a: AnimeForDisplay) => FieldValue[],
+  idf: Map<FieldValue, number>
+): FieldProfile {
+  const acc = new Map<FieldValue, number>();
+  for (const a of animes) {
+    const w = weightFn(a);
+    if (w <= 0) continue;
+    for (const v of new Set(extract(a))) acc.set(v, (acc.get(v) || 0) + w);
+  }
+  acc.forEach((v, k) => acc.set(k, v * (idf.get(k) ?? 0)));
+  normalize(acc);
+  return { weights: acc, extract };
+}
+
+/** Candidate's overlap with a field profile in [0,1], plus the matched values. */
+function fieldMatch(candidate: AnimeForDisplay, profile: FieldProfile): { score: number; matched: FieldValue[] } {
+  const vals = profile.extract(candidate);
+  if (vals.length === 0) return { score: 0, matched: [] };
+  let sum = 0;
+  const matched: FieldValue[] = [];
+  for (const v of vals) {
+    const w = profile.weights.get(v) || 0;
+    sum += w;
+    if (w > 0) matched.push(v);
+  }
+  return { score: sum / vals.length, matched };
+}
 
 /** Statuses that mean "already seen" — hard-excluded from the feed (spec §2). */
 const SEEN_STATUSES = new Set(['completed', 'watching', 'on_hold', 'dropped']);
@@ -131,6 +186,8 @@ export interface FeedOptions {
   nicheMode: boolean;
   /** Ranking-time seed threshold override; falls back to stored / default. */
   threshold?: number | null;
+  /** Per-source weight overrides; unset sources fall back to DEFAULT_WEIGHTS. */
+  weights?: Partial<SourceWeights>;
 }
 
 // ============================================================================
@@ -216,59 +273,13 @@ export function getSeeds(threshold: number): AnimeForDisplay[] {
 }
 
 // ============================================================================
-// Taste profiles (for ranking knobs)
+// Taste profiles (for the metadata ranking sources)
 // ============================================================================
-
-interface TasteProfile {
-  genres: Map<string, number>;
-  studios: Map<number, number>;
-}
-
-/** Build a weighted genre/studio profile, normalized so the max weight is 1. */
-function buildTasteProfile(
-  animes: AnimeForDisplay[],
-  weightFn: (a: AnimeForDisplay) => number
-): TasteProfile {
-  const genres = new Map<string, number>();
-  const studios = new Map<number, number>();
-  for (const a of animes) {
-    const w = weightFn(a);
-    if (w <= 0) continue;
-    for (const g of a.genres || []) {
-      genres.set(g.name, (genres.get(g.name) || 0) + w);
-    }
-    for (const s of a.studios || []) {
-      studios.set(s.id, (studios.get(s.id) || 0) + w);
-    }
-  }
-  normalize(genres);
-  normalize(studios);
-  return { genres, studios };
-}
 
 function normalize<K>(m: Map<K, number>): void {
   let max = 0;
   m.forEach(v => { if (v > max) max = v; });
   if (max > 0) m.forEach((v, k) => m.set(k, v / max));
-}
-
-/** Overlap of a candidate with a taste profile, in [0, 1]. */
-function profileMatch(candidate: AnimeForDisplay, profile: TasteProfile): number {
-  const cGenres = candidate.genres || [];
-  const cStudios = candidate.studios || [];
-  let genreScore = 0;
-  if (cGenres.length > 0) {
-    let sum = 0;
-    for (const g of cGenres) sum += profile.genres.get(g.name) || 0;
-    genreScore = sum / cGenres.length;
-  }
-  let studioScore = 0;
-  if (cStudios.length > 0) {
-    let sum = 0;
-    for (const s of cStudios) sum += profile.studios.get(s.id) || 0;
-    studioScore = sum / cStudios.length;
-  }
-  return TUNING.GENRE_WEIGHT * genreScore + TUNING.STUDIO_WEIGHT * studioScore;
 }
 
 /**
@@ -347,28 +358,44 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     }
   }
 
-  // Suggestions contribute a flat boost (they may have no crowd edges).
+  // Suggestions may have no crowd edges — ensure they're candidates (scored via
+  // the `suggestions` source below, not a baked-in affinity boost).
   for (const s of data.suggestions) {
-    let a = acc.get(s.id);
-    if (!a) { a = { affinity: 0, perSeed: new Map() }; acc.set(s.id, a); }
-    a.affinity += TUNING.SUGGESTION_BOOST;
+    if (!acc.has(s.id)) acc.set(s.id, { affinity: 0, perSeed: new Map() });
   }
 
-  // Build taste profiles once for the knobs.
-  const positiveProfile = buildTasteProfile(
-    getSeeds(threshold),
-    a => seedWeight(a.my_list_status!.score, threshold)
-  );
-  const negativeProfile = buildTasteProfile(
-    all.filter(a => {
-      const st = a.my_list_status?.status;
-      const sc = a.my_list_status?.score ?? 0;
-      return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
-    }),
-    () => 1
-  );
+  // Effective weights = defaults overridden by the caller's knobs.
+  const weights: SourceWeights = { ...DEFAULT_WEIGHTS, ...(options.weights || {}) };
 
-  const items: RecommendationItem[] = [];
+  // IDF-scaled taste profiles for the metadata sources (positive = liked seeds,
+  // negative = dropped / low-scored). IDF is computed once over the full corpus.
+  const seeds = getSeeds(threshold);
+  const seedW = (a: AnimeForDisplay) => seedWeight(a.my_list_status!.score, threshold);
+  const idf = {
+    genre: computeIdf(all, FIELD_EXTRACTORS.genre),
+    studio: computeIdf(all, FIELD_EXTRACTORS.studio),
+    nsfw: computeIdf(all, FIELD_EXTRACTORS.nsfw),
+    rating: computeIdf(all, FIELD_EXTRACTORS.rating),
+  };
+  const pos = {
+    genre: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.genre, idf.genre),
+    studio: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.studio, idf.studio),
+    nsfw: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.nsfw, idf.nsfw),
+    rating: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.rating, idf.rating),
+  };
+  const disliked = all.filter(a => {
+    const st = a.my_list_status?.status;
+    const sc = a.my_list_status?.score ?? 0;
+    return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
+  });
+  const negGenre = buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idf.genre);
+  const negStudio = buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idf.studio);
+
+  // Pass 1: apply hard filters and gather the maxima used to normalize the
+  // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
+  const eligible: { anime: AnimeForDisplay; a: Accumulator }[] = [];
+  let maxRaw = 0;
+  let maxUsers: number = TUNING.POPULARITY_FLOOR;
   for (const [candId, a] of acc) {
     const anime = byId.get(candId);
     if (!anime) continue; // not hydrated yet — skip
@@ -380,19 +407,76 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (hidden.has(candId)) continue;
     if (isPrematureSequel(anime, byId)) continue; // later season of an unwatched show
 
-    // Knobs (spec §5.2)
-    let score = a.affinity;
-    // Gentle, bounded niche penalty — never inflates, never lets the most obscure
-    // title run away with the feed (see TUNING.POPULARITY_PENALTY_K).
+    eligible.push({ anime, a });
+    if (a.affinity > maxRaw) maxRaw = a.affinity;
     const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
-    score = score / (1 + TUNING.POPULARITY_PENALTY_K * Math.log10(users));
-    score *= (1 - TUNING.NEGATIVE_PENALTY_MAX * profileMatch(anime, negativeProfile));
-    score *= (1 + TUNING.GENRE_STUDIO_ALPHA * profileMatch(anime, positiveProfile));
+    if (users > maxUsers) maxUsers = users;
+  }
+  const crowdDenom = Math.log(1 + maxRaw) || 1;
+  const popDenom = Math.log10(maxUsers) || 1;
+
+  // Pass 2: score each candidate as `Σ weight · normalizedSourceValue`, and
+  // retain the per-source breakdown for the on-demand "Pourquoi ?" explain.
+  const items: RecommendationItem[] = [];
+  for (const { anime, a } of eligible) {
+    const candId = anime.id;
+
+    const genreM = fieldMatch(anime, pos.genre);
+    const studioM = fieldMatch(anime, pos.studio);
+    const nsfwM = fieldMatch(anime, pos.nsfw);
+    const ratingM = fieldMatch(anime, pos.rating);
+    const negGenreM = fieldMatch(anime, negGenre);
+    const negStudioM = fieldMatch(anime, negStudio);
+    const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
+
+    const values: SourceWeights = {
+      crowd: maxRaw > 0 ? Math.log(1 + a.affinity) / crowdDenom : 0,
+      suggestions: suggestionIds.has(candId) ? 1 : 0,
+      genre: genreM.score,
+      studio: studioM.score,
+      nsfw: nsfwM.score,
+      rating: ratingM.score,
+      rejection: TUNING.GENRE_WEIGHT * negGenreM.score + TUNING.STUDIO_WEIGHT * negStudioM.score,
+      popularity: Math.log10(users) / popDenom,
+    };
 
     const topSeeds = Array.from(a.perSeed.entries())
       .sort((x, y) => y[1] - x[1])
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
       .map(([sid, backers]) => ({ id: sid, title: byId.get(sid)?.title || `#${sid}`, backers }));
+
+    const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
+    const details: Partial<Record<RecoSource, string | undefined>> = {
+      crowd: topSeeds.length ? `Fans de ${topSeeds.map(s => s.title).join(', ')}` : undefined,
+      suggestions: values.suggestions ? 'Dans tes suggestions MAL' : undefined,
+      genre: genreM.matched.length ? (genreM.matched as string[]).join(', ') : undefined,
+      studio: studioM.matched.length
+        ? studioM.matched.map(id => studioNames.get(id as number) || `#${id}`).join(', ')
+        : undefined,
+      nsfw: values.nsfw > 0 && anime.nsfw ? anime.nsfw : undefined,
+      rating: values.rating > 0 && anime.rating ? anime.rating.toUpperCase() : undefined,
+      rejection: (() => {
+        const parts = [
+          ...(negGenreM.matched as string[]),
+          ...negStudioM.matched.map(id => studioNames.get(id as number) || `#${id}`),
+        ];
+        return parts.length ? parts.join(', ') : undefined;
+      })(),
+      popularity: `${(anime.num_list_users || 0).toLocaleString('fr-FR')} membres`,
+    };
+
+    let score = 0;
+    const breakdown: RecoContribution[] = [];
+    (Object.keys(values) as RecoSource[]).forEach(src => {
+      const weight = weights[src];
+      const value = values[src];
+      const contribution = weight * value;
+      score += contribution;
+      if (weight !== 0 && value !== 0) {
+        breakdown.push({ source: src, value, weight, contribution, detail: details[src] });
+      }
+    });
+    breakdown.sort((x, y) => Math.abs(y.contribution) - Math.abs(x.contribution));
 
     items.push({
       ...anime,
@@ -400,6 +484,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
         affinityScore: score,
         topSeeds,
         fromSuggestions: suggestionIds.has(candId),
+        breakdown,
       },
     });
   }

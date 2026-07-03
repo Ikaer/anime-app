@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { computeFeed, getDismissedAnime, getRecommendationsData } from '@/lib/recommendations';
 import { applyNarrowingFilters } from '@/lib/animeUtils';
+import { parseSourceWeights } from '@/lib/recoWeights';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -31,9 +32,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const thr = typeof threshold === 'string' && threshold.trim() !== ''
       ? parseInt(threshold, 10)
       : null;
+    const weights = parseSourceWeights(typeof req.query.w === 'string' ? req.query.w : undefined);
 
     const data = getRecommendationsData();
-    const ranked = computeFeed({ nicheMode: niche, threshold: Number.isFinite(thr as number) ? thr : null });
+    const ranked = computeFeed({
+      nicheMode: niche,
+      threshold: Number.isFinite(thr as number) ? thr : null,
+      weights,
+    });
     const animes = applyNarrowingFilters(ranked, narrowing);
 
     res.json({

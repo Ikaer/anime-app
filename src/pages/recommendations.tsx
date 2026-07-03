@@ -5,12 +5,14 @@ import {
   AccountSection,
   RecommendationsSection,
   RecoFiltersSection,
+  RecoWeightsSection,
   DisplaySection,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeForDisplay, MALAuthState, ImageSize } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
+import { encodeSourceWeights } from '@/lib/recoWeights';
 
 type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
 
@@ -33,9 +35,12 @@ export default function RecommendationsPage() {
   const [recoLastRefresh, setRecoLastRefresh] = useState<string | null>(null);
   const [recoError, setRecoError] = useState('');
 
+  // Show every card's "Pourquoi ?" breakdown at once (ephemeral display pref).
+  const [showAllExplains, setShowAllExplains] = useState(false);
+
   // Sidebar collapse state (local — not URL-persisted on this page).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    account: true, recos: true, filters: true, display: true,
+    account: true, recos: true, weights: false, filters: true, display: true,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -65,6 +70,10 @@ export default function RecommendationsPage() {
       if (state.search) params.set('search', state.search);
       if (state.minScore !== null) params.set('minScore', String(state.minScore));
       if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
+
+      // Per-source weights (only non-defaults are emitted).
+      const wStr = encodeSourceWeights(state.weights);
+      if (wStr) params.set('w', wStr);
 
       if (state.dismissed) {
         params.set('dismissed', 'true');
@@ -207,6 +216,13 @@ export default function RecommendationsPage() {
         />
       </CollapsibleSection>
 
+      <CollapsibleSection title="Pondération des sources" isExpanded={expanded.weights} onToggle={() => toggle('weights')}>
+        <RecoWeightsSection
+          weights={state.weights}
+          onWeightsChange={(w) => update({ weights: w })}
+        />
+      </CollapsibleSection>
+
       <CollapsibleSection title="Filtres" isExpanded={expanded.filters} onToggle={() => toggle('filters')}>
         <RecoFiltersSection
           search={state.search}
@@ -221,10 +237,15 @@ export default function RecommendationsPage() {
       </CollapsibleSection>
 
       <CollapsibleSection title="Display" isExpanded={expanded.display} onToggle={() => toggle('display')}>
-        <DisplaySection
-          imageSize={state.imageSize}
-          onImageSizeChange={(size: ImageSize) => update({ imageSize: size })}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <DisplaySection
+            imageSize={state.imageSize}
+            onImageSizeChange={(size: ImageSize) => update({ imageSize: size })}
+          />
+          <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
+            {showAllExplains ? 'Masquer les explications' : 'Afficher les explications'}
+          </Button>
+        </div>
       </CollapsibleSection>
     </div>
   );
@@ -265,6 +286,7 @@ export default function RecommendationsPage() {
                 onUpdateMALStatus={handleUpdateMALStatus}
                 onDismiss={handleDismissToggle}
                 dismissMode={state.dismissed ? 'dismissed' : 'feed'}
+                allExplainsOpen={showAllExplains}
               />
             )}
           </div>

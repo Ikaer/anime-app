@@ -151,11 +151,49 @@ export type MediaType = 'tv' | 'movie' | 'ona' | 'ova' | 'special' | 'music';
 export type AnimeLayoutType = 'table' | 'card';
 export type AnimeView = 'new_season' | 'new_season_strict' | 'next_season' | 'find_shows' | 'watching' | 'completed' | 'hidden' | 'dropped' | 'on_hold' | 'plan_to_watch';
 
+// ---------------------------------------------------------------------------
+// Recommendations ("Pour toi") scoring model
+// ---------------------------------------------------------------------------
+
+/**
+ * The individually-weighted signals that compose a recommendation's score.
+ * Each contributes a normalized value in [0,1]; the final score is the
+ * weighted sum `Σ weight · value`. `rejection` and `popularity` default to
+ * negative weights (they push a candidate down).
+ */
+export type RecoSource =
+  | 'crowd'        // MAL crowd recommendations from the user's high-scored seeds
+  | 'suggestions'  // MAL personal "suggestions" endpoint
+  | 'genre'        // taste-profile affinity on genres (IDF-weighted)
+  | 'studio'       // taste-profile affinity on studios (IDF-weighted)
+  | 'nsfw'         // taste-profile affinity on the nsfw flag (IDF-weighted)
+  | 'rating'       // taste-profile affinity on the age rating (IDF-weighted)
+  | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored)
+  | 'popularity';  // MAL popularity — negative weight makes the feed nichier
+
+/** Per-source weight configuration (the tunable knobs, all live in the URL). */
+export type SourceWeights = Record<RecoSource, number>;
+
+/** One line of the on-demand "Pourquoi ?" breakdown for a recommendation. */
+export interface RecoContribution {
+  source: RecoSource;
+  /** Normalized source score in [0,1]. */
+  value: number;
+  /** The weight applied to this source at ranking time. */
+  weight: number;
+  /** `weight · value` — the signed contribution to the final score. */
+  contribution: number;
+  /** Human-readable French detail (matched genres, top seeds, rating, …). */
+  detail?: string;
+}
+
 // Recommendation match metadata attached to each card in the "Pour toi" feed.
 export interface RecoMeta {
   affinityScore: number;
   topSeeds: { id: number; title: string; backers: number }[];
   fromSuggestions: boolean;
+  /** Per-source decomposition of the score, for the on-demand explain. */
+  breakdown: RecoContribution[];
 }
 
 export type CalendarAnimeView = LiteralSubset<AnimeView, 'new_season' | 'new_season_strict' | 'next_season'>;

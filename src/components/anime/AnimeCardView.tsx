@@ -1,10 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta } from '@/models/anime';
+import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoSource } from '@/models/anime';
 import {  formatUserStatus } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
+import { SOURCE_META } from '@/lib/recoWeights';
 import { Button } from '@/components/shared';
 import styles from './AnimeCardView.module.css';
+
+const SOURCE_LABELS: Record<RecoSource, string> = Object.fromEntries(
+    SOURCE_META.map(m => [m.source, m.label])
+) as Record<RecoSource, string>;
 
 interface MALStatusUpdate {
     status?: string;
@@ -23,6 +28,8 @@ interface AnimeCardViewProps {
     onDismiss?: (animeId: number, dismiss: boolean) => void;
     /** 'feed' = show "écarter"; 'dismissed' = show "remettre"; null = neither. */
     dismissMode?: 'feed' | 'dismissed' | null;
+    /** When true, every card's "Pourquoi ?" breakdown is expanded (global override). */
+    allExplainsOpen?: boolean;
 }
 
 function formatRecoHint(meta: RecoMeta): string {
@@ -41,10 +48,20 @@ export default function AnimeCardView({
     onUpdateMALStatus,
     onHideToggle,
     onDismiss,
-    dismissMode
+    dismissMode,
+    allExplainsOpen
 }: AnimeCardViewProps) {
     const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const [explainOpen, setExplainOpen] = useState<Set<number>>(new Set());
+
+    const toggleExplain = useCallback((animeId: number) => {
+        setExplainOpen(prev => {
+            const next = new Set(prev);
+            if (next.has(animeId)) next.delete(animeId); else next.add(animeId);
+            return next;
+        });
+    }, []);
 
     const copyToClipboard = useCallback((text: string, key: string) => {
         const done = () => {
@@ -163,6 +180,37 @@ export default function AnimeCardView({
             case 'plan_to_watch': return '📅';
             default: return '';
         }
+    };
+
+    const renderExplain = (meta: RecoMeta) => {
+        const rows = meta.breakdown;
+        if (rows.length === 0) return null;
+        const maxAbs = Math.max(...rows.map(r => Math.abs(r.contribution)), 0.0001);
+        return (
+            <div className={styles.explainPanel}>
+                {rows.map(r => {
+                    const pct = (Math.abs(r.contribution) / maxAbs) * 100;
+                    const positive = r.contribution >= 0;
+                    return (
+                        <div key={r.source} className={styles.explainRow}>
+                            <div className={styles.explainHead}>
+                                <span className={styles.explainLabel}>{SOURCE_LABELS[r.source] ?? r.source}</span>
+                                <span className={`${styles.explainValue} ${positive ? styles.explainPos : styles.explainNeg}`}>
+                                    {positive ? '+' : ''}{r.contribution.toFixed(2)}
+                                </span>
+                            </div>
+                            <div className={styles.explainBarTrack}>
+                                <div
+                                    className={`${styles.explainBar} ${positive ? styles.explainBarPos : styles.explainBarNeg}`}
+                                    style={{ width: `${pct}%` }}
+                                />
+                            </div>
+                            {r.detail && <span className={styles.explainDetail}>{r.detail}</span>}
+                        </div>
+                    );
+                })}
+            </div>
+        );
     };
 
     return (
@@ -332,6 +380,20 @@ export default function AnimeCardView({
                         </div>
                         {anime.recoMeta && formatRecoHint(anime.recoMeta) && (
                             <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta)}</div>
+                        )}
+                        {anime.recoMeta && anime.recoMeta.breakdown.length > 0 && (
+                            <div className={styles.explainWrap}>
+                                {!allExplainsOpen && (
+                                    <button
+                                        className={styles.explainToggle}
+                                        onClick={() => toggleExplain(anime.id)}
+                                        aria-expanded={explainOpen.has(anime.id)}
+                                    >
+                                        {explainOpen.has(anime.id) ? '▾ Pourquoi ?' : '▸ Pourquoi ?'}
+                                    </button>
+                                )}
+                                {(allExplainsOpen || explainOpen.has(anime.id)) && renderExplain(anime.recoMeta)}
+                            </div>
                         )}
                         <div className={styles.actions}>
                             <Button
