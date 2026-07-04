@@ -87,9 +87,31 @@ export interface Studio {
   name: string;
 }
 
+// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in animes_SIMKL.json.
+export interface SimklPersonalEntry {
+  simkl_id: number;          // kept for deletion reconciliation (diff on ids.simkl)
+  mal_id: number;
+  status: UserAnimeStatus;   // normalized to MAL vocabulary at write time
+  score: number | null;      // SIMKL user rating, 1-10; null if unrated
+  num_episodes_watched: number | null;
+  total_episodes: number | null;
+  watched_at?: string;       // SIMKL last_watched
+  updated_at?: string;       // SIMKL item timestamp
+}
+
+// A detected MAL vs SIMKL mismatch for one title. `null` fields = that dimension agrees.
+export interface Discrepancy {
+  status?: { mal: UserAnimeStatus | null; simkl: UserAnimeStatus };
+  score?: { mal: number | null; simkl: number | null };
+  progress?: { mal: number | null; simkl: number | null };
+  presence?: 'simkl_only'; // soft: synced from SIMKL but absent from your MAL list
+}
+
 // Combined data for display
 export interface AnimeForDisplay extends MALAnime {
   hidden?: boolean;
+  simkl?: SimklPersonalEntry;       // joined at display time by MAL id
+  discrepancy?: Discrepancy | null; // computed at display / filter time
 }
 
 // MAL Authentication
