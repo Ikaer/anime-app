@@ -78,6 +78,9 @@ export default function AnimePage() {
       // Hidden
       params.set('hidden', filters.hiddenOnly ? 'true' : 'false');
 
+      // Discrepancies only (MAL vs SIMKL mismatch)
+      if (filters.discrepanciesOnly) params.set('discrepancies', 'true');
+
       // Unrated only (completed but not yet scored)
       if (filters.unratedOnly) params.set('unrated', 'true');
 
@@ -239,6 +242,10 @@ export default function AnimePage() {
     updateFilters({ hiddenOnly });
   };
 
+  const handleDiscrepanciesOnlyChange = (discrepanciesOnly: boolean) => {
+    updateFilters({ discrepanciesOnly });
+  };
+
   const handleMinScoreChange = (minScore: number | null) => {
     updateFilters({ minScore });
   };
@@ -337,6 +344,8 @@ export default function AnimePage() {
       onMediaTypesChange={handleMediaTypesChange}
       hiddenOnly={filters.hiddenOnly}
       onHiddenOnlyChange={handleHiddenOnlyChange}
+      discrepanciesOnly={filters.discrepanciesOnly}
+      onDiscrepanciesOnlyChange={handleDiscrepanciesOnlyChange}
       minScore={filters.minScore}
       onMinScoreChange={handleMinScoreChange}
       maxScore={filters.maxScore}

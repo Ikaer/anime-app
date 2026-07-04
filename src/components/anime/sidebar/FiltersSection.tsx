@@ -21,6 +21,8 @@ interface FiltersSectionProps {
   onMediaTypesChange: (mediaTypes: string[]) => void;
   hiddenOnly: boolean;
   onHiddenOnlyChange: (hiddenOnly: boolean) => void;
+  discrepanciesOnly: boolean;
+  onDiscrepanciesOnlyChange: (v: boolean) => void;
   minScore: number | null;
   onMinScoreChange: (score: number | null) => void;
   maxScore: number | null;
@@ -36,6 +38,8 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
   onMediaTypesChange,
   hiddenOnly,
   onHiddenOnlyChange,
+  discrepanciesOnly,
+  onDiscrepanciesOnlyChange,
   minScore,
   onMinScoreChange,
   maxScore,
@@ -86,6 +90,13 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
             checked={hiddenOnly} 
             onChange={(e) => onHiddenOnlyChange(e.target.checked)} 
           /> Hidden only
+        </label>
+        <label className={styles.checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={discrepanciesOnly}
+            onChange={(e) => onDiscrepanciesOnlyChange(e.target.checked)}
+          /> MAL/SIMKL discrepancies only
         </label>
       </div>
 

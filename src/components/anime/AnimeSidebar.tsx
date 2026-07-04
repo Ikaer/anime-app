@@ -47,6 +47,8 @@ interface AnimeSidebarProps {
   onMediaTypesChange: (v: string[]) => void;
   hiddenOnly: boolean;
   onHiddenOnlyChange: (v: boolean) => void;
+  discrepanciesOnly: boolean;
+  onDiscrepanciesOnlyChange: (v: boolean) => void;
   minScore: number | null;
   onMinScoreChange: (v: number | null) => void;
   maxScore: number | null;
@@ -81,6 +83,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   seasons, onSeasonsChange,
   mediaTypes, onMediaTypesChange,
   hiddenOnly, onHiddenOnlyChange,
+  discrepanciesOnly, onDiscrepanciesOnlyChange,
   minScore, onMinScoreChange,
   maxScore, onMaxScoreChange,
   animeCount,
@@ -189,6 +192,8 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           onMediaTypesChange={onMediaTypesChange}
           hiddenOnly={hiddenOnly}
           onHiddenOnlyChange={onHiddenOnlyChange}
+          discrepanciesOnly={discrepanciesOnly}
+          onDiscrepanciesOnlyChange={onDiscrepanciesOnlyChange}
           minScore={minScore}
           onMinScoreChange={onMinScoreChange}
           maxScore={maxScore}

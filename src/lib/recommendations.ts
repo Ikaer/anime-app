@@ -15,6 +15,7 @@ import path from 'path';
 import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
+import { getEffectiveStatus } from '@/lib/animeUtils';
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
 const RECOMMENDATIONS_FILE = path.join(DATA_PATH, 'recommendations_MAL.json');
@@ -454,7 +455,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (!anime) continue; // not hydrated yet — skip
 
     // Hard filters (spec §5.3)
-    const st = anime.my_list_status?.status;
+    const st = getEffectiveStatus(anime);
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
     if (dismissed.has(candId)) continue;
     if (hidden.has(candId)) continue;

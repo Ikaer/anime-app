@@ -30,6 +30,7 @@ export interface AnimeFiltersState {
   seasons: SeasonInfo[];
   mediaTypes: string[];
   hiddenOnly: boolean;
+  discrepanciesOnly: boolean;
   unratedOnly: boolean;
   minScore: number | null;
   maxScore: number | null;
@@ -122,6 +123,7 @@ const SIDEBAR_TO_CODE: Record<string, string> = {
   filters: 'f',
   sort: 'so',
   stats: 'st',
+  simkl: 'sk',
 };
 const CODE_TO_SIDEBAR: Record<string, string> = Object.fromEntries(
   Object.entries(SIDEBAR_TO_CODE).map(([k, v]) => [v, k])
@@ -151,6 +153,7 @@ const DEFAULT_SIDEBAR_EXPANDED: Record<string, boolean> = {
   filters: true,
   sort: true,
   stats: true,
+  simkl: true,
 };
 
 export const DEFAULT_FILTERS: AnimeFiltersState = {
@@ -159,6 +162,7 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   seasons: [],
   mediaTypes: [],
   hiddenOnly: false,
+  discrepanciesOnly: false,
   unratedOnly: false,
   minScore: null,
   maxScore: null,
@@ -194,6 +198,7 @@ const PARAM_KEYS = {
   seasons: 'sn',
   mediaType: 'mt',
   hidden: 'h',
+  discrepancies: 'disc',
   unrated: 'ur',
   minScore: 'min',
   maxScore: 'max',
@@ -278,6 +283,10 @@ export function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLS
 
   if (filters.hiddenOnly) {
     params.set(PARAM_KEYS.hidden, '1');
+  }
+
+  if (filters.discrepanciesOnly) {
+    params.set(PARAM_KEYS.discrepancies, '1');
   }
 
   if (filters.unratedOnly) {
@@ -413,6 +422,7 @@ function decodeSidebarExpanded(value: string | null): Record<string, boolean> {
     filters: false,
     sort: false,
     stats: false,
+    simkl: false,
   };
 
   for (const code of value.split(',')) {
@@ -432,6 +442,7 @@ export function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     seasons: decodeSeasons(params.get(PARAM_KEYS.seasons)),
     mediaTypes: decodeMediaTypes(params.get(PARAM_KEYS.mediaType)),
     hiddenOnly: params.get(PARAM_KEYS.hidden) === '1',
+    discrepanciesOnly: params.get(PARAM_KEYS.discrepancies) === '1',
     unratedOnly: params.get(PARAM_KEYS.unrated) === '1',
     minScore: params.has(PARAM_KEYS.minScore) ? parseFloat(params.get(PARAM_KEYS.minScore)!) : null,
     maxScore: params.has(PARAM_KEYS.maxScore) ? parseFloat(params.get(PARAM_KEYS.maxScore)!) : null,

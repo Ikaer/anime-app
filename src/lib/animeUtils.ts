@@ -127,6 +127,15 @@ export function getSeasonInfos(): SeasonInfos {
   };
 }
 
+/**
+ * Single source of truth for an anime's "effective" personal status.
+ * Returns MAL's status today (MAL is authoritative). A future switch to
+ * SIMKL — or a MAL-then-SIMKL fallback — changes only this function.
+ */
+export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
+  return anime.my_list_status?.status;
+}
+
 export function formatUserStatus(status?: string) {
   if (!status) return 'Unknown';
   return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());

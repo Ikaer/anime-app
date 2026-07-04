@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/anime';
-import { applyNarrowingFilters } from '@/lib/animeUtils';
+import { applyNarrowingFilters, getEffectiveStatus } from '@/lib/animeUtils';
 import { AnimeForDisplay, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -20,6 +20,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       season,
       mediaType,
       hidden,
+      discrepancies,
       unrated,
       sortBy = 'mean',
       sortDir = 'desc',
@@ -103,6 +104,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       animeList = animeList.filter(anime => !anime.my_list_status?.score);
     }
 
+    // Apply discrepancies-only filter (MAL vs SIMKL mismatch present)
+    if (discrepancies !== undefined && typeof discrepancies === 'string' && discrepancies.toLowerCase() === 'true') {
+      animeList = animeList.filter(anime => anime.discrepancy != null);
+    }
+
     // Apply genre filter
     if (genres && typeof genres === 'string') {
       const genreList = genres.split(',').map(g => g.trim().toLowerCase());
@@ -115,7 +121,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (status && typeof status === 'string') {
       const statusList = status.split(',').map(s => s.trim());
       animeList = animeList.filter(anime => {
-        const userStatus = anime.my_list_status?.status;
+        const userStatus = getEffectiveStatus(anime);
         if (!userStatus) {
           return statusList.includes('not_defined');
         }
@@ -194,6 +200,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         season: (typeof season === 'string' ? season : null),
         mediaType: (typeof mediaType === 'string' ? mediaType : null),
         hidden: (typeof hidden === 'string' ? hidden : null),
+        discrepancies: (typeof discrepancies === 'string' ? discrepancies : null),
         unrated: (typeof unrated === 'string' ? unrated : null),
         genres: (typeof genres === 'string' ? genres : null),
         status: (typeof status === 'string' ? status : null),
