@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry } from '@/models/anime';
+import { computeDiscrepancy } from '@/lib/simklCompare';
 // Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
 // User preferences removed - all state now controlled via URL
 
@@ -9,6 +10,7 @@ const DATA_PATH = process.env.DATA_PATH || '/app/data';
 // File paths
 const ANIME_MAL_FILE = path.join(DATA_PATH, 'animes_MAL.json');
 const ANIME_HIDDEN_FILE = path.join(DATA_PATH, 'animes_hidden.json');
+const ANIME_SIMKL_FILE = path.join(DATA_PATH, 'animes_SIMKL.json');
 const MAL_AUTH_FILE = path.join(DATA_PATH, 'mal_auth.json');
 
 // Utility function to ensure data directory exists
@@ -84,6 +86,39 @@ export function upsertMALAnime(newAnime: MALAnime[]): void {
   saveMALAnime(existingAnime);
 }
 
+// SIMKL personal-entry operations (keyed by MAL id, as string)
+export function getAllSimklEntries(): Record<string, SimklPersonalEntry> {
+  return readJsonFile<Record<string, SimklPersonalEntry>>(ANIME_SIMKL_FILE, {});
+}
+
+export function getSimklEntryCount(): number {
+  return Object.keys(getAllSimklEntries()).length;
+}
+
+export function upsertSimklEntries(entries: SimklPersonalEntry[]): void {
+  const existing = getAllSimklEntries();
+  entries.forEach(entry => {
+    existing[entry.mal_id.toString()] = entry;
+  });
+  writeJsonFile(ANIME_SIMKL_FILE, existing);
+  cachedAnime = null;
+}
+
+export function removeSimklEntries(malIds: number[]): void {
+  const existing = getAllSimklEntries();
+  let changed = false;
+  malIds.forEach(id => {
+    if (existing[id.toString()]) {
+      delete existing[id.toString()];
+      changed = true;
+    }
+  });
+  if (changed) {
+    writeJsonFile(ANIME_SIMKL_FILE, existing);
+    cachedAnime = null;
+  }
+}
+
 // Combined data operations
 let cachedAnime: AnimeForDisplay[] | null = null;
 let lastCacheTime = 0;
@@ -96,10 +131,16 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   }
   const malAnime = getAllMALAnime();
   const hiddenIds = getHiddenAnimeIds();
-  cachedAnime = Object.values(malAnime).map(anime => ({
-    ...anime,
-    hidden: hiddenIds.includes(anime.id)
-  }));
+  const simklByMalId = getAllSimklEntries();
+  cachedAnime = Object.values(malAnime).map(anime => {
+    const simkl = simklByMalId[anime.id.toString()];
+    return {
+      ...anime,
+      hidden: hiddenIds.includes(anime.id),
+      simkl,
+      discrepancy: computeDiscrepancy(anime, simkl),
+    };
+  });
   lastCacheTime = now;
   return cachedAnime;
 }
