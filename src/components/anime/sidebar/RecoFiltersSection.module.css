@@ -75,3 +75,83 @@
   color: var(--text-primary);
   font-weight: 600;
 }
+
+.yearValue {
+  color: var(--accent-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dual-handle year range: two full-width range inputs stacked over one track.
+   The inputs are transparent and pointer-transparent except for their thumbs,
+   so both handles stay independently grabbable. */
+.yearSlider {
+  position: relative;
+  height: 24px;
+}
+
+.yearTrack,
+.yearFill {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  border-radius: 2px;
+}
+
+.yearTrack {
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border: 1px solid #444;
+}
+
+.yearFill {
+  background: var(--accent-primary);
+}
+
+.yearInput {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+}
+
+.yearInputMin { z-index: 3; }
+.yearInputMax { z-index: 4; }
+
+.yearInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  border: 2px solid var(--bg-primary);
+  cursor: pointer;
+}
+
+.yearInput::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  border: 2px solid var(--bg-primary);
+  cursor: pointer;
+}
+
+.yearInput::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.yearInput::-moz-range-track {
+  background: transparent;
+}

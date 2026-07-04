@@ -26,6 +26,8 @@ export interface RecoUrlState {
   search: string;
   minScore: number | null;
   maxScore: number | null;
+  minYear: number | null;
+  maxYear: number | null;
   /** Display. */
   imageSize: ImageSize;
 }
@@ -39,6 +41,8 @@ export const RECO_DEFAULTS: RecoUrlState = {
   search: '',
   minScore: null,
   maxScore: null,
+  minYear: null,
+  maxYear: null,
   imageSize: 3,
 };
 
@@ -51,6 +55,8 @@ const KEYS = {
   search: 'q',
   minScore: 'min',
   maxScore: 'max',
+  minYear: 'miny',
+  maxYear: 'maxy',
   imageSize: 'img',
 } as const;
 
@@ -69,6 +75,8 @@ function decode(params: URLSearchParams): RecoUrlState {
     search: params.get(KEYS.search) || '',
     minScore: num(params.get(KEYS.minScore)),
     maxScore: num(params.get(KEYS.maxScore)),
+    minYear: num(params.get(KEYS.minYear)),
+    maxYear: num(params.get(KEYS.maxYear)),
     imageSize: (params.has(KEYS.imageSize)
       ? (parseInt(params.get(KEYS.imageSize)!, 10) as ImageSize)
       : RECO_DEFAULTS.imageSize),
@@ -86,6 +94,8 @@ function encode(state: RecoUrlState): string {
   if (state.search) params.set(KEYS.search, state.search);
   if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
   if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
+  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
+  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.imageSize !== RECO_DEFAULTS.imageSize) params.set(KEYS.imageSize, String(state.imageSize));
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';

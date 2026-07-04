@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styles from './RecoFiltersSection.module.css';
 
 /**
  * Narrowing filters that make sense on the ranked recommendations feed:
- * search, media type and MAL `mean` score range. Deliberately omits status,
- * season and hidden — those are governed by the feed's hard filters / ranking.
+ * search, media type, MAL `mean` score range and release-year range.
+ * Deliberately omits status, season and hidden — those are governed by the
+ * feed's hard filters / ranking.
  */
 interface RecoFiltersSectionProps {
   search: string;
@@ -15,9 +16,76 @@ interface RecoFiltersSectionProps {
   onMinScoreChange: (v: number | null) => void;
   maxScore: number | null;
   onMaxScoreChange: (v: number | null) => void;
+  minYear: number | null;
+  maxYear: number | null;
+  /** Both bounds committed together (single URL update — avoids clobbering). */
+  onYearChange: (min: number | null, max: number | null) => void;
 }
 
 const MEDIA_TYPES = ['tv', 'movie', 'ona', 'ova', 'special', 'music'];
+
+// Year-slider bounds: 1960 (historical-crawl floor) to next year (upcoming).
+const MIN_YEAR = 1960;
+const MAX_YEAR = new Date().getFullYear() + 1;
+
+/**
+ * Dual-handle release-year range slider. A value pinned to a bound means "no
+ * bound" (emits null), so the URL stays clean. Commits on release (pointer up /
+ * key up), not per tick, to avoid flooding the router with history entries —
+ * same pattern as the weight sliders.
+ */
+const YearRange: React.FC<{
+  minYear: number | null;
+  maxYear: number | null;
+  onYearChange: (min: number | null, max: number | null) => void;
+}> = ({ minYear, maxYear, onYearChange }) => {
+  const lo = minYear ?? MIN_YEAR;
+  const hi = maxYear ?? MAX_YEAR;
+  const [draft, setDraft] = useState<[number, number]>([lo, hi]);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  // Re-sync when the URL (props) changes from outside this component.
+  useEffect(() => { setDraft([lo, hi]); }, [lo, hi]);
+
+  const [dMin, dMax] = draft;
+  const pct = (y: number) => ((y - MIN_YEAR) / (MAX_YEAR - MIN_YEAR)) * 100;
+
+  // Commit both bounds in one call — a bound at its extreme means "no bound".
+  const commit = () => {
+    const [mn, mx] = draftRef.current;
+    onYearChange(mn <= MIN_YEAR ? null : mn, mx >= MAX_YEAR ? null : mx);
+  };
+
+  return (
+    <div className={styles.fieldGroup}>
+      <label className={styles.label}>
+        Année : <span className={styles.yearValue}>{dMin} – {dMax}</span>
+      </label>
+      <div className={styles.yearSlider}>
+        <div className={styles.yearTrack} />
+        <div
+          className={styles.yearFill}
+          style={{ left: `${pct(dMin)}%`, right: `${100 - pct(dMax)}%` }}
+        />
+        <input
+          type="range" min={MIN_YEAR} max={MAX_YEAR} value={dMin}
+          onChange={(e) => setDraft(([, mx]) => [Math.min(parseInt(e.target.value, 10), mx), mx])}
+          onPointerUp={commit} onKeyUp={commit}
+          className={`${styles.yearInput} ${styles.yearInputMin}`}
+          aria-label="Année minimum"
+        />
+        <input
+          type="range" min={MIN_YEAR} max={MAX_YEAR} value={dMax}
+          onChange={(e) => setDraft(([mn]) => [mn, Math.max(parseInt(e.target.value, 10), mn)])}
+          onPointerUp={commit} onKeyUp={commit}
+          className={`${styles.yearInput} ${styles.yearInputMax}`}
+          aria-label="Année maximum"
+        />
+      </div>
+    </div>
+  );
+};
 
 const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   search,
@@ -28,6 +96,9 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   onMinScoreChange,
   maxScore,
   onMaxScoreChange,
+  minYear,
+  maxYear,
+  onYearChange,
 }) => {
   return (
     <div className={styles.filtersSection}>
@@ -83,6 +154,12 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
           />
         </div>
       </div>
+
+      <YearRange
+        minYear={minYear}
+        maxYear={maxYear}
+        onYearChange={onYearChange}
+      />
     </div>
   );
 };

@@ -9,6 +9,18 @@ export interface NarrowingFilters {
   search?: string;
   minScore?: number | null;
   maxScore?: number | null;
+  minYear?: number | null;
+  maxYear?: number | null;
+}
+
+/** Release year, preferring the season year, falling back to the start date. */
+function animeYear(a: AnimeForDisplay): number | undefined {
+  if (a.start_season?.year) return a.start_season.year;
+  if (a.start_date && a.start_date.length >= 4) {
+    const y = parseInt(a.start_date.slice(0, 4), 10);
+    return Number.isFinite(y) ? y : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -43,6 +55,14 @@ export function applyNarrowingFilters<T extends AnimeForDisplay>(
 
   if (f.maxScore != null && Number.isFinite(f.maxScore)) {
     out = out.filter(a => !!a.mean && a.mean <= f.maxScore!);
+  }
+
+  if (f.minYear != null && Number.isFinite(f.minYear)) {
+    out = out.filter(a => { const y = animeYear(a); return y != null && y >= f.minYear!; });
+  }
+
+  if (f.maxYear != null && Number.isFinite(f.maxYear)) {
+    out = out.filter(a => { const y = animeYear(a); return y != null && y <= f.maxYear!; });
   }
 
   return out;

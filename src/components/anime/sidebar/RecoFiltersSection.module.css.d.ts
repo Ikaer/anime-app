@@ -8,6 +8,13 @@ declare const styles: {
   readonly "scoreInput": string;
   readonly "scoreRangeInputs": string;
   readonly "searchInput": string;
+  readonly "yearFill": string;
+  readonly "yearInput": string;
+  readonly "yearInputMax": string;
+  readonly "yearInputMin": string;
+  readonly "yearSlider": string;
+  readonly "yearTrack": string;
+  readonly "yearValue": string;
 };
 export = styles;
 

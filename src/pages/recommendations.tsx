@@ -70,6 +70,8 @@ export default function RecommendationsPage() {
       if (state.search) params.set('search', state.search);
       if (state.minScore !== null) params.set('minScore', String(state.minScore));
       if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
+      if (state.minYear !== null) params.set('minYear', String(state.minYear));
+      if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
 
       // Per-source weights (only non-defaults are emitted).
       const wStr = encodeSourceWeights(state.weights);
@@ -253,6 +255,9 @@ export default function RecommendationsPage() {
           onMinScoreChange={(v) => update({ minScore: v })}
           maxScore={state.maxScore}
           onMaxScoreChange={(v) => update({ maxScore: v })}
+          minYear={state.minYear}
+          maxYear={state.maxYear}
+          onYearChange={(min, max) => update({ minYear: min, maxYear: max })}
         />
       </CollapsibleSection>
 

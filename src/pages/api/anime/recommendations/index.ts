@@ -10,9 +10,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { nicheMode, threshold, review, mediaType, search, minScore, maxScore } = req.query;
+    const { nicheMode, threshold, review, mediaType, search, minScore, maxScore, minYear, maxYear } = req.query;
 
-    // Narrowing filters shared with /api/anime/animes (media type / search / mean range).
+    // Narrowing filters shared with /api/anime/animes (media type / search / mean range / year range).
     const narrowing = {
       mediaTypes: typeof mediaType === 'string' && mediaType.trim() !== ''
         ? mediaType.split(',').map(t => t.trim()).filter(Boolean)
@@ -20,6 +20,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       search: typeof search === 'string' ? search : undefined,
       minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
       maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
+      minYear: typeof minYear === 'string' ? parseInt(minYear, 10) : null,
+      maxYear: typeof maxYear === 'string' ? parseInt(maxYear, 10) : null,
     };
 
     // Review lists: "Bonnes pioches" (👍) / "Pas pour moi" (👎) — no ranking, same narrowing.
