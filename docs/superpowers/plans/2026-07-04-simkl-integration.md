@@ -82,7 +82,7 @@ export interface Discrepancy {
   status?: { mal: UserAnimeStatus | null; simkl: UserAnimeStatus };
   score?: { mal: number | null; simkl: number | null };
   progress?: { mal: number | null; simkl: number | null };
-  presence?: 'mal_only' | 'simkl_only'; // soft: statused on exactly one side
+  presence?: 'simkl_only'; // soft: synced from SIMKL but absent from your MAL list
 }
 ```
 
@@ -167,11 +167,11 @@ export function computeDiscrepancy(
     result.progress = { mal: malProgress, simkl: simkl.num_episodes_watched };
   }
 
-  // Presence (soft): statused on exactly one side
-  if (!malStatus && simkl.status) {
+  // Presence (soft): synced from SIMKL but not statused on MAL. The inverse
+  // (on MAL, not on SIMKL) is intentionally NOT computed here — this function
+  // only runs when a SIMKL entry exists, and every stored entry has a status.
+  if (!malStatus) {
     result.presence = 'simkl_only';
-  } else if (malStatus && !simkl.status) {
-    result.presence = 'mal_only';
   }
 
   const hasAny =
@@ -835,9 +835,7 @@ const SimklDiscrepancyBadge: React.FC<Props> = ({ anime }) => {
         </span>
       )}
       {d.presence && (
-        <span className={`${styles.chip} ${styles.presence}`}>
-          {d.presence === 'simkl_only' ? 'SIMKL only' : 'MAL only'}
-        </span>
+        <span className={`${styles.chip} ${styles.presence}`}>SIMKL only</span>
       )}
     </span>
   );
@@ -882,7 +880,7 @@ The user-facing connect + sync. New sidebar section + all prop/state wiring + OA
 
 **Files:**
 - Create: `src/components/anime/sidebar/SimklSection.tsx`, `src/components/anime/sidebar/SimklSection.module.css`
-- Modify: `src/components/anime/sidebar/index.ts`, `src/components/anime/AnimeSidebar.tsx`, `src/pages/index.tsx`
+- Modify: `src/components/anime/sidebar/index.ts`, `src/components/anime/AnimeSidebar.tsx`, `src/pages/index.tsx`, `src/hooks/useAnimeUrlState.ts`
 
 **Interfaces:**
 - Consumes: SIMKL auth endpoints (`/api/anime/simkl/auth`), sync endpoint (`/api/anime/simkl/sync`).
@@ -1057,6 +1055,11 @@ Add handlers near the MAL auth handlers (line ~168):
     }
 ```
 
+  **Also fix the empty-URL redirect guard** so the callback param isn't wiped before this effect runs. In `src/hooks/useAnimeUrlState.ts` (line ~73), the redirect that sends param-less `/` to the default preset is whitelisted only for MAL's `auth` key; `simkl_auth` is neither in `PARAM_KEYS` (so `hasAnyParams` is false) nor whitelisted, so `/?simkl_auth=...` would bounce to the preset and drop the param (silently losing the `error` path). Extend the guard:
+```ts
+      if (!params.has('auth') && !params.has('simkl_auth') && !hasRedirected) {
+```
+
 - [ ] **Step 7: Thread SIMKL props into `AnimeSidebar`.** In `src/components/anime/AnimeSidebar.tsx`:
 
   (a) Add to the props interface (after the MAL Sync block, line ~33):
@@ -1126,7 +1129,7 @@ Take a screenshot of the connected sidebar + a discrepancy badge as proof. If no
 - [ ] **Step 11: Commit.**
 
 ```bash
-git add src/components/anime/sidebar/SimklSection.tsx src/components/anime/sidebar/SimklSection.module.css src/components/anime/sidebar/SimklSection.module.css.d.ts src/components/anime/sidebar/index.ts src/components/anime/AnimeSidebar.tsx src/pages/index.tsx
+git add src/components/anime/sidebar/SimklSection.tsx src/components/anime/sidebar/SimklSection.module.css src/components/anime/sidebar/SimklSection.module.css.d.ts src/components/anime/sidebar/index.ts src/components/anime/AnimeSidebar.tsx src/pages/index.tsx src/hooks/useAnimeUrlState.ts
 git commit -m "Wire SIMKL connect + sync sidebar section end-to-end
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -1181,4 +1184,5 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 - **`animes_SIMKL.json` / `simkl_sync_checkpoint.json`** are new runtime data files under `DATA_PATH` (Docker volume). No migration needed — they're created on first sync.
 - **The one live-API unknown** (SIMKL `/sync/all-items/anime` field names) is handled defensively in `normalizeItem` and must be confirmed against a real payload during Task 3/Task 7 (see the VERIFY-STEP callout in Task 3). If `user_rating` is NOT present inline, add a second `/sync/ratings/anime` call in `simklSync.ts` and merge ratings by SIMKL id before `upsertSimklEntries` — the spec anticipates this.
+- **Presence-noise dial (known, not a bug):** every title watched on SIMKL but never added to MAL becomes a `presence: 'simkl_only'` discrepancy. If that set is large, "discrepancies only" may be dominated by presence entries, drowning the status/score/progress mismatches. Approved as-is for v1; if it proves noisy, a cheap refinement is to let the filter (or a sub-toggle) distinguish hard value-mismatches from soft presence — the `Discrepancy` shape already separates them.
 - Memory update (do after merge): mark the SIMKL spike memory as shipped and point it at this plan.
