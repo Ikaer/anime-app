@@ -5,6 +5,7 @@ import {
   AccountSection,
   RecommendationsSection,
   RecoFiltersSection,
+  RecoWeightPresetsSection,
   RecoWeightsSection,
   DisplaySection,
 } from '@/components/anime/sidebar';
@@ -40,7 +41,7 @@ export default function RecommendationsPage() {
 
   // Sidebar collapse state (local — not URL-persisted on this page).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    account: true, recos: true, weights: false, filters: true, display: true,
+    account: true, recos: true, views: true, weights: false, filters: true, display: true,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -236,6 +237,10 @@ export default function RecommendationsPage() {
           onShowLiked={() => update({ review: 'up' })}
           onShowDisliked={() => update({ review: 'down' })}
         />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Views" isExpanded={expanded.views} onToggle={() => toggle('views')}>
+        <RecoWeightPresetsSection onApply={(w) => update({ weights: w })} />
       </CollapsibleSection>
 
       <CollapsibleSection title="Pondération des sources" isExpanded={expanded.weights} onToggle={() => toggle('weights')}>

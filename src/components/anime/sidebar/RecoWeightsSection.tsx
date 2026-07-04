@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { SourceWeights } from '@/models/anime';
-import { SOURCE_META, RECO_WEIGHT_PRESETS, resolveWeights } from '@/lib/recoWeights';
-import { Button } from '@/components/shared';
+import { SOURCE_META } from '@/lib/recoWeights';
 import styles from './RecoWeightsSection.module.css';
 
 /**
- * Presets + sliders to tune the per-source weights of the recommendation
- * score (`score = Σ weight · sourceValue`). Values persist in the URL, so a
- * tuned feed is shareable / bookmarkable. Presets are one-click starting
- * points (replace the full weight map); the sliders underneath still reflect
- * whatever `weights` ends up being, so they stay usable for further tuning.
+ * Sliders to tune the per-source weights of the recommendation score
+ * (`score = Σ weight · sourceValue`). Values persist in the URL, so a tuned
+ * feed is shareable / bookmarkable. One-click starting points live in the
+ * separate `RecoWeightPresetsSection` ("Views") — this component just
+ * reflects whatever `weights` ends up being, from a preset or manual tuning.
  *
  * Slider position is tracked in local `draft` state and only committed to the
  * URL (one `router.push` + one feed refetch) on release — dragging a slider
@@ -30,21 +29,6 @@ const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeig
 
   return (
     <div className={styles.weightsSection}>
-      <div className={styles.presetRow}>
-        {RECO_WEIGHT_PRESETS.map(preset => (
-          <Button
-            key={preset.key}
-            variant="secondary"
-            size="xs"
-            className={styles.presetButton}
-            onClick={() => onWeightsChange(resolveWeights(preset.weights))}
-            title={preset.hint}
-          >
-            {preset.label}
-          </Button>
-        ))}
-      </div>
-
       {SOURCE_META.map(({ source, label, hint, min, max, step }) => (
         <div key={source} className={styles.weightRow}>
           <div className={styles.weightHead}>

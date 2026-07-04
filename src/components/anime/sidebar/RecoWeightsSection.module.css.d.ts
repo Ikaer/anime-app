@@ -1,6 +1,4 @@
 declare const styles: {
-  readonly "presetButton": string;
-  readonly "presetRow": string;
   readonly "slider": string;
   readonly "weightHead": string;
   readonly "weightHint": string;
