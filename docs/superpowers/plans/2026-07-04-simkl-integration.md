@@ -351,7 +351,7 @@ export async function simklFetch(pathAndQuery: string, accessToken: string): Pro
 }
 ```
 
-- [ ] **Step 2: Create `src/lib/simklSync.ts`.** Full contents. **⚠️ VERIFY-STEP baked in:** the exact field names in the `/sync/all-items/anime` payload are documented but not confirmed against a live response. The `normalizeItem` function below uses the documented shape and is fully defensive (optional chaining, skip-on-missing). Before marking this task reviewed, hit the endpoint once (via a quick `curl` with a valid token, or a throwaway log in the sync endpoint from Task 4) and confirm the field names (`show`, `ids.mal`, `ids.simkl`, `status`, `user_rating`, `watched_episodes_count`, `total_episodes_count`, `last_watched_at`). Adjust `normalizeItem` if they differ; the rest of the flow is shape-independent.
+- [ ] **Step 2: Create `src/lib/simklSync.ts`.** Full contents. **✅ VERIFY-STEP RESOLVED (confirmed against a live 630-item account, 2026-07-04):** the `/sync/all-items/anime` payload field names below are all correct as written — per-item `status`, `user_rating` (null when unrated, never 0), `watched_episodes_count`, `total_episodes_count`, `last_watched_at`, `anime_type`; and `show.ids.mal` (a **string** like `"4224"`), `show.ids.simkl` (a **number**). Activities returns `anime.all` and `anime.removed_from_list`. **The one correction vs. the original guess:** do **NOT** pass `extended=ids_only` on the data pull — that param strips every personal field and returns only `show.ids`. The plain call (`/sync/all-items/anime`, plus `date_from` for deltas) already returns the personal fields AND the full `ids` object including `mal`. `extended=simkl_ids_only` is still correct for deletion reconciliation (that call only needs simkl ids). `normalizeItem` stays fully defensive regardless.
 
 ```ts
 /**
@@ -423,8 +423,11 @@ function normalizeAll(raw: RawAllItems): { entries: SimklPersonalEntry[]; orphan
 }
 
 async function fetchAllItems(token: string, dateFrom?: string): Promise<RawAllItems> {
-  let path = '/sync/all-items/anime?extended=ids_only';
-  if (dateFrom) path += `&date_from=${encodeURIComponent(dateFrom)}`;
+  // Plain call (no extended=ids_only): returns per-item status/rating/progress
+  // AND the full ids object (incl. mal). extended=ids_only would strip the
+  // personal fields — verified against a live account 2026-07-04.
+  let path = '/sync/all-items/anime';
+  if (dateFrom) path += `?date_from=${encodeURIComponent(dateFrom)}`;
   const res = await simklFetch(path, token);
   if (!res.ok) throw new Error(`all-items ${res.status}: ${await res.text()}`);
   const text = await res.text();
@@ -1183,6 +1186,6 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ## Post-implementation notes
 
 - **`animes_SIMKL.json` / `simkl_sync_checkpoint.json`** are new runtime data files under `DATA_PATH` (Docker volume). No migration needed — they're created on first sync.
-- **The one live-API unknown** (SIMKL `/sync/all-items/anime` field names) is handled defensively in `normalizeItem` and must be confirmed against a real payload during Task 3/Task 7 (see the VERIFY-STEP callout in Task 3). If `user_rating` is NOT present inline, add a second `/sync/ratings/anime` call in `simklSync.ts` and merge ratings by SIMKL id before `upsertSimklEntries` — the spec anticipates this.
+- **The live-API unknown is now RESOLVED** (confirmed against a real 630-item account, 2026-07-04): `user_rating`, `status`, `watched_episodes_count`, `total_episodes_count`, `last_watched_at`, and `show.ids.{mal,simkl}` are all present inline on the plain `/sync/all-items/anime` call, so no separate `/sync/ratings/anime` merge is needed. The only plan correction was dropping `extended=ids_only` from the data pull (it strips personal fields) — applied to Task 3's `fetchAllItems`.
 - **Presence-noise dial (known, not a bug):** every title watched on SIMKL but never added to MAL becomes a `presence: 'simkl_only'` discrepancy. If that set is large, "discrepancies only" may be dominated by presence entries, drowning the status/score/progress mismatches. Approved as-is for v1; if it proves noisy, a cheap refinement is to let the filter (or a sub-toggle) distinguish hard value-mismatches from soft presence — the `Discrepancy` shape already separates them.
 - Memory update (do after merge): mark the SIMKL spike memory as shipped and point it at this plan.
