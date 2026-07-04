@@ -4,6 +4,16 @@
   gap: 14px;
 }
 
+.presetRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presetButton {
+  flex: 1 1 auto;
+}
+
 .weightRow {
   display: flex;
   flex-direction: column;

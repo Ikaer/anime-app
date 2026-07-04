@@ -82,3 +82,36 @@ export function encodeSourceWeights(weights: SourceWeights): string {
 export function resolveWeights(overrides: Partial<SourceWeights>): SourceWeights {
   return { ...DEFAULT_WEIGHTS, ...overrides };
 }
+
+/** A named, one-click starting point for the weights sliders — not a replacement for manual tuning. */
+export interface WeightPreset {
+  key: string;
+  label: string;
+  hint: string;
+  weights: Partial<SourceWeights>;
+}
+
+/**
+ * `weights` are sparse — `resolveWeights` merges them onto `DEFAULT_WEIGHTS`,
+ * so a preset only needs to state the sources it moves off the default.
+ */
+export const RECO_WEIGHT_PRESETS: WeightPreset[] = [
+  {
+    key: 'sur',
+    label: 'Sûr',
+    hint: 'Colle à ce que les fans de tes séries préférées regardent aussi',
+    weights: { crowd: 1.4, suggestions: 0.5 },
+  },
+  {
+    key: 'decouverte',
+    label: 'Découverte',
+    hint: 'Priorise les genres/studios qui te correspondent, quitte à s’éloigner du consensus',
+    weights: { crowd: 0.5, genre: 0.6, studio: 0.45, popularity: -0.4 },
+  },
+  {
+    key: 'defaut',
+    label: 'Défaut',
+    hint: 'Revient à la pondération de base',
+    weights: {},
+  },
+];
