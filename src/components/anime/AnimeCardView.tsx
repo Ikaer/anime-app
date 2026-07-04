@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoSource } from '@/models/anime';
+import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoSource, RecoVerdict } from '@/models/anime';
 import {  formatUserStatus } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { SOURCE_META } from '@/lib/recoWeights';
@@ -25,9 +25,10 @@ interface AnimeCardViewProps {
     visibleColumns: VisibleColumns;
     onUpdateMALStatus?: (animeId: number, updates: MALStatusUpdate) => void;
     onHideToggle?: (animeId: number, hide: boolean) => void;
-    onDismiss?: (animeId: number, dismiss: boolean) => void;
-    /** 'feed' = show "écarter"; 'dismissed' = show "remettre"; null = neither. */
-    dismissMode?: 'feed' | 'dismissed' | null;
+    onFeedback?: (animeId: number, verdict: RecoVerdict) => void;
+    onRemoveFeedback?: (animeId: number) => void;
+    /** 'feed' = show 👍/👎; 'up'/'down' = review list (show ↩ Remettre); null = hide toggle. */
+    feedbackMode?: 'feed' | RecoVerdict | null;
     /** When true, every card's "Pourquoi ?" breakdown is expanded (global override). */
     allExplainsOpen?: boolean;
 }
@@ -47,8 +48,9 @@ export default function AnimeCardView({
     visibleColumns,
     onUpdateMALStatus,
     onHideToggle,
-    onDismiss,
-    dismissMode,
+    onFeedback,
+    onRemoveFeedback,
+    feedbackMode,
     allExplainsOpen
 }: AnimeCardViewProps) {
     const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
@@ -406,24 +408,36 @@ export default function AnimeCardView({
                             >
                                 MAL
                             </Button>
-                            {dismissMode === 'dismissed' ? (
+                            {feedbackMode === 'up' || feedbackMode === 'down' ? (
                                 <Button
-                                    onClick={() => onDismiss?.(anime.id, false)}
-                                    variant="primary-positive"
+                                    onClick={() => onRemoveFeedback?.(anime.id)}
+                                    variant="secondary"
                                     size="xs"
                                     className={styles.actionButton}
                                 >
                                     ↩ Remettre
                                 </Button>
-                            ) : dismissMode === 'feed' ? (
-                                <Button
-                                    onClick={() => onDismiss?.(anime.id, true)}
-                                    variant="primary-negative"
-                                    size="xs"
-                                    className={styles.actionButton}
-                                >
-                                    ✕ Écarter
-                                </Button>
+                            ) : feedbackMode === 'feed' ? (
+                                <>
+                                    <Button
+                                        onClick={() => onFeedback?.(anime.id, 'up')}
+                                        variant="primary-positive"
+                                        size="xs"
+                                        className={styles.actionButton}
+                                        title="Bonne pioche — renforce ce type de suggestion"
+                                    >
+                                        👍 Bonne pioche
+                                    </Button>
+                                    <Button
+                                        onClick={() => onFeedback?.(anime.id, 'down')}
+                                        variant="primary-negative"
+                                        size="xs"
+                                        className={styles.actionButton}
+                                        title="Pas pour moi — masque et pénalise ce type de suggestion"
+                                    >
+                                        👎 Pas pour moi
+                                    </Button>
+                                </>
                             ) : (
                                 <Button
                                     onClick={() => onHideToggle?.(anime.id, !anime.hidden)}

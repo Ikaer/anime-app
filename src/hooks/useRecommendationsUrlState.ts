@@ -9,7 +9,7 @@
 
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ImageSize, SourceWeights } from '@/models/anime';
+import { ImageSize, SourceWeights, RecoVerdict } from '@/models/anime';
 import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/recoWeights';
 
 export interface RecoUrlState {
@@ -19,8 +19,8 @@ export interface RecoUrlState {
   threshold: number | null;
   /** Engine: per-source weights (resolved — defaults merged with URL overrides). */
   weights: SourceWeights;
-  /** Sub-view: show the "Écartés" (dismissed) list instead of the feed. */
-  dismissed: boolean;
+  /** Sub-view: show a feedback review list ('up' = bonnes pioches, 'down' = pas pour moi) instead of the feed. */
+  review: RecoVerdict | null;
   /** Narrowing filters (shared semantics with the main list). */
   mediaTypes: string[];
   search: string;
@@ -34,7 +34,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   nicheMode: false,
   threshold: null,
   weights: DEFAULT_WEIGHTS,
-  dismissed: false,
+  review: null,
   mediaTypes: [],
   search: '',
   minScore: null,
@@ -46,7 +46,7 @@ const KEYS = {
   niche: 'niche',
   threshold: 'thr',
   weights: 'w',
-  dismissed: 'dis',
+  review: 'rev',
   mediaType: 'mt',
   search: 'q',
   minScore: 'min',
@@ -64,7 +64,7 @@ function decode(params: URLSearchParams): RecoUrlState {
     nicheMode: params.get(KEYS.niche) === '1',
     threshold: num(params.get(KEYS.threshold)),
     weights: resolveWeights(parseSourceWeights(params.get(KEYS.weights))),
-    dismissed: params.get(KEYS.dismissed) === '1',
+    review: params.get(KEYS.review) === 'up' ? 'up' : params.get(KEYS.review) === 'down' ? 'down' : null,
     mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
     search: params.get(KEYS.search) || '',
     minScore: num(params.get(KEYS.minScore)),
@@ -81,7 +81,7 @@ function encode(state: RecoUrlState): string {
   if (state.threshold !== null) params.set(KEYS.threshold, String(state.threshold));
   const wStr = encodeSourceWeights(state.weights);
   if (wStr) params.set(KEYS.weights, wStr);
-  if (state.dismissed) params.set(KEYS.dismissed, '1');
+  if (state.review) params.set(KEYS.review, state.review);
   if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
   if (state.search) params.set(KEYS.search, state.search);
   if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));

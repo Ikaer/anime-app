@@ -14,7 +14,8 @@ interface RecommendationsSectionProps {
   onRefreshRecos: () => void;
   onNicheModeChange: (v: boolean) => void;
   onThresholdChange: (v: number | null) => void;
-  onShowDismissed: () => void;
+  onShowLiked: () => void;
+  onShowDisliked: () => void;
 }
 
 const DEFAULT_THRESHOLD = 8;
@@ -30,7 +31,8 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   onRefreshRecos,
   onNicheModeChange,
   onThresholdChange,
-  onShowDismissed,
+  onShowLiked,
+  onShowDisliked,
 }) => {
   return (
     <div className={styles.recommendationsSection}>
@@ -75,9 +77,14 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
           : 'Jamais rafraîchi'}
       </div>
 
-      <Button onClick={onShowDismissed} variant="secondary" size="xs">
-        Voir les écartés
-      </Button>
+      <div className={styles.reviewLinks}>
+        <Button onClick={onShowLiked} variant="secondary" size="xs">
+          👍 Bonnes pioches
+        </Button>
+        <Button onClick={onShowDisliked} variant="secondary" size="xs">
+          👎 Pas pour moi
+        </Button>
+      </div>
 
       {recoError && <div className={styles.error}>{recoError}</div>}
     </div>

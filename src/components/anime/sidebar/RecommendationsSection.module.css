@@ -46,6 +46,15 @@
   padding: 4px 0;
 }
 
+.reviewLinks {
+  display: flex;
+  gap: 6px;
+}
+
+.reviewLinks > * {
+  flex: 1;
+}
+
 .error {
   color: #ff6b6b;
   font-size: 0.85rem;

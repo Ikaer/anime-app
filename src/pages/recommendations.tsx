@@ -75,8 +75,8 @@ export default function RecommendationsPage() {
       const wStr = encodeSourceWeights(state.weights);
       if (wStr) params.set('w', wStr);
 
-      if (state.dismissed) {
-        params.set('dismissed', 'true');
+      if (state.review) {
+        params.set('review', state.review);
       } else {
         if (state.nicheMode) params.set('nicheMode', 'true');
         if (state.threshold !== null) params.set('threshold', String(state.threshold));
@@ -86,7 +86,7 @@ export default function RecommendationsPage() {
       if (res.ok) {
         const data = await res.json();
         setAnimes(data.animes || []);
-        if (!state.dismissed) setRecoLastRefresh(data.lastRefresh ?? null);
+        if (!state.review) setRecoLastRefresh(data.lastRefresh ?? null);
       } else {
         const errorData = await res.json().catch(() => ({}));
         setError(errorData.error || 'Failed to load recommendations');
@@ -144,18 +144,37 @@ export default function RecommendationsPage() {
     }
   };
 
-  const handleDismissToggle = async (animeId: number, dismiss: boolean) => {
+  // 👍/👎 on a feed card: persist the verdict and drop it from the live list.
+  const handleFeedback = async (animeId: number, verdict: 'up' | 'down') => {
     try {
-      const response = await fetch(`/api/anime/recommendations/dismiss/${animeId}`, {
-        method: dismiss ? 'POST' : 'DELETE',
+      const response = await fetch(`/api/anime/recommendations/feedback/${animeId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verdict }),
       });
       if (response.ok) {
         setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
-        setError(`Failed to ${dismiss ? 'dismiss' : 'restore'} recommendation.`);
+        setError('Impossible d’enregistrer le retour.');
       }
     } catch {
-      setError(`Failed to ${dismiss ? 'dismiss' : 'restore'} recommendation.`);
+      setError('Impossible d’enregistrer le retour.');
+    }
+  };
+
+  // ↩ Remettre from a review list: clear the verdict and drop it from the list.
+  const handleRemoveFeedback = async (animeId: number) => {
+    try {
+      const response = await fetch(`/api/anime/recommendations/feedback/${animeId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setAnimes(prev => prev.filter(a => a.id !== animeId));
+      } else {
+        setError('Impossible de retirer le retour.');
+      }
+    } catch {
+      setError('Impossible de retirer le retour.');
     }
   };
 
@@ -212,7 +231,8 @@ export default function RecommendationsPage() {
           onRefreshRecos={handleRefreshRecos}
           onNicheModeChange={(v) => update({ nicheMode: v })}
           onThresholdChange={(v) => update({ threshold: v })}
-          onShowDismissed={() => update({ dismissed: true })}
+          onShowLiked={() => update({ review: 'up' })}
+          onShowDisliked={() => update({ review: 'down' })}
         />
       </CollapsibleSection>
 
@@ -265,9 +285,13 @@ export default function RecommendationsPage() {
           )}
 
           <div className="reco-header">
-            <h1 className="reco-title">{state.dismissed ? 'Écartés' : '✨ Pour toi'}</h1>
-            {state.dismissed ? (
-              <Button variant="secondary" size="xs" onClick={() => update({ dismissed: false })}>
+            <h1 className="reco-title">
+              {state.review === 'up' ? '👍 Bonnes pioches'
+                : state.review === 'down' ? '👎 Pas pour moi'
+                : '✨ Pour toi'}
+            </h1>
+            {state.review ? (
+              <Button variant="secondary" size="xs" onClick={() => update({ review: null })}>
                 ← Retour aux recommandations
               </Button>
             ) : (
@@ -284,8 +308,9 @@ export default function RecommendationsPage() {
                 imageSize={state.imageSize}
                 visibleColumns={{ score: true, rank: false, popularity: false, users: false, scorers: false }}
                 onUpdateMALStatus={handleUpdateMALStatus}
-                onDismiss={handleDismissToggle}
-                dismissMode={state.dismissed ? 'dismissed' : 'feed'}
+                onFeedback={handleFeedback}
+                onRemoveFeedback={handleRemoveFeedback}
+                feedbackMode={state.review ?? 'feed'}
                 allExplainsOpen={showAllExplains}
               />
             )}

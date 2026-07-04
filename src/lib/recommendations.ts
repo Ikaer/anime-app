@@ -12,13 +12,14 @@
 
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
 const RECOMMENDATIONS_FILE = path.join(DATA_PATH, 'recommendations_MAL.json');
 const DISMISSED_FILE = path.join(DATA_PATH, 'recommendations_dismissed.json');
+const FEEDBACK_FILE = path.join(DATA_PATH, 'recommendations_feedback.json');
 
 // ============================================================================
 // Tuning constants (all knobs live here — no scattered magic numbers)
@@ -38,6 +39,9 @@ export const TUNING = {
   STUDIO_WEIGHT: 0.4,
   /** How many top seeds to surface per candidate for the match hint. */
   TOP_SEEDS_PER_CANDIDATE: 2,
+  /** Synthetic edge weight for a 👍 "bonne pioche" acting as a crowd seed
+   *  (it has no MAL personal score to derive a weight from). ~ a score-9 seed. */
+  FEEDBACK_SEED_WEIGHT: 2,
   /** MAL caps recommendations at 10 per anime. */
   MAX_RECS_PER_ANIME: 10,
   /** Delay between MAL detail calls during a refresh (ms). */
@@ -232,24 +236,52 @@ export function saveRecommendationsData(data: RecommendationsData): void {
 }
 
 // ============================================================================
-// Dismiss list
+// Feedback store (👍 "bonne pioche" / 👎 "pas pour moi")
 // ============================================================================
+//
+// A durable, standalone verdict map (id -> 'up'|'down'), decoupled from the
+// transient feed: a thumb persists even after the title leaves the feed. 👎
+// subsumes the old pure-hide "Écarter" (it hides AND feeds negative taste); 👍
+// both re-ranks the feed (the `feedback` source) and, at the next refresh,
+// joins the crowd seeds so new candidates enter.
 
-export function getDismissedIds(): number[] {
-  return readJsonFile<number[]>(DISMISSED_FILE, []);
+export type FeedbackMap = Record<string, RecoVerdict>;
+
+export function getFeedback(): FeedbackMap {
+  return readJsonFile<FeedbackMap>(FEEDBACK_FILE, {});
 }
 
-export function addDismissedId(animeId: number): void {
-  const ids = getDismissedIds();
-  if (!ids.includes(animeId)) {
-    ids.push(animeId);
-    writeJsonFile(DISMISSED_FILE, ids);
+export function setFeedbackVerdict(animeId: number, verdict: RecoVerdict): void {
+  const fb = getFeedback();
+  fb[String(animeId)] = verdict;
+  writeJsonFile(FEEDBACK_FILE, fb);
+}
+
+export function removeFeedback(animeId: number): void {
+  const fb = getFeedback();
+  if (String(animeId) in fb) {
+    delete fb[String(animeId)];
+    writeJsonFile(FEEDBACK_FILE, fb);
   }
 }
 
-export function removeDismissedId(animeId: number): void {
-  const ids = getDismissedIds().filter(id => id !== animeId);
-  writeJsonFile(DISMISSED_FILE, ids);
+/** Ids carrying the given verdict. */
+function feedbackIds(fb: FeedbackMap, verdict: RecoVerdict): Set<number> {
+  return new Set(
+    Object.entries(fb).filter(([, v]) => v === verdict).map(([k]) => Number(k))
+  );
+}
+
+/** Anime carrying the given verdict, for the review lists. */
+export function getFeedbackAnime(verdict: RecoVerdict): AnimeForDisplay[] {
+  const ids = feedbackIds(getFeedback(), verdict);
+  return getAnimeForDisplay().filter(a => ids.has(a.id));
+}
+
+// Legacy pure-hide dismiss list — superseded by 👎 feedback. Kept read-only so
+// any previously-dismissed ids stay excluded from the feed (union below).
+function getDismissedIds(): number[] {
+  return readJsonFile<number[]>(DISMISSED_FILE, []);
 }
 
 // ============================================================================
@@ -334,6 +366,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const dismissed = new Set(getDismissedIds());
   const hidden = new Set(getHiddenAnimeIds());
   const suggestionIds = new Set(data.suggestions.map(s => s.id));
+  const feedback = getFeedback();
+  const upIds = feedbackIds(feedback, 'up');
+  const downIds = feedbackIds(feedback, 'down');
 
   // Accumulate affinity from edges, grouped by originating seed.
   const acc = new Map<number, Accumulator>();
@@ -348,9 +383,15 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const seedId = Number(seedIdStr);
     const seed = byId.get(seedId);
     const seedScore = seed?.my_list_status?.score;
-    // Live threshold filter: a seed below the (override) threshold is dropped.
-    if (typeof seedScore !== 'number' || seedScore < threshold) continue;
-    const weight = seedWeight(seedScore, threshold);
+    // Live threshold filter, with a fallback for 👍 seeds (no personal score).
+    let weight: number;
+    if (typeof seedScore === 'number' && seedScore >= threshold) {
+      weight = seedWeight(seedScore, threshold);
+    } else if (upIds.has(seedId)) {
+      weight = TUNING.FEEDBACK_SEED_WEIGHT; // 👍 "bonne pioche" acting as a seed
+    } else {
+      continue; // seed below threshold and not thumbed-up — dropped
+    }
     for (const edge of edges) {
       if (edge.hop === 2 && !options.nicheMode) continue; // 2-hop only in niche mode
       const lambda = edge.hop === 2 ? TUNING.NICHE_DAMPING : 1;
@@ -383,11 +424,23 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     nsfw: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.nsfw, idf.nsfw),
     rating: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.rating, idf.rating),
   };
-  const disliked = all.filter(a => {
+  // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
+  // numeric score). Its own weighted source, separate from the MAL-seed genre /
+  // studio profiles, so the user can dial their explicit likes independently.
+  const upAnime = all.filter(a => upIds.has(a.id));
+  const fb = {
+    genre: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.genre, idf.genre),
+    studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
+  };
+
+  // Rejection profile = MAL dislikes (dropped / low-scored) ∪ 👎 "pas pour moi".
+  const dislikedBase = all.filter(a => {
     const st = a.my_list_status?.status;
     const sc = a.my_list_status?.score ?? 0;
     return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
   });
+  const dislikedSeen = new Set(dislikedBase.map(a => a.id));
+  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
   const negGenre = buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idf.genre);
   const negStudio = buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idf.studio);
 
@@ -405,6 +458,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
     if (dismissed.has(candId)) continue;
     if (hidden.has(candId)) continue;
+    if (upIds.has(candId) || downIds.has(candId)) continue; // already thumbed
     if (isPrematureSequel(anime, byId)) continue; // later season of an unwatched show
 
     eligible.push({ anime, a });
@@ -425,6 +479,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const studioM = fieldMatch(anime, pos.studio);
     const nsfwM = fieldMatch(anime, pos.nsfw);
     const ratingM = fieldMatch(anime, pos.rating);
+    const fbGenreM = fieldMatch(anime, fb.genre);
+    const fbStudioM = fieldMatch(anime, fb.studio);
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
     const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
@@ -432,6 +488,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const values: SourceWeights = {
       crowd: maxRaw > 0 ? Math.log(1 + a.affinity) / crowdDenom : 0,
       suggestions: suggestionIds.has(candId) ? 1 : 0,
+      feedback: TUNING.GENRE_WEIGHT * fbGenreM.score + TUNING.STUDIO_WEIGHT * fbStudioM.score,
       genre: genreM.score,
       studio: studioM.score,
       nsfw: nsfwM.score,
@@ -449,6 +506,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: topSeeds.length ? `Fans de ${topSeeds.map(s => s.title).join(', ')}` : undefined,
       suggestions: values.suggestions ? 'Dans tes suggestions MAL' : undefined,
+      feedback: (() => {
+        const parts = [
+          ...(fbGenreM.matched as string[]),
+          ...fbStudioM.matched.map(id => studioNames.get(id as number) || `#${id}`),
+        ];
+        return parts.length ? `Comme tes bonnes pioches : ${parts.join(', ')}` : undefined;
+      })(),
       genre: genreM.matched.length ? (genreM.matched as string[]).join(', ') : undefined,
       studio: studioM.matched.length
         ? studioM.matched.map(id => studioNames.get(id as number) || `#${id}`).join(', ')
@@ -497,12 +561,6 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   });
 
   return items;
-}
-
-/** Anime in the dismissed list, for the "Écartés" view. */
-export function getDismissedAnime(): AnimeForDisplay[] {
-  const dismissed = new Set(getDismissedIds());
-  return getAnimeForDisplay().filter(a => dismissed.has(a.id));
 }
 
 // ============================================================================
@@ -586,7 +644,13 @@ export async function performRecommendationsRefresh(
 
   try {
     const threshold = options.threshold ?? TUNING.DEFAULT_SEED_THRESHOLD;
-    const seeds = getSeeds(threshold);
+    // Seeds = high-scored MAL completions ∪ 👍 "bonnes pioches". The latter let
+    // an explicit endorsement pull in fresh crowd candidates (they're already
+    // hydrated — they came from the feed — so no extra detail fetch is needed).
+    const malSeeds = getSeeds(threshold);
+    const seenSeed = new Set(malSeeds.map(s => s.id));
+    const upSeeds = getFeedbackAnime('up').filter(a => !seenSeed.has(a.id));
+    const seeds = [...malSeeds, ...upSeeds];
 
     const data: RecommendationsData = {
       lastRefresh: null,

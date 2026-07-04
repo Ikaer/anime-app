@@ -6,6 +6,7 @@ declare const styles: {
   readonly "lastRefresh": string;
   readonly "progress": string;
   readonly "recommendationsSection": string;
+  readonly "reviewLinks": string;
   readonly "thresholdInput": string;
 };
 export = styles;

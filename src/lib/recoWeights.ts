@@ -19,6 +19,7 @@ import type { RecoSource, SourceWeights } from '@/models/anime';
 export const DEFAULT_WEIGHTS: SourceWeights = {
   crowd: 1.0,
   suggestions: 0.35,
+  feedback: 0.5,
   genre: 0.25,
   studio: 0.15,
   nsfw: 0.0,
@@ -41,6 +42,7 @@ export interface SourceMeta {
 export const SOURCE_META: SourceMeta[] = [
   { source: 'crowd', label: 'Recommandations MAL', hint: 'Fans de tes séries les mieux notées', min: 0, max: 2, step: 0.05 },
   { source: 'suggestions', label: 'Suggestions MAL', hint: 'Le flux de suggestions perso de MAL', min: 0, max: 1, step: 0.05 },
+  { source: 'feedback', label: 'Tes retours 👍', hint: 'Similaire à tes « bonnes pioches »', min: 0, max: 2, step: 0.05 },
   { source: 'genre', label: 'Genres', hint: 'Affinité de genres (pondérée par rareté)', min: 0, max: 1, step: 0.05 },
   { source: 'studio', label: 'Studios', hint: 'Affinité de studios (pondérée par rareté)', min: 0, max: 1, step: 0.05 },
   { source: 'rating', label: 'Classification', hint: 'Âge conseillé (PG, R…), pondéré par rareté', min: 0, max: 1, step: 0.05 },

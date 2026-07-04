@@ -164,15 +164,19 @@ export type AnimeView = 'new_season' | 'new_season_strict' | 'next_season' | 'fi
 export type RecoSource =
   | 'crowd'        // MAL crowd recommendations from the user's high-scored seeds
   | 'suggestions'  // MAL personal "suggestions" endpoint
+  | 'feedback'     // taste-profile affinity on the user's 👍 "bonne pioche" set
   | 'genre'        // taste-profile affinity on genres (IDF-weighted)
   | 'studio'       // taste-profile affinity on studios (IDF-weighted)
   | 'nsfw'         // taste-profile affinity on the nsfw flag (IDF-weighted)
   | 'rating'       // taste-profile affinity on the age rating (IDF-weighted)
-  | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored)
+  | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored / 👎)
   | 'popularity';  // MAL popularity — negative weight makes the feed nichier
 
 /** Per-source weight configuration (the tunable knobs, all live in the URL). */
 export type SourceWeights = Record<RecoSource, number>;
+
+/** A user's explicit thumb on a recommendation: 👍 keep / 👎 not for me. */
+export type RecoVerdict = 'up' | 'down';
 
 /** One line of the on-demand "Pourquoi ?" breakdown for a recommendation. */
 export interface RecoContribution {
