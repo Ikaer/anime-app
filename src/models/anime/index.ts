@@ -96,7 +96,6 @@ export interface SimklPersonalEntry {
   num_episodes_watched: number | null;
   total_episodes: number | null;
   watched_at?: string;       // SIMKL last_watched
-  updated_at?: string;       // SIMKL item timestamp
 }
 
 // A detected MAL vs SIMKL mismatch for one title. `null` fields = that dimension agrees.

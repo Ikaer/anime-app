@@ -91,10 +91,6 @@ export function getAllSimklEntries(): Record<string, SimklPersonalEntry> {
   return readJsonFile<Record<string, SimklPersonalEntry>>(ANIME_SIMKL_FILE, {});
 }
 
-export function getSimklEntryCount(): number {
-  return Object.keys(getAllSimklEntries()).length;
-}
-
 export function upsertSimklEntries(entries: SimklPersonalEntry[]): void {
   const existing = getAllSimklEntries();
   entries.forEach(entry => {
