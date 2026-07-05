@@ -4,3 +4,5 @@ export type { UseAnimeUrlStateReturn } from './useAnimeUrlState';
 export { useRecommendationsUrlState, RECO_DEFAULTS } from './useRecommendationsUrlState';
 export type { RecoUrlState, UseRecommendationsUrlStateReturn } from './useRecommendationsUrlState';
 
+export { useConnections } from './useConnections';
+
