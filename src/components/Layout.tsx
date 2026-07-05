@@ -35,6 +35,12 @@ export default function Layout({ children }: LayoutProps) {
               >
                 Rating Calculator
               </Link>
+              <Link
+                href="/connections"
+                className={`nav-link ${router.pathname === '/connections' ? 'active' : ''}`}
+              >
+                Connections
+              </Link>
             </nav>
           </div>
         </div>
