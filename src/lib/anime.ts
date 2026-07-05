@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry, AniListTagsEntry } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry, AniListTagsEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { appendLog } from '@/lib/connectionLog';
 // Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
@@ -140,6 +140,25 @@ let cachedAnime: AnimeForDisplay[] | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 10 * 60_000; // 10 min
 
+/**
+ * Assemble the unified cross-source crosswalk from every pipe. The MAL id is
+ * the anchor (and current join key); SIMKL contributes its rich `ids` block;
+ * AniList contributes its own `idMal`-resolved id (authoritative over SIMKL's
+ * `anilist` field, which occasionally mirrors the MAL id). Returns undefined
+ * when only the MAL self-id is known (nothing worth carrying yet).
+ */
+function assembleCrosswalk(
+  malId: number,
+  simkl?: SimklPersonalEntry,
+  anilistTags?: AniListTagsEntry
+): SourceIds | undefined {
+  if (!simkl?.ids && !simkl?.simkl_id && !anilistTags) return undefined;
+  const crosswalk: SourceIds = { ...(simkl?.ids || {}), mal: malId };
+  if (simkl?.simkl_id) crosswalk.simkl = simkl.simkl_id;
+  if (anilistTags?.anilist_id) crosswalk.anilist = anilistTags.anilist_id;
+  return crosswalk;
+}
+
 export function getAnimeForDisplay(): AnimeForDisplay[] {
   const now = Date.now();
   if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
@@ -151,12 +170,14 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   const anilistTagsByMalId = getAllAnilistTags();
   cachedAnime = Object.values(malAnime).map(anime => {
     const simkl = simklByMalId[anime.id.toString()];
+    const anilistTags = anilistTagsByMalId[anime.id.toString()];
     return {
       ...anime,
       hidden: hiddenIds.includes(anime.id),
       simkl,
       discrepancy: computeDiscrepancy(anime, simkl),
-      anilistTags: anilistTagsByMalId[anime.id.toString()],
+      anilistTags,
+      crosswalk: assembleCrosswalk(anime.id, simkl, anilistTags),
     };
   });
   lastCacheTime = now;

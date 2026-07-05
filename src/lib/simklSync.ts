@@ -6,7 +6,7 @@
 import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/simkl';
 import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/anime';
 import { mapSimklStatus } from '@/lib/simklCompare';
-import { SimklPersonalEntry } from '@/models/anime';
+import { SimklPersonalEntry, SourceIds } from '@/models/anime';
 
 export interface SimklSyncResult {
   ok: boolean;
@@ -27,7 +27,7 @@ interface RawSimklAnimeItem {
   anime_type?: string;
   show?: {
     title?: string;
-    ids?: { simkl?: number; mal?: number | string };
+    ids?: SourceIds;
   };
 }
 interface RawAllItems { anime?: RawSimklAnimeItem[]; }
@@ -51,6 +51,7 @@ function normalizeItem(item: RawSimklAnimeItem): SimklPersonalEntry | null {
     num_episodes_watched: item.watched_episodes_count != null ? item.watched_episodes_count : null,
     total_episodes: item.total_episodes_count != null ? item.total_episodes_count : null,
     watched_at: item.last_watched_at,
+    ids: item.show?.ids, // rich cross-source crosswalk (mal, anilist, anidb, kitsu, tmdb…)
   };
 }
 

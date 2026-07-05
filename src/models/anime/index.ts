@@ -96,6 +96,23 @@ export interface SimklPersonalEntry {
   num_episodes_watched: number | null;
   total_episodes: number | null;
   watched_at?: string;       // SIMKL last_watched
+  ids?: SourceIds;           // full cross-source id block from SIMKL's show.ids
+}
+
+/**
+ * Cross-source id crosswalk. SIMKL's all-items response carries a rich `ids`
+ * block (mal, anilist, anidb, kitsu, tmdb, imdb, tvdb…); we store it verbatim.
+ * `mal` may arrive as a string from SIMKL. Kept deliberately open-ended.
+ */
+export interface SourceIds {
+  simkl?: number;
+  mal?: number | string;
+  anilist?: number | string;
+  anidb?: number | string;
+  kitsu?: number | string;
+  tmdb?: number | string;
+  imdb?: string;
+  [key: string]: number | string | undefined;
 }
 
 // A detected MAL vs SIMKL mismatch for one title. `null` fields = that dimension agrees.
@@ -125,6 +142,14 @@ export interface AnimeForDisplay extends MALAnime {
   simkl?: SimklPersonalEntry;       // joined at display time by MAL id
   discrepancy?: Discrepancy | null; // computed at display / filter time
   anilistTags?: AniListTagsEntry;   // joined at display time by MAL id
+  /**
+   * Unified cross-source id crosswalk, assembled at display time from every
+   * pipe (MAL self-id + SIMKL's ids block + AniList's id). Materially
+   * source-independent identity: the join KEY is still the MAL id today, but
+   * the crosswalk carried here is what a future canonical/internal key would be
+   * promoted from — no re-derivation needed. Non-load-bearing for now.
+   */
+  crosswalk?: SourceIds;
 }
 
 // MAL Authentication
