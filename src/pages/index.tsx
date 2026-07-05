@@ -22,6 +22,14 @@ export default function AnimePage() {
   const [syncError, setSyncError] = useState('');
   const [historicalStats, setHistoricalStats] = useState<HistoricalCrawlStats | null>(null);
 
+  // SIMKL auth + sync state (not URL-controlled)
+  const [simklConnected, setSimklConnected] = useState(false);
+  const [simklUser, setSimklUser] = useState<string | undefined>(undefined);
+  const [isSimklAuthLoading, setIsSimklAuthLoading] = useState(true);
+  const [simklAuthError, setSimklAuthError] = useState('');
+  const [isSimklSyncing, setIsSimklSyncing] = useState(false);
+  const [simklSyncMessage, setSimklSyncMessage] = useState('');
+
   // Data state
   const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +55,20 @@ export default function AnimePage() {
       setAuthError('Failed to check authentication status');
     } finally {
       setIsAuthLoading(false);
+    }
+  };
+
+  const checkSimklStatus = async () => {
+    try {
+      setIsSimklAuthLoading(true);
+      const response = await fetch('/api/anime/simkl/auth?action=status');
+      const data = await response.json();
+      setSimklConnected(!!data.isAuthenticated);
+      setSimklUser(data.user?.user?.name);
+    } catch (error) {
+      console.error('Error checking SIMKL status:', error);
+    } finally {
+      setIsSimklAuthLoading(false);
     }
   };
 
@@ -112,6 +134,7 @@ export default function AnimePage() {
   useEffect(() => {
     checkAuthStatus();
     fetchHistoricalStats();
+    checkSimklStatus();
   }, []);
 
   // Handle OAuth callback
@@ -127,6 +150,14 @@ export default function AnimePage() {
       }
       // Remove auth param from URL without affecting other params
       const { auth, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+
+    const simklAuthParam = router.query.simkl_auth;
+    if (simklAuthParam) {
+      if (simklAuthParam === 'success') checkSimklStatus();
+      else setSimklAuthError('SIMKL authentication failed. Please try again.');
+      const { simkl_auth, ...rest } = router.query;
       router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
     }
   }, [router.isReady, router.query, router]);
@@ -167,6 +198,56 @@ export default function AnimePage() {
       setAuthError('Failed to disconnect from MyAnimeList');
     } finally {
       setIsAuthLoading(false);
+    }
+  };
+
+  // SIMKL auth handlers
+  const handleSimklConnect = async () => {
+    try {
+      setIsSimklAuthLoading(true);
+      setSimklAuthError('');
+      const response = await fetch('/api/anime/simkl/auth?action=login');
+      const data = await response.json();
+      if (data.authUrl) window.location.href = data.authUrl;
+      else { setSimklAuthError('Failed to initiate SIMKL authentication'); setIsSimklAuthLoading(false); }
+    } catch (error) {
+      console.error('Error connecting to SIMKL:', error);
+      setSimklAuthError('Failed to connect to SIMKL');
+      setIsSimklAuthLoading(false);
+    }
+  };
+
+  const handleSimklDisconnect = async () => {
+    try {
+      setIsSimklAuthLoading(true);
+      setSimklAuthError('');
+      await fetch('/api/anime/simkl/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
+      setSimklConnected(false);
+      setSimklUser(undefined);
+    } catch (error) {
+      console.error('Error disconnecting from SIMKL:', error);
+      setSimklAuthError('Failed to disconnect from SIMKL');
+    } finally {
+      setIsSimklAuthLoading(false);
+    }
+  };
+
+  const handleSimklSync = async () => {
+    if (!simklConnected) return;
+    setIsSimklSyncing(true);
+    setSimklSyncMessage('');
+    try {
+      const response = await fetch('/api/anime/simkl/sync', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Sync failed');
+      setSimklSyncMessage(
+        `${data.phase}: +${data.added} updated, ${data.removed} removed${data.orphansSkipped ? `, ${data.orphansSkipped} skipped (no MAL id)` : ''}`
+      );
+      loadAnimes();
+    } catch (error) {
+      setSimklSyncMessage(error instanceof Error ? error.message : 'Failed to sync SIMKL.');
+    } finally {
+      setIsSimklSyncing(false);
     }
   };
 
@@ -334,6 +415,15 @@ export default function AnimePage() {
       onSync={handleSync}
       onBigSync={handleBigSync}
       onHistoricalCrawl={handleHistoricalCrawl}
+      simklConnected={simklConnected}
+      simklUser={simklUser}
+      isSimklAuthLoading={isSimklAuthLoading}
+      simklAuthError={simklAuthError}
+      isSimklSyncing={isSimklSyncing}
+      simklSyncMessage={simklSyncMessage}
+      onSimklConnect={handleSimklConnect}
+      onSimklDisconnect={handleSimklDisconnect}
+      onSimklSync={handleSimklSync}
       imageSize={display.imageSize}
       onImageSizeChange={handleImageSizeChange}
       statusFilters={filters.statusFilters}

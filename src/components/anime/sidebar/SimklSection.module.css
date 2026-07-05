@@ -1,0 +1,5 @@
+.simklSection { display: flex; flex-direction: column; gap: 0.5rem; }
+.connectedAccount { display: flex; flex-direction: column; gap: 0.5rem; }
+.buttonGroup { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.status { font-size: 0.8rem; color: var(--text-secondary); }
+.error { color: #dc2626; font-size: 0.8rem; }

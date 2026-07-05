@@ -70,7 +70,7 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
     // Check if we're on /anime with no recognized params
     if (router.pathname === '/' && !hasAnyParams(params)) {
       // Check for legacy 'auth' param (OAuth callback) - don't redirect if present
-      if (!params.has('auth') && !hasRedirected) {
+      if (!params.has('auth') && !params.has('simkl_auth') && !hasRedirected) {
         setHasRedirected(true);
         router.push(getDefaultPresetUrl());
         return;
