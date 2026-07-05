@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getMALAuthData, saveMALAuthData, clearMALAuthData, isMALTokenValid } from '@/lib/anime';
 import { MALAuthData, MALUser } from '@/models/anime';
+import { appendLog } from '@/lib/connectionLog';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -203,6 +204,8 @@ async function initiateOAuthFlow(req: NextApiRequest, res: NextApiResponse) {
 
   console.log('Generated auth URL:', authUrl.toString());
 
+  appendLog('mal-auth', 'info', 'MAL login initiated');
+
   res.json({ authUrl: authUrl.toString() });
 }
 
@@ -212,6 +215,7 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
   const codeVerifier = getCodeVerifier(state);
   if (!codeVerifier) {
     console.error('Invalid or expired state parameter:', state);
+    appendLog('mal-auth', 'error', 'MAL OAuth callback failed: invalid or expired state');
     res.status(400).json({ error: 'Invalid or expired state parameter' });
     return;
   }
@@ -268,16 +272,24 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
     // Save auth data
     saveMALAuthData(userData, tokenData);
 
+    appendLog('mal-auth', 'success', `MAL OAuth callback succeeded for user ${userData.name}`, {
+      user: userData.name,
+    });
+
     // Redirect to anime page
     res.redirect('/?auth=success');
   } catch (error) {
     console.error('OAuth callback error:', error);
+    appendLog('mal-auth', 'error', 'MAL OAuth callback failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     res.redirect('/?auth=error');
   }
 }
 
 async function logout(req: NextApiRequest, res: NextApiResponse) {
   clearMALAuthData();
+  appendLog('mal-auth', 'info', 'MAL account disconnected');
   res.json({ success: true });
 }
 
