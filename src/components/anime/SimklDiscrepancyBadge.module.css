@@ -1,0 +1,30 @@
+.badge {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+.chip {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.mismatch {
+  border-color: #b45309;
+  color: #f59e0b;
+}
+.presence {
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+.info {
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+  opacity: 0.7;
+}

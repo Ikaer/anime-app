@@ -4,6 +4,7 @@ import { AnimeForDisplay, SortColumn, SortDirection, ImageSize, VisibleColumns }
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { formatSeason, formatUserStatus } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
+import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
 import styles from './AnimeTable.module.css';
 
 const formatNumber = (num?: number) => {
@@ -377,6 +378,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       <option value="dropped">Dropped</option>
                       <option value="plan_to_watch">Plan to Watch</option>
                     </select>
+                    <SimklDiscrepancyBadge anime={anime} />
                   </div>
                   <div>
                     <select

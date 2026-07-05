@@ -5,6 +5,7 @@ import {  formatUserStatus } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { SOURCE_META } from '@/lib/recoWeights';
 import { Button } from '@/components/shared';
+import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
 import styles from './AnimeCardView.module.css';
 
 const SOURCE_LABELS: Record<RecoSource, string> = Object.fromEntries(
@@ -379,6 +380,7 @@ export default function AnimeCardView({
                                     {anime.mean ? anime.mean.toFixed(2) : 'N/A'}
                                 </span>
                             )}
+                            <SimklDiscrepancyBadge anime={anime} />
                         </div>
                         {anime.recoMeta && formatRecoHint(anime.recoMeta) && (
                             <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta)}</div>
