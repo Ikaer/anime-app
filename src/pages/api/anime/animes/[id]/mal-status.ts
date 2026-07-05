@@ -1,12 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllMALAnime, saveMALAnime, getMALAuthData } from '@/lib/anime';
-import { AnimeForDisplay, MALAuthData } from '@/models/anime';
+import { getAllMALAnime, saveMALAnime } from '@/lib/anime';
+import { updateMalListStatus, MalListStatusUpdate } from '@/lib/malWrite';
 
-interface MALStatusUpdate {
-  status?: string;
-  score?: number;
-  num_episodes_watched?: number;
-}
+type MALStatusUpdate = MalListStatusUpdate;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -65,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Try to update MAL API
       try {
-        await updateMALAPI(animeId, updates);
+        await updateMalListStatus(animeId, updates);
       } catch (malError) {
         console.error('MAL API update failed, but local state updated:', malError);
         // Don't fail the request if MAL API fails - local state is already updated
@@ -83,56 +79,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Allow', ['PUT']);
     res.status(405).json({ error: `Method ${req.method} not allowed` });
   }
-}
-
-async function updateMALAPI(animeId: number, updates: MALStatusUpdate) {
-  // Read auth data
-  const { token } = getMALAuthData();
-  
-  if (!token) {
-    throw new Error('Not authenticated with MAL');
-  }
-
-  // Check if token is expired (with 5 minute buffer)
-  const now = Date.now();
-  const tokenExpiresAt = token.created_at + (token.expires_in * 1000);
-  
-  if (now >= tokenExpiresAt - 300000) { // 5 minutes buffer
-    throw new Error('Token expired');
-  }
-
-  // Prepare the request body for MAL API
-  const malUpdates: any = {};
-  if (updates.status) malUpdates.status = updates.status;
-  if (updates.score !== undefined) malUpdates.score = updates.score;
-  if (updates.num_episodes_watched !== undefined) malUpdates.num_watched_episodes = updates.num_episodes_watched;
-
-  // Try PUT first, fallback to PATCH if needed
-  let response = await fetch(`https://api.myanimelist.net/v2/anime/${animeId}/my_list_status`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token.access_token}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams(malUpdates).toString(),
-  });
-
-  if (!response.ok && response.status !== 404) {
-    // Try PATCH if PUT fails
-    response = await fetch(`https://api.myanimelist.net/v2/anime/${animeId}/my_list_status`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams(malUpdates).toString(),
-    });
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`MAL API error: ${response.status} - ${errorText}`);
-  }
-
-  return await response.json();
 }

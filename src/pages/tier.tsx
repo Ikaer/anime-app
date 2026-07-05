@@ -1,0 +1,349 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Head from 'next/head';
+import { AnimePageLayout } from '@/components/anime';
+import { RecoFiltersSection } from '@/components/anime/sidebar';
+import { Button, CollapsibleSection } from '@/components/shared';
+import { AnimeForDisplay, ImageSize } from '@/models/anime';
+import { applyNarrowingFilters, getEffectiveScore } from '@/lib/animeUtils';
+import { useTierUrlState } from '@/hooks';
+
+// Score → MAL word + tier color. Row 0 is the "à noter" tray (unrated).
+const SCORE_WORDS: Record<number, string> = {
+  10: 'Chef-d’œuvre', 9: 'Excellent', 8: 'Très bien', 7: 'Bien', 6: 'Correct',
+  5: 'Moyen', 4: 'Mauvais', 3: 'Très mauvais', 2: 'Horrible', 1: 'Abominable',
+};
+const TIER_SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+// green (10) → red (1)
+function scoreColor(n: number): string {
+  return `hsl(${Math.round(((n - 1) / 9) * 120)}, 55%, 42%)`;
+}
+
+const THUMB_W: Record<ImageSize, number> = { 0: 46, 1: 62, 2: 84, 3: 112 };
+const POSTER_RATIO = 0.7; // width / height
+
+interface Preview { anime: AnimeForDisplay; x: number; y: number; }
+interface QueueItem { id: number; score: number; prevScore: number; }
+
+export default function TierPage() {
+  const { state, update, isReady } = useTierUrlState();
+
+  const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Optimistic score overrides layered on the fetched data (0 = unrated / tray).
+  const [overrides, setOverrides] = useState<Map<number, number>>(new Map());
+  const [saving, setSaving] = useState<Set<number>>(new Set());
+  const [failed, setFailed] = useState<Map<number, string>>(new Map());
+
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ filters: true, display: true });
+  const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // ---- Load: the user's watched list (statused, excluding plan_to_watch). ----
+  // Everything is fetched once; filtering happens client-side so it never refetches.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const res = await fetch('/api/anime/animes?status=watching,completed,on_hold,dropped&limit=all');
+        if (!res.ok) throw new Error('load failed');
+        const data = await res.json();
+        if (!cancelled) setAnimes(data.animes || []);
+      } catch {
+        if (!cancelled) setError('Impossible de charger la liste.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Base (server-known) effective score per anime; 0 = unrated.
+  const baseScore = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const a of animes) m.set(a.id, getEffectiveScore(a) ?? 0);
+    return m;
+  }, [animes]);
+
+  const effScoreOf = useCallback(
+    (id: number): number => (overrides.has(id) ? overrides.get(id)! : (baseScore.get(id) ?? 0)),
+    [overrides, baseScore],
+  );
+
+  // Client-side narrowing (search / media type / mean range / year range).
+  const filtered = useMemo(
+    () => applyNarrowingFilters(animes, {
+      search: state.search,
+      mediaTypes: state.mediaTypes,
+      minScore: state.minScore,
+      maxScore: state.maxScore,
+      minYear: state.minYear,
+      maxYear: state.maxYear,
+    }),
+    [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear],
+  );
+
+  // Bucket the filtered list by effective score. Index 0 holds the tray.
+  const buckets = useMemo(() => {
+    const b = new Map<number, AnimeForDisplay[]>();
+    for (let s = 0; s <= 10; s++) b.set(s, []);
+    for (const a of filtered) b.get(effScoreOf(a.id))!.push(a);
+    return b;
+  }, [filtered, effScoreOf]);
+
+  // ---- Serial write queue (respects SIMKL's 1 req/s + 20s per-user lock). ----
+  const queueRef = useRef<QueueItem[]>([]);
+  const processingRef = useRef(false);
+
+  const processQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    while (queueRef.current.length > 0) {
+      const { id, score, prevScore } = queueRef.current.shift()!;
+      setSaving(prev => new Set(prev).add(id));
+      try {
+        const res = await fetch(`/api/anime/animes/${id}/rating`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ score }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || data.ok === false) {
+          // Hard failure — nothing persisted. Revert the optimistic move.
+          setOverrides(prev => new Map(prev).set(id, prevScore));
+          setFailed(prev => new Map(prev).set(id, data.error || 'Échec de l’enregistrement'));
+        } else {
+          // Persisted locally; warn if a remote source (MAL/SIMKL) didn't take it.
+          const bad: string[] = [];
+          if (data.mal && data.mal.ok === false) bad.push('MAL');
+          if (data.simkl && data.simkl.ok === false) bad.push('SIMKL');
+          setFailed(prev => {
+            const n = new Map(prev);
+            if (bad.length) n.set(id, `Non synchronisé sur ${bad.join(' + ')}`);
+            else n.delete(id);
+            return n;
+          });
+        }
+      } catch {
+        setOverrides(prev => new Map(prev).set(id, prevScore));
+        setFailed(prev => new Map(prev).set(id, 'Erreur réseau'));
+      } finally {
+        setSaving(prev => { const n = new Set(prev); n.delete(id); return n; });
+      }
+    }
+    processingRef.current = false;
+  }, []);
+
+  const assignScore = useCallback((id: number, score: number) => {
+    const prevScore = effScoreOf(id);
+    if (prevScore === score) return;
+    setOverrides(prev => new Map(prev).set(id, score));
+    setFailed(prev => { const n = new Map(prev); n.delete(id); return n; });
+    queueRef.current.push({ id, score, prevScore });
+    processQueue();
+  }, [effScoreOf, processQueue]);
+
+  // ---- Drag & drop (native HTML5 — zero-dep; score is the only persisted state). ----
+  const onDragStart = (e: React.DragEvent, id: number) => {
+    e.dataTransfer.setData('text/plain', String(id));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingId(id);
+    setPreview(null);
+  };
+  const onDragEnd = () => setDraggingId(null);
+  const onDropTo = (e: React.DragEvent, score: number) => {
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('text/plain'));
+    if (Number.isInteger(id)) assignScore(id, score);
+    setDraggingId(null);
+  };
+  const allowDrop = (e: React.DragEvent) => e.preventDefault();
+
+  // ---- Hover zoom: a single shared preview element (not 500 large imgs). ----
+  const onCardEnter = (e: React.MouseEvent, anime: AnimeForDisplay) => {
+    if (draggingId !== null) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const PREVIEW_W = 240;
+    // Prefer to the right of the card; flip left if it would overflow.
+    const x = r.right + PREVIEW_W + 16 < window.innerWidth ? r.right + 8 : r.left - PREVIEW_W - 8;
+    const y = Math.max(8, Math.min(r.top, window.innerHeight - 360));
+    setPreview({ anime, x, y });
+  };
+  const onCardLeave = () => setPreview(null);
+
+  const thumbW = THUMB_W[state.thumbSize];
+  const thumbH = Math.round(thumbW / POSTER_RATIO);
+
+  const ratedCount = useMemo(() => {
+    let n = 0;
+    for (let s = 1; s <= 10; s++) n += buckets.get(s)!.length;
+    return n;
+  }, [buckets]);
+
+  const renderCard = (a: AnimeForDisplay) => {
+    const thumb = a.main_picture?.medium || a.main_picture?.large || '';
+    const isSaving = saving.has(a.id);
+    const fail = failed.get(a.id);
+    return (
+      <div
+        key={a.id}
+        className={`card ${draggingId === a.id ? 'dragging' : ''} ${fail ? 'failed' : ''}`}
+        draggable
+        onDragStart={(e) => onDragStart(e, a.id)}
+        onDragEnd={onDragEnd}
+        onMouseEnter={(e) => onCardEnter(e, a)}
+        onMouseLeave={onCardLeave}
+        title={a.title}
+        style={{ width: thumbW, height: thumbH }}
+      >
+        {thumb
+          ? <img src={thumb} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%' }} />
+          : <div className="noimg">{a.title.slice(0, 2)}</div>}
+        {isSaving && <span className="badge saving">…</span>}
+        {!isSaving && fail && <span className="badge fail" title={fail}>!</span>}
+      </div>
+    );
+  };
+
+  const sidebar = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
+      <CollapsibleSection title="Filtres" isExpanded={expanded.filters} onToggle={() => toggle('filters')}>
+        <RecoFiltersSection
+          search={state.search}
+          onSearchChange={(v: string) => update({ search: v })}
+          mediaTypes={state.mediaTypes}
+          onMediaTypesChange={(v: string[]) => update({ mediaTypes: v })}
+          minScore={state.minScore}
+          onMinScoreChange={(v: number | null) => update({ minScore: v })}
+          maxScore={state.maxScore}
+          onMaxScoreChange={(v: number | null) => update({ maxScore: v })}
+          minYear={state.minYear}
+          maxYear={state.maxYear}
+          onYearChange={(min: number | null, max: number | null) => update({ minYear: min, maxYear: max })}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Affichage" isExpanded={expanded.display} onToggle={() => toggle('display')}>
+        <div>
+          <label className="thumb-label">Taille des vignettes</label>
+          <div className="thumb-buttons">
+            {([0, 1, 2, 3] as ImageSize[]).map(s => (
+              <Button
+                key={s}
+                variant="secondary"
+                size="xs"
+                className={state.thumbSize === s ? 'thumb-active' : ''}
+                onClick={() => update({ thumbSize: s })}
+              >
+                {['S', 'M', 'L', 'XL'][s]}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CollapsibleSection>
+    </div>
+  );
+
+  return (
+    <>
+      <Head>
+        <title>Tier list - Anime List</title>
+        <link rel="icon" href="/anime-favicon.svg" />
+      </Head>
+      <AnimePageLayout sidebar={sidebar}>
+        <div className="tier-main">
+          {error && <div className="error-banner">{error} <button onClick={() => setError('')}>×</button></div>}
+
+          <div className="tier-header">
+            <h1 className="tier-title">🏆 Tier list</h1>
+            <span className="tier-count">{ratedCount} notés · {buckets.get(0)!.length} à noter</span>
+          </div>
+
+          {!isReady || isLoading ? (
+            <div className="loading-state">Loading...</div>
+          ) : (
+            <div className="board">
+              {TIER_SCORES.map(s => (
+                <div key={s} className="tier-row" onDragOver={allowDrop} onDrop={(e) => onDropTo(e, s)}>
+                  <div className="tier-label" style={{ background: scoreColor(s) }}>
+                    <span className="tier-num">{s}</span>
+                    <span className="tier-word">{SCORE_WORDS[s]}</span>
+                  </div>
+                  <div className="tier-cards">
+                    {buckets.get(s)!.map(renderCard)}
+                  </div>
+                </div>
+              ))}
+
+              <div className="tray" onDragOver={allowDrop} onDrop={(e) => onDropTo(e, 0)}>
+                <div className="tray-label">À noter · {buckets.get(0)!.length}</div>
+                <div className="tier-cards">
+                  {buckets.get(0)!.map(renderCard)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </AnimePageLayout>
+
+      {preview && (
+        <div className="hover-preview" style={{ left: preview.x, top: preview.y }}>
+          <img src={preview.anime.main_picture?.large || preview.anime.main_picture?.medium || ''} alt="" />
+          <div className="hover-title">{preview.anime.title}</div>
+          {preview.anime.mean != null && <div className="hover-mean">MAL {preview.anime.mean.toFixed(2)}</div>}
+        </div>
+      )}
+
+      <style jsx>{`
+        .tier-main { display: flex; flex-direction: column; gap: 1rem; }
+        .error-banner { background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; }
+        .tier-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+        .tier-title { font-size: 1.5rem; margin: 0; color: var(--text-primary); }
+        .tier-count { color: var(--text-secondary); }
+        .loading-state { text-align: center; padding: 3rem; color: var(--text-secondary); }
+
+        .board { display: flex; flex-direction: column; gap: 6px; }
+        .tier-row { display: flex; align-items: stretch; gap: 8px; background: var(--bg-primary);
+          border: 1px solid var(--border-color); border-radius: 8px; min-height: 64px; }
+        .tier-label { flex: 0 0 96px; display: flex; flex-direction: column; align-items: center;
+          justify-content: center; border-radius: 8px 0 0 8px; color: #fff; padding: 4px; }
+        .tier-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+        .tier-word { font-size: 0.7rem; opacity: 0.9; text-align: center; }
+        .tier-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; flex: 1 1 auto; align-content: flex-start; }
+
+        .tray { border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-secondary, var(--bg-primary)); margin-top: 6px; }
+        .tray-label { padding: 6px 10px; color: var(--text-secondary); font-weight: 600; }
+
+        .card { position: relative; flex: 0 0 auto; border-radius: 4px; overflow: hidden;
+          cursor: grab; background: var(--bg-secondary, #222); border: 1px solid transparent; }
+        .card :global(img) { object-fit: cover; display: block; }
+        .card.dragging { opacity: 0.4; }
+        .card.failed { border-color: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
+        .noimg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+          font-size: 0.7rem; color: var(--text-secondary); }
+        .badge { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; color: #fff; }
+        .badge.saving { background: rgba(0,0,0,0.6); }
+        .badge.fail { background: #dc2626; }
+
+        .thumb-label { display: block; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 6px; }
+        .thumb-buttons { display: flex; gap: 6px; }
+        :global(.thumb-active) { outline: 2px solid var(--accent-color, #3b82f6); }
+      `}</style>
+      <style jsx global>{`
+        .hover-preview { position: fixed; z-index: 1000; width: 240px; pointer-events: none;
+          background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.5); overflow: hidden; }
+        .hover-preview img { width: 100%; display: block; }
+        .hover-title { padding: 6px 8px; font-size: 0.85rem; color: var(--text-primary); }
+        .hover-mean { padding: 0 8px 6px; font-size: 0.75rem; color: var(--text-secondary); }
+      `}</style>
+    </>
+  );
+}

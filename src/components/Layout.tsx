@@ -90,6 +90,12 @@ export default function Layout({ children }: LayoutProps) {
                 >
                   ✨ Pour toi
                 </Link>
+                <Link
+                  href="/tier"
+                  className={`nav-link ${router.pathname === '/tier' ? 'active' : ''}`}
+                >
+                  🏆 Tier list
+                </Link>
                 <OthersDropdown />
                 <Link
                   href="/connections"

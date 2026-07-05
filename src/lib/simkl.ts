@@ -131,3 +131,25 @@ export async function simklFetch(pathAndQuery: string, accessToken: string): Pro
     },
   });
 }
+
+/**
+ * Authenticated SIMKL POST (JSON body). Same required client_id/app-name/
+ * app-version query params + Authorization/User-Agent headers as simklFetch.
+ * SIMKL serializes writes with a 20s per-user lock and caps POSTs at ~1/sec —
+ * callers must issue writes serially (see docs/simkl/apirules.md).
+ */
+export async function simklPost(pathAndQuery: string, accessToken: string, body: unknown): Promise<Response> {
+  const url = new URL(`https://api.simkl.com${pathAndQuery}`);
+  url.searchParams.set('client_id', SIMKL_CLIENT_ID);
+  url.searchParams.set('app-name', SIMKL_APP_NAME);
+  url.searchParams.set('app-version', SIMKL_APP_VERSION);
+  return fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'User-Agent': `${SIMKL_APP_NAME}/${SIMKL_APP_VERSION}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
