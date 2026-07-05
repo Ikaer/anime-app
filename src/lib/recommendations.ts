@@ -15,7 +15,7 @@ import path from 'path';
 import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
-import { getEffectiveStatus } from '@/lib/animeUtils';
+import { getEffectiveStatus, getEffectiveScore } from '@/lib/animeUtils';
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
 const RECOMMENDATIONS_FILE = path.join(DATA_PATH, 'recommendations_MAL.json');
@@ -295,15 +295,21 @@ export function seedWeight(score: number, threshold: number): number {
   return score - (threshold - 1);
 }
 
-/** Completed anime scored >= threshold, sorted by score desc. */
+/**
+ * Completed anime scored >= threshold, sorted by score desc. Uses the effective
+ * (SIMKL-first) personal status/score — a SIMKL-only completion with no MAL
+ * `my_list_status` still seeds the feed. NOTE: because a seed may carry no MAL
+ * personal record, downstream reads of a seed's score MUST go through
+ * `getEffectiveScore`, never `my_list_status!.score`.
+ */
 export function getSeeds(threshold: number): AnimeForDisplay[] {
   return getAnimeForDisplay()
-    .filter(a =>
-      a.my_list_status?.status === 'completed' &&
-      typeof a.my_list_status.score === 'number' &&
-      a.my_list_status.score >= threshold
-    )
-    .sort((a, b) => (b.my_list_status!.score) - (a.my_list_status!.score));
+    .filter(a => {
+      if (getEffectiveStatus(a) !== 'completed') return false;
+      const score = getEffectiveScore(a);
+      return score != null && score >= threshold;
+    })
+    .sort((a, b) => (getEffectiveScore(b) ?? 0) - (getEffectiveScore(a) ?? 0));
 }
 
 // ============================================================================
@@ -338,7 +344,8 @@ function isPrematureSequel(anime: AnimeForDisplay, byId: Map<number, AnimeForDis
   const prequels = (anime.related_anime || []).filter(r => r.relation_type === 'prequel');
   if (prequels.length > 0) {
     return prequels.some(rel => {
-      const status = byId.get(rel.node.id)?.my_list_status?.status;
+      const target = byId.get(rel.node.id);
+      const status = target ? getEffectiveStatus(target) : undefined;
       return !status || !PREQUEL_OK_STATUSES.has(status);
     });
   }
@@ -384,7 +391,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   for (const [seedIdStr, edges] of Object.entries(data.seeds)) {
     const seedId = Number(seedIdStr);
     const seed = byId.get(seedId);
-    const seedScore = seed?.my_list_status?.score;
+    const seedScore = seed ? getEffectiveScore(seed) : undefined;
     // Live threshold filter, with a fallback for 👍 seeds (no personal score).
     let weight: number;
     if (typeof seedScore === 'number' && seedScore >= threshold) {
@@ -413,7 +420,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // IDF-scaled taste profiles for the metadata sources (positive = liked seeds,
   // negative = dropped / low-scored). IDF is computed once over the full corpus.
   const seeds = getSeeds(threshold);
-  const seedW = (a: AnimeForDisplay) => seedWeight(a.my_list_status!.score, threshold);
+  const seedW = (a: AnimeForDisplay) => seedWeight(getEffectiveScore(a) ?? threshold, threshold);
   const idf = {
     genre: computeIdf(all, FIELD_EXTRACTORS.genre),
     studio: computeIdf(all, FIELD_EXTRACTORS.studio),
@@ -439,8 +446,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
 
   // Rejection profile = MAL dislikes (dropped / low-scored) ∪ 👎 "pas pour moi".
   const dislikedBase = all.filter(a => {
-    const st = a.my_list_status?.status;
-    const sc = a.my_list_status?.score ?? 0;
+    const st = getEffectiveStatus(a);
+    const sc = getEffectiveScore(a) ?? 0;
     return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
   });
   const dislikedSeen = new Set(dislikedBase.map(a => a.id));

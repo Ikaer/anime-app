@@ -127,13 +127,42 @@ export function getSeasonInfos(): SeasonInfos {
   };
 }
 
+// ============================================================================
+// Effective personal state (the "local cache authority" seam)
+// ============================================================================
+//
+// The user notes anime in SIMKL (SIMKL → MAL one-way), so SIMKL is the
+// authority for PERSONAL fields; MAL is the fallback. Every personal read used
+// for filtering, seeding, or exclusion goes through these three helpers so the
+// SIMKL-first precedence lives in exactly one place. Catalog fields (mean,
+// genres, studios…) stay MAL — these helpers are personal-only.
+
 /**
- * Single source of truth for an anime's "effective" personal status.
- * Returns MAL's status today (MAL is authoritative). A future switch to
- * SIMKL — or a MAL-then-SIMKL fallback — changes only this function.
+ * Effective personal watch status (SIMKL-first, MAL fallback). SIMKL status is
+ * already normalized to MAL vocabulary at sync time, so callers get one
+ * vocabulary regardless of source.
  */
 export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
-  return anime.my_list_status?.status;
+  return anime.simkl?.status ?? anime.my_list_status?.status;
+}
+
+/**
+ * Effective personal score on the shared 1–10 scale (SIMKL-first, MAL
+ * fallback). Both `0` and `null` mean "unrated" and collapse to `undefined`,
+ * preserving the threshold / `unrated` semantics that keyed off a falsy score.
+ */
+export function getEffectiveScore(anime: AnimeForDisplay): number | undefined {
+  const simkl = anime.simkl?.score;
+  if (simkl != null && simkl > 0) return simkl;
+  const mal = anime.my_list_status?.score;
+  return mal != null && mal > 0 ? mal : undefined;
+}
+
+/** Effective watched-episode progress (SIMKL-first, MAL fallback). */
+export function getEffectiveProgress(anime: AnimeForDisplay): number | undefined {
+  const simkl = anime.simkl?.num_episodes_watched;
+  if (simkl != null) return simkl;
+  return anime.my_list_status?.num_episodes_watched ?? undefined;
 }
 
 export function formatUserStatus(status?: string) {

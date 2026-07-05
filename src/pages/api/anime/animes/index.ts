@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/anime';
-import { applyNarrowingFilters, getEffectiveStatus } from '@/lib/animeUtils';
+import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore } from '@/lib/animeUtils';
 import { AnimeForDisplay, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -99,9 +99,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // Apply unrated filter (in list but score is 0 / never scored)
+    // Apply unrated filter (in list but score is 0 / never scored) — effective
+    // (SIMKL-first) personal score, matching the effective-status filter below.
     if (unrated !== undefined && typeof unrated === 'string' && unrated.toLowerCase() === 'true') {
-      animeList = animeList.filter(anime => !anime.my_list_status?.score);
+      animeList = animeList.filter(anime => getEffectiveScore(anime) == null);
     }
 
     // Apply discrepancies-only filter (MAL vs SIMKL mismatch present)
