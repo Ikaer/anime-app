@@ -1,12 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { 
-  getMALAuthData, 
-  isMALTokenValid, 
-  upsertMALAnime, 
+import {
+  getMALAuthData,
+  isMALTokenValid,
+  upsertMALAnime,
   getSyncMetadata,
-  updatePersonalStatusBatch 
+  updatePersonalStatusBatch
 } from '@/lib/anime';
 import { AnimeSeasonResponse, MALAnime } from '@/models/anime';
+import { appendLog } from '@/lib/connectionLog';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -56,6 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(`Syncing anime for previous season: ${prevYear} ${prevSeason}`);
     console.log(`Syncing anime for next season: ${nextYear} ${nextSeason}`);
 
+    appendLog('sync', 'info', 'Sync started', {
+      currentSeason: { year: currentYear, season: currentSeason },
+      previousSeason: { year: prevYear, season: prevSeason },
+      nextSeason: { year: nextYear, season: nextSeason },
+    });
+
     const allAnime: MALAnime[] = [];
 
     // Fetch current season
@@ -74,6 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     upsertMALAnime(allAnime);
 
     console.log(`Successfully synced ${allAnime.length} seasonal anime`);
+    appendLog('sync', 'info', `Synced ${allAnime.length} seasonal anime`, { syncedCount: allAnime.length });
 
     // Personal status sync
     console.log(`Syncing personal anime list for user: ${user.name}`);
@@ -89,6 +97,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(
       `Personal status sync: ${personalSyncStats.updated} updated, ${personalSyncStats.skipped} skipped, ${personalSyncStats.failed} failed`
     );
+    appendLog('sync', 'success', 'Sync completed', {
+      seasonalSyncedCount: allAnime.length,
+      personalUpdated: personalSyncStats.updated,
+      personalSkipped: personalSyncStats.skipped,
+      personalFailed: personalSyncStats.failed,
+    });
 
     // Return sync results
     const syncMetadata = getSyncMetadata();
@@ -111,7 +125,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('Sync error:', error);
-    res.status(500).json({ 
+    appendLog('sync', 'error', 'Sync failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
       error: 'Failed to sync anime data',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
