@@ -1,76 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import { useRouter } from 'next/router';
 import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
-import { AnimeForDisplay, MALAuthState, UserAnimeStatus, StatsColumn } from '@/models/anime';
-import type { HistoricalCrawlStats } from '@/lib/anime';
-import { useAnimeUrlState } from '@/hooks';
+import { AnimeForDisplay, UserAnimeStatus, StatsColumn } from '@/models/anime';
+import { useAnimeUrlState, useConnections } from '@/hooks';
 
 export default function AnimePage() {
-  const router = useRouter();
   const { filters, display, updateFilters, updateDisplay, isReady } = useAnimeUrlState();
-
-  // Auth state (not URL-controlled)
-  const [authState, setAuthState] = useState<MALAuthState>({ isAuthenticated: false });
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState('');
-
-  // Sync state (not URL-controlled)
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isBigSyncing, setIsBigSyncing] = useState(false);
-  const [isHistoricalCrawling, setIsHistoricalCrawling] = useState(false);
-  const [syncError, setSyncError] = useState('');
-  const [historicalStats, setHistoricalStats] = useState<HistoricalCrawlStats | null>(null);
-
-  // SIMKL auth + sync state (not URL-controlled)
-  const [simklConnected, setSimklConnected] = useState(false);
-  const [simklUser, setSimklUser] = useState<string | undefined>(undefined);
-  const [isSimklAuthLoading, setIsSimklAuthLoading] = useState(true);
-  const [simklAuthError, setSimklAuthError] = useState('');
-  const [isSimklSyncing, setIsSimklSyncing] = useState(false);
-  const [simklSyncMessage, setSimklSyncMessage] = useState('');
 
   // Data state
   const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const fetchHistoricalStats = async () => {
-    try {
-      const res = await fetch('/api/anime/historical-crawl');
-      if (res.ok) setHistoricalStats(await res.json());
-    } catch {
-      // non-critical, silently ignore
-    }
-  };
-
-  const checkAuthStatus = async () => {
-    try {
-      setIsAuthLoading(true);
-      const response = await fetch('/api/anime/auth?action=status');
-      const data = await response.json();
-      setAuthState({ isAuthenticated: data.isAuthenticated, user: data.user });
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-      setAuthError('Failed to check authentication status');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const checkSimklStatus = async () => {
-    try {
-      setIsSimklAuthLoading(true);
-      const response = await fetch('/api/anime/simkl/auth?action=status');
-      const data = await response.json();
-      setSimklConnected(!!data.isAuthenticated);
-      setSimklUser(data.user?.user?.name);
-    } catch (error) {
-      console.error('Error checking SIMKL status:', error);
-    } finally {
-      setIsSimklAuthLoading(false);
-    }
-  };
 
   const loadAnimes = useCallback(async () => {
     try {
@@ -130,174 +70,20 @@ export default function AnimePage() {
     }
   }, [filters]);
 
-  // Check auth status and historical stats on mount
-  useEffect(() => {
-    checkAuthStatus();
-    fetchHistoricalStats();
-    checkSimklStatus();
-  }, []);
-
-  // Handle OAuth callback
-  useEffect(() => {
-    if (!router.isReady) return;
-
-    const authParam = router.query.auth;
-    if (authParam) {
-      if (authParam === 'success') {
-        checkAuthStatus();
-      } else {
-        setAuthError('Authentication failed. Please try again.');
-      }
-      // Remove auth param from URL without affecting other params
-      const { auth, ...rest } = router.query;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
-    }
-
-    const simklAuthParam = router.query.simkl_auth;
-    if (simklAuthParam) {
-      if (simklAuthParam === 'success') checkSimklStatus();
-      else setSimklAuthError('SIMKL authentication failed. Please try again.');
-      const { simkl_auth, ...rest } = router.query;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
-    }
-  }, [router.isReady, router.query, router]);
+  const {
+    authState, isAuthLoading, authError, onConnect: handleConnect, onDisconnect: handleDisconnect,
+    isSyncing, isBigSyncing, isHistoricalCrawling, syncError, historicalStats,
+    onSync: handleSync, onBigSync: handleBigSync, onHistoricalCrawl: handleHistoricalCrawl,
+    simklConnected, simklUser, isSimklAuthLoading, simklAuthError,
+    isSimklSyncing, simklSyncMessage,
+    onSimklConnect: handleSimklConnect, onSimklDisconnect: handleSimklDisconnect, onSimklSync: handleSimklSync,
+  } = useConnections({ onDataChanged: loadAnimes });
 
   // Load animes when filters change
   useEffect(() => {
     if (!isReady) return;
     loadAnimes();
   }, [isReady, loadAnimes]);
-
-  // Auth handlers
-  const handleConnect = async () => {
-    try {
-      setIsAuthLoading(true);
-      setAuthError('');
-      const response = await fetch('/api/anime/auth?action=login');
-      const data = await response.json();
-      if (data.authUrl) {
-        window.location.href = data.authUrl;
-      } else {
-        setAuthError('Failed to initiate authentication');
-      }
-    } catch (error) {
-      console.error('Error connecting to MAL:', error);
-      setAuthError('Failed to connect to MyAnimeList');
-      setIsAuthLoading(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    try {
-      setIsAuthLoading(true);
-      setAuthError('');
-      await fetch('/api/anime/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
-      setAuthState({ isAuthenticated: false });
-    } catch (error) {
-      console.error('Error disconnecting from MAL:', error);
-      setAuthError('Failed to disconnect from MyAnimeList');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  // SIMKL auth handlers
-  const handleSimklConnect = async () => {
-    try {
-      setIsSimklAuthLoading(true);
-      setSimklAuthError('');
-      const response = await fetch('/api/anime/simkl/auth?action=login');
-      const data = await response.json();
-      if (data.authUrl) window.location.href = data.authUrl;
-      else { setSimklAuthError('Failed to initiate SIMKL authentication'); setIsSimklAuthLoading(false); }
-    } catch (error) {
-      console.error('Error connecting to SIMKL:', error);
-      setSimklAuthError('Failed to connect to SIMKL');
-      setIsSimklAuthLoading(false);
-    }
-  };
-
-  const handleSimklDisconnect = async () => {
-    try {
-      setIsSimklAuthLoading(true);
-      setSimklAuthError('');
-      await fetch('/api/anime/simkl/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
-      setSimklConnected(false);
-      setSimklUser(undefined);
-    } catch (error) {
-      console.error('Error disconnecting from SIMKL:', error);
-      setSimklAuthError('Failed to disconnect from SIMKL');
-    } finally {
-      setIsSimklAuthLoading(false);
-    }
-  };
-
-  const handleSimklSync = async () => {
-    if (!simklConnected) return;
-    setIsSimklSyncing(true);
-    setSimklSyncMessage('');
-    try {
-      const response = await fetch('/api/anime/simkl/sync', { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || 'Sync failed');
-      setSimklSyncMessage(
-        `${data.phase}: +${data.added} updated, ${data.removed} removed${data.orphansSkipped ? `, ${data.orphansSkipped} skipped (no MAL id)` : ''}`
-      );
-      loadAnimes();
-    } catch (error) {
-      setSimklSyncMessage(error instanceof Error ? error.message : 'Failed to sync SIMKL.');
-    } finally {
-      setIsSimklSyncing(false);
-    }
-  };
-
-  // Sync handlers
-  const handleSync = async () => {
-    if (!authState.isAuthenticated) return;
-    setIsSyncing(true);
-    setSyncError('');
-    try {
-      const response = await fetch('/api/anime/sync', { method: 'POST' });
-      if (!response.ok) throw new Error('Sync failed');
-      loadAnimes();
-    } catch (error) {
-      setSyncError('Failed to sync data.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleBigSync = async () => {
-    if (!authState.isAuthenticated) return;
-    setIsBigSyncing(true);
-    setSyncError('');
-    try {
-      const response = await fetch('/api/anime/big-sync', { method: 'POST' });
-      if (!response.ok) throw new Error('Big sync failed');
-      loadAnimes();
-    } catch (error) {
-      setSyncError('Failed to start big sync.');
-    } finally {
-      setIsBigSyncing(false);
-    }
-  };
-
-  const handleHistoricalCrawl = async () => {
-    if (!authState.isAuthenticated) return;
-    setIsHistoricalCrawling(true);
-    setSyncError('');
-    try {
-      const res = await fetch('/api/anime/historical-crawl', { method: 'POST' });
-      if (!res.ok) throw new Error('Historical crawl failed');
-      const data = await res.json();
-      setHistoricalStats(data.stats);
-      loadAnimes();
-    } catch {
-      setSyncError('Failed to run historical crawl.');
-    } finally {
-      setIsHistoricalCrawling(false);
-    }
-  };
 
   // Filter handlers - update URL
   const handleStatusFilterChange = (status: UserAnimeStatus | 'not_defined', isChecked: boolean) => {
