@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getMALAuthData, isMALTokenValid, performHistoricalCrawl } from '@/lib/anime';
+import { appendLog } from '@/lib/connectionLog';
 
 // This is a simplified version of the big-sync trigger
 // It doesn't handle the SSE part, as it's meant for an automated cron job
@@ -39,6 +40,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  appendLog('cron-sync', 'info', 'Cron sync run started');
+
   try {
     // Check MAL authentication status before starting
     const { token } = getMALAuthData();
@@ -46,16 +49,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Here you might want to implement logic to refresh the token automatically
       // For now, we just log and fail if not valid
       console.error('Cron sync cannot run: MAL token is invalid or missing.');
+      appendLog('cron-sync', 'error', 'Cron sync aborted: MAL token invalid or missing');
       return res.status(400).json({ error: 'MAL token is invalid or missing. Cannot start sync.' });
     }
 
-    await startBigSync();
+    const bigSyncData = await startBigSync();
+    appendLog('cron-sync', 'info', 'Cron sync triggered big sync', { syncId: bigSyncData.syncId });
 
     // Crawl a small batch of historical seasons after big-sync fires
     const crawlResult = await performHistoricalCrawl(token.access_token);
     console.log(
       `Historical crawl: ${crawlResult.processedSeasons} seasons, ${crawlResult.syncedCount} anime, ${crawlResult.stats.remaining} remaining`
     );
+    appendLog('cron-sync', 'success', 'Cron sync run completed', {
+      processedSeasons: crawlResult.processedSeasons,
+      syncedCount: crawlResult.syncedCount,
+      remaining: crawlResult.stats.remaining,
+    });
 
     res.status(200).json({
       message: 'Cron sync process initiated successfully.',
@@ -67,7 +77,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Cron sync handler failed:', error);
-    res.status(500).json({ 
+    appendLog('cron-sync', 'error', 'Cron sync run failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
       error: 'Failed to initiate cron sync',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
