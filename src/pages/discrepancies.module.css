@@ -1,0 +1,133 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: bold;
+}
+
+.count {
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.state {
+  color: var(--text-secondary);
+  padding: 2rem 0;
+}
+
+.error {
+  color: var(--score-3);
+  padding: 2rem 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-secondary);
+  z-index: 1;
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.groupMal {
+  border-left: 2px solid var(--border-color);
+}
+
+.groupSimkl {
+  border-left: 2px solid var(--border-color);
+}
+
+.thumb {
+  width: 48px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: 4px;
+  background-color: var(--bg-tertiary);
+  display: block;
+}
+
+.thumbPlaceholder {
+  width: 48px;
+  height: 68px;
+  border-radius: 4px;
+  background-color: var(--bg-tertiary);
+}
+
+.titleCell {
+  white-space: normal;
+  max-width: 320px;
+  font-weight: 500;
+}
+
+.mismatch {
+  color: var(--score-5);
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.links {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.linkBtn {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.linkBtn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.presenceTag {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--accent-primary);
+}

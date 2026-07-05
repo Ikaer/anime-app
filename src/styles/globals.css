@@ -116,6 +116,61 @@ a:hover {
   color: var(--accent-primary);
 }
 
+/* "Others" dropdown */
+.nav-dropdown {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-dropdown-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-dropdown-caret {
+  font-size: 0.7em;
+}
+
+.nav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.75rem;
+  min-width: 220px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 0.5rem 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-dropdown-item {
+  color: var(--text-secondary);
+  padding: 0.6rem 1rem;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-dropdown-item:hover {
+  background-color: var(--bg-tertiary, rgba(255, 255, 255, 0.06));
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.nav-dropdown-item.active {
+  color: var(--accent-primary);
+}
+
 .main {
   min-height: calc(100vh - 80px);
   padding: 2rem 0;
