@@ -14,6 +14,10 @@ interface DataSyncSectionProps {
   onSync: () => void;
   onBigSync: () => void;
   onHistoricalCrawl: () => void;
+  isAnilistTagsSyncing: boolean;
+  anilistTagsSyncMessage: string;
+  anilistTagStats: { totalAnime: number; taggedCount: number } | null;
+  onAnilistTagsSync: () => void;
 }
 
 const DataSyncSection: React.FC<DataSyncSectionProps> = ({
@@ -26,8 +30,12 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   onSync,
   onBigSync,
   onHistoricalCrawl,
+  isAnilistTagsSyncing,
+  anilistTagsSyncMessage,
+  anilistTagStats,
+  onAnilistTagsSync,
 }) => {
-  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling;
+  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistTagsSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
 
   return (
@@ -61,6 +69,17 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
         </div>
       )}
       {syncError && <div className={styles.error}>{syncError}</div>}
+      <div className={styles.buttonGroup}>
+        <Button onClick={onAnilistTagsSync} disabled={anyBusy} variant="secondary">
+          {isAnilistTagsSyncing ? 'Starting...' : 'Sync AniList Tags'}
+        </Button>
+      </div>
+      {anilistTagStats !== null && (
+        <div className={styles.crawlStats}>
+          {anilistTagStats.taggedCount} / {anilistTagStats.totalAnime} anime tagged
+        </div>
+      )}
+      {anilistTagsSyncMessage && <div className={styles.crawlStats}>{anilistTagsSyncMessage}</div>}
     </div>
   );
 };

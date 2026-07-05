@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry, AniListTagsEntry } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { appendLog } from '@/lib/connectionLog';
 // Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
@@ -12,6 +12,7 @@ const DATA_PATH = process.env.DATA_PATH || '/app/data';
 const ANIME_MAL_FILE = path.join(DATA_PATH, 'animes_MAL.json');
 const ANIME_HIDDEN_FILE = path.join(DATA_PATH, 'animes_hidden.json');
 const ANIME_SIMKL_FILE = path.join(DATA_PATH, 'animes_SIMKL.json');
+const ANIME_ANILIST_TAGS_FILE = path.join(DATA_PATH, 'animes_anilist_tags.json');
 const MAL_AUTH_FILE = path.join(DATA_PATH, 'mal_auth.json');
 
 // Utility function to ensure data directory exists
@@ -116,6 +117,24 @@ export function removeSimklEntries(malIds: number[]): void {
   }
 }
 
+// AniList catalog-tags operations (keyed by MAL id, as string)
+export function getAllAnilistTags(): Record<string, AniListTagsEntry> {
+  return readJsonFile<Record<string, AniListTagsEntry>>(ANIME_ANILIST_TAGS_FILE, {});
+}
+
+export function getAnilistTagsCount(): number {
+  return Object.keys(getAllAnilistTags()).length;
+}
+
+export function upsertAnilistTags(entries: AniListTagsEntry[]): void {
+  const existing = getAllAnilistTags();
+  entries.forEach(entry => {
+    existing[entry.mal_id.toString()] = entry;
+  });
+  writeJsonFile(ANIME_ANILIST_TAGS_FILE, existing);
+  cachedAnime = null;
+}
+
 // Combined data operations
 let cachedAnime: AnimeForDisplay[] | null = null;
 let lastCacheTime = 0;
@@ -129,6 +148,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   const malAnime = getAllMALAnime();
   const hiddenIds = getHiddenAnimeIds();
   const simklByMalId = getAllSimklEntries();
+  const anilistTagsByMalId = getAllAnilistTags();
   cachedAnime = Object.values(malAnime).map(anime => {
     const simkl = simklByMalId[anime.id.toString()];
     return {
@@ -136,6 +156,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
       hidden: hiddenIds.includes(anime.id),
       simkl,
       discrepancy: computeDiscrepancy(anime, simkl),
+      anilistTags: anilistTagsByMalId[anime.id.toString()],
     };
   });
   lastCacheTime = now;

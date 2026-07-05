@@ -15,6 +15,8 @@ import type { RecoSource, SourceWeights } from '@/models/anime';
  * anchors the feed; metadata sources gently re-rank; `rejection`/`popularity`
  * are negative (they push a candidate down). nsfw ships at 0 — with 2 values
  * (91% "white") it barely discriminates, so it's available-but-off.
+ * anilistTags also ships at 0 until a "Sync AniList Tags" run has populated
+ * coverage (see Connections page); it's meaningless before that.
  */
 export const DEFAULT_WEIGHTS: SourceWeights = {
   crowd: 1.0,
@@ -24,6 +26,7 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
   studio: 0.15,
   nsfw: 0.0,
   rating: 0.05,
+  anilistTags: 0.0,
   rejection: -0.35,
   popularity: -0.15,
 };
@@ -47,6 +50,7 @@ export const SOURCE_META: SourceMeta[] = [
   { source: 'studio', label: 'Studios', hint: 'Affinité de studios (pondérée par rareté)', min: 0, max: 1, step: 0.05 },
   { source: 'rating', label: 'Classification', hint: 'Âge conseillé (PG, R…), pondéré par rareté', min: 0, max: 1, step: 0.05 },
   { source: 'nsfw', label: 'NSFW', hint: 'Signal faible (2 valeurs) — off par défaut', min: 0, max: 1, step: 0.05 },
+  { source: 'anilistTags', label: 'Tags AniList', hint: 'Affinité de tags fins (pondérée par rareté) — nécessite une sync', min: 0, max: 1, step: 0.05 },
   { source: 'rejection', label: 'Rejet', hint: 'Pénalise ce qui ressemble à tes abandons / notes basses', min: -1, max: 0, step: 0.05 },
   { source: 'popularity', label: 'Popularité', hint: 'Négatif = feed plus niche', min: -1, max: 1, step: 0.05 },
 ];

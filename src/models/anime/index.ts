@@ -106,11 +106,25 @@ export interface Discrepancy {
   presence?: 'simkl_only'; // soft: synced from SIMKL but absent from your MAL list
 }
 
+// AniList catalog tag data (read-only, public API). Keyed by MAL id in animes_anilist_tags.json.
+export interface AniListTagEntry {
+  name: string;
+  rank: number;       // AniList relevance rank, 0-100
+  category?: string;
+}
+export interface AniListTagsEntry {
+  mal_id: number;
+  anilist_id: number;
+  tags: AniListTagEntry[];
+  fetched_at: string; // ISO timestamp of last successful fetch
+}
+
 // Combined data for display
 export interface AnimeForDisplay extends MALAnime {
   hidden?: boolean;
   simkl?: SimklPersonalEntry;       // joined at display time by MAL id
   discrepancy?: Discrepancy | null; // computed at display / filter time
+  anilistTags?: AniListTagsEntry;   // joined at display time by MAL id
 }
 
 // MAL Authentication
@@ -190,6 +204,7 @@ export type RecoSource =
   | 'studio'       // taste-profile affinity on studios (IDF-weighted)
   | 'nsfw'         // taste-profile affinity on the nsfw flag (IDF-weighted)
   | 'rating'       // taste-profile affinity on the age rating (IDF-weighted)
+  | 'anilistTags'  // taste-profile affinity on AniList catalog tags (IDF-weighted)
   | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored / 👎)
   | 'popularity';  // MAL popularity — negative weight makes the feed nichier
 

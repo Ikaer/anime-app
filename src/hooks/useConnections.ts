@@ -31,10 +31,24 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [isSimklSyncing, setIsSimklSyncing] = useState(false);
   const [simklSyncMessage, setSimklSyncMessage] = useState('');
 
+  // AniList tags sync state (public API, no auth)
+  const [isAnilistTagsSyncing, setIsAnilistTagsSyncing] = useState(false);
+  const [anilistTagsSyncMessage, setAnilistTagsSyncMessage] = useState('');
+  const [anilistTagStats, setAnilistTagStats] = useState<{ totalAnime: number; taggedCount: number } | null>(null);
+
   const fetchHistoricalStats = async () => {
     try {
       const res = await fetch('/api/anime/historical-crawl');
       if (res.ok) setHistoricalStats(await res.json());
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
+  const fetchAnilistTagStats = async () => {
+    try {
+      const res = await fetch('/api/anime/anilist/tags-sync');
+      if (res.ok) setAnilistTagStats(await res.json());
     } catch {
       // non-critical, silently ignore
     }
@@ -73,6 +87,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     checkAuthStatus();
     fetchHistoricalStats();
     checkSimklStatus();
+    fetchAnilistTagStats();
   }, []);
 
   // Handle OAuth callback
@@ -230,6 +245,22 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const handleAnilistTagsSync = async () => {
+    setIsAnilistTagsSyncing(true);
+    setAnilistTagsSyncMessage('');
+    try {
+      const response = await fetch('/api/anime/anilist/tags-sync', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AniList tags sync failed');
+      setAnilistTagsSyncMessage('Sync started — see the log below for progress.');
+      fetchAnilistTagStats();
+    } catch (error) {
+      setAnilistTagsSyncMessage(error instanceof Error ? error.message : 'Failed to start AniList tags sync.');
+    } finally {
+      setIsAnilistTagsSyncing(false);
+    }
+  };
+
   return {
     authState,
     isAuthLoading,
@@ -253,5 +284,9 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     onSimklConnect: handleSimklConnect,
     onSimklDisconnect: handleSimklDisconnect,
     onSimklSync: handleSimklSync,
+    isAnilistTagsSyncing,
+    anilistTagsSyncMessage,
+    anilistTagStats,
+    onAnilistTagsSync: handleAnilistTagsSync,
   };
 }

@@ -9,6 +9,7 @@ export default function ConnectionsPage() {
     onSync, onBigSync, onHistoricalCrawl,
     simklConnected, simklUser, isSimklAuthLoading, simklAuthError,
     isSimklSyncing, simklSyncMessage, onSimklConnect, onSimklDisconnect, onSimklSync,
+    isAnilistTagsSyncing, anilistTagsSyncMessage, anilistTagStats, onAnilistTagsSync,
   } = useConnections();
 
   return (
@@ -55,6 +56,10 @@ export default function ConnectionsPage() {
             onSync={onSync}
             onBigSync={onBigSync}
             onHistoricalCrawl={onHistoricalCrawl}
+            isAnilistTagsSyncing={isAnilistTagsSyncing}
+            anilistTagsSyncMessage={anilistTagsSyncMessage}
+            anilistTagStats={anilistTagStats}
+            onAnilistTagsSync={onAnilistTagsSync}
           />
         </section>
         <section className="connections-section">

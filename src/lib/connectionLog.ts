@@ -13,7 +13,8 @@ export type LogSource =
   | 'big-sync'
   | 'historical-crawl'
   | 'simkl-sync'
-  | 'cron-sync';
+  | 'cron-sync'
+  | 'anilist-tags-sync';
 
 export type LogLevel = 'info' | 'success' | 'error';
 
