@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
+import { appendLog } from '@/lib/connectionLog';
 // Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
 // User preferences removed - all state now controlled via URL
 
@@ -412,6 +413,7 @@ export async function performHistoricalCrawl(
   batchSize: number = HISTORICAL_CRAWL_BATCH_SIZE
 ): Promise<HistoricalCrawlResult> {
   if (isHistoricalCrawlRunning) {
+    appendLog('historical-crawl', 'info', 'Historical crawl skipped: already running');
     return { success: false, alreadyRunning: true, syncedCount: 0, processedSeasons: 0, stats: getHistoricalCrawlStats() };
   }
 
@@ -419,6 +421,7 @@ export async function performHistoricalCrawl(
   try {
     const batch = getNextHistoricalBatch(batchSize);
     if (batch.length === 0) {
+      appendLog('historical-crawl', 'success', 'Historical crawl already complete: no remaining seasons');
       return { success: true, alreadyRunning: false, syncedCount: 0, processedSeasons: 0, stats: getHistoricalCrawlStats() };
     }
 
@@ -450,15 +453,25 @@ export async function performHistoricalCrawl(
     }
     markSeasonsSynced(syncedKeys);
 
+    const stats = getHistoricalCrawlStats();
+    appendLog('historical-crawl', 'success', `Historical crawl batch complete: ${syncedKeys.length} seasons, ${allAnime.length} anime`, {
+      processedSeasons: syncedKeys.length,
+      syncedCount: allAnime.length,
+      remaining: stats.remaining,
+    });
+
     return {
       success: true,
       alreadyRunning: false,
       syncedCount: allAnime.length,
       processedSeasons: syncedKeys.length,
-      stats: getHistoricalCrawlStats(),
+      stats,
     };
   } catch (error) {
     console.error('Historical crawl error:', error);
+    appendLog('historical-crawl', 'error', 'Historical crawl failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     return {
       success: false,
       alreadyRunning: false,
