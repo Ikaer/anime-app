@@ -129,10 +129,20 @@ export interface AniListTagEntry {
   rank: number;       // AniList relevance rank, 0-100
   category?: string;
 }
+// A staff credit from AniList (Director, Character Design, Music…). The `id` is
+// a stable cross-anime AniList staff id — it's the key the reco source matches on.
+export interface AniListStaffEntry {
+  id: number;
+  name: string;
+  role: string;
+}
 export interface AniListTagsEntry {
   mal_id: number;
   anilist_id: number;
   tags: AniListTagEntry[];
+  // Top-relevance staff credits. Optional so entries written before staff was
+  // added stay valid; a missing `staff` field is the signal to backfill.
+  staff?: AniListStaffEntry[];
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 
@@ -230,6 +240,7 @@ export type RecoSource =
   | 'nsfw'         // taste-profile affinity on the nsfw flag (IDF-weighted)
   | 'rating'       // taste-profile affinity on the age rating (IDF-weighted)
   | 'anilistTags'  // taste-profile affinity on AniList catalog tags (IDF-weighted)
+  | 'anilistStaff' // taste-profile affinity on AniList staff/creators (IDF-weighted)
   | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored / 👎)
   | 'popularity';  // MAL popularity — negative weight makes the feed nichier
 

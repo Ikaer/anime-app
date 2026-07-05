@@ -52,7 +52,7 @@ export const TUNING = {
 } as const;
 
 /** Metadata fields exposed as taste-profile sources, with their value extractor. */
-type MetaField = 'genre' | 'studio' | 'nsfw' | 'rating' | 'anilistTags';
+type MetaField = 'genre' | 'studio' | 'nsfw' | 'rating' | 'anilistTags' | 'anilistStaff';
 type FieldValue = string | number;
 
 const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> = {
@@ -61,6 +61,7 @@ const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> 
   nsfw: a => (a.nsfw ? [a.nsfw] : []),
   rating: a => (a.rating ? [a.rating] : []),
   anilistTags: a => (a.anilistTags?.tags || []).map(t => t.name),
+  anilistStaff: a => (a.anilistTags?.staff || []).map(s => s.id),
 };
 
 /**
@@ -427,6 +428,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     nsfw: computeIdf(all, FIELD_EXTRACTORS.nsfw),
     rating: computeIdf(all, FIELD_EXTRACTORS.rating),
     anilistTags: computeIdf(all, FIELD_EXTRACTORS.anilistTags),
+    anilistStaff: computeIdf(all, FIELD_EXTRACTORS.anilistStaff),
   };
   const pos = {
     genre: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.genre, idf.genre),
@@ -434,6 +436,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     nsfw: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.nsfw, idf.nsfw),
     rating: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.rating, idf.rating),
     anilistTags: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.anilistTags, idf.anilistTags),
+    anilistStaff: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.anilistStaff, idf.anilistStaff),
   };
   // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
   // numeric score). Its own weighted source, separate from the MAL-seed genre /
@@ -491,6 +494,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const nsfwM = fieldMatch(anime, pos.nsfw);
     const ratingM = fieldMatch(anime, pos.rating);
     const anilistTagsM = fieldMatch(anime, pos.anilistTags);
+    const anilistStaffM = fieldMatch(anime, pos.anilistStaff);
     const fbGenreM = fieldMatch(anime, fb.genre);
     const fbStudioM = fieldMatch(anime, fb.studio);
     const negGenreM = fieldMatch(anime, negGenre);
@@ -506,6 +510,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       nsfw: nsfwM.score,
       rating: ratingM.score,
       anilistTags: anilistTagsM.score,
+      anilistStaff: anilistStaffM.score,
       rejection: TUNING.GENRE_WEIGHT * negGenreM.score + TUNING.STUDIO_WEIGHT * negStudioM.score,
       popularity: Math.log10(users) / popDenom,
     };
@@ -516,6 +521,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       .map(([sid, backers]) => ({ id: sid, title: byId.get(sid)?.title || `#${sid}`, backers }));
 
     const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
+    const staffById = new Map((anime.anilistTags?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: topSeeds.length ? `Fans de ${topSeeds.map(s => s.title).join(', ')}` : undefined,
       suggestions: values.suggestions ? 'Dans tes suggestions MAL' : undefined,
@@ -533,6 +539,15 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       nsfw: values.nsfw > 0 && anime.nsfw ? anime.nsfw : undefined,
       rating: values.rating > 0 && anime.rating ? anime.rating.toUpperCase() : undefined,
       anilistTags: anilistTagsM.matched.length ? (anilistTagsM.matched as string[]).join(', ') : undefined,
+      anilistStaff: anilistStaffM.matched.length
+        ? anilistStaffM.matched
+            .map(id => {
+              const s = staffById.get(id as number);
+              if (!s) return `#${id}`;
+              return s.role ? `${s.role} : ${s.name}` : s.name;
+            })
+            .join(', ')
+        : undefined,
       rejection: (() => {
         const parts = [
           ...(negGenreM.matched as string[]),

@@ -5,14 +5,20 @@
  */
 import { getAllMALAnime, getAllAnilistTags, upsertAnilistTags } from '@/lib/anime';
 import { appendLog } from '@/lib/connectionLog';
-import { AniListTagEntry, AniListTagsEntry } from '@/models/anime';
+import { AniListTagEntry, AniListStaffEntry, AniListTagsEntry } from '@/models/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const BATCH_SIZE = 50;
+// Top-relevance staff credits to keep per anime — enough for the discriminative
+// creative roles (director, character design, music…) without bloating storage.
+const STAFF_PER_ANIME = 15;
 // Conservative delay between batches (~28 req/min), safely under AniList's
 // documented degraded limit of 30 req/min (normally 90/min).
 const ANILIST_MIN_DELAY_MS = 2100;
 
+// Tags AND staff in one query per batch (verified live: perPage:50 with a nested
+// staff(perPage:15) stays under AniList's query-complexity ceiling). Staff is
+// nested inside Page.media — NOT an aliased Media (which null-bombs on any miss).
 const TAGS_QUERY = `
 query ($ids: [Int]) {
   Page(page: 1, perPage: ${BATCH_SIZE}) {
@@ -24,14 +30,35 @@ query ($ids: [Int]) {
         rank
         category
       }
+      staff(sort: RELEVANCE, perPage: ${STAFF_PER_ANIME}) {
+        edges {
+          role
+          node {
+            id
+            name { full }
+          }
+        }
+      }
     }
   }
 }`;
 
+interface RawStaffEdge {
+  role?: string;
+  node?: { id?: number; name?: { full?: string } };
+}
 interface RawMedia {
   idMal: number;
   id: number;
   tags: AniListTagEntry[];
+  staff?: { edges?: RawStaffEdge[] };
+}
+
+/** Flatten AniList staff edges to our lean {id,name,role} records. */
+function parseStaff(media: RawMedia): AniListStaffEntry[] {
+  return (media.staff?.edges ?? [])
+    .filter((e): e is RawStaffEdge & { node: { id: number } } => !!e.node?.id)
+    .map(e => ({ id: e.node.id, name: e.node?.name?.full ?? '', role: e.role ?? '' }));
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -89,12 +116,17 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
   try {
     const malAnime = getAllMALAnime();
     const existingTags = getAllAnilistTags();
+    // Fetch anime with no AniList entry yet, OR an entry predating staff support
+    // (staff === undefined) so staff backfills onto already-tagged titles.
     const missingIds = Object.values(malAnime)
       .map(a => a.id)
-      .filter(id => !existingTags[id.toString()]);
+      .filter(id => {
+        const e = existingTags[id.toString()];
+        return !e || e.staff === undefined;
+      });
 
     if (missingIds.length === 0) {
-      appendLog('anilist-tags-sync', 'success', 'AniList tags sync: nothing to do, all anime already tagged');
+      appendLog('anilist-tags-sync', 'success', 'AniList sync: nothing to do, all anime already have tags + staff');
       return { ok: true, alreadyRunning: false, totalMissing: 0, processed: 0, tagged: 0, failed: 0 };
     }
 
@@ -115,6 +147,7 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
             mal_id: m.idMal,
             anilist_id: m.id,
             tags: m.tags ?? [],
+            staff: parseStaff(m),
             fetched_at: now,
           }));
         if (entries.length > 0) {

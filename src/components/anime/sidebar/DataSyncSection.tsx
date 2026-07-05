@@ -71,12 +71,12 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
       {syncError && <div className={styles.error}>{syncError}</div>}
       <div className={styles.buttonGroup}>
         <Button onClick={onAnilistTagsSync} disabled={anyBusy} variant="secondary">
-          {isAnilistTagsSyncing ? 'Starting...' : 'Sync AniList Tags'}
+          {isAnilistTagsSyncing ? 'Starting...' : 'Sync AniList Tags + Staff'}
         </Button>
       </div>
       {anilistTagStats !== null && (
         <div className={styles.crawlStats}>
-          {anilistTagStats.taggedCount} / {anilistTagStats.totalAnime} anime tagged
+          {anilistTagStats.taggedCount} / {anilistTagStats.totalAnime} anime enrichis
         </div>
       )}
       {anilistTagsSyncMessage && <div className={styles.crawlStats}>{anilistTagsSyncMessage}</div>}
