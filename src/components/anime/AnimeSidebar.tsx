@@ -1,14 +1,10 @@
 import React from 'react';
 import styles from './AnimeSidebar.module.css';
-import { MALAuthState, UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
-import type { HistoricalCrawlStats } from '@/lib/anime';
+import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
 import { SeasonInfo } from './SeasonSelector';
 import { Button, CollapsibleSection } from '@/components/shared';
 import {
   SortOrderSection,
-  AccountSection,
-  DataSyncSection,
-  SimklSection,
   ViewsSection,
   DisplaySection,
   FiltersSection,
@@ -16,34 +12,6 @@ import {
 } from './sidebar';
 
 interface AnimeSidebarProps {
-  // Auth
-  authState: MALAuthState;
-  isAuthLoading: boolean;
-  authError: string;
-  onConnect: () => void;
-  onDisconnect: () => void;
-
-  // Sync
-  isSyncing: boolean;
-  isBigSyncing: boolean;
-  isHistoricalCrawling: boolean;
-  syncError: string;
-  historicalStats: HistoricalCrawlStats | null;
-  onSync: () => void;
-  onBigSync: () => void;
-  onHistoricalCrawl: () => void;
-
-  // SIMKL
-  simklConnected: boolean;
-  simklUser?: string;
-  isSimklAuthLoading: boolean;
-  simklAuthError: string;
-  isSimklSyncing: boolean;
-  simklSyncMessage: string;
-  onSimklConnect: () => void;
-  onSimklDisconnect: () => void;
-  onSimklSync: () => void;
-
   // Display
   imageSize: ImageSize;
   onImageSizeChange: (size: ImageSize) => void;
@@ -87,10 +55,6 @@ interface AnimeSidebarProps {
 }
 
 const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
-  authState, isAuthLoading, authError, onConnect, onDisconnect,
-  isSyncing, isBigSyncing, isHistoricalCrawling, syncError, historicalStats, onSync, onBigSync, onHistoricalCrawl,
-  simklConnected, simklUser, isSimklAuthLoading, simklAuthError, isSimklSyncing, simklSyncMessage,
-  onSimklConnect, onSimklDisconnect, onSimklSync,
   imageSize, onImageSizeChange,
   statusFilters, onStatusFilterChange,
   searchQuery, onSearchChange,
@@ -140,56 +104,6 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           </Button>
         </div>
       </div>
-
-      <CollapsibleSection
-        title="Account"
-        isExpanded={sidebarExpanded.account}
-        onToggle={() => toggle('account')}
-      >
-        <AccountSection
-          authState={authState}
-          isAuthLoading={isAuthLoading}
-          authError={authError}
-          onConnect={onConnect}
-          onDisconnect={onDisconnect}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        title="Data Sync"
-        isExpanded={sidebarExpanded.sync}
-        onToggle={() => toggle('sync')}
-      >
-        <DataSyncSection
-          authState={authState}
-          isSyncing={isSyncing}
-          isBigSyncing={isBigSyncing}
-          isHistoricalCrawling={isHistoricalCrawling}
-          syncError={syncError}
-          historicalStats={historicalStats}
-          onSync={onSync}
-          onBigSync={onBigSync}
-          onHistoricalCrawl={onHistoricalCrawl}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        title="SIMKL"
-        isExpanded={sidebarExpanded.simkl}
-        onToggle={() => toggle('simkl')}
-      >
-        <SimklSection
-          isConnected={simklConnected}
-          userName={simklUser}
-          isAuthLoading={isSimklAuthLoading}
-          authError={simklAuthError}
-          isSyncing={isSimklSyncing}
-          syncMessage={simklSyncMessage}
-          onConnect={onSimklConnect}
-          onDisconnect={onSimklDisconnect}
-          onSync={onSimklSync}
-        />
-      </CollapsibleSection>
 
       <CollapsibleSection
         title="Views"

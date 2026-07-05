@@ -364,51 +364,13 @@
     flex: 1;
 }
 
-.malActions {
+.imageActions {
     display: flex;
-    flex-direction: column;
+    justify-content: center;
     gap: 0.5rem;
 }
 
-.malRow {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.malSelect {
-    flex: 1;
-    background: #111827;
-    border: 1px solid #374151;
-    color: #d1d5db;
-    padding: 0.3rem;
-    border-radius: 4px;
-    font-size: 0.8rem;
-}
-
-.episodes {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-}
-
-
-
-
-.topActions {
-    position: absolute;
-    top: 1rem;
-    left: 1rem;
-    right: 1rem;
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-}
-
-.searchBtn,
-.justWatchBtn {
+.imageActionBtn {
     --button-square-size: 2rem;
     border-radius: 6px;
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -418,17 +380,46 @@
     color: white;
 }
 
-.searchBtn:hover,
-.justWatchBtn:hover {
+.imageActionBtn:hover {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
     transform: scale(1.1);
 }
 
-.justWatchIcon {
+.imageActionIcon {
     width: 20px;
     height: 20px;
     object-fit: contain;
+}
+
+.closeBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 11;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(17, 24, 39, 0.8);
+    backdrop-filter: blur(4px);
+    color: white;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover .closeBtn {
+    opacity: 1;
+}
+
+.closeBtn:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+    transform: scale(1.1);
 }
 
 

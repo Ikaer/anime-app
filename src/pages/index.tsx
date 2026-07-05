@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
 import { AnimeForDisplay, UserAnimeStatus, StatsColumn } from '@/models/anime';
-import { useAnimeUrlState, useConnections } from '@/hooks';
+import { useAnimeUrlState } from '@/hooks';
 
 export default function AnimePage() {
   const { filters, display, updateFilters, updateDisplay, isReady } = useAnimeUrlState();
@@ -69,15 +69,6 @@ export default function AnimePage() {
       setIsLoading(false);
     }
   }, [filters]);
-
-  const {
-    authState, isAuthLoading, authError, onConnect: handleConnect, onDisconnect: handleDisconnect,
-    isSyncing, isBigSyncing, isHistoricalCrawling, syncError, historicalStats,
-    onSync: handleSync, onBigSync: handleBigSync, onHistoricalCrawl: handleHistoricalCrawl,
-    simklConnected, simklUser, isSimklAuthLoading, simklAuthError,
-    isSimklSyncing, simklSyncMessage,
-    onSimklConnect: handleSimklConnect, onSimklDisconnect: handleSimklDisconnect, onSimklSync: handleSimklSync,
-  } = useConnections({ onDataChanged: loadAnimes });
 
   // Load animes when filters change
   useEffect(() => {
@@ -188,28 +179,6 @@ export default function AnimePage() {
 
   const sidebar = (
     <AnimeSidebar
-      authState={authState}
-      isAuthLoading={isAuthLoading}
-      authError={authError}
-      onConnect={handleConnect}
-      onDisconnect={handleDisconnect}
-      isSyncing={isSyncing}
-      isBigSyncing={isBigSyncing}
-      isHistoricalCrawling={isHistoricalCrawling}
-      syncError={syncError}
-      historicalStats={historicalStats}
-      onSync={handleSync}
-      onBigSync={handleBigSync}
-      onHistoricalCrawl={handleHistoricalCrawl}
-      simklConnected={simklConnected}
-      simklUser={simklUser}
-      isSimklAuthLoading={isSimklAuthLoading}
-      simklAuthError={simklAuthError}
-      isSimklSyncing={isSimklSyncing}
-      simklSyncMessage={simklSyncMessage}
-      onSimklConnect={handleSimklConnect}
-      onSimklDisconnect={handleSimklDisconnect}
-      onSimklSync={handleSimklSync}
       imageSize={display.imageSize}
       onImageSizeChange={handleImageSizeChange}
       statusFilters={filters.statusFilters}
@@ -264,7 +233,6 @@ export default function AnimePage() {
                 animes={animes}
                 imageSize={display.imageSize}
                 visibleColumns={display.visibleColumns}
-                onUpdateMALStatus={handleUpdateMALStatus}
                 onHideToggle={handleHideToggle}
               />
             ) : (

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { MalConnectionBadge, SimklConnectionBadge } from '@/components/anime';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -16,32 +17,38 @@ export default function Layout({ children }: LayoutProps) {
             <Link href="/" className="logo">
               Anime Tracker
             </Link>
-            <nav className="nav">
-              <Link
-                href="/"
-                className={`nav-link ${router.pathname === '/' ? 'active' : ''}`}
-              >
-                Anime
-              </Link>
-              <Link
-                href="/recommendations"
-                className={`nav-link ${router.pathname === '/recommendations' ? 'active' : ''}`}
-              >
-                ✨ Pour toi
-              </Link>
-              <Link
-                href="/rate"
-                className={`nav-link ${router.pathname === '/rate' ? 'active' : ''}`}
-              >
-                Rating Calculator
-              </Link>
-              <Link
-                href="/connections"
-                className={`nav-link ${router.pathname === '/connections' ? 'active' : ''}`}
-              >
-                Connections
-              </Link>
-            </nav>
+            <div className="header-right">
+              <nav className="nav">
+                <Link
+                  href="/"
+                  className={`nav-link ${router.pathname === '/' ? 'active' : ''}`}
+                >
+                  Anime
+                </Link>
+                <Link
+                  href="/recommendations"
+                  className={`nav-link ${router.pathname === '/recommendations' ? 'active' : ''}`}
+                >
+                  ✨ Pour toi
+                </Link>
+                <Link
+                  href="/rate"
+                  className={`nav-link ${router.pathname === '/rate' ? 'active' : ''}`}
+                >
+                  Rating Calculator
+                </Link>
+                <Link
+                  href="/connections"
+                  className={`nav-link ${router.pathname === '/connections' ? 'active' : ''}`}
+                >
+                  Connections
+                </Link>
+              </nav>
+              <div className="connection-badges">
+                <MalConnectionBadge />
+                <SimklConnectionBadge />
+              </div>
+            </div>
           </div>
         </div>
       </header>

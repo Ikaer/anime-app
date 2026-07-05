@@ -1,0 +1,46 @@
+.badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  opacity: 0.85;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.badge:hover {
+  opacity: 1;
+  background-color: var(--bg-tertiary);
+  text-decoration: none;
+}
+
+.icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: contain;
+  filter: grayscale(100%);
+  opacity: 0.45;
+}
+
+.icon.connected {
+  filter: none;
+  opacity: 1;
+}
+
+.dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+  background-color: var(--text-muted);
+}
+
+.dot.connected {
+  background-color: var(--score-9);
+}

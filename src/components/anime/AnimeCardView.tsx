@@ -12,19 +12,12 @@ const SOURCE_LABELS: Record<RecoSource, string> = Object.fromEntries(
     SOURCE_META.map(m => [m.source, m.label])
 ) as Record<RecoSource, string>;
 
-interface MALStatusUpdate {
-    status?: string;
-    score?: number;
-    num_episodes_watched?: number;
-}
-
 type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
 
 interface AnimeCardViewProps {
     animes: RecoCard[];
     imageSize: ImageSize;
     visibleColumns: VisibleColumns;
-    onUpdateMALStatus?: (animeId: number, updates: MALStatusUpdate) => void;
     onHideToggle?: (animeId: number, hide: boolean) => void;
     onFeedback?: (animeId: number, verdict: RecoVerdict) => void;
     onRemoveFeedback?: (animeId: number) => void;
@@ -47,14 +40,12 @@ export default function AnimeCardView({
     animes,
     imageSize,
     visibleColumns,
-    onUpdateMALStatus,
     onHideToggle,
     onFeedback,
     onRemoveFeedback,
     feedbackMode,
     allExplainsOpen
 }: AnimeCardViewProps) {
-    const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const [explainOpen, setExplainOpen] = useState<Set<number>>(new Set());
 
@@ -94,28 +85,6 @@ export default function AnimeCardView({
         );
     }
 
-    const updateMALStatus = (animeId: number, field: keyof MALStatusUpdate, value: any) => {
-        const currentUpdates = pendingUpdates.get(animeId) || {};
-        const newUpdates = { ...currentUpdates, [field]: value };
-        const newPendingUpdates = new Map(pendingUpdates);
-        newPendingUpdates.set(animeId, newUpdates);
-        setPendingUpdates(newPendingUpdates);
-    };
-
-    const handleUpdateMAL = async (animeId: number) => {
-        const updates = pendingUpdates.get(animeId);
-        if (!updates || !onUpdateMALStatus) return;
-
-        try {
-            await onUpdateMALStatus(animeId, updates);
-            const newPendingUpdates = new Map(pendingUpdates);
-            newPendingUpdates.delete(animeId);
-            setPendingUpdates(newPendingUpdates);
-        } catch (error) {
-            console.error('Failed to update MAL status:', error);
-        }
-    };
-
     const handleManualSearch = (anime: AnimeForDisplay) => {
         const searchTitle = anime.alternative_titles?.en || anime.title;
         const googleUrl = generateGoogleORQuery(searchTitle);
@@ -128,20 +97,7 @@ export default function AnimeCardView({
         window.open(justWatchUrl, '_blank');
     };
 
-    const getDisplayStatus = (anime: AnimeForDisplay) => {
-        const updates = pendingUpdates.get(anime.id);
-        return updates?.status ?? anime.my_list_status?.status ?? '';
-    };
-
-    const getDisplayScore = (anime: AnimeForDisplay) => {
-        const updates = pendingUpdates.get(anime.id);
-        return updates?.score ?? anime.my_list_status?.score ?? 0;
-    };
-
-    const getDisplayEpisodes = (anime: AnimeForDisplay) => {
-        const updates = pendingUpdates.get(anime.id);
-        return updates?.num_episodes_watched ?? anime.my_list_status?.num_episodes_watched ?? 0;
-    };
+    const getDisplayStatus = (anime: AnimeForDisplay) => anime.my_list_status?.status ?? '';
 
     const getScoreClass = (score?: number) => {
         if (score === undefined || score === 0) return styles.scoreNa;
@@ -219,8 +175,6 @@ export default function AnimeCardView({
     return (
         <div className={styles.cardGrid}>
             {animes.map((anime) => {
-                const hasPendingChanges = pendingUpdates.has(anime.id);
-
                 return (
                 <div key={anime.id} className={styles.card}>
                     <div className={styles.imageContainer}>
@@ -240,90 +194,66 @@ export default function AnimeCardView({
                             {anime.status === 'currently_airing' && <div className={styles.pulsingDot} />}
                             {formatStatus(anime.status)}
                         </div>
+                        {onHideToggle && (
+                            <button
+                                className={styles.closeBtn}
+                                onClick={() => onHideToggle(anime.id, !anime.hidden)}
+                                title={anime.hidden ? 'Unhide' : 'Hide'}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            </button>
+                        )}
                         <div className={styles.overlay}>
-                            <div className={styles.topActions}>
-                                    <Button
+                            <div className={styles.imageActions}>
+                                <Button
                                     onClick={() => handleManualSearch(anime)}
-                                        className={styles.searchBtn}
-                                        variant="secondary"
-                                        size="xs"
-                                        square
+                                    className={styles.imageActionBtn}
+                                    variant="secondary"
+                                    size="xs"
+                                    square
                                     title="Search on Google"
                                 >
                                     🔍
-                                    </Button>
-                                    <Button
+                                </Button>
+                                <Button
                                     onClick={() => handleJustWatchSearch(anime)}
-                                    className={styles.justWatchBtn}
+                                    className={styles.imageActionBtn}
+                                    variant="secondary"
+                                    size="xs"
+                                    square
+                                    title="Search on JustWatch"
+                                >
+                                    <Image src="/justwatch.png" alt="JustWatch" width={20} height={20} className={styles.imageActionIcon} />
+                                </Button>
+                                <Button
+                                    href={`https://myanimelist.net/anime/${anime.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={styles.imageActionBtn}
+                                    variant="secondary"
+                                    size="xs"
+                                    square
+                                    title="Open on MyAnimeList"
+                                >
+                                    <Image src="/mal.png" alt="MAL" width={20} height={20} className={styles.imageActionIcon} />
+                                </Button>
+                                {anime.simkl?.simkl_id && (
+                                    <Button
+                                        href={`https://simkl.com/anime/${anime.simkl.simkl_id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={styles.imageActionBtn}
                                         variant="secondary"
                                         size="xs"
                                         square
-                                    title="Search on JustWatch"
-                                >
-                                    <Image
-                                        src="/justwatch.png"
-                                        alt="JustWatch"
-                                        width={20}
-                                        height={20}
-                                        className={styles.justWatchIcon}
-                                    />
+                                        title="Open on SIMKL"
+                                    >
+                                        <Image src="/simkl.png" alt="SIMKL" width={20} height={20} className={styles.imageActionIcon} />
                                     </Button>
-                            </div>
-                            <div className={styles.malActions}>
-                                <div className={styles.malRow}>
-                                    <select
-                                        value={getDisplayStatus(anime)}
-                                        onChange={(e) => updateMALStatus(anime.id, 'status', e.target.value)}
-                                        className={styles.malSelect}
-                                    >
-                                        <option value="">Select Status</option>
-                                        <option value="watching">Watching</option>
-                                        <option value="completed">Completed</option>
-                                        <option value="on_hold">On Hold</option>
-                                        <option value="dropped">Dropped</option>
-                                        <option value="plan_to_watch">Plan to Watch</option>
-                                    </select>
-                                    <select
-                                        value={getDisplayScore(anime)}
-                                        onChange={(e) => updateMALStatus(anime.id, 'score', parseInt(e.target.value))}
-                                        className={styles.malSelect}
-                                    >
-                                        <option value={0}>Score</option>
-                                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => (
-                                            <option key={s} value={s}>{s}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className={styles.malRow}>
-                                    <div className={styles.episodes}>
-                                            <Button
-                                                variant="secondary"
-                                                size="xs"
-                                                square
-                                            onClick={() => updateMALStatus(anime.id, 'num_episodes_watched', Math.max(0, getDisplayEpisodes(anime) - 1))}
-                                            >
-                                                -
-                                            </Button>
-                                        <span>{getDisplayEpisodes(anime)} / {anime.num_episodes || '?'}</span>
-                                            <Button
-                                                variant="secondary"
-                                                size="xs"
-                                                square
-                                            onClick={() => updateMALStatus(anime.id, 'num_episodes_watched', getDisplayEpisodes(anime) + 1)}
-                                            >
-                                                +
-                                            </Button>
-                                    </div>
-                                </div>
-                                <Button
-                                    variant="primary"
-                                    size="xs"
-                                    onClick={() => handleUpdateMAL(anime.id)}
-                                    disabled={!hasPendingChanges}
-                                    title={hasPendingChanges ? 'Apply pending MAL changes' : 'Change status/score/episodes to enable'}
-                                >
-                                    Update MAL
-                                </Button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -380,7 +310,6 @@ export default function AnimeCardView({
                                     {anime.mean ? anime.mean.toFixed(2) : 'N/A'}
                                 </span>
                             )}
-                            <SimklDiscrepancyBadge anime={anime} />
                         </div>
                         {anime.recoMeta && formatRecoHint(anime.recoMeta) && (
                             <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta)}</div>
@@ -399,17 +328,9 @@ export default function AnimeCardView({
                                 {(allExplainsOpen || explainOpen.has(anime.id)) && renderExplain(anime.recoMeta)}
                             </div>
                         )}
+                        {(feedbackMode || anime.discrepancy || anime.simkl) && (
                         <div className={styles.actions}>
-                            <Button
-                                href={`https://myanimelist.net/anime/${anime.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                variant="secondary"
-                                size="xs"
-                                className={styles.actionButton}
-                            >
-                                MAL
-                            </Button>
+                            <SimklDiscrepancyBadge anime={anime} />
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (
                                 <Button
                                     onClick={() => onRemoveFeedback?.(anime.id)}
@@ -440,17 +361,9 @@ export default function AnimeCardView({
                                         👎 Pas pour moi
                                     </Button>
                                 </>
-                            ) : (
-                                <Button
-                                    onClick={() => onHideToggle?.(anime.id, !anime.hidden)}
-                                    variant={anime.hidden ? 'primary-positive' : 'primary-negative'}
-                                    size="xs"
-                                    className={styles.actionButton}
-                                >
-                                    {anime.hidden ? 'Unhide' : 'Hide'}
-                                </Button>
-                            )}
+                            ) : null}
                         </div>
+                        )}
                     </div>
                 </div>
                 );

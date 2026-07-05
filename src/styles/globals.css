@@ -85,9 +85,21 @@ a:hover {
   color: var(--accent-primary);
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .nav {
   display: flex;
   gap: 2rem;
+}
+
+.connection-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .nav-link {

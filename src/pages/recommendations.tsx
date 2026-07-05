@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeCardView } from '@/components/anime';
 import {
-  AccountSection,
   RecommendationsSection,
   RecoFiltersSection,
   RecoWeightPresetsSection,
@@ -22,8 +21,6 @@ export default function RecommendationsPage() {
 
   // Auth (needed to gate the refresh button).
   const [authState, setAuthState] = useState<MALAuthState>({ isAuthenticated: false });
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState('');
 
   // Feed data.
   const [animes, setAnimes] = useState<RecoCard[]>([]);
@@ -41,20 +38,17 @@ export default function RecommendationsPage() {
 
   // Sidebar collapse state (local — not URL-persisted on this page).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    account: true, recos: true, views: true, weights: false, filters: true, display: true,
+    recos: true, views: true, weights: false, filters: true, display: true,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   const checkAuthStatus = async () => {
     try {
-      setIsAuthLoading(true);
       const response = await fetch('/api/anime/auth?action=status');
       const data = await response.json();
       setAuthState({ isAuthenticated: data.isAuthenticated, user: data.user });
     } catch {
-      setAuthError('Failed to check authentication status');
-    } finally {
-      setIsAuthLoading(false);
+      // non-critical: refresh button just stays disabled
     }
   };
 
@@ -181,47 +175,8 @@ export default function RecommendationsPage() {
     }
   };
 
-  const handleUpdateMALStatus = async (animeId: number, updates: any) => {
-    try {
-      const response = await fetch(`/api/anime/animes/${animeId}/mal-status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (response.ok) {
-        setAnimes(prev => prev.map(a =>
-          a.id === animeId
-            ? { ...a, my_list_status: { ...a.my_list_status, ...updates } as any }
-            : a
-        ));
-      } else {
-        throw new Error('Failed to update MAL status');
-      }
-    } catch (err) {
-      setError('Failed to update MAL status.');
-      throw err;
-    }
-  };
-
   const sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
-      <CollapsibleSection title="Account" isExpanded={expanded.account} onToggle={() => toggle('account')}>
-        <AccountSection
-          authState={authState}
-          isAuthLoading={isAuthLoading}
-          authError={authError}
-          onConnect={async () => {
-            const response = await fetch('/api/anime/auth?action=login');
-            const data = await response.json();
-            if (data.authUrl) window.location.href = data.authUrl;
-          }}
-          onDisconnect={async () => {
-            await fetch('/api/anime/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
-            setAuthState({ isAuthenticated: false });
-          }}
-        />
-      </CollapsibleSection>
-
       <CollapsibleSection title="Recommandations" isExpanded={expanded.recos} onToggle={() => toggle('recos')}>
         <RecommendationsSection
           authState={authState}
@@ -317,7 +272,6 @@ export default function RecommendationsPage() {
                 animes={animes}
                 imageSize={state.imageSize}
                 visibleColumns={{ score: true, rank: false, popularity: false, users: false, scorers: false }}
-                onUpdateMALStatus={handleUpdateMALStatus}
                 onFeedback={handleFeedback}
                 onRemoveFeedback={handleRemoveFeedback}
                 feedbackMode={state.review ?? 'feed'}
