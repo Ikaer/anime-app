@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getMALAuthData, isMALTokenValid, getSyncMetadata, performBigSync, BigSyncProgress } from '@/lib/anime';
+import { appendLog } from '@/lib/connectionLog';
 
 // Store ongoing big sync processes
 const syncProcesses = new Map<string, {
@@ -118,6 +119,16 @@ async function handleEventStream(req: NextApiRequest, res: NextApiResponse) {
   });
 }
 
+function progressToLogLevel(progress: BigSyncProgress): 'info' | 'success' | 'error' {
+  if (progress.type === 'error' || progress.type === 'season_error') return 'error';
+  if (progress.type === 'complete') return 'success';
+  return 'info';
+}
+
+function progressToLogMessage(progress: BigSyncProgress): string {
+  return progress.message || progress.details || progress.error || `Big sync ${progress.type}`;
+}
+
 async function performBigSyncAsync(accessToken: string, syncId: string) {
   const addProgress = (progress: BigSyncProgress) => {
     const syncProcess = syncProcesses.get(syncId);
@@ -128,6 +139,14 @@ async function performBigSyncAsync(accessToken: string, syncId: string) {
         syncProcess.progress = syncProcess.progress.slice(-50);
       }
     }
+    appendLog('big-sync', progressToLogLevel(progress), progressToLogMessage(progress), {
+      type: progress.type,
+      year: progress.year,
+      season: progress.season,
+      totalSeasons: progress.totalSeasons,
+      currentSeason: progress.currentSeason,
+      syncedCount: progress.syncedCount,
+    });
   };
 
   try {
