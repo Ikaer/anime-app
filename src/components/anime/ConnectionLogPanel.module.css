@@ -1,0 +1,60 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.list {
+  height: 400px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  padding: 8px;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.empty {
+  color: var(--text-secondary);
+  padding: 8px;
+}
+
+.entry {
+  display: flex;
+  gap: 8px;
+  padding: 2px 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.timestamp {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.source {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.info .message {
+  color: var(--text-primary);
+}
+
+.success .message {
+  color: #4ade80;
+}
+
+.error .message {
+  color: #ff6b6b;
+}
