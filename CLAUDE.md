@@ -66,6 +66,14 @@ Ranking + fetch logic is in [src/lib/recommendations.ts](src/lib/recommendations
 - `/api/anime/historical-crawl` — GET returns crawl stats; POST runs a 5-season batch crawl going back to 1960. Uses a module-level lock to prevent concurrent runs. Cron-sync also calls this directly from lib after triggering big-sync.
 - `/api/anime/cron-sync` — cron-triggered, authenticated via `CRON_SECRET` header
 
+### SIMKL integration (read-only)
+
+A second, read-only personal-data source alongside MAL. SIMKL data lives in a lean side-file `animes_SIMKL.json` (env `DATA_PATH`), **keyed by MAL id**, storing only SIMKL-unique personal fields (`SimklPersonalEntry`: status normalized to MAL vocabulary, score, progress, watched date, the `simkl` id). It is **joined onto MAL records in `getAnimeForDisplay()`** exactly like `animes_hidden.json` — MAL stays the catalog + authority; SIMKL never drives the existing status filters or reco unseen-exclusion (a deliberate seam for a future switch).
+
+- Sync is **one-way (SIMKL → app), personal library only** (statused anime), following SIMKL's two-phase model (`docs/simkl/apirules.md`): initial `/sync/all-items/anime?extended=ids_only`, then `/sync/activities` + `date_from` deltas, with `simkl_sync_checkpoint.json` holding the `anime.all` watermark. Deletion reconciliation diffs `extended=simkl_ids_only` against the local store. Orchestration in [src/lib/simklSync.ts](src/lib/simklSync.ts); auth/state/watermark in [src/lib/simkl.ts](src/lib/simkl.ts); endpoints under `src/pages/api/anime/simkl/` (`auth`, `sync`). **No writes to SIMKL, ever.**
+- **Discrepancy detection** ([src/lib/simklCompare.ts](src/lib/simklCompare.ts), client-safe/pure) compares MAL vs SIMKL status/score/progress and flags presence-on-one-side. Surfaced on the main page as a per-card `SimklDiscrepancyBadge` + a `discrepanciesOnly` (`disc`) URL filter. No dedicated SIMKL page.
+- Deferred: SIMKL "big-sync" for catalog-wide **tags** (→ future `simklTags` reco source), MAL-internal discrepancies, flipping effective-status to SIMKL, and wiring SIMKL delta into cron-sync.
+
 ### Environment variables
 
 | Variable | Purpose |
@@ -75,6 +83,10 @@ Ranking + fetch logic is in [src/lib/recommendations.ts](src/lib/recommendations
 | `MAL_CLIENT_ID` | MyAnimeList OAuth app client ID |
 | `MAL_REDIRECT_URI` | OAuth redirect URI |
 | `CRON_SECRET` | Auth token for cron-sync endpoint |
+| `SIMKL_CLIENT_ID` | SIMKL OAuth app client ID (required query param on every SIMKL request) |
+| `SIMKL_CLIENT_SECRET` | SIMKL OAuth token exchange (confidential client) |
+| `SIMKL_APP_NAME` | Sent as `app-name` query param + `User-Agent` on SIMKL requests |
+| `SIMKL_REDIRECT_URI` | SIMKL OAuth redirect URI |
 
 ### Client components importing from `@/lib/anime`
 
