@@ -226,6 +226,8 @@ export default function RecommendationsPage() {
           <DisplaySection
             imageSize={state.imageSize}
             onImageSizeChange={(size: ImageSize) => update({ imageSize: size })}
+            cardsPerRow={state.cardsPerRow}
+            onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
           />
           <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
             {showAllExplains ? 'Masquer les explications' : 'Afficher les explications'}
@@ -271,6 +273,7 @@ export default function RecommendationsPage() {
               <AnimeCardView
                 animes={animes}
                 imageSize={state.imageSize}
+                cardsPerRow={state.cardsPerRow}
                 visibleColumns={{ score: true, rank: false, popularity: false, users: false, scorers: false }}
                 onFeedback={handleFeedback}
                 onRemoveFeedback={handleRemoveFeedback}

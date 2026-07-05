@@ -15,6 +15,8 @@ interface AnimeSidebarProps {
   // Display
   imageSize: ImageSize;
   onImageSizeChange: (size: ImageSize) => void;
+  cardsPerRow: number | null;
+  onCardsPerRowChange: (value: number | null) => void;
 
   // Filters
   statusFilters: (UserAnimeStatus | 'not_defined')[];
@@ -56,6 +58,7 @@ interface AnimeSidebarProps {
 
 const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   imageSize, onImageSizeChange,
+  cardsPerRow, onCardsPerRowChange,
   statusFilters, onStatusFilterChange,
   searchQuery, onSearchChange,
   seasons, onSeasonsChange,
@@ -121,6 +124,8 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
         <DisplaySection
           imageSize={imageSize}
           onImageSizeChange={onImageSizeChange}
+          cardsPerRow={cardsPerRow}
+          onCardsPerRowChange={onCardsPerRowChange}
         />
       </CollapsibleSection>
 

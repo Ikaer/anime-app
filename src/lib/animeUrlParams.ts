@@ -43,6 +43,8 @@ export interface AnimeDisplayState {
   visibleColumns: VisibleColumns;
   sidebarExpanded: Record<string, boolean>;
   layout: 'table' | 'card';
+  /** Forced cards per row in card layout; null = adaptive (auto-fill). */
+  cardsPerRow: number | null;
 }
 
 export interface AnimeUrlState extends AnimeFiltersState, AnimeDisplayState { }
@@ -175,6 +177,7 @@ export const DEFAULT_DISPLAY: AnimeDisplayState = {
   visibleColumns: DEFAULT_VISIBLE_COLUMNS,
   sidebarExpanded: DEFAULT_SIDEBAR_EXPANDED,
   layout: 'card',
+  cardsPerRow: null,
 };
 
 // ============================================================================
@@ -209,6 +212,7 @@ const PARAM_KEYS = {
   columns: 'cols',
   sidebar: 'sb',
   layout: 'lt',
+  cardsPerRow: 'cpr',
 } as const;
 
 // ============================================================================
@@ -333,6 +337,10 @@ export function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLS
     params.set(PARAM_KEYS.layout, display.layout);
   }
 
+  if (display.cardsPerRow !== null && display.cardsPerRow !== undefined) {
+    params.set(PARAM_KEYS.cardsPerRow, display.cardsPerRow.toString());
+  }
+
   return params;
 }
 
@@ -453,6 +461,8 @@ export function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
 
 export function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
   const imgSize = params.get(PARAM_KEYS.imageSize);
+  const cpr = params.get(PARAM_KEYS.cardsPerRow);
+  const cprNum = cpr !== null ? parseInt(cpr, 10) : NaN;
 
   return {
     imageSize: imgSize ? (parseInt(imgSize, 10) as ImageSize) : DEFAULT_DISPLAY.imageSize,
@@ -463,6 +473,7 @@ export function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
       ? decodeSidebarExpanded(params.get(PARAM_KEYS.sidebar))
       : { ...DEFAULT_SIDEBAR_EXPANDED },
     layout: (params.get(PARAM_KEYS.layout) as any) || DEFAULT_DISPLAY.layout,
+    cardsPerRow: Number.isFinite(cprNum) && cprNum > 0 ? cprNum : DEFAULT_DISPLAY.cardsPerRow,
   };
 }
 
@@ -502,7 +513,8 @@ export const PERSISTENT_UI_KEYS: (keyof AnimeUrlState)[] = [
   'minScore',
   'maxScore',
   'visibleColumns',
-  'sidebarExpanded'
+  'sidebarExpanded',
+  'cardsPerRow'
 ];
 
 export const VIEW_PRESETS: PresetConfig[] = [

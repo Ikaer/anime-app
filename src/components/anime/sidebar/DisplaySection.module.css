@@ -28,3 +28,29 @@
   border-color: var(--accent-primary);
   color: white;
 }
+
+.cardsPerRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cardsPerRowInput {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.cardsPerRowInput:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.clearButton {
+  flex-shrink: 0;
+}

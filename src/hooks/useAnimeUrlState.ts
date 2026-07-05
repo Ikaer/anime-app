@@ -156,6 +156,7 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
     visibleColumns: currentState.visibleColumns,
     sidebarExpanded: currentState.sidebarExpanded,
     layout: currentState.layout,
+    cardsPerRow: currentState.cardsPerRow,
   }), [currentState]);
 
   return {

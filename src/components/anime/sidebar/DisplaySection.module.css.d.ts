@@ -1,5 +1,8 @@
 declare const styles: {
   readonly "activeSizeButton": string;
+  readonly "cardsPerRow": string;
+  readonly "cardsPerRowInput": string;
+  readonly "clearButton": string;
   readonly "displaySection": string;
   readonly "label": string;
   readonly "sizeButton": string;

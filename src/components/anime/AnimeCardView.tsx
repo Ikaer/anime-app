@@ -18,6 +18,8 @@ interface AnimeCardViewProps {
     animes: RecoCard[];
     imageSize: ImageSize;
     visibleColumns: VisibleColumns;
+    /** Forced number of cards per row; null/undefined = adaptive (auto-fill). */
+    cardsPerRow?: number | null;
     onHideToggle?: (animeId: number, hide: boolean) => void;
     onFeedback?: (animeId: number, verdict: RecoVerdict) => void;
     onRemoveFeedback?: (animeId: number) => void;
@@ -40,6 +42,7 @@ export default function AnimeCardView({
     animes,
     imageSize,
     visibleColumns,
+    cardsPerRow,
     onHideToggle,
     onFeedback,
     onRemoveFeedback,
@@ -172,8 +175,12 @@ export default function AnimeCardView({
         );
     };
 
+    const gridStyle = cardsPerRow && cardsPerRow > 0
+        ? { gridTemplateColumns: `repeat(${cardsPerRow}, minmax(0, 1fr))` }
+        : undefined;
+
     return (
-        <div className={styles.cardGrid}>
+        <div className={styles.cardGrid} style={gridStyle}>
             {animes.map((anime) => {
                 return (
                 <div key={anime.id} className={styles.card}>

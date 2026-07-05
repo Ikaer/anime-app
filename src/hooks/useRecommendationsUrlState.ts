@@ -30,6 +30,8 @@ export interface RecoUrlState {
   maxYear: number | null;
   /** Display. */
   imageSize: ImageSize;
+  /** Forced cards per row in card layout; null = adaptive (auto-fill). */
+  cardsPerRow: number | null;
 }
 
 export const RECO_DEFAULTS: RecoUrlState = {
@@ -44,6 +46,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   minYear: null,
   maxYear: null,
   imageSize: 3,
+  cardsPerRow: null,
 };
 
 const KEYS = {
@@ -58,6 +61,7 @@ const KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   imageSize: 'img',
+  cardsPerRow: 'cpr',
 } as const;
 
 function decode(params: URLSearchParams): RecoUrlState {
@@ -80,6 +84,10 @@ function decode(params: URLSearchParams): RecoUrlState {
     imageSize: (params.has(KEYS.imageSize)
       ? (parseInt(params.get(KEYS.imageSize)!, 10) as ImageSize)
       : RECO_DEFAULTS.imageSize),
+    cardsPerRow: (() => {
+      const n = num(params.get(KEYS.cardsPerRow));
+      return n !== null && n > 0 ? Math.floor(n) : RECO_DEFAULTS.cardsPerRow;
+    })(),
   };
 }
 
@@ -97,6 +105,7 @@ function encode(state: RecoUrlState): string {
   if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.imageSize !== RECO_DEFAULTS.imageSize) params.set(KEYS.imageSize, String(state.imageSize));
+  if (state.cardsPerRow !== null) params.set(KEYS.cardsPerRow, String(state.cardsPerRow));
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';
 }

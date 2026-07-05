@@ -129,6 +129,10 @@ export default function AnimePage() {
     updateDisplay({ imageSize });
   };
 
+  const handleCardsPerRowChange = (cardsPerRow: number | null) => {
+    updateDisplay({ cardsPerRow });
+  };
+
   const handleVisibleColumnsChange = (column: StatsColumn, isVisible: boolean) => {
     const newVisibleColumns = { ...display.visibleColumns, [column]: isVisible };
     updateDisplay({ visibleColumns: newVisibleColumns });
@@ -181,6 +185,8 @@ export default function AnimePage() {
     <AnimeSidebar
       imageSize={display.imageSize}
       onImageSizeChange={handleImageSizeChange}
+      cardsPerRow={display.cardsPerRow}
+      onCardsPerRowChange={handleCardsPerRowChange}
       statusFilters={filters.statusFilters}
       onStatusFilterChange={handleStatusFilterChange}
       seasons={filters.seasons}
@@ -233,6 +239,7 @@ export default function AnimePage() {
                 animes={animes}
                 imageSize={display.imageSize}
                 visibleColumns={display.visibleColumns}
+                cardsPerRow={display.cardsPerRow}
                 onHideToggle={handleHideToggle}
               />
             ) : (
