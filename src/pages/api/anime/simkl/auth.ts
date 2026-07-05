@@ -1,6 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { appendLog } from '@/lib/connectionLog';
-
 import crypto from 'crypto';
 import {
   getSimklAuthData,
@@ -104,7 +103,7 @@ async function initiateOAuthFlow(res: NextApiResponse) {
 }
 
 async function handleOAuthCallback(res: NextApiResponse, code: string, state: string) {
-   if (!consumeOAuthState(state)) {
+  if (!consumeOAuthState(state)) {
     appendLog('simkl-auth', 'error', 'SIMKL OAuth callback failed: invalid or expired state');
     res.status(400).json({ error: 'Invalid or expired state parameter' });
     return;
