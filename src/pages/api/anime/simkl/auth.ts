@@ -1,4 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { appendLog } from '@/lib/connectionLog';
+
 import crypto from 'crypto';
 import {
   getSimklAuthData,
@@ -96,12 +98,14 @@ async function initiateOAuthFlow(res: NextApiResponse) {
   authUrl.searchParams.set('app-name', SIMKL_APP_NAME);
   authUrl.searchParams.set('app-version', SIMKL_APP_VERSION);
   authUrl.searchParams.set('state', state);
+  appendLog('simkl-auth', 'info', 'SIMKL login initiated');
 
   res.json({ authUrl: authUrl.toString() });
 }
 
 async function handleOAuthCallback(res: NextApiResponse, code: string, state: string) {
-  if (!consumeOAuthState(state)) {
+   if (!consumeOAuthState(state)) {
+    appendLog('simkl-auth', 'error', 'SIMKL OAuth callback failed: invalid or expired state');
     res.status(400).json({ error: 'Invalid or expired state parameter' });
     return;
   }
@@ -148,14 +152,22 @@ async function handleOAuthCallback(res: NextApiResponse, code: string, state: st
 
     saveSimklAuthData(userData, tokenData);
 
+    appendLog('simkl-auth', 'success', `SIMKL OAuth callback succeeded for user ${userData.user?.name ?? 'unknown'}`, {
+      user: userData.user?.name,
+    });
+
     res.redirect('/?simkl_auth=success');
   } catch (error) {
     console.error('Simkl OAuth callback error:', error);
+    appendLog('simkl-auth', 'error', 'SIMKL OAuth callback failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
     res.redirect('/?simkl_auth=error');
   }
 }
 
 async function logout(res: NextApiResponse) {
   clearSimklAuthData();
+  appendLog('simkl-auth', 'info', 'SIMKL account disconnected');
   res.json({ success: true });
 }
