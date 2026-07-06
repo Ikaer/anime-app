@@ -1,6 +1,8 @@
 declare const styles: {
+  readonly "detail": string;
   readonly "empty": string;
   readonly "entry": string;
+  readonly "entryHeader": string;
   readonly "error": string;
   readonly "info": string;
   readonly "list": string;

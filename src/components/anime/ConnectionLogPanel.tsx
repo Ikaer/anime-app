@@ -59,11 +59,16 @@ const ConnectionLogPanel: React.FC = () => {
         ) : (
           entries.map(entry => (
             <div key={entry.id} className={`${styles.entry} ${styles[entry.level]}`}>
-              <span className={styles.timestamp}>
-                {new Date(entry.timestamp).toLocaleTimeString()}
-              </span>
-              <span className={styles.source}>[{entry.source}]</span>
-              <span className={styles.message}>{entry.message}</span>
+              <div className={styles.entryHeader}>
+                <span className={styles.timestamp}>
+                  {new Date(entry.timestamp).toLocaleTimeString()}
+                </span>
+                <span className={styles.source}>[{entry.source}]</span>
+                <span className={styles.message}>{entry.message}</span>
+              </div>
+              {entry.detail && (
+                <div className={styles.detail}>{JSON.stringify(entry.detail)}</div>
+              )}
             </div>
           ))
         )}

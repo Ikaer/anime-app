@@ -87,10 +87,15 @@ async function fetchTagsBatch(malIds: number[], retryOn429 = true): Promise<RawM
   }
 
   if (!res.ok) {
-    throw new Error(`AniList request failed: ${res.status} ${res.statusText}`);
+    const bodyText = await res.text().catch(() => '');
+    throw new Error(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 500)}` : ''}`);
   }
 
   const json = await res.json();
+  if (Array.isArray(json?.errors) && json.errors.length > 0) {
+    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
+    throw new Error(`AniList GraphQL error: ${messages}`);
+  }
   return (json?.data?.Page?.media ?? []) as RawMedia[];
 }
 
@@ -137,7 +142,7 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
     let tagged = 0;
     let failed = 0;
 
-    for (const batch of batches) {
+    for (const [batchIndex, batch] of batches.entries()) {
       try {
         const media = await fetchTagsBatch(batch);
         const now = new Date().toISOString();
@@ -163,10 +168,20 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
       } catch (error) {
         failed += batch.length;
         processed += batch.length;
-        console.error('AniList tags batch error:', error);
-        appendLog('anilist-tags-sync', 'error', 'AniList tags batch failed, continuing', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`AniList tags batch ${batchIndex + 1}/${batches.length} error (mal ids ${batch[0]}-${batch[batch.length - 1]}):`, error);
+        appendLog(
+          'anilist-tags-sync',
+          'error',
+          `AniList tags batch ${batchIndex + 1}/${batches.length} failed, continuing: ${errorMessage}`,
+          {
+            batchIndex: batchIndex + 1,
+            batchCount: batches.length,
+            batchSize: batch.length,
+            malIds: batch,
+            error: errorMessage,
+          }
+        );
       }
 
       if (processed < missingIds.length) {

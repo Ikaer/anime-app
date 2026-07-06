@@ -31,10 +31,22 @@
 
 .entry {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
   padding: 2px 4px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.entryHeader {
+  display: flex;
+  gap: 8px;
+}
+
+.detail {
+  margin-left: 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  opacity: 0.85;
 }
 
 .timestamp {
