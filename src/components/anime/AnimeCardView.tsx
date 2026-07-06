@@ -216,6 +216,18 @@ export default function AnimeCardView({
                         <div className={styles.overlay}>
                             <div className={styles.imageActions}>
                                 <Button
+                                    href={`/anime/${anime.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={styles.imageActionBtn}
+                                    variant="secondary"
+                                    size="xs"
+                                    square
+                                    title="Voir toutes les infos locales"
+                                >
+                                    ↗
+                                </Button>
+                                <Button
                                     onClick={() => handleManualSearch(anime)}
                                     className={styles.imageActionBtn}
                                     variant="secondary"

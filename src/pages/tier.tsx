@@ -268,6 +268,15 @@ export default function TierPage() {
         {thumb
           ? <img src={thumb} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%' }} />
           : <div className="noimg">{a.title.slice(0, 2)}</div>}
+        <a
+          className="detail-link"
+          href={`/anime/${a.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          title="Voir toutes les infos locales"
+        >↗</a>
         {isSaving && <span className="badge saving">…</span>}
         {!isSaving && fail && <span className="badge fail" title={fail}>!</span>}
       </div>
@@ -383,23 +392,32 @@ export default function TierPage() {
         .tray { border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-secondary, var(--bg-primary)); margin-top: 6px; }
         .tray-label { padding: 6px 10px; color: var(--text-secondary); font-weight: 600; }
 
-        .card { position: relative; flex: 0 0 auto; border-radius: 4px; overflow: hidden;
-          cursor: grab; background: var(--bg-secondary, #222); border: 1px solid transparent; }
-        .card :global(img) { object-fit: cover; display: block; }
-        .card.dragging { opacity: 0.4; }
-        .card.failed { border-color: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
-        .noimg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-          font-size: 0.7rem; color: var(--text-secondary); }
-        .badge { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%;
-          display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; color: #fff; }
-        .badge.saving { background: rgba(0,0,0,0.6); }
-        .badge.fail { background: #dc2626; }
-
         .thumb-label { display: block; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 6px; }
         .thumb-buttons { display: flex; gap: 6px; }
         :global(.thumb-active) { outline: 2px solid var(--accent-color, #3b82f6); }
       `}</style>
       <style jsx global>{`
+        /* Card rules live here (not in the scoped block) because renderCard is a
+           nested helper — styled-jsx only scopes JSX in the component's own
+           return, so scoped .card selectors never match these elements. Scoped
+           under .board so they don't leak beyond the tier board. */
+        .board .card { position: relative; flex: 0 0 auto; border-radius: 4px; overflow: hidden;
+          cursor: grab; background: var(--bg-secondary, #222); border: 1px solid transparent; }
+        .board .card img { object-fit: cover; display: block; }
+        .board .card.dragging { opacity: 0.4; }
+        .board .card.failed { border-color: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
+        .board .noimg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+          font-size: 0.7rem; color: var(--text-secondary); }
+        .board .badge { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; color: #fff; }
+        .board .badge.saving { background: rgba(0,0,0,0.6); }
+        .board .badge.fail { background: #dc2626; }
+        .board .detail-link { position: absolute; bottom: 2px; right: 2px; width: 16px; height: 16px; border-radius: 4px;
+          display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;
+          color: #fff; background: rgba(0,0,0,0.55); text-decoration: none; opacity: 0; transition: opacity 0.12s; }
+        .board .card:hover .detail-link { opacity: 1; }
+        .board .detail-link:hover { background: var(--accent-primary, #3b82f6); }
+
         .hover-preview { position: fixed; z-index: 1000; width: 240px; pointer-events: none;
           background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px;
           box-shadow: 0 8px 30px rgba(0,0,0,0.5); overflow: hidden; }

@@ -421,6 +421,17 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                 <td className={styles.linksCell}>
                   <div className={styles.actionsButtonGroup}>
                     <Button
+                      href={`/anime/${anime.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      variant="secondary"
+                      size="xs"
+                      square
+                      title="Voir toutes les infos locales"
+                    >
+                      ↗
+                    </Button>
+                    <Button
                       href={`https://myanimelist.net/anime/${anime.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
