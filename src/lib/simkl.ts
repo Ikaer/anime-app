@@ -101,12 +101,18 @@ export interface SimklCheckpoint {
   lastActivityAll: string | null;
   // The activities.anime.removed_from_list timestamp, for deletion reconciliation.
   lastRemovedFromList: string | null;
+  // The activities.anime.rated_at timestamp. Tracked separately because SIMKL's
+  // all-items `date_from` delta does NOT surface rating-only changes (verified
+  // live: a freshly-rated title is absent from all-items?date_from=…). When this
+  // advances we must fall back to a FULL pull to capture the new rating.
+  lastRatedAt?: string | null;
 }
 
 export function getSimklCheckpoint(): SimklCheckpoint {
   return readJsonFile<SimklCheckpoint>(SIMKL_CHECKPOINT_FILE, {
     lastActivityAll: null,
     lastRemovedFromList: null,
+    lastRatedAt: null,
   });
 }
 

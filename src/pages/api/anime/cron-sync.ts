@@ -1,5 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getMALAuthData, isMALTokenValid, performHistoricalCrawl } from '@/lib/anime';
+import {
+  getRecommendationsData,
+  isRecommendationsRefreshRunning,
+  performRecommendationsRefresh,
+} from '@/lib/recommendations';
 import { appendLog } from '@/lib/connectionLog';
 
 // This is a simplified version of the big-sync trigger
@@ -25,6 +30,42 @@ async function startBigSync() {
   } catch (error) {
     console.error('Error in cron-sync when starting big sync:', error);
     throw error;
+  }
+}
+
+// Recompute the recommendations feed on the cron tick. No SSE — fire-and-forget
+// like the rest of cron-sync; just log start/result. Reuses the last-known
+// nicheMode/threshold (no user present to supply request params) and yields to a
+// manual refresh already in flight via the shared lock.
+async function refreshRecommendations(accessToken: string) {
+  if (isRecommendationsRefreshRunning()) {
+    appendLog('cron-sync', 'info', 'Cron sync skipped reco refresh: a refresh is already running');
+    return;
+  }
+
+  const { nicheMode, seedThreshold } = getRecommendationsData();
+  appendLog('cron-sync', 'info', 'Cron sync started recommendations refresh', { nicheMode, seedThreshold });
+
+  try {
+    const result = await performRecommendationsRefresh(accessToken, { nicheMode, threshold: seedThreshold });
+    if (result.alreadyRunning) {
+      appendLog('cron-sync', 'info', 'Cron sync reco refresh skipped: already running');
+      return;
+    }
+    console.log(
+      `Reco refresh: ${result.seedCount} seeds, ${result.edgeCount} edges, ${result.hydratedCount} hydrated`
+    );
+    appendLog('cron-sync', 'success', 'Cron sync completed recommendations refresh', {
+      seedCount: result.seedCount,
+      edgeCount: result.edgeCount,
+      hydratedCount: result.hydratedCount,
+    });
+  } catch (error) {
+    // Non-fatal: the reco refresh is best-effort and must not fail the cron run.
+    console.error('Cron sync reco refresh failed:', error);
+    appendLog('cron-sync', 'error', 'Cron sync recommendations refresh failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }
 
@@ -61,6 +102,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(
       `Historical crawl: ${crawlResult.processedSeasons} seasons, ${crawlResult.syncedCount} anime, ${crawlResult.stats.remaining} remaining`
     );
+    // Recompute the recommendations feed with the freshly-synced data.
+    await refreshRecommendations(token.access_token);
+
     appendLog('cron-sync', 'success', 'Cron sync run completed', {
       processedSeasons: crawlResult.processedSeasons,
       syncedCount: crawlResult.syncedCount,

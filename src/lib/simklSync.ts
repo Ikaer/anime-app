@@ -31,7 +31,7 @@ interface RawSimklAnimeItem {
   };
 }
 interface RawAllItems { anime?: RawSimklAnimeItem[]; }
-interface RawActivities { anime?: { all?: string; removed_from_list?: string }; }
+interface RawActivities { anime?: { all?: string; removed_from_list?: string; rated_at?: string }; }
 
 /** Normalize one raw item -> entry, or null if it has no usable MAL id (orphan). */
 function normalizeItem(item: RawSimklAnimeItem): SimklPersonalEntry | null {
@@ -114,23 +114,34 @@ export async function performSimklSync(): Promise<SimklSyncResult> {
     const activities = await fetchActivities(token.access_token);
     const remoteAll = activities.anime?.all ?? null;
     const remoteRemoved = activities.anime?.removed_from_list ?? null;
+    const remoteRated = activities.anime?.rated_at ?? null;
 
     // Phase 1: initial (no watermark yet)
     if (!checkpoint.lastActivityAll) {
       const raw = await fetchAllItems(token.access_token);
       const { entries, orphansSkipped } = normalizeAll(raw);
       upsertSimklEntries(entries);
-      saveSimklCheckpoint({ lastActivityAll: remoteAll, lastRemovedFromList: remoteRemoved });
+      saveSimklCheckpoint({ lastActivityAll: remoteAll, lastRemovedFromList: remoteRemoved, lastRatedAt: remoteRated });
       return { ok: true, phase: 'initial', added: entries.length, removed: 0, orphansSkipped };
     }
 
+    const allMoved = !!remoteAll && remoteAll !== checkpoint.lastActivityAll;
+    // A rating change bumps activities.rated_at (and `all`), but the item is NOT
+    // returned by the all-items date_from delta — so a moved rated_at forces a
+    // FULL pull. Note: existing checkpoints predate lastRatedAt (undefined), so
+    // the first sync after this ships does one backfilling full pull.
+    const ratedMoved = !!remoteRated && remoteRated !== checkpoint.lastRatedAt;
+
     // Phase 2: nothing changed -> short-circuit
-    if (remoteAll && remoteAll === checkpoint.lastActivityAll) {
+    if (!allMoved && !ratedMoved) {
       return { ok: true, phase: 'noop', added: 0, removed: 0, orphansSkipped: 0 };
     }
 
-    // Phase 2: delta pull since saved watermark
-    const raw = await fetchAllItems(token.access_token, checkpoint.lastActivityAll);
+    // Rating-only edits are invisible to the delta, so pull the FULL library when
+    // rated_at advanced; otherwise a normal delta since the saved watermark.
+    const raw = ratedMoved
+      ? await fetchAllItems(token.access_token)
+      : await fetchAllItems(token.access_token, checkpoint.lastActivityAll);
     const { entries, orphansSkipped } = normalizeAll(raw);
     upsertSimklEntries(entries);
 
@@ -140,7 +151,7 @@ export async function performSimklSync(): Promise<SimklSyncResult> {
       removed = await reconcileDeletions(token.access_token);
     }
 
-    const next: SimklCheckpoint = { lastActivityAll: remoteAll, lastRemovedFromList: remoteRemoved };
+    const next: SimklCheckpoint = { lastActivityAll: remoteAll, lastRemovedFromList: remoteRemoved, lastRatedAt: remoteRated };
     saveSimklCheckpoint(next);
     return { ok: true, phase: 'delta', added: entries.length, removed, orphansSkipped };
   } catch (error) {
