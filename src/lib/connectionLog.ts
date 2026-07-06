@@ -14,7 +14,8 @@ export type LogSource =
   | 'historical-crawl'
   | 'simkl-sync'
   | 'cron-sync'
-  | 'anilist-tags-sync';
+  | 'anilist-tags-sync'
+  | 'refresh';
 
 export type LogLevel = 'info' | 'success' | 'error';
 

@@ -111,6 +111,38 @@ export interface AnilistTagsSyncResult {
 
 let isAnilistTagsSyncRunning = false;
 
+/**
+ * Force-refresh AniList tags + staff for specific MAL ids, bypassing the
+ * "missing only" filter that `performAnilistTagsSync` uses. Powers the per-anime
+ * refresh on the detail page. One batch, no throttle loop (caller passes few ids).
+ * Returns the number of ids AniList actually had (skips ones it doesn't know).
+ */
+export async function refreshAnilistTagsForIds(
+  malIds: number[]
+): Promise<{ ok: boolean; tagged: number; error?: string }> {
+  const ids = malIds.filter(id => Number.isInteger(id)).slice(0, BATCH_SIZE);
+  if (ids.length === 0) return { ok: true, tagged: 0 };
+  try {
+    const media = await fetchTagsBatch(ids);
+    const now = new Date().toISOString();
+    const entries: AniListTagsEntry[] = media
+      .filter(m => m.idMal)
+      .map(m => ({
+        mal_id: m.idMal,
+        anilist_id: m.id,
+        tags: m.tags ?? [],
+        staff: parseStaff(m),
+        fetched_at: now,
+      }));
+    if (entries.length > 0) upsertAnilistTags(entries);
+    return { ok: true, tagged: entries.length };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    appendLog('anilist-tags-sync', 'error', `AniList refresh failed for ids ${ids.join(',')}: ${message}`);
+    return { ok: false, tagged: 0, error: message };
+  }
+}
+
 export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
   if (isAnilistTagsSyncRunning) {
     appendLog('anilist-tags-sync', 'info', 'AniList tags sync skipped: already running');
