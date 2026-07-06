@@ -4,7 +4,7 @@ import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeForDisplay, ImageSize } from '@/models/anime';
-import { applyNarrowingFilters, getEffectiveScore } from '@/lib/animeUtils';
+import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus } from '@/lib/animeUtils';
 import { useTierUrlState } from '@/hooks';
 
 // Score → MAL word + tier color. Row 0 is the "à noter" tray (unrated).
@@ -39,6 +39,62 @@ export default function TierPage() {
 
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
+
+  // ---- Manual auto-scroll while dragging. Native HTML5 drag auto-scroll ----
+  // doesn't fire reliably here, so we drive it ourselves. `scrollContainerRef`
+  // points at the layout's `<main>`, but its `overflow-y:auto` never actually
+  // engages (nothing in the ancestor chain gives it a bounded height, so the
+  // box just grows and the page/document scrolls instead) — so we scroll
+  // whichever of the two actually has overflow.
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const dragYRef = useRef<number | null>(null);
+  const autoScrollRafRef = useRef<number | null>(null);
+  const AUTO_SCROLL_EDGE = 80; // px from top/bottom edge that triggers scrolling
+  const AUTO_SCROLL_MAX_SPEED = 18; // px per frame at the very edge
+
+  useEffect(() => {
+    if (draggingId === null) {
+      dragYRef.current = null;
+      if (autoScrollRafRef.current !== null) {
+        cancelAnimationFrame(autoScrollRafRef.current);
+        autoScrollRafRef.current = null;
+      }
+      return;
+    }
+
+    const onWindowDragOver = (e: DragEvent) => { dragYRef.current = e.clientY; };
+    window.addEventListener('dragover', onWindowDragOver);
+
+    const tick = () => {
+      const y = dragYRef.current;
+      if (y !== null) {
+        const inner = scrollContainerRef.current;
+        const useInner = !!inner && inner.scrollHeight > inner.clientHeight;
+        const scrollEl = useInner ? inner! : (document.scrollingElement || document.documentElement);
+        const top = useInner ? inner!.getBoundingClientRect().top : 0;
+        const bottom = useInner ? inner!.getBoundingClientRect().bottom : window.innerHeight;
+        const distTop = y - top;
+        const distBottom = bottom - y;
+        if (distTop < AUTO_SCROLL_EDGE) {
+          const speed = AUTO_SCROLL_MAX_SPEED * (1 - Math.max(distTop, 0) / AUTO_SCROLL_EDGE);
+          scrollEl.scrollTop -= speed;
+        } else if (distBottom < AUTO_SCROLL_EDGE) {
+          const speed = AUTO_SCROLL_MAX_SPEED * (1 - Math.max(distBottom, 0) / AUTO_SCROLL_EDGE);
+          scrollEl.scrollTop += speed;
+        }
+      }
+      autoScrollRafRef.current = requestAnimationFrame(tick);
+    };
+    autoScrollRafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener('dragover', onWindowDragOver);
+      if (autoScrollRafRef.current !== null) {
+        cancelAnimationFrame(autoScrollRafRef.current);
+        autoScrollRafRef.current = null;
+      }
+    };
+  }, [draggingId]);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ filters: true, display: true });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
@@ -90,10 +146,17 @@ export default function TierPage() {
   );
 
   // Bucket the filtered list by effective score. Index 0 holds the tray.
+  // Still-watching anime aren't done yet, so they're excluded from the tray
+  // (unrated watching titles just don't appear on the board at all).
   const buckets = useMemo(() => {
     const b = new Map<number, AnimeForDisplay[]>();
     for (let s = 0; s <= 10; s++) b.set(s, []);
-    for (const a of filtered) b.get(effScoreOf(a.id))!.push(a);
+    for (const a of filtered) {
+      const score = effScoreOf(a.id);
+      if (score === 0 && getEffectiveStatus(a) === 'watching') continue;
+      b.get(score)!.push(a);
+    }
+    for (const list of b.values()) list.sort((a, c) => a.title.localeCompare(c.title));
     return b;
   }, [filtered, effScoreOf]);
 
@@ -256,7 +319,7 @@ export default function TierPage() {
         <title>Tier list - Anime List</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
-      <AnimePageLayout sidebar={sidebar}>
+      <AnimePageLayout sidebar={sidebar} ref={scrollContainerRef}>
         <div className="tier-main">
           {error && <div className="error-banner">{error} <button onClick={() => setError('')}>×</button></div>}
 
