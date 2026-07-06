@@ -233,9 +233,12 @@ export default function TierPage() {
     if (draggingId !== null) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const PREVIEW_W = 240;
+    // Reserve the preview's real height so it never spills below the viewport:
+    // the poster is PREVIEW_W wide at the poster ratio, plus the title/mean rows.
+    const PREVIEW_H = Math.round(PREVIEW_W / POSTER_RATIO) + 60;
     // Prefer to the right of the card; flip left if it would overflow.
     const x = r.right + PREVIEW_W + 16 < window.innerWidth ? r.right + 8 : r.left - PREVIEW_W - 8;
-    const y = Math.max(8, Math.min(r.top, window.innerHeight - 360));
+    const y = Math.max(8, Math.min(r.top, window.innerHeight - PREVIEW_H - 8));
     setPreview({ anime, x, y });
   };
   const onCardLeave = () => setPreview(null);

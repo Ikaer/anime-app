@@ -1,12 +1,12 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useState } from 'react';
 import type { GetServerSideProps } from 'next';
-import { getAnimeForDisplay } from '@/lib/anime';
+import { getAnimeByIdForDisplay } from '@/lib/anime';
 import type { AnimeForDisplay } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
+import { RefreshButton } from '@/components/shared';
 
 interface Props {
   anime: AnimeForDisplay;
@@ -48,6 +48,7 @@ function airingLabel(status?: string): string {
 }
 
 export default function AnimeDetailPage({ anime }: Props) {
+  const router = useRouter();
   const poster = anime.main_picture?.large || anime.main_picture?.medium || '';
   const en = anime.alternative_titles?.en;
   const ja = anime.alternative_titles?.ja;
@@ -89,7 +90,10 @@ export default function AnimeDetailPage({ anime }: Props) {
         <div className="topbar">
           <Link href="/" className="back">← Retour</Link>
           <div className="ext-links">
-            <RefreshButton animeId={anime.id} />
+            <RefreshButton
+              animeId={anime.id}
+              onRefreshed={() => router.replace(router.asPath, undefined, { scroll: false })}
+            />
             <a href={`https://myanimelist.net/anime/${anime.id}`} target="_blank" rel="noopener noreferrer">MAL</a>
             {(simkl?.simkl_id || crosswalk.simkl) && (
               <a href={`https://simkl.com/anime/${simkl?.simkl_id ?? crosswalk.simkl}`} target="_blank" rel="noopener noreferrer">SIMKL</a>
@@ -383,67 +387,6 @@ export default function AnimeDetailPage({ anime }: Props) {
   );
 }
 
-type RefreshOutcome = {
-  mal: { ok: boolean; error?: string };
-  anilist: { ok: boolean; tagged: number; error?: string };
-  simkl: { ok: boolean; phase: string; added: number; removed: number; error?: string };
-};
-
-/**
- * Triggers the per-anime refresh (MAL single-title + AniList tags/staff + SIMKL
- * incremental delta), then re-runs getServerSideProps to show the fresh data.
- * Reports a compact per-source outcome so a failed pipe is visible, not silent.
- */
-function RefreshButton({ animeId }: { animeId: number }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<RefreshOutcome | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function refresh() {
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await fetch(`/api/anime/animes/${animeId}/refresh`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as RefreshOutcome;
-      setResult(data);
-      // Re-run getServerSideProps in place so the page reflects the new data.
-      await router.replace(router.asPath, undefined, { scroll: false });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Échec du rafraîchissement');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const flag = (ok: boolean) => (ok ? '✓' : '✗');
-
-  return (
-    <span className="refresh-wrap">
-      <button className="refresh-btn" onClick={refresh} disabled={busy}>
-        {busy ? '⏳ Rafraîchissement…' : '🔄 Rafraîchir'}
-      </button>
-      {result && (
-        <span className="refresh-status" title="MAL · AniList · SIMKL">
-          MAL {flag(result.mal.ok)} · AniList {flag(result.anilist.ok)} · SIMKL {flag(result.simkl.ok)}
-        </span>
-      )}
-      {error && <span className="refresh-status err">{error}</span>}
-      <style jsx>{`
-        .refresh-wrap { display: inline-flex; align-items: center; gap: 0.5rem; }
-        .refresh-btn { background: var(--accent-primary); border: 1px solid var(--accent-primary);
-          color: #fff; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
-        .refresh-btn:hover:not(:disabled) { filter: brightness(1.1); }
-        .refresh-btn:disabled { opacity: 0.6; cursor: default; }
-        .refresh-status { font-size: 0.78rem; color: var(--text-muted); }
-        .refresh-status.err { color: #f87171; }
-      `}</style>
-    </span>
-  );
-}
-
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div className="field">
@@ -463,7 +406,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   if (!Number.isInteger(id)) {
     return { notFound: true };
   }
-  const anime = getAnimeForDisplay().find(a => a.id === id);
+  const anime = getAnimeByIdForDisplay(id);
   if (!anime) {
     return { notFound: true };
   }

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import styles from './discrepancies.module.css';
+import { RefreshButton } from '@/components/shared';
 import type { AnimeForDisplay, UserAnimeStatus } from '@/models/anime';
 
 const STATUS_LABEL: Record<UserAnimeStatus, string> = {
@@ -32,29 +33,32 @@ export default function DiscrepanciesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const load = useCallback(async () => {
+    try {
+      setError('');
+      const res = await fetch('/api/anime/animes?discrepancies=true&limit=all&sortBy=title&sortDir=asc');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to load discrepancies');
+      }
+      const data = await res.json();
+      setAnimes(data.animes || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load discrepancies');
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        setIsLoading(true);
-        setError('');
-        const res = await fetch('/api/anime/animes?discrepancies=true&limit=all&sortBy=title&sortDir=asc');
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || 'Failed to load discrepancies');
-        }
-        const data = await res.json();
-        if (!cancelled) setAnimes(data.animes || []);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load discrepancies');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
+      setIsLoading(true);
+      await load();
+      if (!cancelled) setIsLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
 
   return (
     <>
@@ -90,6 +94,7 @@ export default function DiscrepanciesPage() {
                   <th className={styles.groupMal}>MAL ep</th>
                   <th>SIMKL ep</th>
                   <th>Links</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -165,6 +170,9 @@ export default function DiscrepanciesPage() {
                             </a>
                           )}
                         </div>
+                      </td>
+                      <td>
+                        <RefreshButton animeId={anime.id} compact onRefreshed={load} />
                       </td>
                     </tr>
                   );

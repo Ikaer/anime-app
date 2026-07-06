@@ -184,6 +184,32 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   return cachedAnime;
 }
 
+/**
+ * Assemble ONE anime record straight from the source files, bypassing the
+ * `getAnimeForDisplay` cache entirely.
+ *
+ * The detail page renders in `getServerSideProps` (page bundle) while refresh
+ * writes run in an API route (api bundle). In a production Next build those two
+ * do NOT share module-level state, so an API-route write invalidating
+ * `cachedAnime` never reaches the page's copy — it would stay stale until the
+ * 10-min TTL expired. Reading fresh here makes the detail page immune to that.
+ */
+export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined {
+  const mal = getAllMALAnime()[id.toString()];
+  if (!mal) return undefined;
+  const hidden = getHiddenAnimeIds();
+  const simkl = getAllSimklEntries()[id.toString()];
+  const anilistTags = getAllAnilistTags()[id.toString()];
+  return {
+    ...mal,
+    hidden: hidden.includes(mal.id),
+    simkl,
+    discrepancy: computeDiscrepancy(mal, simkl),
+    anilistTags,
+    crosswalk: assembleCrosswalk(mal.id, simkl, anilistTags),
+  };
+}
+
 // Deprecated: server-side view filtering removed. `view` parameter now only maps to explicit filters in API handler.
 
 // Authentication operations
