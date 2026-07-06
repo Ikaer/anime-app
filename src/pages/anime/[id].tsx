@@ -92,7 +92,9 @@ export default function AnimeDetailPage({ anime }: Props) {
           <div className="ext-links">
             <RefreshButton
               animeId={anime.id}
-              onRefreshed={() => router.replace(router.asPath, undefined, { scroll: false })}
+              onRefreshed={() => {
+                router.replace(router.asPath, undefined, { scroll: false })
+              }}
             />
             <a href={`https://myanimelist.net/anime/${anime.id}`} target="_blank" rel="noopener noreferrer">MAL</a>
             {(simkl?.simkl_id || crosswalk.simkl) && (
