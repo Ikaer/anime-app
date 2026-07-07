@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styles from './RecommendationsSection.module.css';
 import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
+import { DIVERSITY_MAX, DIVERSITY_STEP } from '@/lib/recoWeights';
 
 interface RecommendationsSectionProps {
   authState: MALAuthState;
@@ -11,9 +12,11 @@ interface RecommendationsSectionProps {
   recoError: string;
   nicheMode: boolean;
   threshold: number | null;
+  diversity: number | null;
   onRefreshRecos: () => void;
   onNicheModeChange: (v: boolean) => void;
   onThresholdChange: (v: number | null) => void;
+  onDiversityChange: (v: number | null) => void;
   onShowLiked: () => void;
   onShowDisliked: () => void;
 }
@@ -28,12 +31,21 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   recoError,
   nicheMode,
   threshold,
+  diversity,
   onRefreshRecos,
   onNicheModeChange,
   onThresholdChange,
+  onDiversityChange,
   onShowLiked,
   onShowDisliked,
 }) => {
+  // Slider position tracked locally; committed to the URL only on release so a
+  // drag fires one router.push + one refetch, not one per tick (mirrors
+  // RecoWeightsSection). null diversity renders as 0 ("Ciblé").
+  const [divDraft, setDivDraft] = useState(diversity ?? 0);
+  useEffect(() => { setDivDraft(diversity ?? 0); }, [diversity]);
+  const commitDiversity = () => onDiversityChange(divDraft > 0 ? divDraft : null);
+
   return (
     <div className={styles.recommendationsSection}>
       <Button
@@ -70,6 +82,29 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
         />
         Mode niche (2-hop, plus lent)
       </label>
+
+      <div className={styles.fieldGroup}>
+        <div className={styles.sliderHead}>
+          <span className={styles.label}>Diversité</span>
+          <span className={styles.sliderValue}>{divDraft.toFixed(2)}</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={DIVERSITY_MAX}
+          step={DIVERSITY_STEP}
+          value={divDraft}
+          onChange={(e) => setDivDraft(parseFloat(e.target.value))}
+          onPointerUp={commitDiversity}
+          onKeyUp={commitDiversity}
+          className={styles.slider}
+          title="Rééquilibre le haut du feed pour éviter les grappes de mêmes genres / studios"
+        />
+        <div className={styles.sliderEnds}>
+          <span>Ciblé</span>
+          <span>Varié</span>
+        </div>
+      </div>
 
       <div className={styles.lastRefresh}>
         {recoLastRefresh

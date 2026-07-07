@@ -77,6 +77,7 @@ export default function RecommendationsPage() {
       } else {
         if (state.nicheMode) params.set('nicheMode', 'true');
         if (state.threshold !== null) params.set('threshold', String(state.threshold));
+        if (state.diversity !== null && state.diversity > 0) params.set('diversity', String(state.diversity));
       }
 
       const res = await fetch(`/api/anime/recommendations?${params.toString()}`);
@@ -186,9 +187,11 @@ export default function RecommendationsPage() {
           recoError={recoError}
           nicheMode={state.nicheMode}
           threshold={state.threshold}
+          diversity={state.diversity}
           onRefreshRecos={handleRefreshRecos}
           onNicheModeChange={(v) => update({ nicheMode: v })}
           onThresholdChange={(v) => update({ threshold: v })}
+          onDiversityChange={(v) => update({ diversity: v })}
           onShowLiked={() => update({ review: 'up' })}
           onShowDisliked={() => update({ review: 'down' })}
         />

@@ -35,12 +35,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       ? parseInt(threshold, 10)
       : null;
     const weights = parseSourceWeights(typeof req.query.w === 'string' ? req.query.w : undefined);
+    const divRaw = typeof req.query.diversity === 'string' ? parseFloat(req.query.diversity) : NaN;
+    const diversity = Number.isFinite(divRaw) ? divRaw : null;
 
     const data = getRecommendationsData();
     const ranked = computeFeed({
       nicheMode: niche,
       threshold: Number.isFinite(thr as number) ? thr : null,
       weights,
+      diversity,
     });
     const animes = applyNarrowingFilters(ranked, narrowing);
 

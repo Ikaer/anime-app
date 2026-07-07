@@ -7,6 +7,10 @@ declare const styles: {
   readonly "progress": string;
   readonly "recommendationsSection": string;
   readonly "reviewLinks": string;
+  readonly "slider": string;
+  readonly "sliderEnds": string;
+  readonly "sliderHead": string;
+  readonly "sliderValue": string;
   readonly "thresholdInput": string;
 };
 export = styles;

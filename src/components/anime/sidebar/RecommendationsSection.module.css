@@ -25,6 +25,31 @@
   font-size: 0.9rem;
 }
 
+.sliderHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sliderValue {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.slider {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.sliderEnds {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
 .checkboxLabel {
   display: flex;
   align-items: center;

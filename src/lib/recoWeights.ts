@@ -44,6 +44,15 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
   popularity: -0.15,
 };
 
+/**
+ * Diversity re-rank (MMR) slider bound. `λ = 0` reproduces the pure affinity
+ * ordering (backward-compatible default); higher λ trades affinity for variety
+ * across the ranked list. Client-safe so the URL hook and the sidebar slider
+ * share the same ceiling. Consumed server-side by `computeFeed`'s MMR pass.
+ */
+export const DIVERSITY_MAX = 1;
+export const DIVERSITY_STEP = 0.05;
+
 /** UI metadata for each weightable source: label, hint, and slider bounds. */
 export interface SourceMeta {
   source: RecoSource;

@@ -203,6 +203,11 @@ export interface FeedOptions {
   threshold?: number | null;
   /** Per-source weight overrides; unset sources fall back to DEFAULT_WEIGHTS. */
   weights?: Partial<SourceWeights>;
+  /**
+   * MMR diversity λ ∈ [0, DIVERSITY_MAX]. `0` (default) keeps the pure affinity
+   * ordering; higher values re-rank the feed to spread genres/studios apart.
+   */
+  diversity?: number | null;
 }
 
 // ============================================================================
@@ -371,6 +376,71 @@ interface Accumulator {
   affinity: number;
   /** seed id -> summed backers (num) contributed by that seed. */
   perSeed: Map<number, number>;
+}
+
+/**
+ * Cheap content signature for the diversity re-rank: the namespaced union of a
+ * candidate's genre names + studio ids (the same two fields `fieldMatch`
+ * already extracts). Namespacing (`g:` / `s:`) keeps a genre and a studio that
+ * happen to share a string from colliding.
+ */
+function diversitySignature(anime: AnimeForDisplay): Set<string> {
+  const s = new Set<string>();
+  for (const g of anime.genres || []) s.add(`g:${g.name}`);
+  for (const st of anime.studios || []) s.add(`s:${st.id}`);
+  return s;
+}
+
+/** Jaccard overlap of two signatures in [0,1]; 0 if either side is empty. */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const v of a) if (b.has(v)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+/**
+ * Maximal Marginal Relevance re-rank for variety. A pass ON TOP of the affinity
+ * ordering (not a change to the score), so the additive weighted-sum model — and
+ * the "Pourquoi ?" breakdown — stays intact. Greedily builds the output: after
+ * seeding with the top-affinity item, each step picks the candidate maximizing
+ * `affinityScore − λ · maxSimilarity(alreadyPicked)`.
+ *
+ * `λ = 0` is a no-op that returns the input untouched (strict-`>` selection over
+ * the already-(affinity, mean)-sorted list reproduces the exact prior order).
+ * A running max-similarity map keeps this O(n²) rather than O(n³).
+ */
+function mmrRerank(items: RecommendationItem[], lambda: number): RecommendationItem[] {
+  if (lambda <= 0 || items.length <= 2) return items;
+
+  const sig = new Map<number, Set<string>>();
+  for (const it of items) sig.set(it.id, diversitySignature(it));
+
+  const remaining = [...items]; // already sorted by (affinity desc, mean desc)
+  const first = remaining.shift()!;
+  const selected: RecommendationItem[] = [first];
+  const maxSim = new Map<number, number>();
+  const firstSig = sig.get(first.id)!;
+  for (const it of remaining) maxSim.set(it.id, jaccard(sig.get(it.id)!, firstSig));
+
+  while (remaining.length > 0) {
+    let bestIdx = 0;
+    let bestVal = -Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const cand = remaining[i];
+      const mmr = cand.recoMeta.affinityScore - lambda * (maxSim.get(cand.id) ?? 0);
+      if (mmr > bestVal) { bestVal = mmr; bestIdx = i; }
+    }
+    const [picked] = remaining.splice(bestIdx, 1);
+    selected.push(picked);
+    const pickedSig = sig.get(picked.id)!;
+    for (const it of remaining) {
+      const sim = jaccard(sig.get(it.id)!, pickedSig);
+      if (sim > (maxSim.get(it.id) ?? 0)) maxSim.set(it.id, sim);
+    }
+  }
+  return selected;
 }
 
 /**
@@ -640,7 +710,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     return (y.mean || 0) - (x.mean || 0);
   });
 
-  return items;
+  // Optional diversity re-rank (MMR). λ = 0 (default) leaves `items` untouched.
+  return mmrRerank(items, options.diversity ?? 0);
 }
 
 // ============================================================================

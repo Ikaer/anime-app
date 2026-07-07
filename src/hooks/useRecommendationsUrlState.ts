@@ -19,6 +19,8 @@ export interface RecoUrlState {
   threshold: number | null;
   /** Engine: per-source weights (resolved — defaults merged with URL overrides). */
   weights: SourceWeights;
+  /** Engine: MMR diversity λ (0 = pure affinity order; null = default 0). */
+  diversity: number | null;
   /** Sub-view: show a feedback review list ('up' = bonnes pioches, 'down' = pas pour moi) instead of the feed. */
   review: RecoVerdict | null;
   /** Narrowing filters (shared semantics with the main list). */
@@ -38,6 +40,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   nicheMode: false,
   threshold: null,
   weights: DEFAULT_WEIGHTS,
+  diversity: null,
   review: null,
   mediaTypes: [],
   search: '',
@@ -53,6 +56,7 @@ const KEYS = {
   niche: 'niche',
   threshold: 'thr',
   weights: 'w',
+  diversity: 'div',
   review: 'rev',
   mediaType: 'mt',
   search: 'q',
@@ -74,6 +78,7 @@ function decode(params: URLSearchParams): RecoUrlState {
     nicheMode: params.get(KEYS.niche) === '1',
     threshold: num(params.get(KEYS.threshold)),
     weights: resolveWeights(parseSourceWeights(params.get(KEYS.weights))),
+    diversity: num(params.get(KEYS.diversity)),
     review: params.get(KEYS.review) === 'up' ? 'up' : params.get(KEYS.review) === 'down' ? 'down' : null,
     mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
     search: params.get(KEYS.search) || '',
@@ -97,6 +102,7 @@ function encode(state: RecoUrlState): string {
   if (state.threshold !== null) params.set(KEYS.threshold, String(state.threshold));
   const wStr = encodeSourceWeights(state.weights);
   if (wStr) params.set(KEYS.weights, wStr);
+  if (state.diversity !== null && state.diversity > 0) params.set(KEYS.diversity, String(state.diversity));
   if (state.review) params.set(KEYS.review, state.review);
   if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
   if (state.search) params.set(KEYS.search, state.search);
