@@ -2,14 +2,16 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { getAnimeByIdForDisplay } from '@/lib/anime';
+import { getAnimeByIdForDisplay, getAnimeForDisplay } from '@/lib/anime';
 import type { AnimeForDisplay } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
+import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
 import { RefreshButton } from '@/components/shared';
 
 interface Props {
   anime: AnimeForDisplay;
+  similar: SimilarByCredits[];
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +49,7 @@ function airingLabel(status?: string): string {
   }
 }
 
-export default function AnimeDetailPage({ anime }: Props) {
+export default function AnimeDetailPage({ anime, similar }: Props) {
   const router = useRouter();
   const poster = anime.main_picture?.large || anime.main_picture?.medium || '';
   const en = anime.alternative_titles?.en;
@@ -248,6 +250,36 @@ export default function AnimeDetailPage({ anime }: Props) {
           </section>
         )}
 
+        {/* ---------- Similar by staff & studio (production-credit recos) ---------- */}
+        {similar.length > 0 && (
+          <section className="section">
+            <h2>Dans le même studio / staff</h2>
+            <p className="reco-sub">Recommandations basées uniquement sur les studios et le staff technique partagés.</p>
+            <div className="reco-cards">
+              {similar.map(s => (
+                <Link key={s.id} href={`/anime/${s.id}`} className="reco-card" title={s.title}>
+                  {s.poster
+                    ? <img src={s.poster} alt="" />
+                    : <div className="reco-noimg">?</div>}
+                  <div className="reco-body">
+                    <span className="reco-title">{s.title}</span>
+                    <div className="reco-shared">
+                      {s.sharedStudios.map(name => (
+                        <span key={`st-${name}`} className="reco-badge studio">🎬 {name}</span>
+                      ))}
+                      {s.sharedStaff.map(cr => (
+                        <span key={`sf-${cr.role}-${cr.name}`} className="reco-badge staff">
+                          <span className="reco-role">{cr.role}</span> {cr.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* ---------- Cross-source id crosswalk ---------- */}
         <section className="section">
           <h2>Identifiants (crosswalk)</h2>
@@ -369,6 +401,24 @@ export default function AnimeDetailPage({ anime }: Props) {
 
         .prose { color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; margin: 0; }
 
+        .reco-sub { color: var(--text-muted); font-size: 0.85rem; margin: -0.5rem 0 1rem; }
+        .reco-cards { display: flex; flex-wrap: wrap; gap: 1rem; }
+        .reco-card { display: flex; gap: 0.75rem; width: 320px; text-decoration: none; color: var(--text-primary);
+          background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.6rem; }
+        .reco-card:hover { border-color: var(--border-hover); }
+        .reco-card img { width: 70px; height: 99px; flex: 0 0 70px; object-fit: cover; border-radius: 6px; }
+        .reco-noimg { width: 70px; height: 99px; flex: 0 0 70px; border-radius: 6px; background: var(--bg-secondary);
+          display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+        .reco-body { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+        .reco-title { font-size: 0.9rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box;
+          -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .reco-card:hover .reco-title { text-decoration: underline; }
+        .reco-shared { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+        .reco-badge { font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; background: var(--bg-secondary);
+          border: 1px solid var(--border-color); color: var(--text-secondary); }
+        .reco-badge.studio { color: var(--accent-primary); }
+        .reco-badge .reco-role { color: var(--text-muted); }
+
         .related { display: flex; flex-wrap: wrap; gap: 0.75rem; }
         .related-card { width: 110px; display: flex; flex-direction: column; gap: 4px; text-decoration: none;
           color: var(--text-primary); }
@@ -412,7 +462,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   if (!anime) {
     return { notFound: true };
   }
+  // Similar-by-credits reads catalog fields (studios/staff) only, so the
+  // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
+  const similar = computeSimilarByCredits(anime, getAnimeForDisplay(), 3);
   // AnimeForDisplay carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.
-  return { props: { anime: JSON.parse(JSON.stringify(anime)) } };
+  return {
+    props: {
+      anime: JSON.parse(JSON.stringify(anime)),
+      similar: JSON.parse(JSON.stringify(similar)),
+    },
+  };
 };
