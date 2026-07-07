@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import styles from './AccountSection.module.css';
 import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
@@ -24,7 +25,10 @@ const AccountSection: React.FC<AccountSectionProps> = ({
         <Button variant="secondary" disabled>Loading...</Button>
       ) : authState.isAuthenticated ? (
         <div className={styles.connectedAccount}>
-          <span>Connected as <strong>{authState.user?.name}</strong></span>
+          <div className={styles.identity}>
+            <Image src="/mal.png" alt="MAL" width={24} height={24} className={styles.providerIcon} />
+            <span>Connected as <strong>{authState.user?.name}</strong></span>
+          </div>
           <Button variant="primary-negative" onClick={onDisconnect}>
             Disconnect
           </Button>

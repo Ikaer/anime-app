@@ -10,6 +10,17 @@
   gap: 10px;
 }
 
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.providerIcon {
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
 .connectedAccount span {
   color: var(--text-primary);
   font-size: 0.9rem;

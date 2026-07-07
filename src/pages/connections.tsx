@@ -20,56 +20,66 @@ export default function ConnectionsPage() {
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
       <div className="connections-page">
-        <section className="connections-section">
-          <h2>MyAnimeList</h2>
-          <AccountSection
-            authState={authState}
-            isAuthLoading={isAuthLoading}
-            authError={authError}
-            onConnect={onConnect}
-            onDisconnect={onDisconnect}
-          />
-        </section>
-        <section className="connections-section">
-          <h2>SIMKL</h2>
-          <SimklSection
-            isConnected={simklConnected}
-            userName={simklUser}
-            isAuthLoading={isSimklAuthLoading}
-            authError={simklAuthError}
-            isSyncing={isSimklSyncing}
-            syncMessage={simklSyncMessage}
-            onConnect={onSimklConnect}
-            onDisconnect={onSimklDisconnect}
-            onSync={onSimklSync}
-          />
-        </section>
-        <section className="connections-section">
-          <h2>Sync</h2>
-          <DataSyncSection
-            authState={authState}
-            isSyncing={isSyncing}
-            isBigSyncing={isBigSyncing}
-            isHistoricalCrawling={isHistoricalCrawling}
-            syncError={syncError}
-            historicalStats={historicalStats}
-            onSync={onSync}
-            onBigSync={onBigSync}
-            onHistoricalCrawl={onHistoricalCrawl}
-            isAnilistTagsSyncing={isAnilistTagsSyncing}
-            anilistTagsSyncMessage={anilistTagsSyncMessage}
-            anilistTagStats={anilistTagStats}
-            onAnilistTagsSync={onAnilistTagsSync}
-          />
-        </section>
-        <section className="connections-section">
+        <div className="connections-col">
+          <section className="connections-section">
+            <h2>MyAnimeList</h2>
+            <AccountSection
+              authState={authState}
+              isAuthLoading={isAuthLoading}
+              authError={authError}
+              onConnect={onConnect}
+              onDisconnect={onDisconnect}
+            />
+          </section>
+          <section className="connections-section">
+            <h2>SIMKL</h2>
+            <SimklSection
+              isConnected={simklConnected}
+              userName={simklUser}
+              isAuthLoading={isSimklAuthLoading}
+              authError={simklAuthError}
+              onConnect={onSimklConnect}
+              onDisconnect={onSimklDisconnect}
+            />
+          </section>
+          <section className="connections-section">
+            <h2>Sync</h2>
+            <DataSyncSection
+              authState={authState}
+              isSyncing={isSyncing}
+              isBigSyncing={isBigSyncing}
+              isHistoricalCrawling={isHistoricalCrawling}
+              syncError={syncError}
+              historicalStats={historicalStats}
+              onSync={onSync}
+              onBigSync={onBigSync}
+              onHistoricalCrawl={onHistoricalCrawl}
+              isAnilistTagsSyncing={isAnilistTagsSyncing}
+              anilistTagsSyncMessage={anilistTagsSyncMessage}
+              anilistTagStats={anilistTagStats}
+              onAnilistTagsSync={onAnilistTagsSync}
+              simklConnected={simklConnected}
+              isSimklSyncing={isSimklSyncing}
+              simklSyncMessage={simklSyncMessage}
+              onSimklSync={onSimklSync}
+            />
+          </section>
+        </div>
+        <div className="connections-log">
           <ConnectionLogPanel />
-        </section>
+        </div>
       </div>
       <style jsx>{`
-        .connections-page { display: flex; flex-direction: column; gap: 1.5rem; max-width: 700px; }
+        .connections-page { display: grid; grid-template-columns: minmax(340px, 440px) 1fr; gap: 1.5rem; align-items: stretch; height: calc(100vh - 144px); min-height: 500px; }
+        .connections-col { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; overflow-y: auto; }
+        .connections-log { display: flex; min-width: 0; min-height: 0; }
         .connections-section { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; }
         .connections-section h2 { margin: 0 0 0.75rem; font-size: 1.1rem; color: var(--text-primary); }
+        @media (max-width: 800px) {
+          .connections-page { grid-template-columns: 1fr; height: auto; min-height: 0; }
+          .connections-col { overflow-y: visible; }
+          .connections-log { min-height: 500px; }
+        }
       `}</style>
     </>
   );

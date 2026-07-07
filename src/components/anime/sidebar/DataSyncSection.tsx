@@ -18,6 +18,10 @@ interface DataSyncSectionProps {
   anilistTagsSyncMessage: string;
   anilistTagStats: { totalAnime: number; taggedCount: number } | null;
   onAnilistTagsSync: () => void;
+  simklConnected: boolean;
+  isSimklSyncing: boolean;
+  simklSyncMessage: string;
+  onSimklSync: () => void;
 }
 
 const DataSyncSection: React.FC<DataSyncSectionProps> = ({
@@ -34,22 +38,26 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   anilistTagsSyncMessage,
   anilistTagStats,
   onAnilistTagsSync,
+  simklConnected,
+  isSimklSyncing,
+  simklSyncMessage,
+  onSimklSync,
 }) => {
-  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistTagsSyncing;
+  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistTagsSyncing || isSimklSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
 
   return (
     <div className={styles.dataSyncSection}>
       <div className={styles.buttonGroup}>
         <Button onClick={onSync} disabled={!authState.isAuthenticated || anyBusy}>
-          {isSyncing ? 'Syncing...' : 'Sync Data'}
+          {isSyncing ? 'Syncing...' : 'Sync MAL Data'}
         </Button>
         <Button
           onClick={onBigSync}
           disabled={!authState.isAuthenticated || anyBusy}
           variant="primary-negative"
         >
-          {isBigSyncing ? 'Big Syncing...' : 'Big Sync'}
+          {isBigSyncing ? 'Big Syncing...' : 'MAL Big Sync'}
         </Button>
       </div>
       <div className={styles.buttonGroup}>
@@ -58,7 +66,7 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
           disabled={!authState.isAuthenticated || anyBusy || crawlDone}
           variant="secondary"
         >
-          {isHistoricalCrawling ? 'Crawling...' : crawlDone ? 'History Complete' : 'Crawl History'}
+          {isHistoricalCrawling ? 'Crawling...' : crawlDone ? 'MAL History Complete' : 'Crawl MAL History'}
         </Button>
       </div>
       {historicalStats !== null && (
@@ -69,6 +77,12 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
         </div>
       )}
       {syncError && <div className={styles.error}>{syncError}</div>}
+      <div className={styles.buttonGroup}>
+        <Button onClick={onSimklSync} disabled={!simklConnected || anyBusy}>
+          {isSimklSyncing ? 'Syncing...' : 'Sync SIMKL'}
+        </Button>
+      </div>
+      {simklSyncMessage && <div className={styles.crawlStats}>{simklSyncMessage}</div>}
       <div className={styles.buttonGroup}>
         <Button onClick={onAnilistTagsSync} disabled={anyBusy} variant="secondary">
           {isAnilistTagsSyncing ? 'Starting...' : 'Sync AniList Tags + Staff'}
