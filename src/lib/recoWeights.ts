@@ -11,24 +11,35 @@
 import type { RecoSource, SourceWeights } from '@/models/anime';
 
 /**
- * Default weights for `score = Σ weight · normalizedSourceValue`. `crowd`
- * anchors the feed; metadata sources gently re-rank; `rejection`/`popularity`
- * are negative (they push a candidate down). nsfw ships at 0 — with 2 values
- * (91% "white") it barely discriminates, so it's available-but-off.
- * anilistTags and anilistStaff also ship at 0 until a "Sync AniList" run has
- * populated coverage (see Connections page); they're meaningless before that.
+ * Default weights for `score = Σ weight · normalizedSourceValue`. MAL `crowd`
+ * anchors the feed; `anilistCrowd` is the second crowd source (a distinct
+ * community — correlated, so weighted below MAL). Metadata sources gently
+ * re-rank; `rejection`/`popularity` are negative (they push a candidate down).
+ *
+ * IMPORTANT — metadata weights are NOT on a common scale. `fieldMatch` divides
+ * the matched IDF weight by the candidate's value COUNT, so high-cardinality
+ * fields yield structurally smaller values. Measured over the live corpus, a
+ * typical match is ~0.40 for BOTH `genre` and `anilistTags`, but only ~0.05 for
+ * `anilistStaff` (diluted by ~13 credits). So `anilistStaff` needs a ~1.0 weight
+ * just to contribute on par with `genre` at 0.2 — that's why its default and
+ * slider range sit an order of magnitude higher, not a typo.
+ *
+ * `nsfw` ships at 0 — with 2 values (~91% "white") it barely discriminates, so
+ * it's available-but-off. `feedback` is dormant until 👍 thumbs accumulate.
+ * The three AniList sources need a "Sync AniList" run to be populated (see the
+ * Connections page); on an unsynced install they simply score 0 (no penalty).
  */
 export const DEFAULT_WEIGHTS: SourceWeights = {
   crowd: 1.0,
-  anilistCrowd: 0.0,
+  anilistCrowd: 0.7,
   suggestions: 0.35,
   feedback: 0.5,
-  genre: 0.25,
+  genre: 0.2,
   studio: 0.15,
   nsfw: 0.0,
   rating: 0.05,
-  anilistTags: 0.0,
-  anilistStaff: 0.0,
+  anilistTags: 0.3,
+  anilistStaff: 1.0,
   rejection: -0.35,
   popularity: -0.15,
 };
@@ -54,7 +65,7 @@ export const SOURCE_META: SourceMeta[] = [
   { source: 'rating', label: 'Classification', hint: 'Âge conseillé (PG, R…), pondéré par rareté', min: 0, max: 1, step: 0.05 },
   { source: 'nsfw', label: 'NSFW', hint: 'Signal faible (2 valeurs) — off par défaut', min: 0, max: 1, step: 0.05 },
   { source: 'anilistTags', label: 'Tags AniList', hint: 'Affinité de tags fins (pondérée par rareté) — nécessite une sync', min: 0, max: 1, step: 0.05 },
-  { source: 'anilistStaff', label: 'Staff AniList', hint: 'Affinité de créateurs : réalisateur, chara-design, musique… (nécessite une sync)', min: 0, max: 1, step: 0.05 },
+  { source: 'anilistStaff', label: 'Staff AniList', hint: 'Affinité de créateurs : réalisateur, chara-design, musique… — échelle plus large (dilué par ~15 crédits ; nécessite une sync)', min: 0, max: 3, step: 0.1 },
   { source: 'rejection', label: 'Rejet', hint: 'Pénalise ce qui ressemble à tes abandons / notes basses', min: -1, max: 0, step: 0.05 },
   { source: 'popularity', label: 'Popularité', hint: 'Négatif = feed plus niche', min: -1, max: 1, step: 0.05 },
 ];
@@ -107,14 +118,34 @@ export const RECO_WEIGHT_PRESETS: WeightPreset[] = [
   {
     key: 'sur',
     label: 'Sûr',
-    hint: 'Colle à ce que les fans de tes séries préférées regardent aussi',
-    weights: { crowd: 1.4, suggestions: 0.5 },
+    hint: 'Consensus des deux communautés (MAL + AniList) ; ignore les profils de goût fins',
+    // Explicit zeros are required: the metadata sources now default non-zero, so
+    // a "pure crowd" preset must override them or it silently inherits them.
+    weights: {
+      crowd: 1.4, anilistCrowd: 1.0, suggestions: 0.5,
+      genre: 0, studio: 0, anilistTags: 0, anilistStaff: 0, rating: 0,
+      popularity: 0,
+    },
   },
   {
     key: 'decouverte',
     label: 'Découverte',
-    hint: 'Priorise les genres/studios qui te correspondent, quitte à s’éloigner du consensus',
-    weights: { crowd: 0.5, genre: 0.6, studio: 0.45, popularity: -0.4 },
+    hint: 'Priorise tes goûts fins (tags, staff, genres) et le niche, quitte à t’éloigner du consensus',
+    weights: {
+      crowd: 0.5, anilistCrowd: 0.4,
+      genre: 0.4, studio: 0.4, anilistTags: 0.6, anilistStaff: 1.3,
+      popularity: -0.5,
+    },
+  },
+  {
+    key: 'createurs',
+    label: 'Créateurs',
+    hint: 'Plus des réalisateurs, compositeurs et studios que tu aimes (signal staff AniList)',
+    weights: {
+      crowd: 0.6, anilistCrowd: 0.5,
+      anilistStaff: 2.0, studio: 0.4, anilistTags: 0.5, genre: 0.15,
+      popularity: -0.2,
+    },
   },
   {
     key: 'defaut',
