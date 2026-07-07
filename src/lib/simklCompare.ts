@@ -56,13 +56,28 @@ export function computeDiscrepancy(
     result.score = { mal: malScore, simkl: simkl.score };
   }
 
-  // Progress (both present and differing)
+  // Progress (both present and differing). Exception: when the two providers
+  // disagree on the *total* episode count but each side has watched all of its
+  // own episodes, the title is fully watched on both — that's not a real
+  // discrepancy (e.g. 12 eps on MAL vs 13 on SIMKL, both completed), so don't
+  // flag it. It would otherwise be impossible to reconcile.
   if (
     malProgress != null &&
     simkl.num_episodes_watched != null &&
     malProgress !== simkl.num_episodes_watched
   ) {
-    result.progress = { mal: malProgress, simkl: simkl.num_episodes_watched };
+    const malTotal = anime.num_episodes ?? null;
+    const simklTotal = simkl.total_episodes ?? null;
+    const bothFullyWatched =
+      malTotal != null &&
+      malTotal > 0 &&
+      malProgress === malTotal &&
+      simklTotal != null &&
+      simklTotal > 0 &&
+      simkl.num_episodes_watched === simklTotal;
+    if (!bothFullyWatched) {
+      result.progress = { mal: malProgress, simkl: simkl.num_episodes_watched };
+    }
   }
 
   // Presence (soft): synced from SIMKL but not statused on MAL. The inverse
