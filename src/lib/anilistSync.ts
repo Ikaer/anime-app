@@ -99,6 +99,112 @@ async function fetchTagsBatch(malIds: number[], retryOn429 = true): Promise<RawM
   return (json?.data?.Page?.media ?? []) as RawMedia[];
 }
 
+// Crowd recommendations query — kept SEPARATE from TAGS_QUERY (tags + staff
+// already sit near AniList's query-complexity ceiling; stacking a
+// recommendations connection on top risks blowing it). Lightweight: only idMal
+// + the recommendations edge. `mediaRecommendation.idMal` resolves the rec
+// straight back onto our MAL join key, so no crosswalk is needed.
+const RECS_PER_ANIME = 15;
+const RECS_QUERY = `
+query ($ids: [Int]) {
+  Page(page: 1, perPage: ${BATCH_SIZE}) {
+    media(idMal_in: $ids, type: ANIME) {
+      idMal
+      recommendations(sort: RATING_DESC, perPage: ${RECS_PER_ANIME}) {
+        edges {
+          node {
+            rating
+            mediaRecommendation { idMal }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+interface RawRecEdge {
+  node?: { rating?: number; mediaRecommendation?: { idMal?: number | null } };
+}
+interface RawRecMedia {
+  idMal: number;
+  recommendations?: { edges?: RawRecEdge[] };
+}
+
+/** One AniList crowd recommendation resolved onto a MAL id, with its net rating. */
+export interface AnilistRecEdge {
+  /** Recommended anime's MAL id. */
+  id: number;
+  /** AniList net recommendation rating (crowd backers) — always > 0 here. */
+  rating: number;
+}
+
+async function fetchRecsBatch(malIds: number[], retryOn429 = true): Promise<RawRecMedia[]> {
+  const res = await fetch(ANILIST_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ query: RECS_QUERY, variables: { ids: malIds } }),
+  });
+
+  if (res.status === 429) {
+    if (!retryOn429) throw new Error('AniList rate limit exceeded (retry already attempted)');
+    const retryAfterHeader = res.headers.get('Retry-After');
+    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
+    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
+    return fetchRecsBatch(malIds, false);
+  }
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '');
+    throw new Error(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 500)}` : ''}`);
+  }
+
+  const json = await res.json();
+  if (Array.isArray(json?.errors) && json.errors.length > 0) {
+    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
+    throw new Error(`AniList GraphQL error: ${messages}`);
+  }
+  return (json?.data?.Page?.media ?? []) as RawRecMedia[];
+}
+
+/**
+ * Fetch AniList crowd recommendations for the given seed MAL ids, batched by 50
+ * and throttled like the tags sync. Returns a map of seed MAL id -> recommended
+ * MAL edges (recs AniList couldn't map to a MAL id, or with a non-positive net
+ * rating, are dropped). AniList silently skips ids it doesn't know, so the map
+ * only contains seeds it recognized.
+ */
+export async function fetchAnilistRecommendations(
+  seedMalIds: number[],
+  onBatch?: (done: number, total: number) => void
+): Promise<Map<number, AnilistRecEdge[]>> {
+  const ids = seedMalIds.filter(id => Number.isInteger(id));
+  const batches = chunk(ids, BATCH_SIZE);
+  const out = new Map<number, AnilistRecEdge[]>();
+  let processed = 0;
+
+  for (const batch of batches) {
+    try {
+      const media = await fetchRecsBatch(batch);
+      for (const m of media) {
+        if (!m.idMal) continue;
+        const edges: AnilistRecEdge[] = (m.recommendations?.edges ?? [])
+          .map(e => ({ id: e.node?.mediaRecommendation?.idMal ?? 0, rating: e.node?.rating ?? 0 }))
+          .filter(e => e.id > 0 && e.rating > 0);
+        if (edges.length > 0) out.set(m.idMal, edges);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      appendLog('anilist-tags-sync', 'error', `AniList recos batch failed (mal ids ${batch[0]}-${batch[batch.length - 1]}), continuing: ${message}`);
+    }
+    processed += batch.length;
+    if (onBatch) onBatch(processed, ids.length);
+    if (processed < ids.length) {
+      await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
+    }
+  }
+  return out;
+}
+
 export interface AnilistTagsSyncResult {
   ok: boolean;
   alreadyRunning: boolean;

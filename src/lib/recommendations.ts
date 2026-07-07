@@ -16,6 +16,7 @@ import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, Sour
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 import { getEffectiveStatus, getEffectiveScore } from '@/lib/animeUtils';
+import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
 const RECOMMENDATIONS_FILE = path.join(DATA_PATH, 'recommendations_MAL.json');
@@ -161,6 +162,13 @@ export interface RecommendationsData {
   nicheMode: boolean;
   /** Keyed by seed id (string) -> edges produced within that seed's subtree. */
   seeds: Record<string, RecoEdge[]>;
+  /**
+   * AniList crowd recommendations, keyed by seed MAL id (string) -> edges.
+   * Parallel to `seeds` but sourced from AniList's `Media.recommendations`
+   * connection. `num` holds AniList's net recommendation rating. Optional for
+   * backward compat: files written before this feature lack it.
+   */
+  anilistSeeds?: Record<string, RecoEdge[]>;
   suggestions: { id: number; rank: number }[];
 }
 
@@ -169,7 +177,7 @@ export interface RecommendationItem extends AnimeForDisplay {
 }
 
 export interface RecoRefreshProgress {
-  type: 'start' | 'progress' | 'seed_done' | 'suggestions' | 'hop2' | 'hydrate' | 'complete' | 'error';
+  type: 'start' | 'progress' | 'seed_done' | 'suggestions' | 'anilist' | 'hop2' | 'hydrate' | 'complete' | 'error';
   message?: string;
   totalSeeds?: number;
   currentSeed?: number;
@@ -227,6 +235,7 @@ const EMPTY_DATA: RecommendationsData = {
   seedThreshold: TUNING.DEFAULT_SEED_THRESHOLD,
   nicheMode: false,
   seeds: {},
+  anilistSeeds: {},
   suggestions: [],
 };
 
@@ -415,6 +424,35 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (!acc.has(s.id)) acc.set(s.id, { affinity: 0, perSeed: new Map() });
   }
 
+  // AniList crowd — its own accumulator, normalized independently (AniList's net
+  // `rating` isn't comparable to MAL's `num_recommendations`). Same seed-weight
+  // and threshold gating as MAL crowd. Candidates surfaced ONLY by AniList are
+  // ensured in `acc` (with zero MAL affinity) so they enter the eligible pass.
+  const anilistAcc = new Map<number, Accumulator>();
+  const bumpAnilist = (candId: number, seedId: number, contribution: number, backers: number) => {
+    let a = anilistAcc.get(candId);
+    if (!a) { a = { affinity: 0, perSeed: new Map() }; anilistAcc.set(candId, a); }
+    a.affinity += contribution;
+    a.perSeed.set(seedId, (a.perSeed.get(seedId) || 0) + backers);
+  };
+  for (const [seedIdStr, edges] of Object.entries(data.anilistSeeds || {})) {
+    const seedId = Number(seedIdStr);
+    const seed = byId.get(seedId);
+    const seedScore = seed ? getEffectiveScore(seed) : undefined;
+    let weight: number;
+    if (typeof seedScore === 'number' && seedScore >= threshold) {
+      weight = seedWeight(seedScore, threshold);
+    } else if (upIds.has(seedId)) {
+      weight = TUNING.FEEDBACK_SEED_WEIGHT;
+    } else {
+      continue;
+    }
+    for (const edge of edges) {
+      bumpAnilist(edge.id, seedId, edge.num * weight, edge.num);
+      if (!acc.has(edge.id)) acc.set(edge.id, { affinity: 0, perSeed: new Map() });
+    }
+  }
+
   // Effective weights = defaults overridden by the caller's knobs.
   const weights: SourceWeights = { ...DEFAULT_WEIGHTS, ...(options.weights || {}) };
 
@@ -462,6 +500,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
   const eligible: { anime: AnimeForDisplay; a: Accumulator }[] = [];
   let maxRaw = 0;
+  let maxAnilistRaw = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   for (const [candId, a] of acc) {
     const anime = byId.get(candId);
@@ -477,10 +516,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
 
     eligible.push({ anime, a });
     if (a.affinity > maxRaw) maxRaw = a.affinity;
+    const anilistAffinity = anilistAcc.get(candId)?.affinity ?? 0;
+    if (anilistAffinity > maxAnilistRaw) maxAnilistRaw = anilistAffinity;
     const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
     if (users > maxUsers) maxUsers = users;
   }
   const crowdDenom = Math.log(1 + maxRaw) || 1;
+  const anilistCrowdDenom = Math.log(1 + maxAnilistRaw) || 1;
   const popDenom = Math.log10(maxUsers) || 1;
 
   // Pass 2: score each candidate as `Σ weight · normalizedSourceValue`, and
@@ -500,9 +542,12 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
     const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
+    const anilistA = anilistAcc.get(candId);
+    const anilistAffinity = anilistA?.affinity ?? 0;
 
     const values: SourceWeights = {
       crowd: maxRaw > 0 ? Math.log(1 + a.affinity) / crowdDenom : 0,
+      anilistCrowd: maxAnilistRaw > 0 ? Math.log(1 + anilistAffinity) / anilistCrowdDenom : 0,
       suggestions: suggestionIds.has(candId) ? 1 : 0,
       feedback: TUNING.GENRE_WEIGHT * fbGenreM.score + TUNING.STUDIO_WEIGHT * fbStudioM.score,
       genre: genreM.score,
@@ -520,10 +565,16 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
       .map(([sid, backers]) => ({ id: sid, title: byId.get(sid)?.title || `#${sid}`, backers }));
 
+    const anilistTopSeeds = Array.from(anilistA?.perSeed.entries() ?? [])
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
+      .map(([sid]) => byId.get(sid)?.title || `#${sid}`);
+
     const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
     const staffById = new Map((anime.anilistTags?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: topSeeds.length ? `Fans de ${topSeeds.map(s => s.title).join(', ')}` : undefined,
+      anilistCrowd: anilistTopSeeds.length ? `Fans AniList de ${anilistTopSeeds.join(', ')}` : undefined,
       suggestions: values.suggestions ? 'Dans tes suggestions MAL' : undefined,
       feedback: (() => {
         const parts = [
@@ -686,6 +737,7 @@ export async function performRecommendationsRefresh(
       seedThreshold: threshold,
       nicheMode: options.nicheMode,
       seeds: {},
+      anilistSeeds: {},
       suggestions: [],
     };
 
@@ -718,6 +770,26 @@ export async function performRecommendationsRefresh(
       console.error('Failed to fetch suggestions:', error);
     }
 
+    // AniList crowd recos for the same seeds (orthogonal source). AniList
+    // resolves recs straight to MAL ids, so no crosswalk; batched + throttled
+    // inside fetchAnilistRecommendations. Non-fatal — a failure leaves the
+    // AniList source empty (weight defaults to 0 anyway).
+    try {
+      report({ type: 'anilist', message: 'Fetching AniList recommendations...' });
+      const anilistRecs = await fetchAnilistRecommendations(
+        seeds.map(s => s.id),
+        (done, total) => report({ type: 'anilist', currentSeed: done, totalSeeds: total, message: `AniList ${done}/${total}` })
+      );
+      const anilistSeeds: Record<string, RecoEdge[]> = {};
+      anilistRecs.forEach((edges, seedMalId) => {
+        anilistSeeds[seedMalId.toString()] = edges.map(e => ({ id: e.id, num: e.rating, hop: 1 as const }));
+      });
+      data.anilistSeeds = anilistSeeds;
+      saveRecommendationsData(data);
+    } catch (error) {
+      console.error('Failed to fetch AniList recommendations:', error);
+    }
+
     // Optional niche 2-hop: recos of each 1-hop candidate, stored under its seed.
     if (options.nicheMode) {
       for (let i = 0; i < seeds.length; i++) {
@@ -744,6 +816,9 @@ export async function performRecommendationsRefresh(
     const existing = getAllMALAnime();
     const candidateIds = new Set<number>();
     for (const edges of Object.values(data.seeds)) {
+      for (const e of edges) candidateIds.add(e.id);
+    }
+    for (const edges of Object.values(data.anilistSeeds || {})) {
       for (const e of edges) candidateIds.add(e.id);
     }
     for (const s of data.suggestions) candidateIds.add(s.id);

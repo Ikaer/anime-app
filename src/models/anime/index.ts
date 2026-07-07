@@ -233,6 +233,7 @@ export type AnimeView = 'new_season' | 'new_season_strict' | 'next_season' | 'fi
  */
 export type RecoSource =
   | 'crowd'        // MAL crowd recommendations from the user's high-scored seeds
+  | 'anilistCrowd' // AniList crowd recommendations from the user's high-scored seeds
   | 'suggestions'  // MAL personal "suggestions" endpoint
   | 'feedback'     // taste-profile affinity on the user's 👍 "bonne pioche" set
   | 'genre'        // taste-profile affinity on genres (IDF-weighted)
