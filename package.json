@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "css:types": "npx tcm -p \"src/**/*.module.css\" . --camelCase",
-    "css:types:watch": "npx tcm -w -p \"src/**/*.module.css\" . --camelCase"
+    "css:types:watch": "npx tcm -w -p \"src/**/*.module.css\" . --camelCase",
+    "data:copy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/copy-data.ps1"
   },
   "dependencies": {
     "next": "14.0.0",
