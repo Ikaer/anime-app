@@ -46,103 +46,77 @@ export interface RatingGrid {
 const COMPLETE_GRID: CriteriaSection[] = [
   {
     id: 'ecriture',
-    name: 'Écriture & Scénario',
+    name: "Écriture & Scénario",
     criteria: [
       {
         id: 'coherence_rythme',
-        name: 'Cohérence & Rythme',
+        name: "Cohérence & Rythme",
         steps: [
           {
             value: 0,
             label: "Cassé",
             description: "Incohérences majeures, rythme brisé : longueurs, précipitation ou remplissage qui plombent le récit.",
-            examples: [
-              "Adaptation qui compresse plusieurs tomes en un épisode pour boucler à la va-vite",
-              "The Promised Neverland S2, arcs entiers sautés",
-            ],
+            examples: ["Hellsing Ultimate (4) : structure d'OVA décousue, ça part dans tous les sens"],
           },
           {
             value: 1,
             label: "Bancal",
             description: "Ça tient debout mais ça patine ou trébuche par moments.",
-            examples: [
-              "Arcs de filler qui cassent l'élan (longs passages de Bleach / Naruto)",
-              "Ventre mou de milieu de saison avant que ça reparte",
-            ],
+            examples: ["Clannad (6) : longueurs et remplissage avant que ça décolle"],
           },
           {
             value: 2,
             label: "Correct",
             description: "Suivi sans accroc, rythme correct sans être remarquable.",
-            examples: [
-              "Shônen saisonnier qui se suit sans effort mais sans relief",
-            ],
+            examples: ["Dr. Stone (7) : ça se suit sans effort, sans relief particulier"],
           },
           {
             value: 3,
             label: "Bien tenu",
             description: "Rythme bien tenu sur la durée, peu de temps morts.",
-            examples: [
-              "Vinland Saga S1",
-              "Jujutsu Kaisen S1, peu de gras",
-            ],
+            examples: ["Vinland Saga (8) : tempo maîtrisé malgré la lenteur assumée", "Jujutsu Kaisen (9)"],
           },
           {
             value: 4,
             label: "Maîtrisé",
             description: "Rythme maîtrisé de bout en bout, chaque épisode à sa place.",
-            examples: [
-              "Frieren : chaque épisode pèse son poids",
-              "Monster, dense malgré 74 épisodes ; Steins;Gate",
-            ],
+            examples: ["Frieren: Beyond Journey's End (10) : chaque épisode pèse son poids", "Steins;Gate (10)"],
           },
         ],
       },
       {
         id: 'execution_originalite',
-        name: 'Exécution ou Originalité',
+        name: "Exécution ou Originalité",
         steps: [
           {
             value: 0,
             label: "Paresseux",
-            description: "Codes ressassés sans effort, ou bonne idée de départ gâchée par l'exécution.",
-            examples: [
-              "Isekai power-fantasy au moule, héros OP sans enjeu",
-            ],
+            description: "Codes ressassés sans effort, ou bonne idée gâchée par l'exécution.",
+            examples: ["The Hidden Dungeon Only I Can Enter (4) : moule isekai/ecchi sans relief"],
           },
           {
             value: 1,
             label: "Déjà-vu",
             description: "Du déjà-vu dans le fond comme la forme, exécution passable qui manque d'allant.",
-            examples: [
-              "Romcom scolaire qui coche les cases sans énergie",
-            ],
+            examples: ["My Happy Marriage (5) : codes du genre cochés sans allant"],
           },
           {
             value: 2,
             label: "Propre",
             description: "Codes classiques exécutés proprement, sans surprise.",
-            examples: [
-              "Battle shônen classique bien mené mais balisé",
-            ],
+            examples: ["Blue Lock (6) : recette du sport-shônen exécutée proprement"],
           },
           {
             value: 3,
             label: "Une patte",
             description: "Une vraie patte d'auteur ou des idées qui sortent du lot.",
-            examples: [
-              "Dandadan, ton et énergie qui sortent du lot",
-              "Odd Taxi, angle narratif original",
-            ],
+            examples: ["Bocchi the Rock! (9) : patte visuelle et comique qui sort du lot", "Dan Da Dan (10)"],
           },
           {
             value: 4,
             label: "Force le respect",
             description: "Concept réellement innovant, OU classique exécuté à un niveau qui force le respect.",
-            examples: [
-              "Steins;Gate : concept temporel exploité à fond",
-              "Ghost in the Shell (film) ; Frieren, le classique sublimé",
-            ],
+            examples: ["Steins;Gate (10) : concept temporel exploité à fond", "Ghost in the Shell (10, film 1995)"],
           },
         ],
       },
@@ -150,98 +124,77 @@ const COMPLETE_GRID: CriteriaSection[] = [
   },
   {
     id: 'personnages',
-    name: 'Les Personnages',
+    name: "Les Personnages",
     criteria: [
       {
         id: 'evolution_ecriture',
-        name: 'Évolution & Écriture',
+        name: "Évolution & Écriture",
         steps: [
           {
             value: 0,
             label: "Plats",
             description: "Persos plats, motivations absentes ou incohérentes.",
-            examples: [
-              "Faire-valoir sans motivation, méchant méchant « parce que »",
-            ],
+            examples: ["Mistress Kanan is Devilishly Easy (4) : persos-fonction, zéro évolution"],
           },
           {
             value: 1,
             label: "Esquissés",
             description: "Motivations esquissées, psychologie sommaire.",
-            examples: [
-              "Motivations posées en une réplique, jamais creusées",
-            ],
+            examples: ["Campfire Cooking in Another World with My Absurd Skill (5) : motivations à peine posées"],
           },
           {
             value: 2,
             label: "Crédibles",
             description: "Motivations claires, psychologie crédible.",
-            examples: [
-              "Casting cohérent dont les choix se comprennent",
-            ],
+            examples: ["Dr. Stone (7) : motivations lisibles, mais peu d'évolution"],
           },
           {
             value: 3,
             label: "Arcs amorcés",
             description: "Des arcs amorcés, quelques persos évoluent vraiment.",
-            examples: [
-              "Deux-trois persos qui évoluent nettement sur la saison",
-            ],
+            examples: ["86 Eighty-Six (8) : Shin et Lena avancent nettement"],
           },
           {
             value: 4,
             label: "Vrais arcs",
             description: "Vrais arcs, persos qui changent et le justifient.",
-            examples: [
-              "Thorfinn (Vinland Saga), transformation gagnée",
-              "Johan / Tenma (Monster) ; Rei (March Comes in Like a Lion)",
-            ],
+            examples: ["Vinland Saga (8) : Thorfinn, transformation gagnée", "Code Geass: Lelouch of the Rebellion R2 (9) : Lelouch"],
           },
         ],
       },
       {
         id: 'attachement_charisme',
-        name: 'Attachement / Charisme',
+        name: "Attachement / Charisme",
         steps: [
           {
             value: 0,
             label: "Indifférence",
             description: "Indifférence, voire rejet.",
-            examples: [
-              "Tu ne retiens aucun nom à la fin",
-            ],
+            examples: ["Scum's Wish (4) : persos qui te laissent froid, voire agacent"],
           },
           {
             value: 1,
             label: "Tièdes",
             description: "Un ou deux persos sympas, le reste te laisse froid.",
-            examples: [
-              "Un sidekick sympa, le reste transparent",
-            ],
+            examples: ["Blue Lock (6) : un ou deux marquants, le reste fonctionnel"],
           },
           {
             value: 2,
             label: "Attachants",
             description: "On s'attache à quelques persos.",
-            examples: [
-              "Deux-trois persos auxquels tu tiens",
-            ],
+            examples: ["Ranking of Kings (7) : on s'attache vite à Bojji"],
           },
           {
             value: 3,
             label: "Casting attachant",
             description: "Casting attachant, tu suis leurs histoires avec plaisir.",
-            examples: [
-              "Bande dont tu suis chaque histoire avec plaisir (Spy x Family)",
-            ],
+            examples: ["Spy x Family (9) : la famille Forger", "Delicious in Dungeon (9)"],
           },
           {
             value: 4,
             label: "Magnétique",
             description: "Casting magnétique, leur sort te tient.",
-            examples: [
-              "Frieren & compagnie ; l'équipage du Bebop, dont le sort te tient",
-            ],
+            examples: ["Frieren: Beyond Journey's End (10)", "KonoSuba (10) : la bande de bras cassés"],
           },
         ],
       },
@@ -249,99 +202,77 @@ const COMPLETE_GRID: CriteriaSection[] = [
   },
   {
     id: 'realisation_visuelle',
-    name: 'Réalisation Visuelle',
+    name: "Réalisation Visuelle",
     criteria: [
       {
         id: 'fluidite_dynamisme',
-        name: 'Fluidité & Dynamisme',
+        name: "Fluidité & Dynamisme",
         steps: [
           {
             value: 0,
             label: "Figée",
             description: "Animation pauvre / figée qui nuit aux scènes clés.",
-            examples: [
-              "Plans fixes et économies de budget qui plombent les moments forts",
-            ],
+            examples: ["One-Punch Man Season 3 (1) : chute d'animation flagrante sur les combats"],
           },
           {
             value: 1,
             label: "Inégale",
             description: "Animation inégale, ça dépanne sans convaincre.",
-            examples: [
-              "Beaux key frames mais intervalles pauvres",
-            ],
+            examples: ["Prod en dents de scie : beaux pics noyés dans du remplissage"],
           },
           {
             value: 2,
             label: "Propre",
             description: "Animation propre, au service de l'intention (baston, comédie, émotion).",
-            examples: [
-              "Animation nette au service de la scène, sans esbroufe",
-            ],
+            examples: ["Dr. Stone (7) : anim propre au service du récit"],
           },
           {
             value: 3,
             label: "Soignée",
             description: "Animation soignée, quelques morceaux de bravoure.",
-            examples: [
-              "Gros épisodes-événements bien au-dessus de la moyenne de la série",
-            ],
+            examples: ["Jujutsu Kaisen (9) : gros épisodes-événements"],
           },
           {
             value: 4,
             label: "Transcende",
             description: "Animation qui transcende la scène, mémorable par elle-même.",
-            examples: [
-              "Sakuga qui devient la scène (Demon Slayer / Ufotable)",
-              "Mob Psycho 100 ; Chainsaw Man",
-            ],
+            examples: ["Chainsaw Man – The Movie: Reze Arc (10)", "Demon Slayer: Entertainment District Arc (10)"],
           },
         ],
       },
       {
         id: 'direction_artistique',
-        name: 'Direction Artistique',
+        name: "Direction Artistique",
         steps: [
           {
             value: 0,
             label: "Générique",
             description: "Visuel générique ou laid.",
-            examples: [
-              "Chara-design interchangeable, décors sans âme",
-            ],
+            examples: ["The Hidden Dungeon Only I Can Enter (4) : DA passe-partout"],
           },
           {
             value: 1,
             label: "Sans identité",
             description: "Visuel banal mais propre, sans identité.",
-            examples: [
-              "Propre mais anonyme, aucun parti pris",
-            ],
+            examples: ["My Happy Marriage (5) : propre mais anonyme"],
           },
           {
             value: 2,
             label: "Cohérente",
             description: "Identité visuelle correcte et cohérente.",
-            examples: [
-              "Direction visuelle correcte et tenue sur la durée",
-            ],
+            examples: ["Blue Lock (6) : identité visuelle correcte et tenue"],
           },
           {
             value: 3,
             label: "Partis pris",
             description: "DA soignée avec de vrais partis pris.",
-            examples: [
-              "Palette et cadrage affirmés (Made in Abyss)",
-            ],
+            examples: ["Made in Abyss (8) : direction visuelle forte", "Bakemonogatari (6) : partis pris Shaft assumés (note globale à part)"],
           },
           {
             value: 4,
             label: "Marquante",
             description: "DA marquante : couleurs, cadrage, mise en scène mémorables.",
-            examples: [
-              "Ping Pong (Yuasa), mise en scène signature",
-              "Utena / Penguindrum (Ikuhara) ; GITS (film)",
-            ],
+            examples: ["Ghost in the Shell (10, film 1995)", "Witch Hat Atelier (7) : DA d'exception, le fond en retrait"],
           },
         ],
       },
@@ -349,98 +280,77 @@ const COMPLETE_GRID: CriteriaSection[] = [
   },
   {
     id: 'enrobage_sonore',
-    name: 'Enrobage Sonore',
+    name: "Enrobage Sonore",
     criteria: [
       {
         id: 'musique_ost',
-        name: 'Musique (OST, OP/ED)',
+        name: "Musique (OST, OP/ED)",
         steps: [
           {
             value: 0,
             label: "Oubliable",
             description: "BO oubliable ou hors-sujet, génériques qu'on skip.",
-            examples: [
-              "OST passe-partout, OP/ED skippés direct",
-            ],
+            examples: ["The Hidden Dungeon Only I Can Enter (4) : BO passe-partout, OP/ED skippés"],
           },
           {
             value: 1,
             label: "Fade",
             description: "BO fade, quelques pistes passent mais rien ne reste.",
-            examples: [
-              "Une ou deux pistes correctes, rien ne marque",
-            ],
+            examples: ["My Happy Marriage (5) : BO fonctionnelle, rien ne reste"],
           },
           {
             value: 2,
             label: "Correcte",
             description: "BO correcte qui accompagne sans déranger.",
-            examples: [
-              "OST fonctionnelle qui soutient les scènes sans se faire remarquer",
-            ],
+            examples: ["Dr. Stone (7) : soutient les scènes sans se faire remarquer"],
           },
           {
             value: 3,
             label: "Marquante",
             description: "Bonne BO, des thèmes qui marquent, génériques appréciés.",
-            examples: [
-              "Des thèmes identifiables, OP/ED qu'on garde",
-            ],
+            examples: ["Made in Abyss (8) : score de Kevin Penkin, thèmes forts"],
           },
           {
             value: 4,
             label: "No-skip",
             description: "BO qui magnifie les scènes, génériques no-skip.",
-            examples: [
-              "Sawano (Attack on Titan) ; Yoko Kanno (Bebop)",
-              "Ushio (Ping Pong, A Silent Voice) ; Evan Call (Frieren)",
-            ],
+            examples: ["Frieren: Beyond Journey's End (10, Evan Call)", "A Silent Voice (10, Kensuke Ushio)"],
           },
         ],
       },
       {
         id: 'sound_design_doublage',
-        name: 'Sound Design & Doublage',
+        name: "Sound Design & Doublage",
         steps: [
           {
             value: 0,
             label: "À côté",
             description: "Bruitages plats, doublage à côté.",
-            examples: [
-              "Impacts sans poids, seiyuu à contre-emploi",
-            ],
+            examples: ["Impacts sans poids, seiyuu à contre-emploi (rarement un titre-repère net)"],
           },
           {
             value: 1,
             label: "Pauvre",
             description: "Sound design pauvre, doublage inégal.",
-            examples: [
-              "Design sonore minimal, jeu vocal en dents de scie",
-            ],
+            examples: ["Design sonore minimal, jeu vocal en dents de scie"],
           },
           {
             value: 2,
             label: "Corrects",
             description: "Sound design et seiyuu corrects.",
-            examples: [
-              "Bruitages et casting vocal solides sans se distinguer",
-            ],
+            examples: ["Dr. Stone (7) : bruitages et casting vocal solides sans se distinguer"],
           },
           {
             value: 3,
             label: "Convaincant",
             description: "Bon sound design, doublage convaincant.",
-            examples: [
-              "Design sonore soigné, seiyuu investis",
-            ],
+            examples: ["Vinland Saga (8) : doublage investi, sound design solide"],
           },
           {
             value: 4,
             label: "Percutant",
             description: "Impacts / spatialisation percutants, doublage investi et juste.",
-            examples: [
-              "Impacts et mixage qui claquent, seiyuu au sommet",
-            ],
+            examples: ["Chainsaw Man (9) : impacts et mixage qui claquent", "Demon Slayer: Entertainment District Arc (10)"],
           },
         ],
       },
@@ -448,97 +358,77 @@ const COMPLETE_GRID: CriteriaSection[] = [
   },
   {
     id: 'fin_impact',
-    name: 'Fin & Impact',
+    name: "Fin & Impact",
     criteria: [
       {
         id: 'gestion_conclusion',
-        name: 'Gestion de la Conclusion',
+        name: "Gestion de la Conclusion",
         steps: [
           {
             value: 0,
             label: "Bâclée",
             description: "Fin bâclée, expédiée ou inexistante.",
-            examples: [
-              "Fin anime-original expédiée, ou « lisez le manga »",
-            ],
+            examples: ["Fin anime-original expédiée / « lisez le manga » (pas d'exemple net dans ta liste)"],
           },
           {
             value: 1,
             label: "Demi-teinte",
             description: "Fin tiède ou en demi-teinte, laisse des trous.",
-            examples: [
-              "Conclusion tiède qui laisse des fils pendants",
-            ],
+            examples: ["Bakemonogatari (6) : se clôt en demi-teinte, laisse des fils"],
           },
           {
             value: 2,
             label: "Propre",
             description: "Fin qui clôt proprement.",
-            examples: [
-              "Ça referme correctement, sans éclat",
-            ],
+            examples: ["Dr. Stone (7) : les arcs se referment correctement"],
           },
           {
             value: 3,
             label: "Satisfaisante",
             description: "Conclusion satisfaisante et cohérente.",
-            examples: [
-              "Résolution cohérente qui paie ce qui a été posé",
-            ],
+            examples: ["Vinland Saga Season 2 (8) : conclusion d'arc cohérente"],
           },
           {
             value: 4,
             label: "Empreinte",
             description: "Conclusion qui laisse une empreinte, à la hauteur du voyage.",
-            examples: [
-              "Steins;Gate ; Cowboy Bebop, fin à la hauteur du voyage",
-            ],
+            examples: ["Steins;Gate (10)", "Fullmetal Alchemist: Brotherhood (10)"],
           },
         ],
       },
       {
         id: 'facteur_recommandation',
-        name: 'Facteur Recommandation',
+        name: "Facteur Recommandation",
         steps: [
           {
             value: 0,
             label: "À personne",
             description: "Tu le conseilles à personne / vu et oublié.",
-            examples: [
-              "Vu et oublié, tu n'en parles pas",
-            ],
+            examples: ["One-Punch Man Season 3 (1)", "Alya Sometimes Hides Her Feelings in Russian (3)"],
           },
           {
             value: 1,
             label: "Bof",
             description: "Bof, tu n'en parles pas de toi-même.",
-            examples: [
-              "Tu ne le sors pas spontanément",
-            ],
+            examples: ["Scum's Wish (4)", "Natsume's Book of Friends (5)"],
           },
           {
             value: 2,
             label: "Sous conditions",
             description: "Tu le conseilles sous conditions (public précis).",
-            examples: [
-              "Recommandé aux fans du genre uniquement",
-            ],
+            examples: ["Blue Lock (6) : pour les amateurs du genre", "One-Punch Man (6)"],
           },
           {
             value: 3,
             label: "Volontiers",
             description: "Tu le recommandes volontiers.",
-            examples: [
-              "Tu le conseilles sans hésiter quand le sujet vient",
-            ],
+            examples: ["Made in Abyss (8)", "Vinland Saga (8)"],
           },
           {
             value: 4,
             label: "Spontanément",
             description: "Tu le recommandes spontanément / envie de le revoir.",
-            examples: [
-              "Tu le cites de toi-même, envie de le revoir (Asobi Asobase, ton rewatch annuel)",
-            ],
+            examples: ["Asobi Asobase (10) : ton rewatch annuel", "Frieren: Beyond Journey's End (10)"],
           },
         ],
       },
