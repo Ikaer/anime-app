@@ -97,7 +97,8 @@ export default function AnimeRatingCalculator() {
                           style={{ '--step-accent': stepColor(step.value, maxStep) } as React.CSSProperties}
                           onClick={() => handleStep(criterion.id, step.value)}
                         >
-                          {step.label}
+                          <span className={styles.stepLabel}>{step.label}</span>
+                          {step.description && <span className={styles.stepDesc}>{step.description}</span>}
                         </button>
                       );
                     })}

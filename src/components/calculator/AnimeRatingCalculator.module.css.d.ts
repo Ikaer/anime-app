@@ -23,6 +23,8 @@ declare const styles: {
   readonly "stepBtn": string;
   readonly "stepBtnSelected": string;
   readonly "stepButtons": string;
+  readonly "stepDesc": string;
+  readonly "stepLabel": string;
 };
 export = styles;
 
