@@ -99,6 +99,13 @@ export default function AnimeRatingCalculator() {
                         >
                           <span className={styles.stepLabel}>{step.label}</span>
                           {step.description && <span className={styles.stepDesc}>{step.description}</span>}
+                          {step.examples && step.examples.length > 0 && (
+                            <span className={styles.stepExamples}>
+                              {step.examples.map((ex, i) => (
+                                <span key={i} className={styles.stepExample}>{ex}</span>
+                              ))}
+                            </span>
+                          )}
                         </button>
                       );
                     })}
