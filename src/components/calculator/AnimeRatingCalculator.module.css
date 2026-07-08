@@ -1,13 +1,13 @@
 .page {
   display: flex;
-  gap: 2rem;
-  align-items: flex-start;
+  justify-content: center;
 }
 
-/* ── Calculator (left column) ── */
+/* ── Calculator column ── */
 .calculator {
   flex: 1 1 0;
   min-width: 0;
+  max-width: 900px;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -26,47 +26,61 @@
 }
 
 /* ── Custom scrollbars (WebKit/Blink) ── */
-.calculator::-webkit-scrollbar,
-.savedList::-webkit-scrollbar {
+.calculator::-webkit-scrollbar {
   width: 8px;
 }
 
-.calculator::-webkit-scrollbar-track,
-.savedList::-webkit-scrollbar-track {
+.calculator::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.calculator::-webkit-scrollbar-thumb,
-.savedList::-webkit-scrollbar-thumb {
+.calculator::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
 }
 
-.calculator::-webkit-scrollbar-thumb:hover,
-.savedList::-webkit-scrollbar-thumb:hover {
+.calculator::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover);
 }
 
-.animeNameRow {
+/* ── Grid selector ── */
+.gridRow {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
-.animeNameInput {
-  flex: 1;
+.gridLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gridSelect {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 6px;
-  padding: 0.6rem 0.9rem;
-  font-size: 1.05rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
   transition: border-color 0.15s;
 }
 
-.animeNameInput:focus {
+.gridSelect:focus {
   outline: none;
   border-color: var(--accent-primary);
+}
+
+.gridDescription {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 /* ── Section card ── */
@@ -222,27 +236,6 @@
   align-items: center;
 }
 
-.saveBtn {
-  background: var(--accent-primary);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.6rem 1.25rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.saveBtn:hover {
-  background: var(--accent-hover);
-}
-
-.saveBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .resetBtn {
   background: transparent;
   color: var(--text-muted);
@@ -257,123 +250,4 @@
 .resetBtn:hover {
   color: var(--text-primary);
   border-color: var(--border-hover);
-}
-
-/* ── Saved ratings panel (right column) ── */
-.savedPanel {
-  width: 320px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 100px;
-}
-
-.savedPanelHeader {
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 0.75rem;
-}
-
-.savedList {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.savedItem {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
-}
-
-.savedItem:hover {
-  border-color: var(--accent-primary);
-  background: var(--bg-tertiary);
-}
-
-.savedItemActive {
-  border-color: var(--accent-primary);
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.savedItemTop {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.savedItemName {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.savedItemScore {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--accent-primary);
-  white-space: nowrap;
-}
-
-.savedItemMeta {
-  margin-top: 0.2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.savedItemDate {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.savedItemRaw {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.savedItemDeleteBtn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0.1rem 0.3rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  line-height: 1;
-  transition: color 0.12s;
-  flex-shrink: 0;
-}
-
-.savedItemDeleteBtn:hover {
-  color: #ef4444;
-}
-
-.emptyState {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 2rem 1rem;
-}
-
-.loadingState {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 1rem;
 }

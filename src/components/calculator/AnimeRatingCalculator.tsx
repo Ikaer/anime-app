@@ -1,10 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { CriteriaSection, SavedRating } from '@/models/rating';
+import { useState, useCallback } from 'react';
+import { RATING_GRIDS, DEFAULT_GRID_ID, getGrid, RatingGrid } from '@/lib/ratingGrids';
 import styles from './AnimeRatingCalculator.module.css';
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
-}
 
 /** Map a 0–10 score to the shared --score-N palette (red → green). */
 function scoreColor(score: number) {
@@ -20,102 +16,61 @@ function stepColor(value: number, max: number) {
   return 'var(--score-9)';
 }
 
-function computeScore(scores: Record<string, number>, criteria: CriteriaSection[]) {
+function computeScore(scores: Record<string, number>, grid: RatingGrid) {
   let totalPoints = 0;
   let maxPoints = 0;
-  for (const section of criteria) {
+  for (const section of grid.sections) {
     for (const criterion of section.criteria) {
       const maxStep = Math.max(...criterion.steps.map(s => s.value));
       maxPoints += maxStep;
       totalPoints += scores[criterion.id] ?? 0;
     }
   }
-  const scoreOutOfTen = maxPoints > 0 ? Math.round((totalPoints / maxPoints) * 1000) / 100 : 0;
+  // Map to /10 against the grid's reference (own max unless it opts to top out
+  // lower, e.g. the "dropped" grid references the 20-pt complete scale).
+  const denom = grid.pointsForTen ?? maxPoints;
+  const scoreOutOfTen = denom > 0 ? Math.round((totalPoints / denom) * 1000) / 100 : 0;
   return { totalPoints, maxPoints, scoreOutOfTen };
 }
 
 export default function AnimeRatingCalculator() {
-  const [criteria, setCriteria] = useState<CriteriaSection[]>([]);
+  const [gridId, setGridId] = useState<string>(DEFAULT_GRID_ID);
   const [scores, setScores] = useState<Record<string, number>>({});
-  const [animeName, setAnimeName] = useState('');
-  const [savedRatings, setSavedRatings] = useState<SavedRating[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/ratings/criteria').then(r => r.json()),
-      fetch('/api/ratings').then(r => r.json()),
-    ]).then(([c, r]) => {
-      setCriteria(c);
-      setSavedRatings(r);
-      setLoading(false);
-    });
-  }, []);
-
-  const { totalPoints, maxPoints, scoreOutOfTen } = computeScore(scores, criteria);
+  const grid = getGrid(gridId);
+  const { totalPoints, maxPoints, scoreOutOfTen } = computeScore(scores, grid);
 
   const handleStep = useCallback((criterionId: string, value: number) => {
     setScores(prev => ({ ...prev, [criterionId]: value }));
-    setActiveId(null);
   }, []);
 
-  const handleReset = () => {
+  const handleReset = () => setScores({});
+
+  const handleGridChange = (id: string) => {
+    // Criteria ids differ between grids, so a fresh slate avoids stale scores.
+    setGridId(id);
     setScores({});
-    setAnimeName('');
-    setActiveId(null);
   };
-
-  const handleLoad = (rating: SavedRating) => {
-    setAnimeName(rating.animeName);
-    setActiveId(rating.id);
-    // Best-effort: only apply scores for criteria that still exist
-    const existingIds = new Set(criteria.flatMap(s => s.criteria.map(c => c.id)));
-    const safeScores: Record<string, number> = {};
-    for (const [id, val] of Object.entries(rating.scores)) {
-      if (existingIds.has(id)) safeScores[id] = val;
-    }
-    setScores(safeScores);
-  };
-
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    await fetch(`/api/ratings/${id}`, { method: 'DELETE' });
-    setSavedRatings(prev => prev.filter(r => r.id !== id));
-    if (activeId === id) setActiveId(null);
-  };
-
-  const handleSave = async () => {
-    if (!animeName.trim()) return;
-    setSaving(true);
-    const res = await fetch('/api/ratings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ animeName, scores }),
-    });
-    const saved: SavedRating = await res.json();
-    setSavedRatings(prev => [saved, ...prev]);
-    setActiveId(saved.id);
-    setSaving(false);
-  };
-
-  if (loading) return <div className={styles.loadingState}>Loading…</div>;
 
   return (
     <div className={styles.page}>
-      {/* Left: calculator */}
       <div className={styles.calculator}>
-        <div className={styles.animeNameRow}>
-          <input
-            className={styles.animeNameInput}
-            placeholder="Anime name…"
-            value={animeName}
-            onChange={e => { setAnimeName(e.target.value); setActiveId(null); }}
-          />
+        <div className={styles.gridRow}>
+          <label className={styles.gridLabel} htmlFor="grid-select">Grille</label>
+          <select
+            id="grid-select"
+            className={styles.gridSelect}
+            value={gridId}
+            onChange={e => handleGridChange(e.target.value)}
+          >
+            {RATING_GRIDS.map(g => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          {grid.description && <span className={styles.gridDescription}>{grid.description}</span>}
         </div>
 
-        {criteria.map(section => {
+        {grid.sections.map(section => {
           const ratedCount = section.criteria.filter(c => scores[c.id] !== undefined).length;
           const complete = ratedCount === section.criteria.length;
           return (
@@ -163,49 +118,8 @@ export default function AnimeRatingCalculator() {
           </div>
           <div className={styles.scoreActions}>
             <button className={styles.resetBtn} onClick={handleReset}>Reset</button>
-            <button
-              className={styles.saveBtn}
-              onClick={handleSave}
-              disabled={saving || !animeName.trim()}
-            >
-              {saving ? 'Saving…' : 'Save rating'}
-            </button>
           </div>
         </div>
-      </div>
-
-      {/* Right: saved ratings */}
-      <div className={styles.savedPanel}>
-        <div className={styles.savedPanelHeader}>Saved ratings ({savedRatings.length})</div>
-        {savedRatings.length === 0 ? (
-          <div className={styles.emptyState}>No saved ratings yet.</div>
-        ) : (
-          <div className={styles.savedList}>
-            {savedRatings.map(r => (
-              <div
-                key={r.id}
-                className={`${styles.savedItem} ${activeId === r.id ? styles.savedItemActive : ''}`}
-                onClick={() => handleLoad(r)}
-              >
-                <div className={styles.savedItemTop}>
-                  <span className={styles.savedItemName}>{r.animeName}</span>
-                  <span className={styles.savedItemScore} style={{ color: scoreColor(r.scoreOutOfTen) }}>{r.scoreOutOfTen.toFixed(1)}/10</span>
-                  <button
-                    className={styles.savedItemDeleteBtn}
-                    onClick={e => handleDelete(e, r.id)}
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className={styles.savedItemMeta}>
-                  <span className={styles.savedItemDate}>{formatDate(r.savedAt)}</span>
-                  <span className={styles.savedItemRaw}>{r.totalPoints}/{r.maxPoints} pts</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
