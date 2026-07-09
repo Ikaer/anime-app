@@ -16,6 +16,7 @@
  */
 
 import type { AnimeForDisplay } from '@/models/anime';
+import { getPrimaryTitle } from '@/lib/animeUtils';
 
 export interface SharedStaffCredit {
   name: string;
@@ -118,7 +119,7 @@ export function computeSimilarByCredits(
 
     scored.push({
       id: cand.id,
-      title: cand.title,
+      title: getPrimaryTitle(cand),
       poster: cand.main_picture?.medium || cand.main_picture?.large,
       score,
       sharedStudios,

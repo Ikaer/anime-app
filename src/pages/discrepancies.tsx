@@ -3,6 +3,7 @@ import Head from 'next/head';
 import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
 import type { AnimeForDisplay, UserAnimeStatus } from '@/models/anime';
+import { getPrimaryTitle } from '@/lib/animeUtils';
 
 const STATUS_LABEL: Record<UserAnimeStatus, string> = {
   watching: 'Watching',
@@ -117,7 +118,7 @@ export default function DiscrepanciesPage() {
                         )}
                       </td>
                       <td className={styles.titleCell}>
-                        {anime.title}
+                        {getPrimaryTitle(anime)}
                         {simklOnly && (
                           <>
                             {' '}

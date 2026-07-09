@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/anime';
-import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore } from '@/lib/animeUtils';
+import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { AnimeForDisplay, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -140,8 +140,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
       switch (sortColumn) {
         case 'title':
-          aValue = a.title.toLowerCase();
-          bValue = b.title.toLowerCase();
+          aValue = getPrimaryTitle(a).toLowerCase();
+          bValue = getPrimaryTitle(b).toLowerCase();
           break;
         case 'mean':
           aValue = a.mean || 0;

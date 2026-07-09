@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoSource, RecoVerdict } from '@/models/anime';
-import {  formatUserStatus } from '@/lib/animeUtils';
+import {  formatUserStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { SOURCE_META } from '@/lib/recoWeights';
 import { Button } from '@/components/shared';
@@ -188,7 +188,7 @@ export default function AnimeCardView({
                         {anime.main_picture?.large || anime.main_picture?.medium ? (
                             <Image
                                 src={anime.main_picture?.large || anime.main_picture?.medium}
-                                alt={anime.title}
+                                alt={getPrimaryTitle(anime)}
                                 className={styles.animeImage}
                                 fill
                                 sizes="(max-width: 1200px) 50vw, 280px"
@@ -278,10 +278,10 @@ export default function AnimeCardView({
                     </div>
                     <div className={styles.cardContent}>
                         <div className={styles.titleRow}>
-                            <span className={styles.title} title={anime.title}>{anime.title}</span>
+                            <span className={styles.title} title={getPrimaryTitle(anime)}>{getPrimaryTitle(anime)}</span>
                             <button
                                 className={`${styles.copyBtn} ${copiedKey === `${anime.id}-title` ? styles.copyBtnCopied : ''}`}
-                                onClick={() => copyToClipboard(anime.title, `${anime.id}-title`)}
+                                onClick={() => copyToClipboard(getPrimaryTitle(anime), `${anime.id}-title`)}
                                 title="Copier le titre"
                             >
                                 {copiedKey === `${anime.id}-title` ? (
@@ -296,12 +296,12 @@ export default function AnimeCardView({
                                 )}
                             </button>
                         </div>
-                        {anime.alternative_titles?.en && anime.alternative_titles.en !== anime.title && (
+                        {getSecondaryTitle(anime) && (
                             <div className={styles.titleRow}>
-                                <span className={styles.altTitle}>{anime.alternative_titles.en}</span>
+                                <span className={styles.altTitle}>{getSecondaryTitle(anime)}</span>
                                 <button
                                     className={`${styles.copyBtn} ${copiedKey === `${anime.id}-alt` ? styles.copyBtnCopied : ''}`}
-                                    onClick={() => copyToClipboard(anime.alternative_titles!.en!, `${anime.id}-alt`)}
+                                    onClick={() => copyToClipboard(getSecondaryTitle(anime)!, `${anime.id}-alt`)}
                                     title="Copier le titre alternatif"
                                 >
                                     {copiedKey === `${anime.id}-alt` ? (

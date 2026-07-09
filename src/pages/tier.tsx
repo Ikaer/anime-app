@@ -4,7 +4,7 @@ import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeForDisplay, ImageSize } from '@/models/anime';
-import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus } from '@/lib/animeUtils';
+import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/animeUtils';
 import { useTierUrlState } from '@/hooks';
 
 // Score → MAL word + tier color. Row 0 is the "à noter" tray (unrated).
@@ -156,7 +156,7 @@ export default function TierPage() {
       if (score === 0 && getEffectiveStatus(a) === 'watching') continue;
       b.get(score)!.push(a);
     }
-    for (const list of b.values()) list.sort((a, c) => a.title.localeCompare(c.title));
+    for (const list of b.values()) list.sort((a, c) => getPrimaryTitle(a).localeCompare(getPrimaryTitle(c)));
     return b;
   }, [filtered, effScoreOf]);
 
@@ -265,12 +265,12 @@ export default function TierPage() {
         onDragEnd={onDragEnd}
         onMouseEnter={(e) => onCardEnter(e, a)}
         onMouseLeave={onCardLeave}
-        title={a.title}
+        title={getPrimaryTitle(a)}
         style={{ width: thumbW, height: thumbH }}
       >
         {thumb
           ? <img src={thumb} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%' }} />
-          : <div className="noimg">{a.title.slice(0, 2)}</div>}
+          : <div className="noimg">{getPrimaryTitle(a).slice(0, 2)}</div>}
         <a
           className="detail-link"
           href={`/anime/${a.id}`}
@@ -370,7 +370,7 @@ export default function TierPage() {
       {preview && (
         <div className="hover-preview" style={{ left: preview.x, top: preview.y }}>
           <img src={preview.anime.main_picture?.large || preview.anime.main_picture?.medium || ''} alt="" />
-          <div className="hover-title">{preview.anime.title}</div>
+          <div className="hover-title">{getPrimaryTitle(preview.anime)}</div>
           {preview.anime.mean != null && <div className="hover-mean">MAL {preview.anime.mean.toFixed(2)}</div>}
         </div>
       )}

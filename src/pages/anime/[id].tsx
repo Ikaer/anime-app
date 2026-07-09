@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByIdForDisplay, getAnimeForDisplay } from '@/lib/anime';
 import type { AnimeForDisplay } from '@/models/anime';
-import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason } from '@/lib/animeUtils';
+import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
 import { RefreshButton } from '@/components/shared';
@@ -55,6 +55,8 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const en = anime.alternative_titles?.en;
   const ja = anime.alternative_titles?.ja;
   const synonyms = anime.alternative_titles?.synonyms || [];
+  const primaryTitle = getPrimaryTitle(anime);
+  const secondaryTitle = getSecondaryTitle(anime);
 
   const mal = anime.my_list_status;
   const simkl = anime.simkl;
@@ -84,7 +86,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   return (
     <>
       <Head>
-        <title>{anime.title} — Détails locaux</title>
+        <title>{primaryTitle} — Détails locaux</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
 
@@ -113,11 +115,11 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         {/* ---------- Header ---------- */}
         <header className="header">
           {poster
-            ? <img className="poster" src={poster} alt={anime.title} />
+            ? <img className="poster" src={poster} alt={primaryTitle} />
             : <div className="poster noimg">No image</div>}
           <div className="head-info">
-            <h1>{anime.title}</h1>
-            {en && en !== anime.title && <div className="alt">{en}</div>}
+            <h1>{primaryTitle}</h1>
+            {secondaryTitle && <div className="alt">{secondaryTitle}</div>}
             {ja && <div className="alt ja">{ja}</div>}
             {synonyms.length > 0 && <div className="synonyms">Aussi : {synonyms.join(' · ')}</div>}
             <div className="badges">

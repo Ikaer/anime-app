@@ -1,6 +1,23 @@
 import type { AnimeForDisplay } from '@/models/anime';
 
 // ============================================================================
+// Display titles (English-first)
+// ============================================================================
+
+type TitleFields = Pick<AnimeForDisplay, 'title' | 'alternative_titles'>;
+
+/** Primary display title: MAL's English title when present, else the original (romaji) title. */
+export function getPrimaryTitle(a: TitleFields): string {
+  return a.alternative_titles?.en || a.title;
+}
+
+/** Secondary title: the original (romaji) title, returned only when it differs from the primary. */
+export function getSecondaryTitle(a: TitleFields): string | undefined {
+  const primary = getPrimaryTitle(a);
+  return a.title && a.title !== primary ? a.title : undefined;
+}
+
+// ============================================================================
 // Narrowing filters (shared by /api/anime/animes and /api/anime/recommendations)
 // ============================================================================
 

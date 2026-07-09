@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { AnimeForDisplay, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
-import { formatSeason, formatUserStatus } from '@/lib/animeUtils';
+import { formatSeason, formatUserStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
 import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
 import styles from './AnimeTable.module.css';
@@ -59,8 +59,8 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
 
       switch (sortColumn) {
         case 'title':
-          aValue = a.title.toLowerCase();
-          bValue = b.title.toLowerCase();
+          aValue = getPrimaryTitle(a).toLowerCase();
+          bValue = getPrimaryTitle(b).toLowerCase();
           break;
         case 'mean':
           aValue = a.mean || 0;
@@ -226,10 +226,6 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     return new Date(dateString).toLocaleDateString();
   };
 
-  const getEnglishTitle = (anime: AnimeForDisplay) => {
-    return anime.alternative_titles?.en || anime.title;
-  };
-
   const formatStatus = (status?: string) => {
     return formatUserStatus(status);
   };
@@ -322,7 +318,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                   {anime.main_picture?.large || anime.main_picture?.medium ? (
                     <Image
                       src={anime.main_picture?.large || anime.main_picture?.medium}
-                      alt={anime.title}
+                      alt={getPrimaryTitle(anime)}
                       className={`${styles.animeImage} ${styles[`imageSize${imageSize}`]}`}
                       width={imageDimensions.width}
                       height={imageDimensions.height}
@@ -335,9 +331,9 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                 </td>
                 <td className={styles.titleCell}>
                   <div className="title-content">
-                    <div className={styles.primaryTitle}>{anime.title}</div>
-                    {anime.alternative_titles?.en && anime.alternative_titles.en !== anime.title && (
-                      <div className={styles.altTitle}>{anime.alternative_titles.en}</div>
+                    <div className={styles.primaryTitle}>{getPrimaryTitle(anime)}</div>
+                    {getSecondaryTitle(anime) && (
+                      <div className={styles.altTitle}>{getSecondaryTitle(anime)}</div>
                     )}
                   </div>
                   <div className={styles.genresInTitle}>{formatGenres(anime.genres || [])}</div>
