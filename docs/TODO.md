@@ -6,6 +6,6 @@
 - [X] Find discrepancies within MAL data itself (e.g. status "completed" but
       `num_episodes_watched` < total episodes, entries marked complete without
       a completion date, etc.)
-- [ ] When I remove a watched status from MAL, it does not disappears in the app (ex: The Slime Diaries, Steins;Gate 0)   
+- [X] When I remove a watched status from MAL, it does not disappears in the app (ex: The Slime Diaries, Steins;Gate 0)   
 - [X] Find discrepancies between MAL and SIMKL (status/score/progress
       mismatches for the same title across both services)
