@@ -15,7 +15,7 @@ import path from 'path';
 import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
-import { getEffectiveStatus, getEffectiveScore } from '@/lib/animeUtils';
+import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
@@ -633,12 +633,12 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const topSeeds = Array.from(a.perSeed.entries())
       .sort((x, y) => y[1] - x[1])
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
-      .map(([sid, backers]) => ({ id: sid, title: byId.get(sid)?.title || `#${sid}`, backers }));
+      .map(([sid, backers]) => { const s = byId.get(sid); return { id: sid, title: s ? getPrimaryTitle(s) : `#${sid}`, backers }; });
 
     const anilistTopSeeds = Array.from(anilistA?.perSeed.entries() ?? [])
       .sort((x, y) => y[1] - x[1])
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
-      .map(([sid]) => byId.get(sid)?.title || `#${sid}`);
+      .map(([sid]) => { const s = byId.get(sid); return s ? getPrimaryTitle(s) : `#${sid}`; });
 
     const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
     const staffById = new Map((anime.anilistTags?.staff || []).map(s => [s.id, s]));
