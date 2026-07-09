@@ -268,6 +268,8 @@ export interface RecoContribution {
 export interface RecoMeta {
   affinityScore: number;
   topSeeds: { id: number; title: string; backers: number }[];
+  /** Total number of seeds (liked/list anime) whose crowd recos point at this candidate. */
+  totalSeeds: number;
   fromSuggestions: boolean;
   /** Per-source decomposition of the score, for the on-demand explain. */
   breakdown: RecoContribution[];

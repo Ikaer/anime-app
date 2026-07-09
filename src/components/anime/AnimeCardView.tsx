@@ -32,7 +32,9 @@ interface AnimeCardViewProps {
 function formatRecoHint(meta: RecoMeta): string {
     if (meta.topSeeds.length > 0) {
         const top = meta.topSeeds[0];
-        return `Recommandé par les fans de ${top.title} · ${top.backers}`;
+        const others = meta.totalSeeds - 1;
+        const suffix = others > 0 ? ` (+${others} autre${others > 1 ? 's' : ''} anime${others > 1 ? 's' : ''})` : '';
+        return `Recommandé par les fans de ${top.title}${suffix}`;
     }
     if (meta.fromSuggestions) return 'Suggéré pour toi';
     return '';

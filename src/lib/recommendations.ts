@@ -630,21 +630,23 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       popularity: Math.log10(users) / popDenom,
     };
 
-    const topSeeds = Array.from(a.perSeed.entries())
-      .sort((x, y) => y[1] - x[1])
+    const sortedSeeds = Array.from(a.perSeed.entries()).sort((x, y) => y[1] - x[1]);
+    const seedTitle = (sid: number) => { const s = byId.get(sid); return s ? getPrimaryTitle(s) : `#${sid}`; };
+    const topSeeds = sortedSeeds
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
-      .map(([sid, backers]) => { const s = byId.get(sid); return { id: sid, title: s ? getPrimaryTitle(s) : `#${sid}`, backers }; });
+      .map(([sid, backers]) => ({ id: sid, title: seedTitle(sid), backers }));
+    // Full list (not just topSeeds) so the "Pourquoi ?" explain shows every seed.
+    const allSeedTitles = sortedSeeds.map(([sid]) => seedTitle(sid));
 
-    const anilistTopSeeds = Array.from(anilistA?.perSeed.entries() ?? [])
+    const anilistAllTitles = Array.from(anilistA?.perSeed.entries() ?? [])
       .sort((x, y) => y[1] - x[1])
-      .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
-      .map(([sid]) => { const s = byId.get(sid); return s ? getPrimaryTitle(s) : `#${sid}`; });
+      .map(([sid]) => seedTitle(sid));
 
     const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
     const staffById = new Map((anime.anilistTags?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
-      crowd: topSeeds.length ? `Fans de ${topSeeds.map(s => s.title).join(', ')}` : undefined,
-      anilistCrowd: anilistTopSeeds.length ? `Fans AniList de ${anilistTopSeeds.join(', ')}` : undefined,
+      crowd: allSeedTitles.length ? `Fans de ${allSeedTitles.join(', ')}` : undefined,
+      anilistCrowd: anilistAllTitles.length ? `Fans AniList de ${anilistAllTitles.join(', ')}` : undefined,
       suggestions: values.suggestions ? 'Dans tes suggestions MAL' : undefined,
       feedback: (() => {
         const parts = [
@@ -697,6 +699,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       recoMeta: {
         affinityScore: score,
         topSeeds,
+        totalSeeds: sortedSeeds.length,
         fromSuggestions: suggestionIds.has(candId),
         breakdown,
       },
