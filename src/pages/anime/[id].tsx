@@ -73,6 +73,12 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const searchTitle = en || anime.title;
   const anilistId = anime.anilistTags?.anilist_id ?? crosswalk.anilist;
 
+  // Page backdrop. AniList's landscape banner is the real thing (it's what Plex
+  // shows); the portrait poster is the fallback and needs a heavier blur, since
+  // cover-cropping it to a wide viewport leaves only a thin, meaningless band.
+  const banner = anime.anilistTags?.banner_image || '';
+  const backdrop = banner || poster;
+
   // Cross-source id rows worth surfacing, in a stable order.
   const idRows: Array<[string, string | number | undefined, string | undefined]> = [
     ['MAL', anime.id, `https://myanimelist.net/anime/${anime.id}`],
@@ -90,6 +96,17 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <title>{primaryTitle} — Détails locaux</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
+
+      {/* Full-page backdrop, scrimmed, behind every section. Two layers: a blurred
+          fill that colors the whole viewport, and — when AniList gave us a banner —
+          the crisp art at its natural width, anchored to the top like Plex. */}
+      {backdrop && (
+        <div className={`backdrop ${banner ? 'is-banner' : 'is-poster'}`} aria-hidden="true">
+          <img className="ambient" src={backdrop} alt="" />
+          {banner && <img className="art" src={banner} alt="" />}
+          <div className="grain" />
+        </div>
+      )}
 
       <div className="page">
         <div className="topbar">
@@ -341,7 +358,68 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
       <style jsx>{`
         /* 520 (side) + 20 (gap) + 1100 (main) + the 1.5rem padding on each side, so the
            hero and the topbar line up exactly with the two columns underneath. */
-        .page { max-width: 1688px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; color: var(--text-primary); }
+        .page { position: relative; z-index: 1;
+          max-width: 1688px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; color: var(--text-primary); }
+
+        /* ---------- Page backdrop ---------- */
+        /* Knobs. --art-scrim must track --bg-primary. */
+        .backdrop {
+          --art-scrim: 10, 10, 10;
+          --ambient-opacity: 0.55;
+          --ambient-blur: 60px;
+          --ambient-crop: center 30%;
+          /* How far down the viewport the crisp banner reaches before it's gone. */
+          --art-fade: 78%;
+          --art-opacity: 0.62;
+          /* Film grain over the whole backdrop. Set to 0 to remove it entirely. */
+          --grain-opacity: 0.22;
+
+          position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+        }
+        /* Poster fallback: no crisp layer at all. A portrait cover-cropped to a wide
+           viewport is a thin, meaningless band, so it only ever plays the ambient
+           role — and there it needs to be stronger, since it's all there is. */
+        .backdrop.is-poster {
+          --ambient-opacity: 0.9;
+          --ambient-blur: 34px;
+          --ambient-crop: center 18%;
+        }
+
+        /* Ambient fill: covers the viewport, blurred past recognition, pure color. */
+        .backdrop .ambient { position: absolute; inset: 0; width: 100%; height: 100%;
+          object-fit: cover; object-position: var(--ambient-crop);
+          opacity: var(--ambient-opacity);
+          filter: blur(var(--ambient-blur)) saturate(1.35) brightness(1.05);
+          /* Overflow the edges so the blur doesn't smear the image's own borders inward. */
+          transform: scale(1.15); }
+
+        /* Crisp art: natural aspect at full width (AniList banners are ~4.75:1, so at
+           any real viewport this downscales — never upscales — and stays sharp).
+           It dissolves downward into the ambient layer instead of ending on an edge. */
+        .backdrop .art { position: absolute; top: 0; left: 0; width: 100%; height: auto;
+          opacity: var(--art-opacity);
+          -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent var(--art-fade));
+          mask-image: linear-gradient(to bottom, #000 30%, transparent var(--art-fade)); }
+        /* Film grain, blended into the art (and only the art — .backdrop's z-index
+           isolates the blend, so page content above is untouched). Sits over the scrim,
+           hence the z-index; a fractalNoise turbulence, generated inline, no asset. */
+        .grain { position: absolute; inset: 0; z-index: 2; opacity: var(--grain-opacity);
+          mix-blend-mode: overlay; background-size: 200px 200px;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+        /* Scrim. The layer is fixed, so this gradient is anchored to the viewport, not
+           the document: keep it an even wash (lighter up top, darker down low) rather
+           than a page-long fade, or every scroll position gets a bright top edge. */
+        .backdrop::after { content: ''; position: absolute; inset: 0; z-index: 1;
+          background:
+            linear-gradient(to bottom,
+              rgba(var(--art-scrim), 0.22) 0%,
+              rgba(var(--art-scrim), 0.45) 55%,
+              rgba(var(--art-scrim), 0.72) 100%),
+            radial-gradient(130% 100% at 50% 0%, rgba(var(--art-scrim), 0) 40%, rgba(var(--art-scrim), 0.55) 100%); }
+
+        /* Panels go translucent so the backdrop tints through instead of being boxed out. */
+        .hero, .section { background: rgba(26, 26, 26, 0.62); backdrop-filter: blur(8px); }
 
         /* Two columns: discovery blocks on the left, facts on the right. The side
            column is capped so the recommendation cards never stretch at 4K. */
@@ -357,9 +435,10 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         .ext-links a:hover { border-color: var(--border-hover); }
 
         .hero { display: flex; gap: 1.5rem; margin-bottom: 1.25rem; padding: 1.25rem 1.5rem;
-          background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; }
+          border: 1px solid var(--border-color); border-radius: 12px; }
+
         .poster { width: 220px; flex: 0 0 220px; border-radius: 10px; object-fit: cover; align-self: flex-start;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+          box-shadow: 0 10px 40px rgba(0,0,0,0.65); }
         .poster.noimg { height: 308px; display: flex; align-items: center; justify-content: center;
           background: var(--bg-secondary); color: var(--text-muted); }
         .head-info { flex: 1 1 auto; min-width: 0; }
@@ -379,7 +458,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         .pill.nsfw { color: #f87171; border-color: #7f1d1d; }
         .pill.hidden { color: #fbbf24; border-color: #78350f; }
 
-        .section { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px;
+        .section { border: 1px solid var(--border-color); border-radius: 12px;
           padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
         .section h2 { margin: 0 0 1rem; font-size: 1.15rem; }
         .section h3 { margin: 1rem 0 0.5rem; font-size: 0.95rem; color: var(--text-secondary); }

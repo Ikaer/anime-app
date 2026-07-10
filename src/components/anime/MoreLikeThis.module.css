@@ -1,6 +1,8 @@
-/* Matches the styled-jsx `.section` look of the anime detail page. */
+/* Matches the styled-jsx `.section` look of the anime detail page — including its
+   translucency, so the page's poster backdrop reads through this panel too. */
 .section {
-    background: var(--bg-secondary);
+    background: rgba(26, 26, 26, 0.62);
+    backdrop-filter: blur(8px);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 1.25rem 1.5rem;

@@ -143,6 +143,13 @@ export interface AniListTagsEntry {
   // Top-relevance staff credits. Optional so entries written before staff was
   // added stay valid; a missing `staff` field is the signal to backfill.
   staff?: AniListStaffEntry[];
+  /**
+   * AniList's landscape banner art — the one thing MAL has no equivalent of, and
+   * what the detail page uses as its page backdrop. AniList genuinely has none for
+   * many titles, so a fetched-but-absent banner is stored as `null`; `undefined`
+   * means never fetched, and is the backfill signal (same pattern as `staff`).
+   */
+  banner_image?: string | null;
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 

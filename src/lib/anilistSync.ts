@@ -25,6 +25,7 @@ query ($ids: [Int]) {
     media(idMal_in: $ids, type: ANIME) {
       idMal
       id
+      bannerImage
       tags {
         name
         rank
@@ -50,8 +51,25 @@ interface RawStaffEdge {
 interface RawMedia {
   idMal: number;
   id: number;
+  bannerImage?: string | null;
   tags: AniListTagEntry[];
   staff?: { edges?: RawStaffEdge[] };
+}
+
+/**
+ * One AniList media node -> our stored entry. `banner_image` is coerced to an
+ * explicit `null` when AniList has none, so `undefined` keeps meaning "never
+ * fetched" and stays usable as the backfill signal.
+ */
+function toEntry(m: RawMedia, fetchedAt: string): AniListTagsEntry {
+  return {
+    mal_id: m.idMal,
+    anilist_id: m.id,
+    tags: m.tags ?? [],
+    staff: parseStaff(m),
+    banner_image: m.bannerImage ?? null,
+    fetched_at: fetchedAt,
+  };
 }
 
 /** Flatten AniList staff edges to our lean {id,name,role} records. */
@@ -231,15 +249,7 @@ export async function refreshAnilistTagsForIds(
   try {
     const media = await fetchTagsBatch(ids);
     const now = new Date().toISOString();
-    const entries: AniListTagsEntry[] = media
-      .filter(m => m.idMal)
-      .map(m => ({
-        mal_id: m.idMal,
-        anilist_id: m.id,
-        tags: m.tags ?? [],
-        staff: parseStaff(m),
-        fetched_at: now,
-      }));
+    const entries: AniListTagsEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
     if (entries.length > 0) upsertAnilistTags(entries);
     return { ok: true, tagged: entries.length };
   } catch (error) {
@@ -259,13 +269,14 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
   try {
     const malAnime = getAllMALAnime();
     const existingTags = getAllAnilistTags();
-    // Fetch anime with no AniList entry yet, OR an entry predating staff support
-    // (staff === undefined) so staff backfills onto already-tagged titles.
+    // Fetch anime with no AniList entry yet, OR an entry predating staff / banner
+    // support (field === undefined) so those backfill onto already-tagged titles.
+    // A banner AniList doesn't have is stored as null, so it never re-queues.
     const missingIds = Object.values(malAnime)
       .map(a => a.id)
       .filter(id => {
         const e = existingTags[id.toString()];
-        return !e || e.staff === undefined;
+        return !e || e.staff === undefined || e.banner_image === undefined;
       });
 
     if (missingIds.length === 0) {
@@ -284,15 +295,7 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
       try {
         const media = await fetchTagsBatch(batch);
         const now = new Date().toISOString();
-        const entries: AniListTagsEntry[] = media
-          .filter(m => m.idMal)
-          .map(m => ({
-            mal_id: m.idMal,
-            anilist_id: m.id,
-            tags: m.tags ?? [],
-            staff: parseStaff(m),
-            fetched_at: now,
-          }));
+        const entries: AniListTagsEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
         if (entries.length > 0) {
           upsertAnilistTags(entries);
           tagged += entries.length;
