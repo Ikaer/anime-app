@@ -9,6 +9,7 @@
  * Server-only (uses `fs` via `jsonStore`).
  */
 
+import type { NextApiResponse } from 'next';
 import { MALAnime, MALAuthData, MALUser } from '@/models/anime';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 
@@ -56,6 +57,27 @@ export function isMALTokenValid(token: MALAuthData | null): boolean {
   const tokenExpiry = token.created_at + (token.expires_in * 1000);
 
   return now < tokenExpiry;
+}
+
+/** The stored access token, or null when absent or expired. */
+export function getValidMalToken(): MALAuthData | null {
+  const { token } = getMALAuthData();
+  return token && isMALTokenValid(token) ? token : null;
+}
+
+/**
+ * Route guard. Returns the MAL auth on success; on failure it has *already*
+ * written a 401 and returns null, so the caller just returns.
+ */
+export function requireMalAuth(
+  res: NextApiResponse
+): { token: MALAuthData; user: MALUser | null } | null {
+  const { token, user } = getMALAuthData();
+  if (!token || !isMALTokenValid(token)) {
+    res.status(401).json({ error: 'Not authenticated with MAL' });
+    return null;
+  }
+  return { token, user };
 }
 
 // ============================================================================

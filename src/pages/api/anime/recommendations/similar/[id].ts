@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { getValidMalToken } from '@/lib/mal';
 import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AnilistEdgeInput, type RecoEdge } from '@/lib/recommendations';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 
@@ -22,8 +22,8 @@ export interface SimilarSourceOutcome {
 }
 
 async function loadMalEdges(animeId: number): Promise<{ edges: RecoEdge[]; outcome: SimilarSourceOutcome }> {
-  const { token } = getMALAuthData();
-  if (!token || !isMALTokenValid(token)) {
+  const token = getValidMalToken();
+  if (!token) {
     return { edges: [], outcome: { ok: false, error: 'Not authenticated with MAL' } };
   }
   try {

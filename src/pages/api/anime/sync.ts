@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { upsertAnime, getSyncMetadata, updatePersonalStatusBatch } from '@/lib/store';
-import { getMALAuthData, isMALTokenValid, fetchSeasonalAnime, fetchUserAnimelist } from '@/lib/mal';
+import { requireMalAuth, fetchSeasonalAnime, fetchUserAnimelist } from '@/lib/mal';
 import { getSeasonInfos } from '@/lib/animeUtils';
 import { MALAnime } from '@/models/anime';
 import { appendLog } from '@/lib/connectionLog';
@@ -17,10 +17,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { token, user } = getMALAuthData();
-    if (!token || !isMALTokenValid(token)) {
-      return res.status(401).json({ error: 'Not authenticated with MAL' });
-    }
+    const auth = requireMalAuth(res);
+    if (!auth) return;
+    const { token, user } = auth;
 
     if (!user?.name) {
       return res.status(401).json({ error: 'User information not available' });

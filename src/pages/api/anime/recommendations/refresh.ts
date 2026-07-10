@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { requireMalAuth } from '@/lib/mal';
 import { performRecommendationsRefresh, isRecommendationsRefreshRunning, RecoRefreshProgress } from '@/lib/recommendations';
 
 // Store ongoing refresh processes (mirrors big-sync.ts).
@@ -21,10 +21,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function handleStartRefresh(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const { token } = getMALAuthData();
-    if (!token || !isMALTokenValid(token)) {
-      return res.status(401).json({ error: 'Not authenticated with MAL' });
-    }
+    const auth = requireMalAuth(res);
+    if (!auth) return;
+    const { token } = auth;
 
     // Spec §7.2: reject concurrent refreshes with 409.
     if (isRecommendationsRefreshRunning()) {

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllAnime, upsertAnime } from '@/lib/store';
-import { getMALAuthData, isMALTokenValid, fetchAnimeById } from '@/lib/mal';
+import { getValidMalToken, fetchAnimeById } from '@/lib/mal';
 import { refreshAnilistTagsForIds } from '@/lib/anilistSync';
 import { performSimklSync } from '@/lib/simklSync';
 import { appendLog } from '@/lib/connectionLog';
@@ -20,8 +20,8 @@ import { appendLog } from '@/lib/connectionLog';
 async function refreshMal(
   animeId: number
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
-  const { token } = getMALAuthData();
-  if (!token || !isMALTokenValid(token)) {
+  const token = getValidMalToken();
+  if (!token) {
     return { ok: false, error: 'Not authenticated with MAL' };
   }
 

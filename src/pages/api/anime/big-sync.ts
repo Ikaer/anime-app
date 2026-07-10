@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { requireMalAuth } from '@/lib/mal';
 import { getSyncMetadata } from '@/lib/store';
 import { performBigSync, BigSyncProgress } from '@/lib/malSync';
 import { appendLog } from '@/lib/connectionLog';
@@ -24,11 +24,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function handleStartBigSync(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Check authentication
-    const { token } = getMALAuthData();
-    if (!token || !isMALTokenValid(token)) {
-      return res.status(401).json({ error: 'Not authenticated with MAL' });
-    }
+    const auth = requireMalAuth(res);
+    if (!auth) return;
+    const { token } = auth;
 
     // Generate a unique sync ID
     const syncId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

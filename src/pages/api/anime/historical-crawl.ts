@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { requireMalAuth } from '@/lib/mal';
 import { getHistoricalCrawlStats, performHistoricalCrawl } from '@/lib/malSync';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -8,10 +8,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { token } = getMALAuthData();
-    if (!token || !isMALTokenValid(token)) {
-      return res.status(401).json({ error: 'Not authenticated with MAL' });
-    }
+    const auth = requireMalAuth(res);
+    if (!auth) return;
+    const { token } = auth;
 
     const result = await performHistoricalCrawl(token.access_token);
 

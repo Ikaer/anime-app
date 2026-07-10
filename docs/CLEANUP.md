@@ -77,7 +77,7 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 | 4.1 | Done | `fetchSeasonalAnime` exists twice, near-verbatim | [lib/anime.ts:640](../src/lib/anime.ts) and [api/anime/sync.ts:138](../src/pages/api/anime/sync.ts). |
 | 4.2 | Done | The 27-entry MAL `fields` array is copy-pasted **five** times | [anime.ts:592](../src/lib/anime.ts), [anime.ts:650](../src/lib/anime.ts), [recommendations.ts:160](../src/lib/recommendations.ts), [refresh.ts:27](../src/pages/api/anime/animes/[id]/refresh.ts), [sync.ts:144](../src/pages/api/anime/sync.ts). Adding one MAL field today means remembering all five. |
 | 4.3 | Done | Extract `lib/jsonStore.ts` | `DATA_PATH` redeclared in 5 files; `readJsonFile`/`writeJsonFile` in 3; `ensureDataDirectory` in 4. |
-| 4.4 | Todo | Extract a `requireMalToken(res)` guard | The preamble `const { token } = getMALAuthData(); if (!token \|\| !isMALTokenValid(token)) return res.status(401)…` appears verbatim in **seven** routes. |
+| 4.4 | Done | Extract a `requireMalToken(res)` guard | The preamble `const { token } = getMALAuthData(); if (!token \|\| !isMALTokenValid(token)) return res.status(401)…` appears verbatim in **seven** routes. |
 | 4.5 | Done | Season arithmetic implemented three times | [anime.ts:254](../src/lib/anime.ts), [api/anime/sync.ts:31](../src/pages/api/anime/sync.ts), and [animeUtils.ts:110](../src/lib/animeUtils.ts) (`getSeasonInfos` — the good one the other two should call). |
 
 ---
