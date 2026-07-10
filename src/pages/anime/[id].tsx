@@ -8,6 +8,7 @@ import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUser
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
 import { RefreshButton } from '@/components/shared';
+import { MoreLikeThis } from '@/components/anime';
 
 interface Props {
   anime: AnimeForDisplay;
@@ -281,6 +282,9 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
             </div>
           </section>
         )}
+
+        {/* ---------- Crowd drill-down (MAL + AniList recos anchored on this title) ---------- */}
+        <MoreLikeThis animeId={anime.id} />
 
         {/* ---------- Cross-source id crosswalk ---------- */}
         <section className="section">

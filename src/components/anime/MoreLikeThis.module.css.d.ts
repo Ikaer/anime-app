@@ -1,0 +1,35 @@
+declare const styles: {
+  readonly "affinity": string;
+  readonly "body": string;
+  readonly "card": string;
+  readonly "cards": string;
+  readonly "empty": string;
+  readonly "error": string;
+  readonly "explainBar": string;
+  readonly "explainBarNeg": string;
+  readonly "explainBarPos": string;
+  readonly "explainBarTrack": string;
+  readonly "explainBtn": string;
+  readonly "explainDetail": string;
+  readonly "explainHead": string;
+  readonly "explainLabel": string;
+  readonly "explainNeg": string;
+  readonly "explainPanel": string;
+  readonly "explainPos": string;
+  readonly "explainRow": string;
+  readonly "explainValue": string;
+  readonly "loadBtn": string;
+  readonly "mean": string;
+  readonly "meta": string;
+  readonly "noimg": string;
+  readonly "poster": string;
+  readonly "posterLink": string;
+  readonly "section": string;
+  readonly "seen": string;
+  readonly "seenWatched": string;
+  readonly "sub": string;
+  readonly "title": string;
+  readonly "warn": string;
+};
+export = styles;
+

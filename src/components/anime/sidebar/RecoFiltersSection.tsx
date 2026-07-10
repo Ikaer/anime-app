@@ -51,10 +51,13 @@ const YearRange: React.FC<{
   const [dMin, dMax] = draft;
   const pct = (y: number) => ((y - MIN_YEAR) / (MAX_YEAR - MIN_YEAR)) * 100;
 
-  // Commit both bounds in one call — a bound at its extreme means "no bound".
+  // Commit both bounds in one call. The lower bound is emitted verbatim (the
+  // 2000 default vs. the 1960 floor are distinct, so 1960 must stay explicit —
+  // the URL layer omits it when it equals the default). The upper bound at its
+  // extreme still means "no bound".
   const commit = () => {
     const [mn, mx] = draftRef.current;
-    onYearChange(mn <= MIN_YEAR ? null : mn, mx >= MAX_YEAR ? null : mx);
+    onYearChange(mn, mx >= MAX_YEAR ? null : mx);
   };
 
   return (

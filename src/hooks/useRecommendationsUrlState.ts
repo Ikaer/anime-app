@@ -46,7 +46,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   search: '',
   minScore: null,
   maxScore: null,
-  minYear: null,
+  minYear: 2000,
   maxYear: null,
   imageSize: 3,
   cardsPerRow: null,
@@ -84,7 +84,7 @@ function decode(params: URLSearchParams): RecoUrlState {
     search: params.get(KEYS.search) || '',
     minScore: num(params.get(KEYS.minScore)),
     maxScore: num(params.get(KEYS.maxScore)),
-    minYear: num(params.get(KEYS.minYear)),
+    minYear: params.has(KEYS.minYear) ? num(params.get(KEYS.minYear)) : RECO_DEFAULTS.minYear,
     maxYear: num(params.get(KEYS.maxYear)),
     imageSize: (params.has(KEYS.imageSize)
       ? (parseInt(params.get(KEYS.imageSize)!, 10) as ImageSize)
@@ -108,7 +108,7 @@ function encode(state: RecoUrlState): string {
   if (state.search) params.set(KEYS.search, state.search);
   if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
   if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
+  if (state.minYear !== null && state.minYear !== RECO_DEFAULTS.minYear) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.imageSize !== RECO_DEFAULTS.imageSize) params.set(KEYS.imageSize, String(state.imageSize));
   if (state.cardsPerRow !== null) params.set(KEYS.cardsPerRow, String(state.cardsPerRow));

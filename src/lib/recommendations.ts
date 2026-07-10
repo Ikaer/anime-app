@@ -121,6 +121,30 @@ function fieldMatch(candidate: AnimeForDisplay, profile: FieldProfile): { score:
   return { score: sum / vals.length, matched };
 }
 
+/**
+ * Negative taste profiles = MAL dislikes (dropped / low-scored) ∪ 👎 "pas pour
+ * moi". Shared by the global feed and the single-target drill-down: both push a
+ * candidate down when it resembles what the user has rejected.
+ */
+function buildRejectionProfiles(
+  all: AnimeForDisplay[],
+  downIds: Set<number>,
+  idfGenre: Map<FieldValue, number>,
+  idfStudio: Map<FieldValue, number>
+): { negGenre: FieldProfile; negStudio: FieldProfile } {
+  const dislikedBase = all.filter(a => {
+    const st = getEffectiveStatus(a);
+    const sc = getEffectiveScore(a) ?? 0;
+    return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
+  });
+  const dislikedSeen = new Set(dislikedBase.map(a => a.id));
+  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
+  return {
+    negGenre: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idfGenre),
+    negStudio: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idfStudio),
+  };
+}
+
 /** Statuses that mean "already seen" — hard-excluded from the feed (spec §2). */
 const SEEN_STATUSES = new Set(['completed', 'watching', 'on_hold', 'dropped']);
 
@@ -555,16 +579,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
   };
 
-  // Rejection profile = MAL dislikes (dropped / low-scored) ∪ 👎 "pas pour moi".
-  const dislikedBase = all.filter(a => {
-    const st = getEffectiveStatus(a);
-    const sc = getEffectiveScore(a) ?? 0;
-    return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
-  });
-  const dislikedSeen = new Set(dislikedBase.map(a => a.id));
-  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
-  const negGenre = buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idf.genre);
-  const negStudio = buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idf.studio);
+  const { negGenre, negStudio } = buildRejectionProfiles(all, downIds, idf.genre, idf.studio);
 
   // Pass 1: apply hard filters and gather the maxima used to normalize the
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
@@ -755,7 +770,7 @@ async function malFetch(url: string, accessToken: string): Promise<any> {
   throw new Error('MAL API request failed: rate limited (429) after retries');
 }
 
-async function fetchRecoEdges(animeId: number, accessToken: string): Promise<RecoEdge[]> {
+export async function fetchRecoEdges(animeId: number, accessToken: string): Promise<RecoEdge[]> {
   const url = `https://api.myanimelist.net/v2/anime/${animeId}?fields=recommendations`;
   const data: MalRecommendationsResponse = await malFetch(url, accessToken);
   return (data.recommendations || [])
@@ -925,4 +940,241 @@ export async function performRecommendationsRefresh(
   } finally {
     isRefreshRunning = false;
   }
+}
+
+// ============================================================================
+// "Plus comme ça" — single-target drill-down (detail page)
+// ============================================================================
+//
+// Same machinery as `computeFeed`, one anchor instead of the whole seed set.
+// The question flips from "what fits my taste" to "what resembles THIS title",
+// so the taste profiles are built from the target anime alone rather than from
+// the user's high-scored completions. Two consequences:
+//
+//  - `suggestions` and `feedback` are user-global sources with no per-title
+//    meaning here, so they are forced to weight 0.
+//  - `rejection` and `popularity` stay ON: they still express "don't hand me
+//    something that looks like what I dropped", which holds for any candidate.
+//
+// The candidate set is strictly the crowd edges of the target (MAL + AniList) —
+// metadata only RE-RANKS within it, never injects. That keeps this block
+// distinct from the sibling "Dans le même studio / staff" section, which IS a
+// pure catalog-wide credit similarity.
+//
+// Unlike the feed, seen titles are NOT excluded: the pool is at most ~25 edges
+// before filtering, and a heavy watcher would see the block gutted. They are
+// returned with their effective `status` so the UI can mark them "déjà vu".
+//
+// Nothing is fetched to hydrate: a crowd edge pointing at a title absent from
+// the local catalog is skipped (no metadata to rank on). Stateless — this never
+// touches the stored `RecommendationsData`.
+
+/** Per-source weights for the drill-down: the two user-global sources are off. */
+const SIMILAR_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0, feedback: 0 };
+
+/** Default number of similar titles returned. */
+export const SIMILAR_LIMIT = 12;
+
+/** One AniList crowd edge as returned by `fetchAnilistRecommendations`. */
+export interface AnilistEdgeInput {
+  id: number;
+  rating: number;
+}
+
+/**
+ * Lean card shape for the drill-down — deliberately NOT `AnimeForDisplay` +
+ * `RecoMeta`: `topSeeds` / `fromSuggestions` are meaningless with a single
+ * anchor, and the detail page only needs enough to render a poster card.
+ */
+export interface SimilarItem {
+  id: number;
+  title: string;
+  poster?: string;
+  mean?: number;
+  mediaType?: string;
+  year?: number;
+  /** Effective (SIMKL-first) personal status, when the user already listed it. */
+  status?: string;
+  /** True when that status means the title has already been watched. */
+  seen: boolean;
+  /** Σ weight · normalizedSourceValue, same additive model as the feed. */
+  score: number;
+  breakdown: RecoContribution[];
+}
+
+/**
+ * Rank the crowd recommendations of ONE anime. Pure read + math over edges the
+ * caller fetched — no MAL/AniList calls, no writes.
+ */
+export function computeSimilarTo(
+  targetId: number,
+  malEdges: RecoEdge[],
+  anilistEdges: AnilistEdgeInput[],
+  limit: number = SIMILAR_LIMIT
+): SimilarItem[] {
+  const all = getAnimeForDisplay();
+  const byId = new Map<number, AnimeForDisplay>(all.map(a => [a.id, a]));
+  const target = byId.get(targetId);
+  if (!target) return [];
+
+  // The target itself and its franchise entries trivially "resemble" it, and the
+  // page already lists relations in its own section.
+  const excluded = new Set<number>([
+    targetId,
+    ...(target.related_anime || []).map(r => r.node.id),
+    ...getHiddenAnimeIds(),
+    ...feedbackIds(getFeedback(), 'down'),
+  ]);
+
+  const crowd = new Map<number, number>();
+  for (const e of malEdges) {
+    if (e.num > 0) crowd.set(e.id, (crowd.get(e.id) || 0) + e.num);
+  }
+  const anilistCrowd = new Map<number, number>();
+  for (const e of anilistEdges) {
+    if (e.rating > 0) anilistCrowd.set(e.id, (anilistCrowd.get(e.id) || 0) + e.rating);
+  }
+
+  // Pass 1: hard filters + the maxima that normalize the unbounded sources.
+  const eligible: AnimeForDisplay[] = [];
+  let maxCrowd = 0;
+  let maxAnilist = 0;
+  let maxUsers: number = TUNING.POPULARITY_FLOOR;
+  for (const candId of new Set([...crowd.keys(), ...anilistCrowd.keys()])) {
+    if (excluded.has(candId)) continue;
+    const anime = byId.get(candId);
+    if (!anime) continue; // absent from the local catalog — nothing to rank on
+    if (isPrematureSequel(anime, byId)) continue;
+
+    eligible.push(anime);
+    maxCrowd = Math.max(maxCrowd, crowd.get(candId) || 0);
+    maxAnilist = Math.max(maxAnilist, anilistCrowd.get(candId) || 0);
+    maxUsers = Math.max(maxUsers, anime.num_list_users || 0);
+  }
+  if (eligible.length === 0) return [];
+
+  const crowdDenom = Math.log(1 + maxCrowd) || 1;
+  const anilistDenom = Math.log(1 + maxAnilist) || 1;
+  const popDenom = Math.log10(maxUsers) || 1;
+
+  // IDF over the full corpus (as in the feed), but the positive profiles are
+  // built from the single target: "shares a RARE genre/tag/studio/creator with
+  // this title" scores far above "shares a ubiquitous one".
+  const idf = {
+    genre: computeIdf(all, FIELD_EXTRACTORS.genre),
+    studio: computeIdf(all, FIELD_EXTRACTORS.studio),
+    nsfw: computeIdf(all, FIELD_EXTRACTORS.nsfw),
+    rating: computeIdf(all, FIELD_EXTRACTORS.rating),
+    anilistTags: computeIdf(all, FIELD_EXTRACTORS.anilistTags),
+    anilistStaff: computeIdf(all, FIELD_EXTRACTORS.anilistStaff),
+  };
+  const one = () => 1;
+  const self = {
+    genre: buildFieldProfile([target], one, FIELD_EXTRACTORS.genre, idf.genre),
+    studio: buildFieldProfile([target], one, FIELD_EXTRACTORS.studio, idf.studio),
+    nsfw: buildFieldProfile([target], one, FIELD_EXTRACTORS.nsfw, idf.nsfw),
+    rating: buildFieldProfile([target], one, FIELD_EXTRACTORS.rating, idf.rating),
+    anilistTags: buildFieldProfile([target], one, FIELD_EXTRACTORS.anilistTags, idf.anilistTags),
+    anilistStaff: buildFieldProfile([target], one, FIELD_EXTRACTORS.anilistStaff, idf.anilistStaff),
+  };
+  const downIds = feedbackIds(getFeedback(), 'down');
+  const { negGenre, negStudio } = buildRejectionProfiles(all, downIds, idf.genre, idf.studio);
+
+  // Names/roles as the TARGET credits them — the explain says what the candidate
+  // shares with the anime you're looking at.
+  const targetStudioNames = new Map((target.studios || []).map(s => [s.id, s.name]));
+  const targetStaffById = new Map((target.anilistTags?.staff || []).map(s => [s.id, s]));
+
+  // Pass 2: score with the same additive weighted sum as the feed.
+  const items: SimilarItem[] = [];
+  for (const anime of eligible) {
+    const candId = anime.id;
+    const crowdNum = crowd.get(candId) || 0;
+    const anilistNum = anilistCrowd.get(candId) || 0;
+
+    const genreM = fieldMatch(anime, self.genre);
+    const studioM = fieldMatch(anime, self.studio);
+    const nsfwM = fieldMatch(anime, self.nsfw);
+    const ratingM = fieldMatch(anime, self.rating);
+    const tagsM = fieldMatch(anime, self.anilistTags);
+    const staffM = fieldMatch(anime, self.anilistStaff);
+    const negGenreM = fieldMatch(anime, negGenre);
+    const negStudioM = fieldMatch(anime, negStudio);
+    const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
+
+    const values: SourceWeights = {
+      crowd: maxCrowd > 0 ? Math.log(1 + crowdNum) / crowdDenom : 0,
+      anilistCrowd: maxAnilist > 0 ? Math.log(1 + anilistNum) / anilistDenom : 0,
+      suggestions: 0,
+      feedback: 0,
+      genre: genreM.score,
+      studio: studioM.score,
+      nsfw: nsfwM.score,
+      rating: ratingM.score,
+      anilistTags: tagsM.score,
+      anilistStaff: staffM.score,
+      rejection: TUNING.GENRE_WEIGHT * negGenreM.score + TUNING.STUDIO_WEIGHT * negStudioM.score,
+      popularity: Math.log10(users) / popDenom,
+    };
+
+    const details: Partial<Record<RecoSource, string | undefined>> = {
+      crowd: crowdNum > 0 ? `${crowdNum} fan${crowdNum > 1 ? 's' : ''} de ce titre le recommandent` : undefined,
+      anilistCrowd: anilistNum > 0 ? `${anilistNum} recommandation${anilistNum > 1 ? 's' : ''} AniList depuis ce titre` : undefined,
+      genre: genreM.matched.length ? `En commun : ${(genreM.matched as string[]).join(', ')}` : undefined,
+      studio: studioM.matched.length
+        ? `En commun : ${studioM.matched.map(id => targetStudioNames.get(id as number) || `#${id}`).join(', ')}`
+        : undefined,
+      nsfw: values.nsfw > 0 && anime.nsfw ? `Même classement NSFW : ${anime.nsfw}` : undefined,
+      rating: values.rating > 0 && anime.rating ? `Même classification : ${anime.rating.toUpperCase()}` : undefined,
+      anilistTags: tagsM.matched.length ? `En commun : ${(tagsM.matched as string[]).join(', ')}` : undefined,
+      anilistStaff: staffM.matched.length
+        ? `En commun : ${staffM.matched
+            .map(id => {
+              const s = targetStaffById.get(id as number);
+              if (!s) return `#${id}`;
+              return s.role ? `${s.role} : ${s.name}` : s.name;
+            })
+            .join(', ')}`
+        : undefined,
+      rejection: (() => {
+        const candStudioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
+        const parts = [
+          ...(negGenreM.matched as string[]),
+          ...negStudioM.matched.map(id => candStudioNames.get(id as number) || `#${id}`),
+        ];
+        return parts.length ? `Proche de tes rejets : ${parts.join(', ')}` : undefined;
+      })(),
+      popularity: `${(anime.num_list_users || 0).toLocaleString('fr-FR')} membres`,
+    };
+
+    let score = 0;
+    const breakdown: RecoContribution[] = [];
+    (Object.keys(values) as RecoSource[]).forEach(src => {
+      const weight = SIMILAR_WEIGHTS[src];
+      const value = values[src];
+      const contribution = weight * value;
+      score += contribution;
+      if (weight !== 0 && value !== 0) {
+        breakdown.push({ source: src, value, weight, contribution, detail: details[src] });
+      }
+    });
+    breakdown.sort((x, y) => Math.abs(y.contribution) - Math.abs(x.contribution));
+
+    const status = getEffectiveStatus(anime);
+    items.push({
+      id: candId,
+      title: getPrimaryTitle(anime),
+      poster: anime.main_picture?.medium || anime.main_picture?.large,
+      mean: anime.mean,
+      mediaType: anime.media_type,
+      year: anime.start_season?.year,
+      status,
+      seen: !!status && SEEN_STATUSES.has(status),
+      score,
+      breakdown,
+    });
+  }
+
+  items.sort((x, y) => y.score - x.score || (y.mean || 0) - (x.mean || 0) || x.id - y.id);
+  return items.slice(0, limit);
 }
