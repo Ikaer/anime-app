@@ -32,9 +32,9 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [simklSyncMessage, setSimklSyncMessage] = useState('');
 
   // AniList tags sync state (public API, no auth)
-  const [isAnilistTagsSyncing, setIsAnilistTagsSyncing] = useState(false);
-  const [anilistTagsSyncMessage, setAnilistTagsSyncMessage] = useState('');
-  const [anilistTagStats, setAnilistTagStats] = useState<{ totalAnime: number; taggedCount: number } | null>(null);
+  const [isAnilistMetaSyncing, setIsAnilistMetaSyncing] = useState(false);
+  const [anilistMetaSyncMessage, setAnilistMetaSyncMessage] = useState('');
+  const [anilistMetaStats, setAnilistMetaStats] = useState<{ totalAnime: number; taggedCount: number } | null>(null);
 
   const fetchHistoricalStats = async () => {
     try {
@@ -45,10 +45,10 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  const fetchAnilistTagStats = async () => {
+  const fetchAnilistMetaStats = async () => {
     try {
-      const res = await fetch('/api/anime/anilist/tags-sync');
-      if (res.ok) setAnilistTagStats(await res.json());
+      const res = await fetch('/api/anime/anilist/meta-sync');
+      if (res.ok) setAnilistMetaStats(await res.json());
     } catch {
       // non-critical, silently ignore
     }
@@ -87,7 +87,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     checkAuthStatus();
     fetchHistoricalStats();
     checkSimklStatus();
-    fetchAnilistTagStats();
+    fetchAnilistMetaStats();
   }, []);
 
   // Handle OAuth callback
@@ -245,48 +245,56 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  const handleAnilistTagsSync = async () => {
-    setIsAnilistTagsSyncing(true);
-    setAnilistTagsSyncMessage('');
+  const handleAnilistMetaSync = async () => {
+    setIsAnilistMetaSyncing(true);
+    setAnilistMetaSyncMessage('');
     try {
-      const response = await fetch('/api/anime/anilist/tags-sync', { method: 'POST' });
+      const response = await fetch('/api/anime/anilist/meta-sync', { method: 'POST' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'AniList tags sync failed');
-      setAnilistTagsSyncMessage('Sync started — see the log below for progress.');
-      fetchAnilistTagStats();
+      setAnilistMetaSyncMessage('Sync started — see the log below for progress.');
+      fetchAnilistMetaStats();
     } catch (error) {
-      setAnilistTagsSyncMessage(error instanceof Error ? error.message : 'Failed to start AniList tags sync.');
+      setAnilistMetaSyncMessage(error instanceof Error ? error.message : 'Failed to start AniList tags sync.');
     } finally {
-      setIsAnilistTagsSyncing(false);
+      setIsAnilistMetaSyncing(false);
     }
   };
 
+  // One group per source. The nesting is what carries the "which source?"
+  // information — no field inside a group needs its source as a prefix.
   return {
-    authState,
-    isAuthLoading,
-    authError,
-    onConnect: handleConnect,
-    onDisconnect: handleDisconnect,
-    isSyncing,
-    isBigSyncing,
-    isHistoricalCrawling,
-    syncError,
-    historicalStats,
-    onSync: handleSync,
-    onBigSync: handleBigSync,
-    onHistoricalCrawl: handleHistoricalCrawl,
-    simklConnected,
-    simklUser,
-    isSimklAuthLoading,
-    simklAuthError,
-    isSimklSyncing,
-    simklSyncMessage,
-    onSimklConnect: handleSimklConnect,
-    onSimklDisconnect: handleSimklDisconnect,
-    onSimklSync: handleSimklSync,
-    isAnilistTagsSyncing,
-    anilistTagsSyncMessage,
-    anilistTagStats,
-    onAnilistTagsSync: handleAnilistTagsSync,
+    mal: {
+      authState,
+      isAuthLoading,
+      authError,
+      onConnect: handleConnect,
+      onDisconnect: handleDisconnect,
+      isSyncing,
+      isBigSyncing,
+      isHistoricalCrawling,
+      syncError,
+      historicalStats,
+      onSync: handleSync,
+      onBigSync: handleBigSync,
+      onHistoricalCrawl: handleHistoricalCrawl,
+    },
+    simkl: {
+      isConnected: simklConnected,
+      userName: simklUser,
+      isAuthLoading: isSimklAuthLoading,
+      authError: simklAuthError,
+      isSyncing: isSimklSyncing,
+      syncMessage: simklSyncMessage,
+      onConnect: handleSimklConnect,
+      onDisconnect: handleSimklDisconnect,
+      onSync: handleSimklSync,
+    },
+    anilist: {
+      isSyncing: isAnilistMetaSyncing,
+      syncMessage: anilistMetaSyncMessage,
+      tagStats: anilistMetaStats,
+      onSync: handleAnilistMetaSync,
+    },
   };
 }

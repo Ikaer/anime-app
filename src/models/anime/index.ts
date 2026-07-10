@@ -121,7 +121,9 @@ export interface Discrepancy {
   presence?: 'simkl_only'; // soft: synced from SIMKL but absent from your MAL list
 }
 
-// AniList catalog tag data (read-only, public API). Keyed by MAL id in animes_anilist_tags.json.
+// AniList catalog metadata (read-only, public API). Keyed by MAL id in
+// animes_anilist_tags.json — the filename still says "tags" for backward
+// compatibility; the entry has held staff and banner art for a while now.
 export interface AniListTagEntry {
   name: string;
   rank: number;       // AniList relevance rank, 0-100
@@ -134,7 +136,7 @@ export interface AniListStaffEntry {
   name: string;
   role: string;
 }
-export interface AniListTagsEntry {
+export interface AniListMetaEntry {
   mal_id: number;
   anilist_id: number;
   tags: AniListTagEntry[];
@@ -156,7 +158,7 @@ export interface AnimeForDisplay extends MALAnime {
   hidden?: boolean;
   simkl?: SimklPersonalEntry;       // joined at display time by MAL id
   discrepancy?: Discrepancy | null; // computed at display / filter time
-  anilistTags?: AniListTagsEntry;   // joined at display time by MAL id
+  anilistMeta?: AniListMetaEntry;   // joined at display time by MAL id
   /**
    * Unified cross-source id crosswalk, assembled at display time from every
    * pipe (MAL self-id + SIMKL's ids block + AniList's id). Materially

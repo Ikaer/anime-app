@@ -3,14 +3,7 @@ import { AccountSection, SimklSection, DataSyncSection, ConnectionLogPanel } fro
 import { useConnections } from '@/hooks';
 
 export default function ConnectionsPage() {
-  const {
-    authState, isAuthLoading, authError, onConnect, onDisconnect,
-    isSyncing, isBigSyncing, isHistoricalCrawling, syncError, historicalStats,
-    onSync, onBigSync, onHistoricalCrawl,
-    simklConnected, simklUser, isSimklAuthLoading, simklAuthError,
-    isSimklSyncing, simklSyncMessage, onSimklConnect, onSimklDisconnect, onSimklSync,
-    isAnilistTagsSyncing, anilistTagsSyncMessage, anilistTagStats, onAnilistTagsSync,
-  } = useConnections();
+  const { mal, simkl, anilist } = useConnections();
 
   return (
     <>
@@ -24,44 +17,44 @@ export default function ConnectionsPage() {
           <section className="connections-section">
             <h2>MyAnimeList</h2>
             <AccountSection
-              authState={authState}
-              isAuthLoading={isAuthLoading}
-              authError={authError}
-              onConnect={onConnect}
-              onDisconnect={onDisconnect}
+              authState={mal.authState}
+              isAuthLoading={mal.isAuthLoading}
+              authError={mal.authError}
+              onConnect={mal.onConnect}
+              onDisconnect={mal.onDisconnect}
             />
           </section>
           <section className="connections-section">
             <h2>SIMKL</h2>
             <SimklSection
-              isConnected={simklConnected}
-              userName={simklUser}
-              isAuthLoading={isSimklAuthLoading}
-              authError={simklAuthError}
-              onConnect={onSimklConnect}
-              onDisconnect={onSimklDisconnect}
+              isConnected={simkl.isConnected}
+              userName={simkl.userName}
+              isAuthLoading={simkl.isAuthLoading}
+              authError={simkl.authError}
+              onConnect={simkl.onConnect}
+              onDisconnect={simkl.onDisconnect}
             />
           </section>
           <section className="connections-section">
             <h2>Sync</h2>
             <DataSyncSection
-              authState={authState}
-              isSyncing={isSyncing}
-              isBigSyncing={isBigSyncing}
-              isHistoricalCrawling={isHistoricalCrawling}
-              syncError={syncError}
-              historicalStats={historicalStats}
-              onSync={onSync}
-              onBigSync={onBigSync}
-              onHistoricalCrawl={onHistoricalCrawl}
-              isAnilistTagsSyncing={isAnilistTagsSyncing}
-              anilistTagsSyncMessage={anilistTagsSyncMessage}
-              anilistTagStats={anilistTagStats}
-              onAnilistTagsSync={onAnilistTagsSync}
-              simklConnected={simklConnected}
-              isSimklSyncing={isSimklSyncing}
-              simklSyncMessage={simklSyncMessage}
-              onSimklSync={onSimklSync}
+              authState={mal.authState}
+              isSyncing={mal.isSyncing}
+              isBigSyncing={mal.isBigSyncing}
+              isHistoricalCrawling={mal.isHistoricalCrawling}
+              syncError={mal.syncError}
+              historicalStats={mal.historicalStats}
+              onSync={mal.onSync}
+              onBigSync={mal.onBigSync}
+              onHistoricalCrawl={mal.onHistoricalCrawl}
+              isAnilistMetaSyncing={anilist.isSyncing}
+              anilistMetaSyncMessage={anilist.syncMessage}
+              anilistMetaStats={anilist.tagStats}
+              onAnilistMetaSync={anilist.onSync}
+              simklConnected={simkl.isConnected}
+              isSimklSyncing={simkl.isSyncing}
+              simklSyncMessage={simkl.syncMessage}
+              onSimklSync={simkl.onSync}
             />
           </section>
         </div>

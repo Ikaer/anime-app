@@ -14,10 +14,10 @@ interface DataSyncSectionProps {
   onSync: () => void;
   onBigSync: () => void;
   onHistoricalCrawl: () => void;
-  isAnilistTagsSyncing: boolean;
-  anilistTagsSyncMessage: string;
-  anilistTagStats: { totalAnime: number; taggedCount: number } | null;
-  onAnilistTagsSync: () => void;
+  isAnilistMetaSyncing: boolean;
+  anilistMetaSyncMessage: string;
+  anilistMetaStats: { totalAnime: number; taggedCount: number } | null;
+  onAnilistMetaSync: () => void;
   simklConnected: boolean;
   isSimklSyncing: boolean;
   simklSyncMessage: string;
@@ -34,16 +34,16 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   onSync,
   onBigSync,
   onHistoricalCrawl,
-  isAnilistTagsSyncing,
-  anilistTagsSyncMessage,
-  anilistTagStats,
-  onAnilistTagsSync,
+  isAnilistMetaSyncing,
+  anilistMetaSyncMessage,
+  anilistMetaStats,
+  onAnilistMetaSync,
   simklConnected,
   isSimklSyncing,
   simklSyncMessage,
   onSimklSync,
 }) => {
-  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistTagsSyncing || isSimklSyncing;
+  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isSimklSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
 
   return (
@@ -84,16 +84,16 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
       </div>
       {simklSyncMessage && <div className={styles.crawlStats}>{simklSyncMessage}</div>}
       <div className={styles.buttonGroup}>
-        <Button onClick={onAnilistTagsSync} disabled={anyBusy} variant="secondary">
-          {isAnilistTagsSyncing ? 'Starting...' : 'Sync AniList Tags + Staff'}
+        <Button onClick={onAnilistMetaSync} disabled={anyBusy} variant="secondary">
+          {isAnilistMetaSyncing ? 'Starting...' : 'Sync AniList Metadata'}
         </Button>
       </div>
-      {anilistTagStats !== null && (
+      {anilistMetaStats !== null && (
         <div className={styles.crawlStats}>
-          {anilistTagStats.taggedCount} / {anilistTagStats.totalAnime} anime enrichis
+          {anilistMetaStats.taggedCount} / {anilistMetaStats.totalAnime} anime enrichis
         </div>
       )}
-      {anilistTagsSyncMessage && <div className={styles.crawlStats}>{anilistTagsSyncMessage}</div>}
+      {anilistMetaSyncMessage && <div className={styles.crawlStats}>{anilistMetaSyncMessage}</div>}
     </div>
   );
 };

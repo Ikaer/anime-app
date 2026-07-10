@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getValidMalToken } from '@/lib/mal';
-import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AnilistEdgeInput, type RecoEdge } from '@/lib/recommendations';
+import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AniListEdgeInput, type RecoEdge } from '@/lib/recommendations';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 
 /**
@@ -33,7 +33,7 @@ async function loadMalEdges(animeId: number): Promise<{ edges: RecoEdge[]; outco
   }
 }
 
-async function loadAnilistEdges(animeId: number): Promise<{ edges: AnilistEdgeInput[]; outcome: SimilarSourceOutcome }> {
+async function loadAnilistEdges(animeId: number): Promise<{ edges: AniListEdgeInput[]; outcome: SimilarSourceOutcome }> {
   try {
     const recs = await fetchAnilistRecommendations([animeId]);
     return { edges: recs.get(animeId) || [], outcome: { ok: true } };

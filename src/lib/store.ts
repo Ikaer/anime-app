@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeForDisplay, SyncMetadata, SimklPersonalEntry, AniListTagsEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos } from '@/lib/animeUtils';
@@ -22,7 +22,7 @@ import { getSeasonInfos } from '@/lib/animeUtils';
 const ANIME_MAL_FILE = dataFile('animes_MAL.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
 const ANIME_SIMKL_FILE = dataFile('animes_SIMKL.json');
-const ANIME_ANILIST_TAGS_FILE = dataFile('animes_anilist_tags.json');
+const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_tags.json');
 
 // ============================================================================
 // Hidden anime ids
@@ -107,20 +107,20 @@ export function removeSimklEntries(malIds: number[]): void {
 // AniList catalog-metadata slice (keyed by MAL id, as string)
 // ============================================================================
 
-export function getAllAnilistTags(): Record<string, AniListTagsEntry> {
-  return readJsonFile<Record<string, AniListTagsEntry>>(ANIME_ANILIST_TAGS_FILE, {});
+export function getAllAnilistMeta(): Record<string, AniListMetaEntry> {
+  return readJsonFile<Record<string, AniListMetaEntry>>(ANIME_ANILIST_META_FILE, {});
 }
 
-export function getAnilistTagsCount(): number {
-  return Object.keys(getAllAnilistTags()).length;
+export function getAnilistMetaCount(): number {
+  return Object.keys(getAllAnilistMeta()).length;
 }
 
-export function upsertAnilistTags(entries: AniListTagsEntry[]): void {
-  const existing = getAllAnilistTags();
+export function upsertAnilistMeta(entries: AniListMetaEntry[]): void {
+  const existing = getAllAnilistMeta();
   entries.forEach(entry => {
     existing[entry.mal_id.toString()] = entry;
   });
-  writeJsonFile(ANIME_ANILIST_TAGS_FILE, existing);
+  writeJsonFile(ANIME_ANILIST_META_FILE, existing);
   cachedAnime = null;
 }
 
@@ -142,12 +142,12 @@ const CACHE_TTL_MS = 10 * 60_000; // 10 min
 function assembleCrosswalk(
   malId: number,
   simkl?: SimklPersonalEntry,
-  anilistTags?: AniListTagsEntry
+  anilistMeta?: AniListMetaEntry
 ): SourceIds | undefined {
-  if (!simkl?.ids && !simkl?.simkl_id && !anilistTags) return undefined;
+  if (!simkl?.ids && !simkl?.simkl_id && !anilistMeta) return undefined;
   const crosswalk: SourceIds = { ...(simkl?.ids || {}), mal: malId };
   if (simkl?.simkl_id) crosswalk.simkl = simkl.simkl_id;
-  if (anilistTags?.anilist_id) crosswalk.anilist = anilistTags.anilist_id;
+  if (anilistMeta?.anilist_id) crosswalk.anilist = anilistMeta.anilist_id;
   return crosswalk;
 }
 
@@ -159,17 +159,17 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   const malAnime = getAllAnime();
   const hiddenIds = getHiddenAnimeIds();
   const simklByMalId = getAllSimklEntries();
-  const anilistTagsByMalId = getAllAnilistTags();
+  const anilistMetaByMalId = getAllAnilistMeta();
   cachedAnime = Object.values(malAnime).map(anime => {
     const simkl = simklByMalId[anime.id.toString()];
-    const anilistTags = anilistTagsByMalId[anime.id.toString()];
+    const anilistMeta = anilistMetaByMalId[anime.id.toString()];
     return {
       ...anime,
       hidden: hiddenIds.includes(anime.id),
       simkl,
       discrepancy: computeDiscrepancy(anime, simkl),
-      anilistTags,
-      crosswalk: assembleCrosswalk(anime.id, simkl, anilistTags),
+      anilistMeta,
+      crosswalk: assembleCrosswalk(anime.id, simkl, anilistMeta),
     };
   });
   lastCacheTime = now;
@@ -191,14 +191,14 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
   if (!mal) return undefined;
   const hidden = getHiddenAnimeIds();
   const simkl = getAllSimklEntries()[id.toString()];
-  const anilistTags = getAllAnilistTags()[id.toString()];
+  const anilistMeta = getAllAnilistMeta()[id.toString()];
   return {
     ...mal,
     hidden: hidden.includes(mal.id),
     simkl,
     discrepancy: computeDiscrepancy(mal, simkl),
-    anilistTags,
-    crosswalk: assembleCrosswalk(mal.id, simkl, anilistTags),
+    anilistMeta,
+    crosswalk: assembleCrosswalk(mal.id, simkl, anilistMeta),
   };
 }
 

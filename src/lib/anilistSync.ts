@@ -1,11 +1,12 @@
 /**
- * AniList catalog-tags sync. Public GraphQL API, no auth. Pulls the tag
- * taxonomy for anime already known locally (via animes_MAL.json) and
- * persists it via anime.ts. Read-only against AniList; no writes.
+ * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
+ * taxonomy, the top staff credits and the banner art for anime already known
+ * locally (via animes_MAL.json) and persists them via store.ts. Read-only
+ * against AniList; no writes.
  */
-import { getAllAnime, getAllAnilistTags, upsertAnilistTags } from '@/lib/store';
+import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
-import { AniListTagEntry, AniListStaffEntry, AniListTagsEntry } from '@/models/anime';
+import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry } from '@/models/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const BATCH_SIZE = 50;
@@ -61,7 +62,7 @@ interface RawMedia {
  * explicit `null` when AniList has none, so `undefined` keeps meaning "never
  * fetched" and stays usable as the backfill signal.
  */
-function toEntry(m: RawMedia, fetchedAt: string): AniListTagsEntry {
+function toEntry(m: RawMedia, fetchedAt: string): AniListMetaEntry {
   return {
     mal_id: m.idMal,
     anilist_id: m.id,
@@ -149,7 +150,7 @@ interface RawRecMedia {
 }
 
 /** One AniList crowd recommendation resolved onto a MAL id, with its net rating. */
-export interface AnilistRecEdge {
+export interface AniListRecEdge {
   /** Recommended anime's MAL id. */
   id: number;
   /** AniList net recommendation rating (crowd backers) — always > 0 here. */
@@ -194,10 +195,10 @@ async function fetchRecsBatch(malIds: number[], retryOn429 = true): Promise<RawR
 export async function fetchAnilistRecommendations(
   seedMalIds: number[],
   onBatch?: (done: number, total: number) => void
-): Promise<Map<number, AnilistRecEdge[]>> {
+): Promise<Map<number, AniListRecEdge[]>> {
   const ids = seedMalIds.filter(id => Number.isInteger(id));
   const batches = chunk(ids, BATCH_SIZE);
-  const out = new Map<number, AnilistRecEdge[]>();
+  const out = new Map<number, AniListRecEdge[]>();
   let processed = 0;
 
   for (const batch of batches) {
@@ -205,14 +206,14 @@ export async function fetchAnilistRecommendations(
       const media = await fetchRecsBatch(batch);
       for (const m of media) {
         if (!m.idMal) continue;
-        const edges: AnilistRecEdge[] = (m.recommendations?.edges ?? [])
+        const edges: AniListRecEdge[] = (m.recommendations?.edges ?? [])
           .map(e => ({ id: e.node?.mediaRecommendation?.idMal ?? 0, rating: e.node?.rating ?? 0 }))
           .filter(e => e.id > 0 && e.rating > 0);
         if (edges.length > 0) out.set(m.idMal, edges);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      appendLog('anilist-tags-sync', 'error', `AniList recos batch failed (mal ids ${batch[0]}-${batch[batch.length - 1]}), continuing: ${message}`);
+      appendLog('anilist-meta-sync', 'error', `AniList recos batch failed (mal ids ${batch[0]}-${batch[batch.length - 1]}), continuing: ${message}`);
     }
     processed += batch.length;
     if (onBatch) onBatch(processed, ids.length);
@@ -223,7 +224,7 @@ export async function fetchAnilistRecommendations(
   return out;
 }
 
-export interface AnilistTagsSyncResult {
+export interface AniListMetaSyncResult {
   ok: boolean;
   alreadyRunning: boolean;
   totalMissing: number;
@@ -233,15 +234,15 @@ export interface AnilistTagsSyncResult {
   error?: string;
 }
 
-let isAnilistTagsSyncRunning = false;
+let isAnilistMetaSyncRunning = false;
 
 /**
  * Force-refresh AniList tags + staff for specific MAL ids, bypassing the
- * "missing only" filter that `performAnilistTagsSync` uses. Powers the per-anime
+ * "missing only" filter that `performAnilistMetaSync` uses. Powers the per-anime
  * refresh on the detail page. One batch, no throttle loop (caller passes few ids).
  * Returns the number of ids AniList actually had (skips ones it doesn't know).
  */
-export async function refreshAnilistTagsForIds(
+export async function refreshAnilistMetaForIds(
   malIds: number[]
 ): Promise<{ ok: boolean; tagged: number; error?: string }> {
   const ids = malIds.filter(id => Number.isInteger(id)).slice(0, BATCH_SIZE);
@@ -249,42 +250,42 @@ export async function refreshAnilistTagsForIds(
   try {
     const media = await fetchTagsBatch(ids);
     const now = new Date().toISOString();
-    const entries: AniListTagsEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
-    if (entries.length > 0) upsertAnilistTags(entries);
+    const entries: AniListMetaEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
+    if (entries.length > 0) upsertAnilistMeta(entries);
     return { ok: true, tagged: entries.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    appendLog('anilist-tags-sync', 'error', `AniList refresh failed for ids ${ids.join(',')}: ${message}`);
+    appendLog('anilist-meta-sync', 'error', `AniList refresh failed for ids ${ids.join(',')}: ${message}`);
     return { ok: false, tagged: 0, error: message };
   }
 }
 
-export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
-  if (isAnilistTagsSyncRunning) {
-    appendLog('anilist-tags-sync', 'info', 'AniList tags sync skipped: already running');
+export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
+  if (isAnilistMetaSyncRunning) {
+    appendLog('anilist-meta-sync', 'info', 'AniList metadata sync skipped: already running');
     return { ok: false, alreadyRunning: true, totalMissing: 0, processed: 0, tagged: 0, failed: 0 };
   }
 
-  isAnilistTagsSyncRunning = true;
+  isAnilistMetaSyncRunning = true;
   try {
     const malAnime = getAllAnime();
-    const existingTags = getAllAnilistTags();
+    const existingMeta = getAllAnilistMeta();
     // Fetch anime with no AniList entry yet, OR an entry predating staff / banner
     // support (field === undefined) so those backfill onto already-tagged titles.
     // A banner AniList doesn't have is stored as null, so it never re-queues.
     const missingIds = Object.values(malAnime)
       .map(a => a.id)
       .filter(id => {
-        const e = existingTags[id.toString()];
+        const e = existingMeta[id.toString()];
         return !e || e.staff === undefined || e.banner_image === undefined;
       });
 
     if (missingIds.length === 0) {
-      appendLog('anilist-tags-sync', 'success', 'AniList sync: nothing to do, all anime already have tags + staff');
+      appendLog('anilist-meta-sync', 'success', 'AniList sync: nothing to do, all anime already have tags + staff');
       return { ok: true, alreadyRunning: false, totalMissing: 0, processed: 0, tagged: 0, failed: 0 };
     }
 
-    appendLog('anilist-tags-sync', 'info', `AniList tags sync started: ${missingIds.length} anime to fetch`);
+    appendLog('anilist-meta-sync', 'info', `AniList metadata sync started: ${missingIds.length} anime to fetch`);
 
     const batches = chunk(missingIds, BATCH_SIZE);
     let processed = 0;
@@ -295,13 +296,13 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
       try {
         const media = await fetchTagsBatch(batch);
         const now = new Date().toISOString();
-        const entries: AniListTagsEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
+        const entries: AniListMetaEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
         if (entries.length > 0) {
-          upsertAnilistTags(entries);
+          upsertAnilistMeta(entries);
           tagged += entries.length;
         }
         processed += batch.length;
-        appendLog('anilist-tags-sync', 'info', `AniList tags: ${processed}/${missingIds.length} processed`, {
+        appendLog('anilist-meta-sync', 'info', `AniList tags: ${processed}/${missingIds.length} processed`, {
           processed,
           totalMissing: missingIds.length,
           tagged,
@@ -312,7 +313,7 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error(`AniList tags batch ${batchIndex + 1}/${batches.length} error (mal ids ${batch[0]}-${batch[batch.length - 1]}):`, error);
         appendLog(
-          'anilist-tags-sync',
+          'anilist-meta-sync',
           'error',
           `AniList tags batch ${batchIndex + 1}/${batches.length} failed, continuing: ${errorMessage}`,
           {
@@ -330,7 +331,7 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
       }
     }
 
-    appendLog('anilist-tags-sync', 'success', `AniList tags sync complete: ${tagged} tagged, ${failed} failed`, {
+    appendLog('anilist-meta-sync', 'success', `AniList metadata sync complete: ${tagged} tagged, ${failed} failed`, {
       processed,
       tagged,
       failed,
@@ -338,8 +339,8 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
 
     return { ok: true, alreadyRunning: false, totalMissing: missingIds.length, processed, tagged, failed };
   } catch (error) {
-    console.error('AniList tags sync error:', error);
-    appendLog('anilist-tags-sync', 'error', 'AniList tags sync failed', {
+    console.error('AniList metadata sync error:', error);
+    appendLog('anilist-meta-sync', 'error', 'AniList metadata sync failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return {
@@ -352,6 +353,6 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   } finally {
-    isAnilistTagsSyncRunning = false;
+    isAnilistMetaSyncRunning = false;
   }
 }

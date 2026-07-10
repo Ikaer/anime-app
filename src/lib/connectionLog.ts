@@ -1,8 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 
-const LOGS_PATH = process.env.LOGS_PATH || process.env.DATA_PATH || '/app/data';
+const DATA_PATH = process.env.DATA_PATH || '/app/data';
+const LOGS_PATH = process.env.LOGS_PATH || DATA_PATH;
 const LOG_FILE = path.join(LOGS_PATH, 'connection_log.json');
+
+/**
+ * The log used to live under `DATA_PATH`, before `LOGS_PATH` was wired up. Read
+ * the old location once when the new one is still empty, so switching does not
+ * silently blank the panel. The next `appendLog` rewrites to `LOG_FILE`.
+ */
+const LEGACY_LOG_FILE = path.join(DATA_PATH, 'connection_log.json');
+
 const MAX_ENTRIES = 500;
 const DEFAULT_PAGE_SIZE = 200;
 
@@ -18,7 +27,7 @@ export type LogSource =
   | 'mal-historical-crawl'
   | 'simkl-auth'
   | 'simkl-sync'
-  | 'anilist-tags-sync'
+  | 'anilist-meta-sync'
   | 'cron-sync'
   | 'refresh';
 
@@ -46,10 +55,11 @@ function ensureLogsDirectory(): void {
 
 function readStore(): LogStore {
   try {
-    if (!fs.existsSync(LOG_FILE)) {
+    const file = fs.existsSync(LOG_FILE) ? LOG_FILE : LEGACY_LOG_FILE;
+    if (!fs.existsSync(file)) {
       return { counter: 0, entries: [] };
     }
-    const content = fs.readFileSync(LOG_FILE, 'utf-8');
+    const content = fs.readFileSync(file, 'utf-8');
     const parsed = JSON.parse(content);
     return {
       counter: typeof parsed.counter === 'number' ? parsed.counter : 0,

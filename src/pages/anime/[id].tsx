@@ -62,8 +62,8 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const mal = anime.my_list_status;
   const simkl = anime.simkl;
   const disc = anime.discrepancy;
-  const tags = anime.anilistTags?.tags || [];
-  const staff = anime.anilistTags?.staff || [];
+  const tags = anime.anilistMeta?.tags || [];
+  const staff = anime.anilistMeta?.staff || [];
   const crosswalk = anime.crosswalk || {};
 
   const effStatus = getEffectiveStatus(anime);
@@ -71,12 +71,12 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const effProgress = getEffectiveProgress(anime);
 
   const searchTitle = en || anime.title;
-  const anilistId = anime.anilistTags?.anilist_id ?? crosswalk.anilist;
+  const anilistId = anime.anilistMeta?.anilist_id ?? crosswalk.anilist;
 
   // Page backdrop. AniList's landscape banner is the real thing (it's what Plex
   // shows); the portrait poster is the fallback and needs a heavier blur, since
   // cover-cropping it to a wide viewport leaves only a thin, meaningless band.
-  const banner = anime.anilistTags?.banner_image || '';
+  const banner = anime.anilistMeta?.banner_image || '';
   const backdrop = banner || poster;
 
   // Cross-source id rows worth surfacing, in a stable order.

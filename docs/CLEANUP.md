@@ -44,13 +44,13 @@ Do not treat these as quick wins. Each is a design decision.
 
 | # | Status | Item | Notes |
 |---|--------|------|-------|
-| 2.1 | Todo | Nest `useConnections` return value as `{ mal, simkl, anilist }` | Currently a flat bag of ~28 values where `authState` / `isSyncing` / `isBigSyncing` / `onConnect` / `onSync` mean MAL, sitting next to `simklConnected` / `onSimklSync` / `onAnilistTagsSync`. Nesting removes the prefixes and shrinks every consumer. |
+| 2.1 | Done | Nest `useConnections` return value as `{ mal, simkl, anilist }` | Currently a flat bag of ~28 values where `authState` / `isSyncing` / `isBigSyncing` / `onConnect` / `onSync` mean MAL, sitting next to `simklConnected` / `onSimklSync` / `onAnilistTagsSync`. Nesting removes the prefixes and shrinks every consumer. |
 | 2.2 | Done | `LogSource` channel names | [connectionLog.ts:9](../src/lib/connectionLog.ts). `mal-auth`/`simkl-auth` are symmetric; then `sync`, `big-sync`, `historical-crawl`, `refresh` (MAL implied) vs `simkl-sync`, `anilist-tags-sync`. |
 | 2.3 | Done | Move MAL API routes under `/api/anime/mal/` | `sync`, `big-sync`, `historical-crawl` → `mal/*`, matching `simkl/*` and `anilist/*`. `auth` could NOT move: its path is the MAL OAuth app's registered redirect URI (`MAL_REDIRECT_URI`), same class of external-config breakage as 2.4. Both now carry a comment saying so. |
 | 2.4 | Blocked | ⚠️ Do **not** rename `/api/anime/cron-sync` | Called by an external cron job on the NAS with `CRON_SECRET`. Renaming breaks configuration that lives outside this repo. Left here so nobody "fixes" it as part of 2.3. |
-| 2.5 | Todo | AniList "tags" is now a lie — rename to `anilistMeta` | `animes_anilist_tags.json`, `AniListTagsEntry`, `getAllAnilistTags`, `getAnilistTagsCount`, `performAnilistTagsSync`, `/anilist/tags-sync`, `anilistTagStats` all carry tags **+ staff + `banner_image`**. Note the data-file rename is gated by §3. |
-| 2.6 | Todo | Fix AniList casing drift | `AniList*` types vs `Anilist*` functions vs `anilist*` variables. Pick one. |
-| 2.7 | Todo | `recommendations_MAL.json` stale suffix | Now also stores `anilistSeeds`. Data-file rename gated by §3. |
+| 2.5 | Done | AniList "tags" is now a lie — rename to `anilistMeta` | Code-only, as §3 is out of scope: `animes_anilist_tags.json` keeps its name on disk. The `anilistTags` **reco source** deliberately keeps its name — it really is tags-only, and it is persisted in the URL weights param. |
+| 2.6 | Done | Fix AniList casing drift | Rule: `AniList` in PascalCase type names, `anilist` in camelCase identifiers. |
+| 2.7 | Dropped | `recommendations_MAL.json` stale suffix | Purely a data-file rename, and §3 is out of scope. |
 | 2.8 | Done | `SeasonInfo` declared three times | [models/anime/index.ts:224](../src/models/anime/index.ts) (unused), [animeUtils.ts:107](../src/lib/animeUtils.ts) (local, shadows it), [SeasonSelector.tsx:7](../src/components/anime/SeasonSelector.tsx) (the one actually imported). Keep one. |
 
 ---
@@ -89,7 +89,7 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 | 5.1 | Done | Delete `AnimeUserPreferences`, `AnimeFilters`, `AnimeSortOptions`, `MediaType`, `AnimeView`, `CalendarAnimeView`, `AnimeViewHelper` + `animeViewsHelper` | [models/anime/index.ts](../src/models/anime/index.ts). ~40 lines of exhaustiveness scaffolding for a view system that no longer exists. |
 | 5.2 | Done | Delete `models/shared/` entirely | Once `CalendarAnimeView` (5.1) is gone, `LiteralSubset` — the folder's only export — is unused. |
 | 5.3 | Done | Remove stale comments describing removals that already happened | [anime.ts:6-7](../src/lib/anime.ts) and [anime.ts:213](../src/lib/anime.ts). |
-| 5.4 | Done | `LOGS_PATH` is documented in CLAUDE.md and set in `docker-compose.yml`, but **never read in `src/`** | Wired up: `connectionLog.ts` now writes to `LOGS_PATH`, falling back to `DATA_PATH`. The existing `connection_log.json` under `DATA_PATH` is orphaned on next deploy (rolling 500-entry UI log, not durable state). |
+| 5.4 | Done | `LOGS_PATH` is documented in CLAUDE.md and set in `docker-compose.yml`, but **never read in `src/`** | Wired up: `connectionLog.ts` now writes to `LOGS_PATH`, falling back to `DATA_PATH`, and reads the old `DATA_PATH` copy once when the new location is still empty so the panel does not blank out on deploy. |
 | 5.5 | Todo | Retire `recommendations_dismissed.json` + `getDismissedIds` | Legacy read-only pre-👎 store. At some point it stops being worth carrying. Deleting it resurrects every dismissed title into the feed, so this is a data decision, not a code one. |
 | 5.6 | Done | `docs/TODO.md` is entirely checked off | Delete or archive. |
 | 5.7 | Done | Drop `export` from symbols only referenced inside their own file | Not dead, just leaking a wider API than intended: `getSeeds`, `seedWeight`, `getFeedback`, `saveRecommendationsData`, `TUNING` (`recommendations.ts`); `encodeFiltersToParams`, `decodeUrlToFilters`, `encodeDisplayToParams`, `decodeUrlToDisplay` (`animeUrlParams.ts`); `updatePersonalStatus`, `getSyncCheckpoint` (`anime.ts`). |

@@ -46,7 +46,7 @@ function isTechnicalStaff(role: string): boolean {
 
 /** Technical (non-source-author) staff credits for one anime. */
 function technicalStaff(a: AnimeForDisplay) {
-  return (a.anilistTags?.staff || []).filter(s => isTechnicalStaff(s.role));
+  return (a.anilistMeta?.staff || []).filter(s => isTechnicalStaff(s.role));
 }
 
 /**

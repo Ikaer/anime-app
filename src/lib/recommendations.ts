@@ -60,8 +60,8 @@ const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> 
   studio: a => (a.studios || []).map(s => s.id),
   nsfw: a => (a.nsfw ? [a.nsfw] : []),
   rating: a => (a.rating ? [a.rating] : []),
-  anilistTags: a => (a.anilistTags?.tags || []).map(t => t.name),
-  anilistStaff: a => (a.anilistTags?.staff || []).map(s => s.id),
+  anilistTags: a => (a.anilistMeta?.tags || []).map(t => t.name),
+  anilistStaff: a => (a.anilistMeta?.staff || []).map(s => s.id),
 };
 
 /**
@@ -621,7 +621,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       .map(([sid]) => seedTitle(sid));
 
     const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
-    const staffById = new Map((anime.anilistTags?.staff || []).map(s => [s.id, s]));
+    const staffById = new Map((anime.anilistMeta?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: allSeedTitles.length ? `Fans de ${allSeedTitles.join(', ')}` : undefined,
       anilistCrowd: anilistAllTitles.length ? `Fans AniList de ${anilistAllTitles.join(', ')}` : undefined,
@@ -939,7 +939,7 @@ const SIMILAR_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0, fee
 export const SIMILAR_LIMIT = 12;
 
 /** One AniList crowd edge as returned by `fetchAnilistRecommendations`. */
-export interface AnilistEdgeInput {
+export interface AniListEdgeInput {
   id: number;
   rating: number;
 }
@@ -972,7 +972,7 @@ export interface SimilarItem {
 export function computeSimilarTo(
   targetId: number,
   malEdges: RecoEdge[],
-  anilistEdges: AnilistEdgeInput[],
+  anilistEdges: AniListEdgeInput[],
   limit: number = SIMILAR_LIMIT
 ): SimilarItem[] {
   const all = getAnimeForDisplay();
@@ -1046,7 +1046,7 @@ export function computeSimilarTo(
   // Names/roles as the TARGET credits them — the explain says what the candidate
   // shares with the anime you're looking at.
   const targetStudioNames = new Map((target.studios || []).map(s => [s.id, s.name]));
-  const targetStaffById = new Map((target.anilistTags?.staff || []).map(s => [s.id, s]));
+  const targetStaffById = new Map((target.anilistMeta?.staff || []).map(s => [s.id, s]));
 
   // Pass 2: score with the same additive weighted sum as the feed.
   const items: SimilarItem[] = [];

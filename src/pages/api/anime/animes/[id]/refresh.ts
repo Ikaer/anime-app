@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllAnime, upsertAnime } from '@/lib/store';
 import { getValidMalToken, fetchAnimeById } from '@/lib/mal';
-import { refreshAnilistTagsForIds } from '@/lib/anilistSync';
+import { refreshAnilistMetaForIds } from '@/lib/anilistSync';
 import { performSimklSync } from '@/lib/simklSync';
 import { appendLog } from '@/lib/connectionLog';
 
@@ -48,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Each source is isolated: one failing must not sink the others.
   const [malResult, anilistResult, simklResult] = await Promise.all([
     refreshMal(animeId).catch(e => ({ ok: false, error: e instanceof Error ? e.message : 'MAL refresh failed' })),
-    refreshAnilistTagsForIds([animeId]).catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' })),
+    refreshAnilistMetaForIds([animeId]).catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' })),
     performSimklSync().catch(e => ({ ok: false, phase: 'noop' as const, added: 0, removed: 0, orphansSkipped: 0, error: e instanceof Error ? e.message : 'SIMKL sync failed' })),
   ]);
 
