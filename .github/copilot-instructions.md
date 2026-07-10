@@ -23,7 +23,10 @@ src/
 │   └── index.tsx         # Main anime page
 ├── hooks/                # Custom hooks (useAnimeUrlState)
 ├── lib/                  # Server-side data operations & utilities
-│   ├── anime.ts          # MAL data, sync, auth (server-side)
+│   ├── jsonStore.ts      # DATA_PATH + JSON read/write primitives
+│   ├── store.ts          # The local record (server-side)
+│   ├── mal.ts            # MAL auth + API reads
+│   ├── malSync.ts        # MAL big-sync / historical crawl
 │   ├── animeUtils.ts     # Anime filtering & sorting logic
 │   ├── animeUrlParams.ts # URL state parsing
 │   └── searchLinks.ts    # Google/JustWatch search-link generators
@@ -61,7 +64,7 @@ import { Button, CollapsibleSection } from '@/components/shared';
 
 ### Data Storage
 - JSON file-based storage in `/app/data/`
-- `lib/anime.ts` has its own `readJsonFile`/`writeJsonFile` utilities
+- `lib/jsonStore.ts` owns `dataFile`/`readJsonFile`/`writeJsonFile`
 - Automatic directory creation via `ensureDataDirectory()`
 
 ### API Routes
@@ -70,8 +73,8 @@ All under `/api/anime/`:
 - `/api/anime/animes/[id]/hide` — hide/unhide anime
 - `/api/anime/animes/[id]/mal-status` — update MAL watch status
 - `/api/anime/auth` — MAL OAuth flow
-- `/api/anime/sync` — manual sync
-- `/api/anime/big-sync` — full seasonal sync
+- `/api/anime/mal/sync` — manual sync
+- `/api/anime/mal/big-sync` — full seasonal sync
 - `/api/anime/cron-sync` — cron-triggered sync
 
 ## Environment & Deployment

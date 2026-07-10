@@ -100,7 +100,7 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 
 | # | Status | Item | Notes |
 |---|--------|------|-------|
-| 6.1 | Todo | CLAUDE.md says "all component styles use CSS Modules", but there are **nine `<style jsx>` blocks** | All of them in pages: `anime/[id].tsx`, `tier.tsx`, `recommendations.tsx`, `connections.tsx`. The real rule seems to be "components use modules, pages use styled-jsx". Either enforce the stated rule or write down the actual one. |
+| 6.1 | Done | CLAUDE.md says "all component styles use CSS Modules", but there are **nine `<style jsx>` blocks** | Resolved by writing down the actual rule (components → CSS Modules, pages → styled-jsx) rather than converting nine page-local layout blocks for no gain. |
 | 6.2 | Done | Two routes log to stdout instead of the connection log panel | [api/anime/sync.ts](../src/pages/api/anime/sync.ts) has 13 `console.log` and [auth.ts](../src/pages/api/anime/auth.ts) has 9, while every other sync path reports through `appendLog`. Those two are invisible in the UI log. |
 
 ---
