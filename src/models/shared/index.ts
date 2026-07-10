@@ -1,1 +1,0 @@
-export type LiteralSubset<K, T extends K> = T;

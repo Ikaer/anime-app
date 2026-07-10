@@ -3,8 +3,6 @@ import path from 'path';
 import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry, AniListTagsEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { appendLog } from '@/lib/connectionLog';
-// Legacy view-specific filter utilities removed (fire-and-forget presets now handled client-side)
-// User preferences removed - all state now controlled via URL
 
 const DATA_PATH = process.env.DATA_PATH || '/app/data';
 
@@ -210,8 +208,6 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
   };
 }
 
-// Deprecated: server-side view filtering removed. `view` parameter now only maps to explicit filters in API handler.
-
 // Authentication operations
 export function getMALAuthData(): { user: MALUser | null; token: MALAuthData | null } {
   const authData = readJsonFile(MAL_AUTH_FILE, { user: null, token: null });
@@ -294,7 +290,7 @@ interface PersonalStatusUpdateResult {
  * Update personal status for a single anime if it exists and differs from current state.
  * Does NOT insert new anime - only updates existing ones.
  */
-export function updatePersonalStatus(
+function updatePersonalStatus(
   animeId: number,
   newListStatus: MALListStatus
 ): PersonalStatusUpdateResult {
@@ -414,7 +410,7 @@ interface SyncCheckpoint {
   syncedSeasons: string[];
 }
 
-export function getSyncCheckpoint(): SyncCheckpoint {
+function getSyncCheckpoint(): SyncCheckpoint {
   return readJsonFile<SyncCheckpoint>(SYNC_CHECKPOINT_FILE, { syncedSeasons: [] });
 }
 

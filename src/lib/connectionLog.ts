@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const DATA_PATH = process.env.DATA_PATH || '/app/data';
-const LOG_FILE = path.join(DATA_PATH, 'connection_log.json');
+const LOGS_PATH = process.env.LOGS_PATH || process.env.DATA_PATH || '/app/data';
+const LOG_FILE = path.join(LOGS_PATH, 'connection_log.json');
 const MAX_ENTRIES = 500;
 const DEFAULT_PAGE_SIZE = 200;
 
@@ -33,9 +33,9 @@ interface LogStore {
   entries: LogEntry[];
 }
 
-function ensureDataDirectory(): void {
-  if (!fs.existsSync(DATA_PATH)) {
-    fs.mkdirSync(DATA_PATH, { recursive: true, mode: 0o755 });
+function ensureLogsDirectory(): void {
+  if (!fs.existsSync(LOGS_PATH)) {
+    fs.mkdirSync(LOGS_PATH, { recursive: true, mode: 0o755 });
   }
 }
 
@@ -57,7 +57,7 @@ function readStore(): LogStore {
 }
 
 function writeStore(store: LogStore): void {
-  ensureDataDirectory();
+  ensureLogsDirectory();
   fs.writeFileSync(LOG_FILE, JSON.stringify(store, null, 2), 'utf-8');
 }
 

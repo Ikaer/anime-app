@@ -27,7 +27,7 @@ const FEEDBACK_FILE = path.join(DATA_PATH, 'recommendations_feedback.json');
 // Tuning constants (all knobs live here — no scattered magic numbers)
 // ============================================================================
 
-export const TUNING = {
+const TUNING = {
   /** Default seed threshold: completed && score >= this value. */
   DEFAULT_SEED_THRESHOLD: 8,
   /** Damping λ applied to hop=2 edges (affinity *= λ^(hop-1)). */
@@ -272,7 +272,7 @@ export function getRecommendationsData(): RecommendationsData {
   return readJsonFile<RecommendationsData>(RECOMMENDATIONS_FILE, { ...EMPTY_DATA });
 }
 
-export function saveRecommendationsData(data: RecommendationsData): void {
+function saveRecommendationsData(data: RecommendationsData): void {
   writeJsonFile(RECOMMENDATIONS_FILE, data);
 }
 
@@ -288,7 +288,7 @@ export function saveRecommendationsData(data: RecommendationsData): void {
 
 export type FeedbackMap = Record<string, RecoVerdict>;
 
-export function getFeedback(): FeedbackMap {
+function getFeedback(): FeedbackMap {
   return readJsonFile<FeedbackMap>(FEEDBACK_FILE, {});
 }
 
@@ -329,7 +329,7 @@ function getDismissedIds(): number[] {
 // Seeds
 // ============================================================================
 
-export function seedWeight(score: number, threshold: number): number {
+function seedWeight(score: number, threshold: number): number {
   // threshold=8: 8->1, 9->2, 10->3
   return score - (threshold - 1);
 }
@@ -341,7 +341,7 @@ export function seedWeight(score: number, threshold: number): number {
  * personal record, downstream reads of a seed's score MUST go through
  * `getEffectiveScore`, never `my_list_status!.score`.
  */
-export function getSeeds(threshold: number): AnimeForDisplay[] {
+function getSeeds(threshold: number): AnimeForDisplay[] {
   return getAnimeForDisplay()
     .filter(a => {
       if (getEffectiveStatus(a) !== 'completed') return false;

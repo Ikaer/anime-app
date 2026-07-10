@@ -263,7 +263,7 @@ function encodeSidebarExpanded(expanded: Record<string, boolean>): string | null
   return expandedCodes.join(',');
 }
 
-export function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchParams {
+function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchParams {
   const params = new URLSearchParams();
 
   if (filters.statusFilters !== undefined) {
@@ -316,7 +316,7 @@ export function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLS
   return params;
 }
 
-export function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLSearchParams {
+function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLSearchParams {
   const params = new URLSearchParams();
 
   if (display.imageSize !== undefined && display.imageSize !== DEFAULT_DISPLAY.imageSize) {
@@ -443,7 +443,7 @@ function decodeSidebarExpanded(value: string | null): Record<string, boolean> {
   return result;
 }
 
-export function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
+function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
   return {
     statusFilters: decodeStatuses(params.get(PARAM_KEYS.status)),
     searchQuery: params.get(PARAM_KEYS.search) || '',
@@ -459,7 +459,7 @@ export function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
   };
 }
 
-export function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
+function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
   const imgSize = params.get(PARAM_KEYS.imageSize);
   const cpr = params.get(PARAM_KEYS.cardsPerRow);
   const cprNum = cpr !== null ? parseInt(cpr, 10) : NaN;

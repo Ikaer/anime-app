@@ -3,8 +3,6 @@
  * Based on MyAnimeList API structure
  */
 
-import { LiteralSubset } from "../shared";
-
 // Base MAL anime data (from API)
 export interface MALAnime {
   id: number;
@@ -219,14 +217,12 @@ export interface SyncMetadata {
 export type SortColumn = 'title' | 'mean' | 'start_date' | 'status' | 'num_episodes' | 'rank' | 'popularity' | 'num_list_users' | 'num_scoring_users';
 export type SortDirection = 'asc' | 'desc';
 
-// Seasons & media types (shared across API and UI)
+// Seasons (shared across API and UI)
 export type SeasonName = 'winter' | 'spring' | 'summer' | 'fall';
 export interface SeasonInfo { year: number; season: SeasonName }
-export type MediaType = 'tv' | 'movie' | 'ona' | 'ova' | 'special' | 'music';
 
 // View types
 export type AnimeLayoutType = 'table' | 'card';
-export type AnimeView = 'new_season' | 'new_season_strict' | 'next_season' | 'find_shows' | 'watching' | 'completed' | 'hidden' | 'dropped' | 'on_hold' | 'plan_to_watch';
 
 // ---------------------------------------------------------------------------
 // Recommendations ("Pour toi") scoring model
@@ -282,54 +278,6 @@ export interface RecoMeta {
   breakdown: RecoContribution[];
 }
 
-export type CalendarAnimeView = LiteralSubset<AnimeView, 'new_season' | 'new_season_strict' | 'next_season'>;
-
-export class AnimeViewHelper {
-  private _exhausterAll: { [key in AnimeView]: AnimeView } = {
-    new_season_strict: 'new_season_strict',
-    new_season: 'new_season',
-    next_season: 'next_season',
-    find_shows: 'find_shows',
-    watching: 'watching',
-    completed: 'completed',
-    hidden: 'hidden',
-    dropped: 'dropped',
-    on_hold: 'on_hold',
-    plan_to_watch: 'plan_to_watch',
-  }
-  private _exhausterCalendar: { [key in CalendarAnimeView]: CalendarAnimeView } = {
-    new_season_strict: 'new_season_strict',
-    new_season: 'new_season',
-    next_season: 'next_season',
-  }
-
-  public readonly keys: AnimeView[] = Object.keys(this._exhausterAll) as AnimeView[];
-
-  public readonly calendarViews: CalendarAnimeView[] = Object.keys(this._exhausterCalendar) as CalendarAnimeView[];
-
-  public isValid(view: string): view is AnimeView {
-    return view in this._exhausterAll;
-  }
-}
-export const animeViewsHelper = new AnimeViewHelper();
-
-
-export interface AnimeFilters {
-  search?: string;
-  genres?: string[];
-  status?: (UserAnimeStatus | 'not_defined')[];
-  minScore?: number;
-  maxScore?: number;
-  season?: SeasonInfo[];
-  mediaType?: MediaType[];
-  hidden?: boolean;
-}
-
-export interface AnimeSortOptions {
-  column: SortColumn;
-  direction: SortDirection;
-}
-
 // Display options
 export type ImageSize = 0 | 1 | 2 | 3;
 
@@ -354,35 +302,6 @@ export interface AnimeDisplayState {
   visibleColumns: VisibleColumns;
   sidebarExpanded: Record<string, boolean>;
   layout: AnimeLayoutType;
-}
-
-// User preferences for persistent state
-export interface AnimeUserPreferences {
-  // Legacy: currentView now deprecated (fire-and-forget presets)
-  currentView?: AnimeView;
-
-  // Sort preferences
-  sortBy: SortColumn;
-  sortDir: SortDirection;
-
-  // Filter preferences
-  statusFilters: (UserAnimeStatus | 'not_defined')[];
-  searchQuery: string;
-  seasons: Array<{ year: number; season: 'winter' | 'spring' | 'summer' | 'fall' }>;
-  mediaTypes: string[];
-  hiddenOnly: boolean;
-  minScore: number | null;
-  maxScore: number | null;
-
-  // Display preferences
-  imageSize: ImageSize; // 1x, 2x, or 3x
-  visibleColumns: VisibleColumns; // Stats columns visibility
-  layout: AnimeLayoutType;
-
-  // UI state (optional - sidebar collapse is localStorage only)
-  sidebarExpanded?: Record<string, boolean>;
-
-  lastUpdated: string;
 }
 
 // API response model for anime list endpoint
