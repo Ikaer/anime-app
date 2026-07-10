@@ -4,7 +4,7 @@
  * persists via anime.ts. See docs/simkl/apirules.md for the protocol.
  */
 import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/simkl';
-import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/anime';
+import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/store';
 import { mapSimklStatus } from '@/lib/simklCompare';
 import { SimklPersonalEntry, SourceIds } from '@/models/anime';
 

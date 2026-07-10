@@ -3,7 +3,7 @@
  * taxonomy for anime already known locally (via animes_MAL.json) and
  * persists it via anime.ts. Read-only against AniList; no writes.
  */
-import { getAllMALAnime, getAllAnilistTags, upsertAnilistTags } from '@/lib/anime';
+import { getAllAnime, getAllAnilistTags, upsertAnilistTags } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
 import { AniListTagEntry, AniListStaffEntry, AniListTagsEntry } from '@/models/anime';
 
@@ -267,7 +267,7 @@ export async function performAnilistTagsSync(): Promise<AnilistTagsSyncResult> {
 
   isAnilistTagsSyncRunning = true;
   try {
-    const malAnime = getAllMALAnime();
+    const malAnime = getAllAnime();
     const existingTags = getAllAnilistTags();
     // Fetch anime with no AniList entry yet, OR an entry predating staff / banner
     // support (field === undefined) so those backfill onto already-tagged titles.

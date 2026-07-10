@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid, getHistoricalCrawlStats, performHistoricalCrawl } from '@/lib/anime';
+import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { getHistoricalCrawlStats, performHistoricalCrawl } from '@/lib/malSync';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

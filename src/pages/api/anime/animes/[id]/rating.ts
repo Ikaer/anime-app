@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllMALAnime, saveMALAnime, getAllSimklEntries, upsertSimklEntries } from '@/lib/anime';
+import { getAllAnime, saveAnime, getAllSimklEntries, upsertSimklEntries } from '@/lib/store';
 import { updateMalListStatus } from '@/lib/malWrite';
 import { pushSimklRating } from '@/lib/simklWrite';
 
@@ -34,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // --- Local writes (authority) ---
-    const malData = getAllMALAnime();
+    const malData = getAllAnime();
     const anime = malData[String(animeId)];
     if (!anime) return res.status(404).json({ error: 'Anime not found' });
 
@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     anime.my_list_status.score = score;
     anime.my_list_status.updated_at = new Date().toISOString();
-    saveMALAnime(malData);
+    saveAnime(malData);
 
     // Update the local SIMKL entry too, when one exists — getEffectiveScore is
     // SIMKL-first, so without this the drag wouldn't show through for a title

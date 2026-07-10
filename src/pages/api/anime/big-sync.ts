@@ -1,5 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid, getSyncMetadata, performBigSync, BigSyncProgress } from '@/lib/anime';
+import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { getSyncMetadata } from '@/lib/store';
+import { performBigSync, BigSyncProgress } from '@/lib/malSync';
 import { appendLog } from '@/lib/connectionLog';
 
 // Store ongoing big sync processes

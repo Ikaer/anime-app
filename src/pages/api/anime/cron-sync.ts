@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid, performHistoricalCrawl } from '@/lib/anime';
+import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { performHistoricalCrawl } from '@/lib/malSync';
 import {
   getRecommendationsData,
   isRecommendationsRefreshRunning,

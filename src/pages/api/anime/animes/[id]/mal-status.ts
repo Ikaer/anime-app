@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllMALAnime, saveMALAnime } from '@/lib/anime';
+import { getAllAnime, saveAnime } from '@/lib/store';
 import { updateMalListStatus, MalListStatusUpdate } from '@/lib/malWrite';
 
 type MALStatusUpdate = MalListStatusUpdate;
@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       // Read current animes to update local state
-      const animesData = getAllMALAnime();
+      const animesData = getAllAnime();
       console.log(`Looking for anime ID ${animeId} in file with ${Object.keys(animesData).length} animes`);
       console.log('Available anime IDs:', Object.keys(animesData).slice(0, 10)); // Log first 10 IDs
 
@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       anime.my_list_status.updated_at = new Date().toISOString();
 
       // Save updated animes
-      saveMALAnime(animesData);
+      saveAnime(animesData);
 
       // Try to update MAL API
       try {

@@ -188,17 +188,6 @@ export interface MALAuthState {
   token?: MALAuthData;
 }
 
-// API Response types
-export interface AnimeSeasonResponse {
-  data: Array<{
-    node: MALAnime;
-  }>;
-  paging?: {
-    next?: string;
-    previous?: string;
-  };
-}
-
 // Sync metadata
 export interface SyncMetadata {
   lastSyncDate: string;

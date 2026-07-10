@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { addHiddenAnimeId, removeHiddenAnimeId } from '@/lib/anime';
+import { addHiddenAnimeId, removeHiddenAnimeId } from '@/lib/store';
 
 export default async function handler(
   req: NextApiRequest,

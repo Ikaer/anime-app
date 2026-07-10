@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { MALAuthState } from '@/models/anime';
-import type { HistoricalCrawlStats } from '@/lib/anime';
+import type { HistoricalCrawlStats } from '@/lib/malSync';
 
 interface UseConnectionsOptions {
   onDataChanged?: () => void;

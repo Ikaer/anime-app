@@ -35,7 +35,7 @@ Do not treat these as quick wins. Each is a design decision.
 
 | # | Status | Item | Notes |
 |---|--------|------|-------|
-| 1.1 | Todo | Split `lib/anime.ts` (876 lines) into `lib/store.ts` + `lib/mal.ts` + `lib/malSync.ts` | It is currently three modules in one: JSON store, MAL HTTP client, sync orchestration. SIMKL already has this split (`simkl.ts` / `simklSync.ts` / `simklWrite.ts`). **This is the cheapest fix for most of the naming smell** — functions that land in `store.ts` are about the *local record* and drop the `MAL` prefix (`saveMALAnime` → `saveAnime`); functions in `mal.ts` genuinely are about MAL and keep it. |
+| 1.1 | Done | Split `lib/anime.ts` (876 lines) into `lib/store.ts` + `lib/mal.ts` + `lib/malSync.ts` | It is currently three modules in one: JSON store, MAL HTTP client, sync orchestration. SIMKL already has this split (`simkl.ts` / `simklSync.ts` / `simklWrite.ts`). **This is the cheapest fix for most of the naming smell** — functions that land in `store.ts` are about the *local record* and drop the `MAL` prefix (`saveMALAnime` → `saveAnime`); functions in `mal.ts` genuinely are about MAL and keep it. |
 | 1.2 | Todo | `AnimeForDisplay extends MALAnime` — decouple the local record from the MAL API shape | [models/anime/index.ts:157](../src/models/anime/index.ts). The local cache record literally inherits a MAL response (`my_list_status`, `main_picture`, `num_list_users`), with SIMKL/AniList bolted on as optional side-objects. Contradicts the "local cache authority / sources are interchangeable refill pipes" model in CLAUDE.md. Target shape ≈ `AnimeRecord { id, crosswalk, catalog, personal, sources: { mal, simkl, anilist } }`. Touches nearly every file — decide before starting. |
 
 ---
@@ -74,11 +74,11 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 
 | # | Status | Item | Notes |
 |---|--------|------|-------|
-| 4.1 | Todo | `fetchSeasonalAnime` exists twice, near-verbatim | [lib/anime.ts:640](../src/lib/anime.ts) and [api/anime/sync.ts:138](../src/pages/api/anime/sync.ts). |
-| 4.2 | Todo | The 27-entry MAL `fields` array is copy-pasted **five** times | [anime.ts:592](../src/lib/anime.ts), [anime.ts:650](../src/lib/anime.ts), [recommendations.ts:160](../src/lib/recommendations.ts), [refresh.ts:27](../src/pages/api/anime/animes/[id]/refresh.ts), [sync.ts:144](../src/pages/api/anime/sync.ts). Adding one MAL field today means remembering all five. |
+| 4.1 | Done | `fetchSeasonalAnime` exists twice, near-verbatim | [lib/anime.ts:640](../src/lib/anime.ts) and [api/anime/sync.ts:138](../src/pages/api/anime/sync.ts). |
+| 4.2 | Done | The 27-entry MAL `fields` array is copy-pasted **five** times | [anime.ts:592](../src/lib/anime.ts), [anime.ts:650](../src/lib/anime.ts), [recommendations.ts:160](../src/lib/recommendations.ts), [refresh.ts:27](../src/pages/api/anime/animes/[id]/refresh.ts), [sync.ts:144](../src/pages/api/anime/sync.ts). Adding one MAL field today means remembering all five. |
 | 4.3 | Done | Extract `lib/jsonStore.ts` | `DATA_PATH` redeclared in 5 files; `readJsonFile`/`writeJsonFile` in 3; `ensureDataDirectory` in 4. |
 | 4.4 | Todo | Extract a `requireMalToken(res)` guard | The preamble `const { token } = getMALAuthData(); if (!token \|\| !isMALTokenValid(token)) return res.status(401)…` appears verbatim in **seven** routes. |
-| 4.5 | WIP | Season arithmetic implemented three times | [anime.ts:254](../src/lib/anime.ts), [api/anime/sync.ts:31](../src/pages/api/anime/sync.ts), and [animeUtils.ts:110](../src/lib/animeUtils.ts) (`getSeasonInfos` — the good one the other two should call). |
+| 4.5 | Done | Season arithmetic implemented three times | [anime.ts:254](../src/lib/anime.ts), [api/anime/sync.ts:31](../src/pages/api/anime/sync.ts), and [animeUtils.ts:110](../src/lib/animeUtils.ts) (`getSeasonInfos` — the good one the other two should call). |
 
 ---
 

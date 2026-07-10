@@ -11,11 +11,12 @@
  */
 
 import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
-import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
+import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { MAL_ANIME_FIELDS } from '@/lib/mal';
 
 const RECOMMENDATIONS_FILE = dataFile('recommendations_MAL.json');
 const DISMISSED_FILE = dataFile('recommendations_dismissed.json');
@@ -153,17 +154,6 @@ const SEEN_STATUSES = new Set(['completed', 'watching', 'on_hold', 'dropped']);
  * and the candidate is hard-filtered. Prevents "Jian Lai 2nd Season"-type junk.
  */
 const PREQUEL_OK_STATUSES = new Set(['completed', 'watching']);
-
-/** Full field list for hydrating missing titles (mirrors fetchSeasonalAnime). */
-const FULL_FIELDS = [
-  'id', 'title', 'main_picture', 'alternative_titles',
-  'start_date', 'end_date', 'synopsis', 'mean', 'rank', 'popularity',
-  'num_list_users', 'num_scoring_users', 'nsfw', 'genres',
-  'created_at', 'updated_at', 'media_type', 'status',
-  'my_list_status', 'num_episodes', 'start_season', 'broadcast',
-  'source', 'average_episode_duration', 'rating', 'pictures',
-  'background', 'related_anime', 'studios',
-].join(',');
 
 // ============================================================================
 // Types
@@ -758,7 +748,7 @@ async function fetchSuggestions(accessToken: string): Promise<{ id: number; rank
 }
 
 async function fetchAnimeDetail(animeId: number, accessToken: string): Promise<MALAnime | null> {
-  const url = `https://api.myanimelist.net/v2/anime/${animeId}?fields=${FULL_FIELDS}&nsfw=true`;
+  const url = `https://api.myanimelist.net/v2/anime/${animeId}?fields=${MAL_ANIME_FIELDS}&nsfw=true`;
   try {
     return await malFetch(url, accessToken);
   } catch (error) {
@@ -875,7 +865,7 @@ export async function performRecommendationsRefresh(
     }
 
     // Hydrate missing titles so the feed can render them.
-    const existing = getAllMALAnime();
+    const existing = getAllAnime();
     const candidateIds = new Set<number>();
     for (const edges of Object.values(data.seeds)) {
       for (const e of edges) candidateIds.add(e.id);
@@ -893,12 +883,12 @@ export async function performRecommendationsRefresh(
       const detail = await fetchAnimeDetail(missing[i], accessToken);
       if (detail) hydrated.push(detail);
       if (hydrated.length > 0 && hydrated.length % 25 === 0) {
-        upsertMALAnime(hydrated.splice(0)); // flush in batches
+        upsertAnime(hydrated.splice(0)); // flush in batches
         report({ type: 'hydrate', hydrated: i + 1, message: `Hydrated ${i + 1}/${missing.length}` });
       }
       await delay(TUNING.FETCH_DELAY_MS);
     }
-    if (hydrated.length > 0) upsertMALAnime(hydrated);
+    if (hydrated.length > 0) upsertAnime(hydrated);
 
     data.lastRefresh = new Date().toISOString();
     saveRecommendationsData(data);

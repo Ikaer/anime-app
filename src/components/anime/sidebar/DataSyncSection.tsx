@@ -2,7 +2,7 @@ import React from 'react';
 import styles from './DataSyncSection.module.css';
 import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
-import type { HistoricalCrawlStats } from '@/lib/anime';
+import type { HistoricalCrawlStats } from '@/lib/malSync';
 
 interface DataSyncSectionProps {
   authState: MALAuthState;

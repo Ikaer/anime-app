@@ -1,8 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllMALAnime, upsertMALAnime, getMALAuthData, isMALTokenValid } from '@/lib/anime';
+import { getAllAnime, upsertAnime } from '@/lib/store';
+import { getMALAuthData, isMALTokenValid, fetchAnimeById } from '@/lib/mal';
 import { refreshAnilistTagsForIds } from '@/lib/anilistSync';
 import { performSimklSync } from '@/lib/simklSync';
-import { MALAnime } from '@/models/anime';
 import { appendLog } from '@/lib/connectionLog';
 
 /**
@@ -17,18 +17,6 @@ import { appendLog } from '@/lib/connectionLog';
  *   user accepted the incremental sync for the refresh).
  */
 
-// Same field set as the seasonal sync, so a single-title fetch produces a
-// complete record (the merge below preserves anything MAL omits regardless).
-const MAL_FIELDS = [
-  'id', 'title', 'main_picture', 'alternative_titles',
-  'start_date', 'end_date', 'synopsis', 'mean', 'rank', 'popularity',
-  'num_list_users', 'num_scoring_users', 'nsfw', 'genres',
-  'created_at', 'updated_at', 'media_type', 'status',
-  'my_list_status', 'num_episodes', 'start_season', 'broadcast',
-  'source', 'average_episode_duration', 'rating', 'pictures',
-  'background', 'related_anime', 'studios',
-].join(',');
-
 async function refreshMal(
   animeId: number
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
@@ -37,20 +25,12 @@ async function refreshMal(
     return { ok: false, error: 'Not authenticated with MAL' };
   }
 
-  const url = `https://api.myanimelist.net/v2/anime/${animeId}?fields=${MAL_FIELDS}&nsfw=true`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${token.access_token}` },
-  });
-  if (!response.ok) {
-    return { ok: false, error: `MAL API ${response.status} ${response.statusText}` };
-  }
-
-  const fetched = (await response.json()) as MALAnime;
-  if (!fetched?.id) return { ok: false, error: 'MAL returned no anime' };
+  const fetched = await fetchAnimeById(token.access_token, animeId);
+  if (!fetched) return { ok: false, error: 'MAL returned no anime' };
 
   // Merge over the existing record so any field MAL didn't return survives.
-  const existing = getAllMALAnime()[String(animeId)];
-  upsertMALAnime([{ ...existing, ...fetched }]);
+  const existing = getAllAnime()[String(animeId)];
+  upsertAnime([{ ...existing, ...fetched }]);
   return { ok: true };
 }
 

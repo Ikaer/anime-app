@@ -3,7 +3,7 @@
  * status endpoint and the tier-list rating endpoint share one implementation.
  * Writes `my_list_status` via the MAL API (PUT, falling back to PATCH).
  */
-import { getMALAuthData } from '@/lib/anime';
+import { getMALAuthData } from '@/lib/mal';
 
 export interface MalListStatusUpdate {
   status?: string;

@@ -37,7 +37,11 @@ All data is stored as JSON files under `DATA_PATH` (env var, defaults to `/app/d
 - `recommendations_feedback.json` — "Pour toi" thumbs, `{ id: 'up' | 'down' }` (see the "Pour toi" section)
 - `animes_anilist_tags.json` — AniList catalog tags + staff keyed by MAL id (see "AniList tags + staff integration")
 
-[src/lib/anime.ts](src/lib/anime.ts) owns all file I/O with a 10-min in-process cache on `getAnimeForDisplay()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveMALAnime`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness.
+[src/lib/jsonStore.ts](src/lib/jsonStore.ts) owns the raw file-I/O primitives (`DATA_PATH`, `dataFile`, `readJsonFile`, `writeJsonFile`); every module that persists a JSON file goes through it.
+
+[src/lib/store.ts](src/lib/store.ts) owns the **local record** — it reads those files and joins them into `AnimeForDisplay`, with a 10-min in-process cache on `getAnimeForDisplay()`. Cache is explicitly invalidated (`cachedAnime = null`) inside every write function (`saveAnime`, `addHiddenAnimeId`, `removeHiddenAnimeId`) — do not rely on TTL expiry for post-mutation freshness. **Naming rule:** functions here carry no source prefix, because they are about the local record rather than about MAL. A `MAL`/`Simkl`/`Anilist` prefix means the function genuinely concerns that one source's slice of the data.
+
+The MAL pipe is split the way SIMKL's already was: [src/lib/mal.ts](src/lib/mal.ts) (OAuth token store + API reads, including the single `MAL_ANIME_FIELDS` field list every MAL read shares), [src/lib/malSync.ts](src/lib/malSync.ts) (big-sync + historical-crawl orchestration), [src/lib/malWrite.ts](src/lib/malWrite.ts) (writes back to MAL).
 
 **Cross-bundle cache caveat (important).** In a production Next build, **API routes and pages do NOT share module-level state**, so `cachedAnime` invalidated by an API-route write does NOT reach a page's `getServerSideProps` copy — that stale copy then survives until its own 10-min TTL expires ("eventually updates on its own"). Consequence: **anything rendered in `getServerSideProps` must NOT read the cached `getAnimeForDisplay()`** after an API-route mutation. The detail page ([src/pages/anime/[id].tsx](src/pages/anime/[id].tsx)) reads a single record via `getAnimeByIdForDisplay()`, which assembles straight from the files (cache-bypassing). The main list / recommendations / tier pages are unaffected because their reads and writes are BOTH API routes (same bundle → shared instance).
 

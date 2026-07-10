@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, isMALTokenValid } from '@/lib/anime';
+import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
 import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AnilistEdgeInput, type RecoEdge } from '@/lib/recommendations';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 

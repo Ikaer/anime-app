@@ -1,10 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllMALAnime, getAnilistTagsCount } from '@/lib/anime';
+import { getAllAnime, getAnilistTagsCount } from '@/lib/store';
 import { performAnilistTagsSync } from '@/lib/anilistSync';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
-    const totalAnime = Object.keys(getAllMALAnime()).length;
+    const totalAnime = Object.keys(getAllAnime()).length;
     const taggedCount = getAnilistTagsCount();
     return res.status(200).json({ totalAnime, taggedCount });
   }
