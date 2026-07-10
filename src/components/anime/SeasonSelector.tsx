@@ -2,9 +2,7 @@ import React, { useMemo, useState } from 'react';
 import styles from './SeasonSelector.module.css';
 import { getSeasonInfos } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
-
-type Season = 'winter' | 'spring' | 'summer' | 'fall';
-export type SeasonInfo = { year: number; season: Season };
+import type { SeasonInfo, SeasonName } from '@/models/anime';
 
 interface SeasonSelectorProps {
   value: SeasonInfo[];
@@ -14,7 +12,7 @@ interface SeasonSelectorProps {
 const SeasonSelector: React.FC<SeasonSelectorProps> = ({ value, onChange }) => {
   const infos = getSeasonInfos();
   const [showAdd, setShowAdd] = useState(false);
-  const [season, setSeason] = useState<Season>('winter');
+  const [season, setSeason] = useState<SeasonName>('winter');
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [year, setYear] = useState<number>(currentYear);
 
@@ -50,7 +48,7 @@ const SeasonSelector: React.FC<SeasonSelectorProps> = ({ value, onChange }) => {
         <div className={styles.addRow}>
           <label>
             Season:
-            <select value={season} onChange={(e) => setSeason(e.target.value as Season)}>
+            <select value={season} onChange={(e) => setSeason(e.target.value as SeasonName)}>
               <option value="winter">Winter</option>
               <option value="spring">Spring</option>
               <option value="summer">Summer</option>

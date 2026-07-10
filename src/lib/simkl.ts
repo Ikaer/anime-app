@@ -1,9 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 
-const DATA_PATH = process.env.DATA_PATH || '/app/data';
-const SIMKL_AUTH_FILE = path.join(DATA_PATH, 'simkl_auth.json');
-const SIMKL_STATE_FILE = path.join(DATA_PATH, 'simkl_oauth_state.json');
+const SIMKL_AUTH_FILE = dataFile('simkl_auth.json');
+const SIMKL_STATE_FILE = dataFile('simkl_oauth_state.json');
 const STATE_TTL_MS = 10 * 60_000;
 
 export interface SimklAuthData {
@@ -22,34 +20,6 @@ export interface SimklUser {
     id?: number;
   };
   [key: string]: unknown;
-}
-
-function ensureDataDirectory(): void {
-  if (!fs.existsSync(DATA_PATH)) {
-    fs.mkdirSync(DATA_PATH, { recursive: true, mode: 0o755 });
-  }
-}
-
-function readJsonFile<T>(filePath: string, defaultValue: T): T {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return defaultValue;
-    }
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch (error) {
-    console.error(`Error reading ${filePath}:`, error);
-    return defaultValue;
-  }
-}
-
-function writeJsonFile<T>(filePath: string, data: T): void {
-  try {
-    ensureDataDirectory();
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (error) {
-    console.error(`Error writing ${filePath}:`, error);
-    throw error;
-  }
 }
 
 export function getSimklAuthData(): { user: SimklUser | null; token: SimklAuthData | null } {
@@ -91,7 +61,7 @@ export function consumeOAuthState(state: string): boolean {
   return Date.now() - issuedAt <= STATE_TTL_MS;
 }
 
-const SIMKL_CHECKPOINT_FILE = path.join(DATA_PATH, 'simkl_sync_checkpoint.json');
+const SIMKL_CHECKPOINT_FILE = dataFile('simkl_sync_checkpoint.json');
 const SIMKL_APP_NAME = process.env.SIMKL_APP_NAME || 'my-app-name';
 const SIMKL_APP_VERSION = '1.0';
 const SIMKL_CLIENT_ID = process.env.SIMKL_CLIENT_ID || '';

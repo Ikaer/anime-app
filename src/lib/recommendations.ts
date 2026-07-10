@@ -10,18 +10,16 @@
  * ranking knob never requires a re-fetch.
  */
 
-import fs from 'fs';
-import path from 'path';
 import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
 import { getAnimeForDisplay, getAllMALAnime, upsertMALAnime, getHiddenAnimeIds } from '@/lib/anime';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 
-const DATA_PATH = process.env.DATA_PATH || '/app/data';
-const RECOMMENDATIONS_FILE = path.join(DATA_PATH, 'recommendations_MAL.json');
-const DISMISSED_FILE = path.join(DATA_PATH, 'recommendations_dismissed.json');
-const FEEDBACK_FILE = path.join(DATA_PATH, 'recommendations_feedback.json');
+const RECOMMENDATIONS_FILE = dataFile('recommendations_MAL.json');
+const DISMISSED_FILE = dataFile('recommendations_dismissed.json');
+const FEEDBACK_FILE = dataFile('recommendations_feedback.json');
 
 // ============================================================================
 // Tuning constants (all knobs live here — no scattered magic numbers)
@@ -232,31 +230,6 @@ export interface FeedOptions {
    * ordering; higher values re-rank the feed to spread genres/studios apart.
    */
   diversity?: number | null;
-}
-
-// ============================================================================
-// JSON I/O
-// ============================================================================
-
-function ensureDataDirectory(): void {
-  if (!fs.existsSync(DATA_PATH)) {
-    fs.mkdirSync(DATA_PATH, { recursive: true, mode: 0o755 });
-  }
-}
-
-function readJsonFile<T>(filePath: string, defaultValue: T): T {
-  try {
-    if (!fs.existsSync(filePath)) return defaultValue;
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch (error) {
-    console.error(`Error reading ${filePath}:`, error);
-    return defaultValue;
-  }
-}
-
-function writeJsonFile<T>(filePath: string, data: T): void {
-  ensureDataDirectory();
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
 }
 
 const EMPTY_DATA: RecommendationsData = {

@@ -1,4 +1,4 @@
-import type { AnimeForDisplay } from '@/models/anime';
+import type { AnimeForDisplay, SeasonName, SeasonInfo } from '@/models/anime';
 
 // ============================================================================
 // Display titles (English-first)
@@ -103,19 +103,20 @@ export const formatSeason = (year: number, season: string) => {
 }
 
 
-type Season = 'winter' | 'spring' | 'summer' | 'fall';
-type SeasonInfo = { year: number; season: Season };
-type SeasonInfos = { current: SeasonInfo; previous: SeasonInfo; next: SeasonInfo };
+export type SeasonInfos = { current: SeasonInfo; previous: SeasonInfo; next: SeasonInfo };
 
+/**
+ * The current season plus its neighbours, derived from today's date. This is
+ * the single implementation of the season arithmetic — everything that needs a
+ * "which season are we in" answer calls it.
+ */
 export function getSeasonInfos(): SeasonInfos {
-
-  // Default: new_season view (current implementation)
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
 
   // Determine current season
   const month = currentDate.getMonth(); // 0-11
-  let currentSeason: Season;
+  let currentSeason: SeasonName;
   if (month >= 0 && month <= 2) currentSeason = 'winter';
   else if (month >= 3 && month <= 5) currentSeason = 'spring';
   else if (month >= 6 && month <= 8) currentSeason = 'summer';
@@ -123,7 +124,7 @@ export function getSeasonInfos(): SeasonInfos {
 
   // Determine previous season
   let prevYear = currentYear;
-  let prevSeason: Season;
+  let prevSeason: SeasonName;
   if (currentSeason === 'winter') { prevSeason = 'fall'; prevYear--; }
   else if (currentSeason === 'spring') prevSeason = 'winter';
   else if (currentSeason === 'summer') prevSeason = 'spring';
@@ -131,7 +132,7 @@ export function getSeasonInfos(): SeasonInfos {
 
   // Determine next season
   let nextYear = currentYear;
-  let nextSeason: Season;
+  let nextSeason: SeasonName;
   if (currentSeason === 'winter') nextSeason = 'spring';
   else if (currentSeason === 'spring') nextSeason = 'summer';
   else if (currentSeason === 'summer') nextSeason = 'fall';

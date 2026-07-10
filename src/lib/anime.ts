@@ -1,49 +1,15 @@
-import fs from 'fs';
-import path from 'path';
 import { MALAnime, AnimeForDisplay, MALAuthData, MALUser, SyncMetadata, UserAnimeStatus, SimklPersonalEntry, AniListTagsEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { appendLog } from '@/lib/connectionLog';
-
-const DATA_PATH = process.env.DATA_PATH || '/app/data';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { getSeasonInfos } from '@/lib/animeUtils';
 
 // File paths
-const ANIME_MAL_FILE = path.join(DATA_PATH, 'animes_MAL.json');
-const ANIME_HIDDEN_FILE = path.join(DATA_PATH, 'animes_hidden.json');
-const ANIME_SIMKL_FILE = path.join(DATA_PATH, 'animes_SIMKL.json');
-const ANIME_ANILIST_TAGS_FILE = path.join(DATA_PATH, 'animes_anilist_tags.json');
-const MAL_AUTH_FILE = path.join(DATA_PATH, 'mal_auth.json');
-
-// Utility function to ensure data directory exists
-function ensureDataDirectory(): void {
-  if (!fs.existsSync(DATA_PATH)) {
-    fs.mkdirSync(DATA_PATH, { recursive: true, mode: 0o755 });
-  }
-}
-
-// Utility function to safely read JSON files
-function readJsonFile<T>(filePath: string, defaultValue: T): T {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return defaultValue;
-    }
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(content);
-  } catch (error) {
-    console.error(`Error reading ${filePath}:`, error);
-    return defaultValue;
-  }
-}
-
-// Utility function to safely write JSON files
-function writeJsonFile<T>(filePath: string, data: T): void {
-  try {
-    ensureDataDirectory();
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (error) {
-    console.error(`Error writing ${filePath}:`, error);
-    throw error;
-  }
-}
+const ANIME_MAL_FILE = dataFile('animes_MAL.json');
+const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
+const ANIME_SIMKL_FILE = dataFile('animes_SIMKL.json');
+const ANIME_ANILIST_TAGS_FILE = dataFile('animes_anilist_tags.json');
+const MAL_AUTH_FILE = dataFile('mal_auth.json');
 
 // Hidden anime IDs operations
 export function getHiddenAnimeIds(): number[] {
@@ -247,27 +213,12 @@ export function getSyncMetadata(): SyncMetadata | null {
 
   if (!mostRecent.updated_at) return null;
 
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const month = currentDate.getMonth() + 1;
-
-  let currentSeason: string;
-  if (month >= 1 && month <= 3) currentSeason = 'winter';
-  else if (month >= 4 && month <= 6) currentSeason = 'spring';
-  else if (month >= 7 && month <= 9) currentSeason = 'summer';
-  else currentSeason = 'fall';
-
-  let prevYear = currentYear;
-  let prevSeason: string;
-  if (currentSeason === 'winter') { prevSeason = 'fall'; prevYear--; }
-  else if (currentSeason === 'spring') prevSeason = 'winter';
-  else if (currentSeason === 'summer') prevSeason = 'spring';
-  else prevSeason = 'summer';
+  const { current, previous } = getSeasonInfos();
 
   return {
     lastSyncDate: mostRecent.updated_at,
-    currentSeason: { year: currentYear, season: currentSeason },
-    previousSeason: { year: prevYear, season: prevSeason },
+    currentSeason: current,
+    previousSeason: previous,
     totalAnimeCount: animeList.length
   };
 }
@@ -398,7 +349,7 @@ export function updatePersonalStatusBatch(
 
 // Historical crawl checkpoint
 
-const SYNC_CHECKPOINT_FILE = path.join(DATA_PATH, 'sync_checkpoint.json');
+const SYNC_CHECKPOINT_FILE = dataFile('sync_checkpoint.json');
 const HISTORICAL_CRAWL_OLDEST_YEAR = 1960;
 const HISTORICAL_CRAWL_BATCH_SIZE = 5;
 const HISTORICAL_CRAWL_CONSECUTIVE_EMPTY_STOP = 8;

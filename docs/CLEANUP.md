@@ -51,7 +51,7 @@ Do not treat these as quick wins. Each is a design decision.
 | 2.5 | Todo | AniList "tags" is now a lie — rename to `anilistMeta` | `animes_anilist_tags.json`, `AniListTagsEntry`, `getAllAnilistTags`, `getAnilistTagsCount`, `performAnilistTagsSync`, `/anilist/tags-sync`, `anilistTagStats` all carry tags **+ staff + `banner_image`**. Note the data-file rename is gated by §3. |
 | 2.6 | Todo | Fix AniList casing drift | `AniList*` types vs `Anilist*` functions vs `anilist*` variables. Pick one. |
 | 2.7 | Todo | `recommendations_MAL.json` stale suffix | Now also stores `anilistSeeds`. Data-file rename gated by §3. |
-| 2.8 | Todo | `SeasonInfo` declared three times | [models/anime/index.ts:224](../src/models/anime/index.ts) (unused), [animeUtils.ts:107](../src/lib/animeUtils.ts) (local, shadows it), [SeasonSelector.tsx:7](../src/components/anime/SeasonSelector.tsx) (the one actually imported). Keep one. |
+| 2.8 | Done | `SeasonInfo` declared three times | [models/anime/index.ts:224](../src/models/anime/index.ts) (unused), [animeUtils.ts:107](../src/lib/animeUtils.ts) (local, shadows it), [SeasonSelector.tsx:7](../src/components/anime/SeasonSelector.tsx) (the one actually imported). Keep one. |
 
 ---
 
@@ -76,9 +76,9 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 |---|--------|------|-------|
 | 4.1 | Todo | `fetchSeasonalAnime` exists twice, near-verbatim | [lib/anime.ts:640](../src/lib/anime.ts) and [api/anime/sync.ts:138](../src/pages/api/anime/sync.ts). |
 | 4.2 | Todo | The 27-entry MAL `fields` array is copy-pasted **five** times | [anime.ts:592](../src/lib/anime.ts), [anime.ts:650](../src/lib/anime.ts), [recommendations.ts:160](../src/lib/recommendations.ts), [refresh.ts:27](../src/pages/api/anime/animes/[id]/refresh.ts), [sync.ts:144](../src/pages/api/anime/sync.ts). Adding one MAL field today means remembering all five. |
-| 4.3 | Todo | Extract `lib/jsonStore.ts` | `DATA_PATH` redeclared in 5 files; `readJsonFile`/`writeJsonFile` in 3; `ensureDataDirectory` in 4. |
+| 4.3 | Done | Extract `lib/jsonStore.ts` | `DATA_PATH` redeclared in 5 files; `readJsonFile`/`writeJsonFile` in 3; `ensureDataDirectory` in 4. |
 | 4.4 | Todo | Extract a `requireMalToken(res)` guard | The preamble `const { token } = getMALAuthData(); if (!token \|\| !isMALTokenValid(token)) return res.status(401)…` appears verbatim in **seven** routes. |
-| 4.5 | Todo | Season arithmetic implemented three times | [anime.ts:254](../src/lib/anime.ts), [api/anime/sync.ts:31](../src/pages/api/anime/sync.ts), and [animeUtils.ts:110](../src/lib/animeUtils.ts) (`getSeasonInfos` — the good one the other two should call). |
+| 4.5 | WIP | Season arithmetic implemented three times | [anime.ts:254](../src/lib/anime.ts), [api/anime/sync.ts:31](../src/pages/api/anime/sync.ts), and [animeUtils.ts:110](../src/lib/animeUtils.ts) (`getSeasonInfos` — the good one the other two should call). |
 
 ---
 

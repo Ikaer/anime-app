@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './AnimeSidebar.module.css';
 import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
-import { SeasonInfo } from './SeasonSelector';
+import type { SeasonInfo } from '@/models/anime';
 import { Button, CollapsibleSection } from '@/components/shared';
 import {
   SortOrderSection,

@@ -1,7 +1,8 @@
 import React from 'react';
 import styles from './FiltersSection.module.css';
 import { UserAnimeStatus } from '@/models/anime';
-import SeasonSelector, { SeasonInfo } from '../SeasonSelector';
+import SeasonSelector from '../SeasonSelector';
+import type { SeasonInfo } from '@/models/anime';
 
 const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
   "watching", 

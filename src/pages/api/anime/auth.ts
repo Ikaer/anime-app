@@ -4,7 +4,7 @@ import { MALAuthData, MALUser } from '@/models/anime';
 import { appendLog } from '@/lib/connectionLog';
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 
 // MAL OAuth2 configuration
 const MAL_CLIENT_ID = process.env.MAL_CLIENT_ID;
@@ -28,72 +28,51 @@ function generateCodeChallenge(verifier: string): string {
 }
 
 // Store code verifier in file system for persistence across server restarts
-const DATA_PATH = process.env.DATA_PATH || '/app/data';
-const CODE_VERIFIER_FILE = path.join(DATA_PATH, 'oauth_state.json');
+const CODE_VERIFIER_FILE = dataFile('oauth_state.json');
+const STATE_TTL_MS = 10 * 60 * 1000;
+
+type VerifierStore = Record<string, { verifier: string; timestamp: number }>;
+
+function readVerifierStore(): VerifierStore {
+  return readJsonFile<VerifierStore>(CODE_VERIFIER_FILE, {});
+}
 
 function saveCodeVerifier(state: string, verifier: string): void {
   try {
-    if (!fs.existsSync(DATA_PATH)) {
-      fs.mkdirSync(DATA_PATH, { recursive: true });
-    }
-    
-    let stateData: Record<string, { verifier: string; timestamp: number }> = {};
-    if (fs.existsSync(CODE_VERIFIER_FILE)) {
-      const content = fs.readFileSync(CODE_VERIFIER_FILE, 'utf-8');
-      stateData = JSON.parse(content);
-    }
-    
-    // Clean old entries (older than 10 minutes)
+    const stateData = readVerifierStore();
+
     const now = Date.now();
     Object.keys(stateData).forEach(key => {
-      if (now - stateData[key].timestamp > 10 * 60 * 1000) {
+      if (now - stateData[key].timestamp > STATE_TTL_MS) {
         delete stateData[key];
       }
     });
-    
+
     stateData[state] = { verifier, timestamp: now };
-    fs.writeFileSync(CODE_VERIFIER_FILE, JSON.stringify(stateData, null, 2));
+    writeJsonFile(CODE_VERIFIER_FILE, stateData);
   } catch (error) {
     console.error('Error saving code verifier:', error);
   }
 }
 
 function getCodeVerifier(state: string): string | null {
-  try {
-    if (!fs.existsSync(CODE_VERIFIER_FILE)) {
-      return null;
-    }
-    
-    const content = fs.readFileSync(CODE_VERIFIER_FILE, 'utf-8');
-    const stateData = JSON.parse(content);
-    
-    const entry = stateData[state];
-    if (!entry) return null;
-    
-    // Check if not expired (10 minutes)
-    if (Date.now() - entry.timestamp > 10 * 60 * 1000) {
-      delete stateData[state];
-      fs.writeFileSync(CODE_VERIFIER_FILE, JSON.stringify(stateData, null, 2));
-      return null;
-    }
-    
-    return entry.verifier;
-  } catch (error) {
-    console.error('Error getting code verifier:', error);
+  const stateData = readVerifierStore();
+  const entry = stateData[state];
+  if (!entry) return null;
+
+  if (Date.now() - entry.timestamp > STATE_TTL_MS) {
+    deleteCodeVerifier(state);
     return null;
   }
+
+  return entry.verifier;
 }
 
 function deleteCodeVerifier(state: string): void {
   try {
-    if (!fs.existsSync(CODE_VERIFIER_FILE)) {
-      return;
-    }
-    
-    const content = fs.readFileSync(CODE_VERIFIER_FILE, 'utf-8');
-    const stateData = JSON.parse(content);
+    const stateData = readVerifierStore();
     delete stateData[state];
-    fs.writeFileSync(CODE_VERIFIER_FILE, JSON.stringify(stateData, null, 2));
+    writeJsonFile(CODE_VERIFIER_FILE, stateData);
   } catch (error) {
     console.error('Error deleting code verifier:', error);
   }

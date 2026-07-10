@@ -11,18 +11,14 @@ import {
   SortDirection,
   ImageSize,
   VisibleColumns,
-  SeasonName
+  SeasonName,
+  SeasonInfo
 } from '@/models/anime';
 import { getSeasonInfos } from './animeUtils';
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export interface SeasonInfo {
-  year: number;
-  season: SeasonName;
-}
 
 export interface AnimeFiltersState {
   statusFilters: (UserAnimeStatus | 'not_defined')[];
