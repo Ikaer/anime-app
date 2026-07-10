@@ -114,7 +114,8 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         </div>
 
         {/* ---------- Header ---------- */}
-        <header className="header">
+        {/* `hero`, not `header`: globals.css styles `.header` as the sticky site navbar. */}
+        <header className="hero">
           {poster
             ? <img className="poster" src={poster} alt={primaryTitle} />
             : <div className="poster noimg">No image</div>}
@@ -134,8 +135,80 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
               {anime.nsfw && anime.nsfw !== 'white' && <span className="pill nsfw">NSFW: {anime.nsfw}</span>}
               {anime.hidden && <span className="pill hidden">Masqué</span>}
             </div>
+            {anime.synopsis && <p className="prose synopsis">{anime.synopsis}</p>}
           </div>
+          {/* Third column, sitting under the action buttons of the topbar. */}
+          {((anime.genres && anime.genres.length > 0) || (anime.studios && anime.studios.length > 0)) && (
+            <div className="head-meta">
+              {anime.genres && anime.genres.length > 0 && (
+                <div className="head-chips">
+                  {anime.genres.map(g => <span key={g.id} className="chip">{g.name}</span>)}
+                </div>
+              )}
+              {anime.studios && anime.studios.length > 0 && (
+                <div className="head-chips">
+                  {anime.studios.map(s => <span key={s.id} className="chip studio">🎬 {s.name}</span>)}
+                </div>
+              )}
+            </div>
+          )}
         </header>
+
+        <div className="columns">
+        <aside className="col-side">
+          {/* ---------- Crowd drill-down (MAL + AniList recos anchored on this title) ---------- */}
+          <MoreLikeThis animeId={anime.id} />
+
+          {/* ---------- Similar by staff & studio (production-credit recos) ---------- */}
+          {similar.length > 0 && (
+            <section className="section">
+              <h2>Dans le même studio / staff</h2>
+              <p className="reco-sub">Recommandations basées uniquement sur les studios et le staff technique partagés.</p>
+              <div className="reco-cards">
+                {similar.map(s => (
+                  <Link key={s.id} href={`/anime/${s.id}`} className="reco-card" title={s.title}>
+                    {s.poster
+                      ? <img src={s.poster} alt="" />
+                      : <div className="reco-noimg">?</div>}
+                    <div className="reco-body">
+                      <span className="reco-title">{s.title}</span>
+                      <div className="reco-shared">
+                        {s.sharedStudios.map(name => (
+                          <span key={`st-${name}`} className="reco-badge studio">🎬 {name}</span>
+                        ))}
+                        {s.sharedStaff.map(cr => (
+                          <span key={`sf-${cr.role}-${cr.name}`} className="reco-badge staff">
+                            <span className="reco-role">{cr.role}</span> {cr.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ---------- Related anime ---------- */}
+          {anime.related_anime && anime.related_anime.length > 0 && (
+            <section className="section">
+              <h2>Anime liés</h2>
+              <div className="related">
+                {anime.related_anime.map(r => (
+                  <Link key={r.node.id} href={`/anime/${r.node.id}`} className="related-card" title={r.node.title}>
+                    {r.node.main_picture?.medium
+                      ? <img src={r.node.main_picture.medium} alt="" />
+                      : <div className="related-noimg">?</div>}
+                    <span className="related-rel">{r.relation_type_formatted || r.relation_type}</span>
+                    <span className="related-title">{r.node.title}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </aside>
+
+        <main className="col-main">
 
         {/* ---------- Personal state reconciliation (the point of this page) ---------- */}
         <section className="section">
@@ -204,23 +277,6 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           </div>
         </section>
 
-        {/* ---------- Genres & studios ---------- */}
-        {((anime.genres && anime.genres.length > 0) || (anime.studios && anime.studios.length > 0)) && (
-          <section className="section">
-            <h2>Genres & studios</h2>
-            {anime.genres && anime.genres.length > 0 && (
-              <div className="chips">
-                {anime.genres.map(g => <span key={g.id} className="chip">{g.name}</span>)}
-              </div>
-            )}
-            {anime.studios && anime.studios.length > 0 && (
-              <div className="chips studios">
-                {anime.studios.map(s => <span key={s.id} className="chip studio">🎬 {s.name}</span>)}
-              </div>
-            )}
-          </section>
-        )}
-
         {/* ---------- AniList tags & staff ---------- */}
         {(tags.length > 0 || staff.length > 0) && (
           <section className="section">
@@ -253,39 +309,6 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           </section>
         )}
 
-        {/* ---------- Similar by staff & studio (production-credit recos) ---------- */}
-        {similar.length > 0 && (
-          <section className="section">
-            <h2>Dans le même studio / staff</h2>
-            <p className="reco-sub">Recommandations basées uniquement sur les studios et le staff technique partagés.</p>
-            <div className="reco-cards">
-              {similar.map(s => (
-                <Link key={s.id} href={`/anime/${s.id}`} className="reco-card" title={s.title}>
-                  {s.poster
-                    ? <img src={s.poster} alt="" />
-                    : <div className="reco-noimg">?</div>}
-                  <div className="reco-body">
-                    <span className="reco-title">{s.title}</span>
-                    <div className="reco-shared">
-                      {s.sharedStudios.map(name => (
-                        <span key={`st-${name}`} className="reco-badge studio">🎬 {name}</span>
-                      ))}
-                      {s.sharedStaff.map(cr => (
-                        <span key={`sf-${cr.role}-${cr.name}`} className="reco-badge staff">
-                          <span className="reco-role">{cr.role}</span> {cr.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ---------- Crowd drill-down (MAL + AniList recos anchored on this title) ---------- */}
-        <MoreLikeThis animeId={anime.id} />
-
         {/* ---------- Cross-source id crosswalk ---------- */}
         <section className="section">
           <h2>Identifiants (crosswalk)</h2>
@@ -303,13 +326,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           </div>
         </section>
 
-        {/* ---------- Synopsis / background ---------- */}
-        {anime.synopsis && (
-          <section className="section">
-            <h2>Synopsis</h2>
-            <p className="prose">{anime.synopsis}</p>
-          </section>
-        )}
+        {/* ---------- Background ---------- */}
         {anime.background && (
           <section className="section">
             <h2>Contexte</h2>
@@ -317,27 +334,20 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           </section>
         )}
 
-        {/* ---------- Related anime ---------- */}
-        {anime.related_anime && anime.related_anime.length > 0 && (
-          <section className="section">
-            <h2>Anime liés</h2>
-            <div className="related">
-              {anime.related_anime.map(r => (
-                <Link key={r.node.id} href={`/anime/${r.node.id}`} className="related-card" title={r.node.title}>
-                  {r.node.main_picture?.medium
-                    ? <img src={r.node.main_picture.medium} alt="" />
-                    : <div className="related-noimg">?</div>}
-                  <span className="related-rel">{r.relation_type_formatted || r.relation_type}</span>
-                  <span className="related-title">{r.node.title}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
+        </main>
+        </div>
       </div>
 
       <style jsx>{`
-        .page { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; color: var(--text-primary); }
+        /* 520 (side) + 20 (gap) + 1100 (main) + the 1.5rem padding on each side, so the
+           hero and the topbar line up exactly with the two columns underneath. */
+        .page { max-width: 1688px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; color: var(--text-primary); }
+
+        /* Two columns: discovery blocks on the left, facts on the right. The side
+           column is capped so the recommendation cards never stretch at 4K. */
+        .columns { display: grid; grid-template-columns: minmax(340px, 520px) minmax(0, 1100px); gap: 1.25rem;
+          align-items: start; justify-content: center; }
+        .col-main, .col-side { min-width: 0; }
         .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
         .back { color: var(--accent-primary); text-decoration: none; font-weight: 600; }
         .back:hover { text-decoration: underline; }
@@ -346,12 +356,14 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; }
         .ext-links a:hover { border-color: var(--border-hover); }
 
-        .header { display: flex; gap: 1.5rem; margin-bottom: 2rem; }
+        .hero { display: flex; gap: 1.5rem; margin-bottom: 1.25rem; padding: 1.25rem 1.5rem;
+          background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; }
         .poster { width: 220px; flex: 0 0 220px; border-radius: 10px; object-fit: cover; align-self: flex-start;
           box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
         .poster.noimg { height: 308px; display: flex; align-items: center; justify-content: center;
           background: var(--bg-secondary); color: var(--text-muted); }
         .head-info { flex: 1 1 auto; min-width: 0; }
+        .head-meta { flex: 0 0 320px; display: flex; flex-direction: column; gap: 0.6rem; }
         .head-info h1 { margin: 0 0 0.4rem; font-size: 1.9rem; line-height: 1.2; }
         .alt { color: var(--text-secondary); font-size: 1rem; }
         .alt.ja { color: var(--text-muted); }
@@ -393,7 +405,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         .field-value a:hover { text-decoration: underline; }
 
         .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-        .chips.studios { margin-top: 0.6rem; }
+        .head-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
         .chip { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 999px;
           padding: 3px 10px; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 5px; }
         .chip.tag .rank { color: var(--text-muted); font-size: 0.7rem; }
@@ -406,19 +418,24 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         .staff-name { color: var(--text-primary); font-size: 0.85rem; text-align: right; }
 
         .prose { color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; margin: 0; }
+        /* The header spans both columns, so cap the measure rather than the container. */
+        .synopsis { margin-top: 1rem; max-width: 100ch; font-size: 0.92rem; }
 
         .reco-sub { color: var(--text-muted); font-size: 0.85rem; margin: -0.5rem 0 1rem; }
-        .reco-cards { display: flex; flex-wrap: wrap; gap: 1rem; }
-        .reco-card { display: flex; gap: 0.75rem; width: 320px; text-decoration: none; color: var(--text-primary);
-          background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.6rem; }
-        .reco-card:hover { border-color: var(--border-hover); }
-        .reco-card img { width: 70px; height: 99px; flex: 0 0 70px; object-fit: cover; border-radius: 6px; }
+        /* next/link renders the <a>, and styled-jsx only scopes DOM elements it sees in
+           this JSX — so the card class must be reached globally, under its scoped parent. */
+        .reco-cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1rem; }
+        .reco-cards :global(.reco-card) { display: flex; gap: 0.75rem; flex: 1 1 300px; min-width: 0; text-decoration: none;
+          color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color);
+          border-radius: 10px; padding: 0.6rem; }
+        .reco-cards :global(.reco-card):hover { border-color: var(--border-hover); }
+        .reco-cards :global(.reco-card) img { width: 70px; height: 99px; flex: 0 0 70px; object-fit: cover; border-radius: 6px; }
         .reco-noimg { width: 70px; height: 99px; flex: 0 0 70px; border-radius: 6px; background: var(--bg-secondary);
           display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
         .reco-body { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
         .reco-title { font-size: 0.9rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box;
           -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-        .reco-card:hover .reco-title { text-decoration: underline; }
+        .reco-cards :global(.reco-card):hover .reco-title { text-decoration: underline; }
         .reco-shared { display: flex; flex-wrap: wrap; gap: 0.3rem; }
         .reco-badge { font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; background: var(--bg-secondary);
           border: 1px solid var(--border-color); color: var(--text-secondary); }
@@ -426,19 +443,25 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         .reco-badge .reco-role { color: var(--text-muted); }
 
         .related { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-        .related-card { width: 110px; display: flex; flex-direction: column; gap: 4px; text-decoration: none;
+        .related :global(.related-card) { width: 110px; display: flex; flex-direction: column; gap: 4px; text-decoration: none;
           color: var(--text-primary); }
-        .related-card img { width: 110px; height: 156px; object-fit: cover; border-radius: 6px; }
+        .related :global(.related-card) img { width: 110px; height: 156px; object-fit: cover; border-radius: 6px; }
         .related-noimg { width: 110px; height: 156px; border-radius: 6px; background: var(--bg-tertiary);
           display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
         .related-rel { font-size: 0.7rem; color: var(--accent-primary); }
         .related-title { font-size: 0.78rem; line-height: 1.25; overflow: hidden; display: -webkit-box;
           -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-        .related-card:hover .related-title { text-decoration: underline; }
+        .related :global(.related-card):hover .related-title { text-decoration: underline; }
+
+        @media (max-width: 1100px) {
+          .columns { grid-template-columns: minmax(0, 1fr); }
+        }
 
         @media (max-width: 640px) {
-          .header { flex-direction: column; }
+          .hero { flex-direction: column; }
           .poster { width: 160px; flex-basis: auto; }
+          .head-meta { flex-basis: auto; }
+          .head-chips { justify-content: flex-start; }
         }
       `}</style>
     </>
