@@ -6,7 +6,13 @@ import crypto from 'crypto';
 import fs from 'fs';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 
-// MAL OAuth2 configuration
+/**
+ * MAL OAuth. This route deliberately does NOT live under `/api/anime/mal/`
+ * with the other MAL routes: its path is the registered redirect URI of the
+ * MyAnimeList OAuth application (`MAL_REDIRECT_URI`), which is configuration
+ * outside this repo. Moving it breaks login on the next deploy.
+ */
+
 const MAL_CLIENT_ID = process.env.MAL_CLIENT_ID;
 const MAL_REDIRECT_URI = process.env.MAL_REDIRECT_URI || 'http://localhost:3000/api/anime/auth';
 const MAL_AUTH_URL = 'https://myanimelist.net/v1/oauth2/authorize';
@@ -160,15 +166,9 @@ async function initiateOAuthFlow(req: NextApiRequest, res: NextApiResponse) {
     return;
   }
 
-  console.log('Initiating OAuth flow with client ID:', MAL_CLIENT_ID);
-  console.log('Redirect URI:', MAL_REDIRECT_URI);
-
   const state = crypto.randomUUID();
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
-
-  console.log('Generated state:', state);
-  console.log('Generated code challenge:', codeChallenge);
 
   // Store code verifier with state as key
   saveCodeVerifier(state, codeVerifier);
@@ -181,19 +181,14 @@ async function initiateOAuthFlow(req: NextApiRequest, res: NextApiResponse) {
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'plain'); // MAL uses 'plain', not 'S256'
 
-  console.log('Generated auth URL:', authUrl.toString());
-
   appendLog('mal-auth', 'info', 'MAL login initiated');
 
   res.json({ authUrl: authUrl.toString() });
 }
 
 async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, code: string, state: string) {
-  console.log('Handling OAuth callback with state:', state);
-  
   const codeVerifier = getCodeVerifier(state);
   if (!codeVerifier) {
-    console.error('Invalid or expired state parameter:', state);
     appendLog('mal-auth', 'error', 'MAL OAuth callback failed: invalid or expired state');
     res.status(400).json({ error: 'Invalid or expired state parameter' });
     return;
@@ -203,8 +198,6 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
   deleteCodeVerifier(state);
 
   try {
-    console.log('Exchanging code for token...');
-    
     // Exchange code for token
     const tokenResponse = await fetch(MAL_TOKEN_URL, {
       method: 'POST',
@@ -221,15 +214,11 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
     });
 
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('Token exchange failed:', tokenResponse.status, errorText);
-      throw new Error(`Token exchange failed: ${tokenResponse.status} ${tokenResponse.statusText}`);
+      throw new Error(`Token exchange failed: ${tokenResponse.status} ${await tokenResponse.text()}`);
     }
 
     const tokenData: MALAuthData = await tokenResponse.json();
     tokenData.created_at = Date.now();
-    
-    console.log('Token exchange successful');
 
     // Get user info
     const userResponse = await fetch('https://api.myanimelist.net/v2/users/@me', {
@@ -239,14 +228,10 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
     });
 
     if (!userResponse.ok) {
-      const errorText = await userResponse.text();
-      console.error('User info request failed:', userResponse.status, errorText);
-      throw new Error(`User info request failed: ${userResponse.status} ${userResponse.statusText}`);
+      throw new Error(`User info request failed: ${userResponse.status} ${await userResponse.text()}`);
     }
 
     const userData: MALUser = await userResponse.json();
-    
-    console.log('User info retrieved:', userData.name);
 
     // Save auth data
     saveMALAuthData(userData, tokenData);
@@ -258,7 +243,6 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
     // Redirect to anime page
     res.redirect('/?auth=success');
   } catch (error) {
-    console.error('OAuth callback error:', error);
     appendLog('mal-auth', 'error', 'MAL OAuth callback failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });

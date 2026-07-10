@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { current, previous, next } = getSeasonInfos();
 
-    appendLog('sync', 'info', 'Sync started', {
+    appendLog('mal-sync', 'info', 'Sync started', {
       currentSeason: current,
       previousSeason: previous,
       nextSeason: next,
@@ -39,13 +39,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     upsertAnime(allAnime);
-    appendLog('sync', 'info', `Synced ${allAnime.length} seasonal anime`, { syncedCount: allAnime.length });
+    appendLog('mal-sync', 'info', `Synced ${allAnime.length} seasonal anime`, { syncedCount: allAnime.length });
 
     // Personal status sync — updates existing records only, never inserts.
     const personalAnimeList = await fetchUserAnimelist(token.access_token, user.name);
     const personalSyncStats = updatePersonalStatusBatch(personalAnimeList);
 
-    appendLog('sync', 'success', 'Sync completed', {
+    appendLog('mal-sync', 'success', 'Sync completed', {
       seasonalSyncedCount: allAnime.length,
       personalFetched: personalAnimeList.length,
       personalUpdated: personalSyncStats.updated,
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('Sync error:', error);
-    appendLog('sync', 'error', 'Sync failed', {
+    appendLog('mal-sync', 'error', 'Sync failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     res.status(500).json({

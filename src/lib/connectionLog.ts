@@ -6,15 +6,20 @@ const LOG_FILE = path.join(LOGS_PATH, 'connection_log.json');
 const MAX_ENTRIES = 500;
 const DEFAULT_PAGE_SIZE = 200;
 
+/**
+ * Log channels, one per sync/auth flow. Source-specific channels carry their
+ * source's prefix; `cron-sync` and `refresh` have none because they genuinely
+ * span every source.
+ */
 export type LogSource =
   | 'mal-auth'
+  | 'mal-sync'
+  | 'mal-big-sync'
+  | 'mal-historical-crawl'
   | 'simkl-auth'
-  | 'sync'
-  | 'big-sync'
-  | 'historical-crawl'
   | 'simkl-sync'
-  | 'cron-sync'
   | 'anilist-tags-sync'
+  | 'cron-sync'
   | 'refresh';
 
 export type LogLevel = 'info' | 'success' | 'error';

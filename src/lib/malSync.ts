@@ -104,7 +104,7 @@ export async function performHistoricalCrawl(
   batchSize: number = HISTORICAL_CRAWL_BATCH_SIZE
 ): Promise<HistoricalCrawlResult> {
   if (isHistoricalCrawlRunning) {
-    appendLog('historical-crawl', 'info', 'Historical crawl skipped: already running');
+    appendLog('mal-historical-crawl', 'info', 'Historical crawl skipped: already running');
     return { success: false, alreadyRunning: true, syncedCount: 0, processedSeasons: 0, stats: getHistoricalCrawlStats() };
   }
 
@@ -112,7 +112,7 @@ export async function performHistoricalCrawl(
   try {
     const batch = getNextHistoricalBatch(batchSize);
     if (batch.length === 0) {
-      appendLog('historical-crawl', 'success', 'Historical crawl already complete: no remaining seasons');
+      appendLog('mal-historical-crawl', 'success', 'Historical crawl already complete: no remaining seasons');
       return { success: true, alreadyRunning: false, syncedCount: 0, processedSeasons: 0, stats: getHistoricalCrawlStats() };
     }
 
@@ -145,7 +145,7 @@ export async function performHistoricalCrawl(
     markSeasonsSynced(syncedKeys);
 
     const stats = getHistoricalCrawlStats();
-    appendLog('historical-crawl', 'success', `Historical crawl batch complete: ${syncedKeys.length} seasons, ${allAnime.length} anime`, {
+    appendLog('mal-historical-crawl', 'success', `Historical crawl batch complete: ${syncedKeys.length} seasons, ${allAnime.length} anime`, {
       processedSeasons: syncedKeys.length,
       syncedCount: allAnime.length,
       remaining: stats.remaining,
@@ -160,7 +160,7 @@ export async function performHistoricalCrawl(
     };
   } catch (error) {
     console.error('Historical crawl error:', error);
-    appendLog('historical-crawl', 'error', 'Historical crawl failed', {
+    appendLog('mal-historical-crawl', 'error', 'Historical crawl failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
     return {

@@ -68,10 +68,10 @@ Ranking + fetch logic is in [src/lib/recommendations.ts](src/lib/recommendations
 
 ### MAL sync
 
-- `/api/anime/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)
-- `/api/anime/big-sync` — full seasonal sync, fetches 8 years of seasons + upcoming ranking via MAL API, SSE progress streaming
-- `/api/anime/historical-crawl` — GET returns crawl stats; POST runs a 5-season batch crawl going back to 1960. Uses a module-level lock to prevent concurrent runs. Cron-sync also calls this directly from lib after triggering big-sync.
-- `/api/anime/cron-sync` — cron-triggered, authenticated via `CRON_SECRET` header
+- `/api/anime/mal/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)
+- `/api/anime/mal/big-sync` — full seasonal sync, fetches 8 years of seasons + upcoming ranking via MAL API, SSE progress streaming
+- `/api/anime/mal/historical-crawl` — GET returns crawl stats; POST runs a 5-season batch crawl going back to 1960. Uses a module-level lock to prevent concurrent runs. Cron-sync also calls this directly from lib after triggering big-sync.
+- `/api/anime/cron-sync` — cron-triggered, authenticated via `CRON_SECRET` header. Stays outside `mal/` on purpose: an external cron job on the NAS calls this exact path, and it spans MAL + recommendations. `/api/anime/auth` likewise stays put — it is the MAL OAuth app's registered redirect URI.
 - `/api/anime/animes/[id]/refresh` (POST) — on-demand single-title refill from ALL THREE sources in parallel (MAL single-title GET merged over the local record, AniList force-refetch of tags+staff+banner, SIMKL incremental sync). Each source is isolated/non-fatal; returns a per-source `{ mal, anilist, simkl }` outcome. Backs the detail-page `RefreshButton`.
 
 ### SIMKL integration (read-only)

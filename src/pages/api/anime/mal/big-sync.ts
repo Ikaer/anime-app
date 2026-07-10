@@ -139,7 +139,7 @@ async function performBigSyncAsync(accessToken: string, syncId: string) {
         syncProcess.progress = syncProcess.progress.slice(-50);
       }
     }
-    appendLog('big-sync', progressToLogLevel(progress), progressToLogMessage(progress), {
+    appendLog('mal-big-sync', progressToLogLevel(progress), progressToLogMessage(progress), {
       type: progress.type,
       year: progress.year,
       season: progress.season,

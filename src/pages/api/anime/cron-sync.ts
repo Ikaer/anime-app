@@ -8,12 +8,20 @@ import {
 } from '@/lib/recommendations';
 import { appendLog } from '@/lib/connectionLog';
 
-// This is a simplified version of the big-sync trigger
-// It doesn't handle the SSE part, as it's meant for an automated cron job
+/**
+ * Cron entry point. This route deliberately does NOT live under
+ * `/api/anime/mal/`: it is invoked by an external cron job on the NAS (see
+ * docker-compose.yml) with `CRON_SECRET`, so its path is configuration outside
+ * this repo. It also spans more than MAL — it triggers the recommendations
+ * refresh too.
+ *
+ * Simplified version of the big-sync trigger: no SSE, since nothing is
+ * listening.
+ */
 
 async function startBigSync() {
   try {
-    const response = await fetch('http://localhost:3000/api/anime/big-sync', {
+    const response = await fetch('http://localhost:3000/api/anime/mal/big-sync', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

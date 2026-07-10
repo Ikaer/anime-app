@@ -45,8 +45,8 @@ Do not treat these as quick wins. Each is a design decision.
 | # | Status | Item | Notes |
 |---|--------|------|-------|
 | 2.1 | Todo | Nest `useConnections` return value as `{ mal, simkl, anilist }` | Currently a flat bag of ~28 values where `authState` / `isSyncing` / `isBigSyncing` / `onConnect` / `onSync` mean MAL, sitting next to `simklConnected` / `onSimklSync` / `onAnilistTagsSync`. Nesting removes the prefixes and shrinks every consumer. |
-| 2.2 | Todo | `LogSource` channel names | [connectionLog.ts:9](../src/lib/connectionLog.ts). `mal-auth`/`simkl-auth` are symmetric; then `sync`, `big-sync`, `historical-crawl`, `refresh` (MAL implied) vs `simkl-sync`, `anilist-tags-sync`. |
-| 2.3 | Todo | Move MAL API routes under `/api/anime/mal/` | `auth`, `sync`, `big-sync`, `historical-crawl` → `mal/*`, matching `simkl/*` and `anilist/*`. |
+| 2.2 | Done | `LogSource` channel names | [connectionLog.ts:9](../src/lib/connectionLog.ts). `mal-auth`/`simkl-auth` are symmetric; then `sync`, `big-sync`, `historical-crawl`, `refresh` (MAL implied) vs `simkl-sync`, `anilist-tags-sync`. |
+| 2.3 | Done | Move MAL API routes under `/api/anime/mal/` | `sync`, `big-sync`, `historical-crawl` → `mal/*`, matching `simkl/*` and `anilist/*`. `auth` could NOT move: its path is the MAL OAuth app's registered redirect URI (`MAL_REDIRECT_URI`), same class of external-config breakage as 2.4. Both now carry a comment saying so. |
 | 2.4 | Blocked | ⚠️ Do **not** rename `/api/anime/cron-sync` | Called by an external cron job on the NAS with `CRON_SECRET`. Renaming breaks configuration that lives outside this repo. Left here so nobody "fixes" it as part of 2.3. |
 | 2.5 | Todo | AniList "tags" is now a lie — rename to `anilistMeta` | `animes_anilist_tags.json`, `AniListTagsEntry`, `getAllAnilistTags`, `getAnilistTagsCount`, `performAnilistTagsSync`, `/anilist/tags-sync`, `anilistTagStats` all carry tags **+ staff + `banner_image`**. Note the data-file rename is gated by §3. |
 | 2.6 | Todo | Fix AniList casing drift | `AniList*` types vs `Anilist*` functions vs `anilist*` variables. Pick one. |
@@ -101,7 +101,7 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 | # | Status | Item | Notes |
 |---|--------|------|-------|
 | 6.1 | Todo | CLAUDE.md says "all component styles use CSS Modules", but there are **nine `<style jsx>` blocks** | All of them in pages: `anime/[id].tsx`, `tier.tsx`, `recommendations.tsx`, `connections.tsx`. The real rule seems to be "components use modules, pages use styled-jsx". Either enforce the stated rule or write down the actual one. |
-| 6.2 | Todo | Two routes log to stdout instead of the connection log panel | [api/anime/sync.ts](../src/pages/api/anime/sync.ts) has 13 `console.log` and [auth.ts](../src/pages/api/anime/auth.ts) has 9, while every other sync path reports through `appendLog`. Those two are invisible in the UI log. |
+| 6.2 | Done | Two routes log to stdout instead of the connection log panel | [api/anime/sync.ts](../src/pages/api/anime/sync.ts) has 13 `console.log` and [auth.ts](../src/pages/api/anime/auth.ts) has 9, while every other sync path reports through `appendLog`. Those two are invisible in the UI log. |
 
 ---
 

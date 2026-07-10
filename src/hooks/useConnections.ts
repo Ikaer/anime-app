@@ -38,7 +38,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
 
   const fetchHistoricalStats = async () => {
     try {
-      const res = await fetch('/api/anime/historical-crawl');
+      const res = await fetch('/api/anime/mal/historical-crawl');
       if (res.ok) setHistoricalStats(await res.json());
     } catch {
       // non-critical, silently ignore
@@ -203,7 +203,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     setIsSyncing(true);
     setSyncError('');
     try {
-      const response = await fetch('/api/anime/sync', { method: 'POST' });
+      const response = await fetch('/api/anime/mal/sync', { method: 'POST' });
       if (!response.ok) throw new Error('Sync failed');
       onDataChanged?.();
     } catch (error) {
@@ -218,7 +218,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     setIsBigSyncing(true);
     setSyncError('');
     try {
-      const response = await fetch('/api/anime/big-sync', { method: 'POST' });
+      const response = await fetch('/api/anime/mal/big-sync', { method: 'POST' });
       if (!response.ok) throw new Error('Big sync failed');
       onDataChanged?.();
     } catch (error) {
@@ -233,7 +233,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     setIsHistoricalCrawling(true);
     setSyncError('');
     try {
-      const res = await fetch('/api/anime/historical-crawl', { method: 'POST' });
+      const res = await fetch('/api/anime/mal/historical-crawl', { method: 'POST' });
       if (!res.ok) throw new Error('Historical crawl failed');
       const data = await res.json();
       setHistoricalStats(data.stats);
