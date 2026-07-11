@@ -225,7 +225,10 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+    // Fixed locale: the server (Node) and browser default locales can
+    // disagree, and a locale-less toLocaleDateString() then renders
+    // differently on each side, tripping a hydration mismatch.
+    return new Date(dateString).toLocaleDateString('fr-FR');
   };
 
   const formatStatus = (status?: string) => {

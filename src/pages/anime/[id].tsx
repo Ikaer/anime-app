@@ -24,7 +24,10 @@ function fmtDate(d?: string): string {
   if (!d) return '—';
   const parsed = new Date(d);
   if (Number.isNaN(parsed.getTime())) return d;
-  return parsed.toLocaleDateString();
+  // Fixed locale (not the runtime default): the server's Node locale and the
+  // browser's locale can disagree, and toLocaleDateString() with no locale
+  // arg then renders differently on each side, tripping a hydration mismatch.
+  return parsed.toLocaleDateString('fr-FR');
 }
 
 function fmtDuration(seconds?: number): string {
@@ -35,7 +38,9 @@ function fmtDuration(seconds?: number): string {
 
 function fmtNum(n?: number): string {
   if (n == null) return '—';
-  return n.toLocaleString();
+  // Fixed locale, same reasoning as fmtDate above: the runtime-default locale
+  // differs between the server (Node) and the browser, tripping hydration.
+  return n.toLocaleString('fr-FR');
 }
 
 function fmtScore(n?: number | null): string {
@@ -120,7 +125,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <div className="topbar">
           <Link href="/" className="back">{t('detail.back')}</Link>
           <div className="ext-links">
-            <Link href={`/rate?id=${anime.id}`}>{t('detail.rate')}</Link>
+            <Link href={`/rate?id=${anime.id}`} className="ext-link">{t('detail.rate')}</Link>
             <RefreshButton
               animeId={anime.id}
               onRefreshed={() => {
@@ -173,7 +178,9 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
               )}
               {anime.studios && anime.studios.length > 0 && (
                 <div className="head-chips">
-                  {anime.studios.map(s => <span key={s.id} className="chip studio">🎬 {s.name}</span>)}
+                  {anime.studios.map(s => (
+                    <Link key={s.id} href={`/credits/studio/${s.id}`} className="chip studio">🎬 {s.name}</Link>
+                  ))}
                 </div>
               )}
             </div>
@@ -324,10 +331,10 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
                 <h3>{t('detail.staffCount', { count: staff.length })}</h3>
                 <div className="staff-list">
                   {staff.map(s => (
-                    <div key={`${s.id}-${s.role}`} className="staff-row">
+                    <Link key={`${s.id}-${s.role}`} href={`/credits/staff/${s.id}`} className="staff-row">
                       <span className="staff-role">{s.role}</span>
                       <span className="staff-name">{s.name}</span>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </>
@@ -442,6 +449,11 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         .ext-links a { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary);
           padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; }
         .ext-links a:hover { border-color: var(--border-hover); }
+        /* "Noter" is a next/link <a> — styled-jsx can't scope it (see .chip.studio note
+           below), so it needs its own :global() rule to match the plain <a> siblings. */
+        .ext-links :global(.ext-link) { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary);
+          padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; }
+        .ext-links :global(.ext-link):hover { border-color: var(--border-hover); }
 
         .hero { display: flex; gap: 1.5rem; margin-bottom: 1.25rem; padding: 1.25rem 1.5rem;
           border: 1px solid var(--border-color); border-radius: 12px; }
@@ -494,14 +506,22 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
 
         .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
         .head-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; }
-        .chip { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 999px;
+        /* .chip.studio is rendered via next/link (a real <a>), which styled-jsx can't
+           scope automatically — reached with :global(), same pattern as .reco-card below. */
+        :global(.chip) { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 999px;
           padding: 3px 10px; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 5px; }
-        .chip.tag .rank { color: var(--text-muted); font-size: 0.7rem; }
-        .chip.studio { color: var(--text-secondary); }
+        :global(.chip.tag) .rank { color: var(--text-muted); font-size: 0.7rem; }
+        :global(.chip.studio) { color: var(--text-secondary); text-decoration: none; }
+        :global(.chip.studio):hover { border-color: var(--border-hover); color: var(--accent-primary); }
 
         .staff-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem 1rem; }
-        .staff-row { display: flex; justify-content: space-between; gap: 0.75rem; padding: 3px 0;
-          border-bottom: 1px dashed var(--border-color); }
+        /* .staff-row is a next/link <a> too — see .chip.studio note above. Scoped through
+           the parent class rather than bare :global(.staff-row): a single class has lower
+           specificity than globals.css's a:hover underline reset, which was winning on
+           hover and underlining the whole row instead of just .staff-name below. */
+        .staff-list :global(.staff-row) { display: flex; justify-content: space-between; gap: 0.75rem; padding: 3px 0;
+          border-bottom: 1px dashed var(--border-color); text-decoration: none; }
+        .staff-list :global(.staff-row):hover .staff-name { text-decoration: underline; }
         .staff-role { color: var(--text-muted); font-size: 0.8rem; }
         .staff-name { color: var(--text-primary); font-size: 0.85rem; text-align: right; }
 

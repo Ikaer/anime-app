@@ -223,6 +223,12 @@
   "detail.crosswalk": "Identifiers (crosswalk)",
   "detail.background": "Background",
 
+  "credits.pageTitle": "{name} — Anime",
+  "credits.studioHeading": "Anime produced by {name}",
+  "credits.staffHeading": "Anime with {name}",
+  "credits.countOne": "{count} anime",
+  "credits.countOther": "{count} anime",
+
   "refresh.title": "Refresh from MAL / AniList / SIMKL",
   "refresh.refreshing": "⏳ Refreshing…",
   "refresh.refresh": "🔄 Refresh",
