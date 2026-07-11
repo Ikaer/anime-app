@@ -43,13 +43,13 @@ Not a filter — a **computed candidate set with affinity ranking**. Each candid
 
 Every card explains itself: a **"Why?"** breakdown shows exactly which signals fired ("Recommended by fans of Attack on Titan", shared tags, shared staff…). All source weights are live-tunable sliders and persist in the URL.
 
-![For You — recommendation feed with affinity explanations, feedback buttons, and tunable source weights](docs/screenshots/03-recommendations.png)
+![For You — recommendation feed with affinity explanations, feedback buttons, and tunable source weights](docs/screenshots/02-recommendations.png)
 
 ### 🏆 Tier list — a drag-and-drop rating board
 
 Ten score rows (green → red, with MAL's word labels) plus an "to rate" tray. **A tier is a score**: drop a card into a row and it writes that score to **both MAL and SIMKL** to keep them in sync. Optimistic updates with revert-on-failure, a serial write queue that respects SIMKL's rate limits, and a red badge if a remote write didn't take.
 
-![Tier list — hundreds of titles bucketed into colored score rows by drag and drop](docs/screenshots/04-tier-list.png)
+![Tier list — hundreds of titles bucketed into colored score rows by drag and drop](docs/screenshots/03-tier-list.png)
 
 ### 🔍 Rich detail pages
 
@@ -58,19 +58,19 @@ Every title gets a full-bleed AniList banner backdrop, a **"Personal state" pane
 - **"More like this"** — the same weighted-source engine re-ranking this title's crowd edges around the *single anchor*
 - **"Same studio / staff"** — a pure catalog-wide credit-similarity search
 
-![Detail page — banner backdrop, MAL/SIMKL/effective state, catalog sheet, AniList tags and staff, and similarity blocks](docs/screenshots/06-detail.png)
+![Detail page — banner backdrop, MAL/SIMKL/effective state, catalog sheet, AniList tags and staff, and similarity blocks](docs/screenshots/05-detail.png)
+
+### 🎬 Credits pages — studio & staff filmographies
+
+Every studio chip and staff credit on a detail page is a link. Click one and you land on that studio's or person's full filmography across the entire crawled catalog — a poster grid sorted by score, with year, media type, mean rating, and (for staff) their role on each title. It turns "who made this?" into a browsable path through the catalog: from a favorite show to its studio, to a composer or director, to everything else they touched.
+
+![Credits page — Madhouse's filmography as a poster grid sorted by score](docs/screenshots/06-credits.png)
 
 ### ⚖️ MAL / SIMKL discrepancy detection
 
 Because two personal-data sources drift, the app continuously compares status, score, and progress across MAL and SIMKL and surfaces mismatches — as a per-card badge, a filter on the main list, and a dedicated comparison page.
 
-![Discrepancies — a table comparing MAL vs SIMKL status, score, and episode count](docs/screenshots/05-discrepancies.png)
-
-### 🗂️ Table or card layout, everything URL-driven
-
-Toggle between an information-dense table and a poster grid. Both share the same filter sidebar, and **all filter and display state lives in the URL query string** — every view is a shareable, bookmarkable link, and the browser back button just works.
-
-![Table view — dense rows with inline status, progress, scores, and quick actions](docs/screenshots/02-table-view.png)
+![Discrepancies — a table comparing MAL vs SIMKL status, score, and episode count](docs/screenshots/04-discrepancies.png)
 
 ### Plus
 
@@ -83,7 +83,7 @@ Toggle between an information-dense table and a poster grid. Both share the same
 
 ## Architecture highlights
 
-- **URL is the single source of truth.** Filters and display state are parsed from and pushed to the query string; there is no client state store. Presets are just URL templates.
+- **URL is the single source of truth.** Filters and display state are parsed from and pushed to the query string; there is no client state store. Every view is a shareable, bookmarkable link and the back button just works. Presets are just URL templates.
 - **No database.** All data persists as plain JSON files under `DATA_PATH`, joined in-process into a unified display record with a short-lived cache that's explicitly invalidated on every write.
 - **Local-cache authority.** Three helpers (`getEffectiveStatus` / `getEffectiveScore` / `getEffectiveProgress`) resolve personal fields SIMKL-first with MAL fallback, so every personal read goes through one seam.
 - **CSS Modules with generated typings** for components; scoped `<style jsx>` for one-off page layout. Colors come from CSS custom properties.
