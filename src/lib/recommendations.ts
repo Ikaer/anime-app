@@ -18,7 +18,7 @@ import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { MAL_ANIME_FIELDS } from '@/lib/mal';
 
-const RECOMMENDATIONS_FILE = dataFile('recommendations_MAL.json');
+const RECOMMENDATIONS_FILE = dataFile('recommendations.json');
 const DISMISSED_FILE = dataFile('recommendations_dismissed.json');
 const FEEDBACK_FILE = dataFile('recommendations_feedback.json');
 

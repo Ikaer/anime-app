@@ -11,7 +11,7 @@ import path from 'path';
  */
 export const DATA_PATH = process.env.DATA_PATH || '/app/data';
 
-/** Absolute path of a data file, e.g. `dataFile('animes_MAL.json')`. */
+/** Absolute path of a data file, e.g. `dataFile('animes_mal.json')`. */
 export function dataFile(name: string): string {
   return path.join(DATA_PATH, name);
 }

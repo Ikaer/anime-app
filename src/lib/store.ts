@@ -19,10 +19,10 @@ import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos } from '@/lib/animeUtils';
 
-const ANIME_MAL_FILE = dataFile('animes_MAL.json');
+const ANIME_MAL_FILE = dataFile('animes_mal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
 const ANIME_SIMKL_FILE = dataFile('animes_SIMKL.json');
-const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_tags.json');
+const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
 
 // ============================================================================
 // Hidden anime ids

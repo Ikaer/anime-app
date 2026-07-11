@@ -17,7 +17,7 @@ import { fetchSeasonalAnime, fetchUpcomingAnime, MalFetchProgress } from '@/lib/
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { appendLog } from '@/lib/connectionLog';
 
-const SYNC_CHECKPOINT_FILE = dataFile('sync_checkpoint.json');
+const SYNC_CHECKPOINT_FILE = dataFile('mal_season_checkpoint.json');
 
 /** Courtesy pause between seasons (each season is itself several requests). */
 const SEASON_DELAY_MS = 2000;

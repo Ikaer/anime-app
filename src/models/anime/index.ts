@@ -122,8 +122,8 @@ export interface Discrepancy {
 }
 
 // AniList catalog metadata (read-only, public API). Keyed by MAL id in
-// animes_anilist_tags.json — the filename still says "tags" for backward
-// compatibility; the entry has held staff and banner art for a while now.
+// animes_anilist_meta.json. The interface name still says "Tag" for historical
+// reasons; the entry has held staff and banner art for a while now.
 export interface AniListTagEntry {
   name: string;
   rank: number;       // AniList relevance rank, 0-100

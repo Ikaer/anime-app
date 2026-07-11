@@ -62,11 +62,11 @@ These are files on the NAS volume. Renaming without a dual-read fallback
 
 | # | Status | Item | What breaks if renamed blind |
 |---|--------|------|------------------------------|
-| 3.0 | Todo | Decide: migrate, or leave filenames alone and only fix code names | Recommendation: **leave the filenames**. The code-level names are what hurt daily. If you do migrate, add `readJsonFile(newPath, oldPath, default)` that rewrites to the new name on first read, then land 3.1–3.4 behind it. |
-| 3.1 | Todo | `mal_auth.json` | You get logged out. |
-| 3.2 | Todo | `recommendations_feedback.json` | All 👍/👎 verdicts vanish. |
-| 3.3 | Todo | `sync_checkpoint.json` → e.g. `mal_season_checkpoint.json` | Historical crawl restarts from 1960. It is the *seasonal crawl* checkpoint, not a sync checkpoint — and it sits next to `simkl_sync_checkpoint.json`, which genuinely is one. |
-| 3.4 | Todo | `animes_MAL.json`, `recommendations_MAL.json`, `animes_anilist_tags.json` | Full re-sync / re-fetch. |
+| 3.0 | Done | Decide: migrate, or leave filenames alone and only fix code names | Migrated. No dual-read helper needed: coordinated cutover (app stopped, prod files renamed via `scripts/rename-data-files.ps1`, then redeployed), so new code meets the new names. Backup taken first. |
+| 3.1 | Dropped | `mal_auth.json` | Not a rename — already correctly `mal_`-prefixed and it genuinely is the MAL OAuth token. No misleading name to fix. |
+| 3.2 | Dropped | `recommendations_feedback.json` | Not a rename — accurately names the recommendations feedback store; no source-prefix smell. |
+| 3.3 | Done | `sync_checkpoint.json` → `mal_season_checkpoint.json` | Historical crawl restarts from 1960. It is the *seasonal crawl* checkpoint, not a sync checkpoint — and it sits next to `simkl_sync_checkpoint.json`, which genuinely is one. |
+| 3.4 | Done | `animes_MAL.json`→`animes_mal.json`, `recommendations_MAL.json`→`recommendations.json`, `animes_anilist_tags.json`→`animes_anilist_meta.json` | Full re-sync / re-fetch. `animes_MAL`→`animes_mal` is a case-only rename (matters on the case-sensitive Synology backend). |
 
 ---
 

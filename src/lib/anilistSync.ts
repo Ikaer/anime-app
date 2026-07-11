@@ -1,7 +1,7 @@
 /**
  * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
  * taxonomy, the top staff credits and the banner art for anime already known
- * locally (via animes_MAL.json) and persists them via store.ts. Read-only
+ * locally (via animes_mal.json) and persists them via store.ts. Read-only
  * against AniList; no writes.
  */
 import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta } from '@/lib/store';
