@@ -37,6 +37,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const weights = parseSourceWeights(typeof req.query.w === 'string' ? req.query.w : undefined);
     const divRaw = typeof req.query.diversity === 'string' ? parseFloat(req.query.diversity) : NaN;
     const diversity = Number.isFinite(divRaw) ? divRaw : null;
+    const lang = req.query.lang === 'en' ? 'en' : 'fr';
 
     const data = getRecommendationsData();
     const ranked = computeFeed({
@@ -44,6 +45,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       threshold: Number.isFinite(thr as number) ? thr : null,
       weights,
       diversity,
+      lang,
     });
     const animes = applyNarrowingFilters(ranked, narrowing);
 

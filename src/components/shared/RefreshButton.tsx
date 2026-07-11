@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import styles from './RefreshButton.module.css';
+import { useT } from '@/lib/i18n';
 
 type RefreshOutcome = {
   mal: { ok: boolean; error?: string };
@@ -25,6 +26,7 @@ export interface RefreshButtonProps {
  * `onRefreshed`.
  */
 export default function RefreshButton({ animeId, onRefreshed, compact }: RefreshButtonProps) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<RefreshOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export default function RefreshButton({ animeId, onRefreshed, compact }: Refresh
       setResult(data);
       if (onRefreshed) await onRefreshed();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Échec du rafraîchissement');
+      setError(e instanceof Error ? e.message : t('refresh.failed'));
     } finally {
       setBusy(false);
     }
@@ -54,9 +56,9 @@ export default function RefreshButton({ animeId, onRefreshed, compact }: Refresh
         className={`${styles.btn} ${compact ? styles.compact : ''}`}
         onClick={refresh}
         disabled={busy}
-        title="Rafraîchir depuis MAL / AniList / SIMKL"
+        title={t('refresh.title')}
       >
-        {busy ? (compact ? '⏳' : '⏳ Rafraîchissement…') : (compact ? '🔄' : '🔄 Rafraîchir')}
+        {busy ? (compact ? '⏳' : t('refresh.refreshing')) : (compact ? '🔄' : t('refresh.refresh'))}
       </button>
       {result && (
         <span className={styles.status} title="MAL · AniList · SIMKL">

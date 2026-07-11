@@ -6,12 +6,10 @@ import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeForDisplay, ImageSize } from '@/models/anime';
 import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/animeUtils';
 import { useTierUrlState } from '@/hooks';
+import { useT, TranslationKey } from '@/lib/i18n';
 
-// Score → MAL word + tier color. Row 0 is the "à noter" tray (unrated).
-const SCORE_WORDS: Record<number, string> = {
-  10: 'Chef-d’œuvre', 9: 'Excellent', 8: 'Très bien', 7: 'Bien', 6: 'Correct',
-  5: 'Moyen', 4: 'Mauvais', 3: 'Très mauvais', 2: 'Horrible', 1: 'Abominable',
-};
+// Row 0 is the "à noter" tray (unrated); scores 10→1 carry MAL's word labels
+// (localized via `tierWord.<n>`).
 const TIER_SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
 // green (10) → red (1)
@@ -26,6 +24,7 @@ interface Preview { anime: AnimeForDisplay; x: number; y: number; }
 interface QueueItem { id: number; score: number; prevScore: number; }
 
 export default function TierPage() {
+  const t = useT();
   const { state, update, isReady } = useTierUrlState();
 
   const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
@@ -112,7 +111,7 @@ export default function TierPage() {
         const data = await res.json();
         if (!cancelled) setAnimes(data.animes || []);
       } catch {
-        if (!cancelled) setError('Impossible de charger la liste.');
+        if (!cancelled) setError(t('tier.loadFailed'));
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -180,7 +179,7 @@ export default function TierPage() {
         if (!res.ok || data.ok === false) {
           // Hard failure — nothing persisted. Revert the optimistic move.
           setOverrides(prev => new Map(prev).set(id, prevScore));
-          setFailed(prev => new Map(prev).set(id, data.error || 'Échec de l’enregistrement'));
+          setFailed(prev => new Map(prev).set(id, data.error || t('tier.saveFailed')));
         } else {
           // Persisted locally; warn if a remote source (MAL/SIMKL) didn't take it.
           const bad: string[] = [];
@@ -188,14 +187,14 @@ export default function TierPage() {
           if (data.simkl && data.simkl.ok === false) bad.push('SIMKL');
           setFailed(prev => {
             const n = new Map(prev);
-            if (bad.length) n.set(id, `Non synchronisé sur ${bad.join(' + ')}`);
+            if (bad.length) n.set(id, t('tier.notSynced', { sources: bad.join(' + ') }));
             else n.delete(id);
             return n;
           });
         }
       } catch {
         setOverrides(prev => new Map(prev).set(id, prevScore));
-        setFailed(prev => new Map(prev).set(id, 'Erreur réseau'));
+        setFailed(prev => new Map(prev).set(id, t('tier.networkError')));
       } finally {
         setSaving(prev => { const n = new Set(prev); n.delete(id); return n; });
       }
@@ -278,7 +277,7 @@ export default function TierPage() {
           rel="noopener noreferrer"
           draggable={false}
           onClick={(e) => e.stopPropagation()}
-          title="Voir toutes les infos locales"
+          title={t('table.localInfo')}
         >↗</a>
         {isSaving && <span className="badge saving">…</span>}
         {!isSaving && fail && <span className="badge fail" title={fail}>!</span>}
@@ -288,7 +287,7 @@ export default function TierPage() {
 
   const sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
-      <CollapsibleSection title="Filtres" isExpanded={expanded.filters} onToggle={() => toggle('filters')}>
+      <CollapsibleSection title={t('section.filters')} isExpanded={expanded.filters} onToggle={() => toggle('filters')}>
         <RecoFiltersSection
           search={state.search}
           onSearchChange={(v: string) => update({ search: v })}
@@ -304,9 +303,9 @@ export default function TierPage() {
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Affichage" isExpanded={expanded.display} onToggle={() => toggle('display')}>
+      <CollapsibleSection title={t('section.display')} isExpanded={expanded.display} onToggle={() => toggle('display')}>
         <div>
-          <label className="thumb-label">Taille des vignettes</label>
+          <label className="thumb-label">{t('section.thumbnailSize')}</label>
           <div className="thumb-buttons">
             {([0, 1, 2, 3] as ImageSize[]).map(s => (
               <Button
@@ -328,7 +327,7 @@ export default function TierPage() {
   return (
     <>
       <Head>
-        <title>Tier list - Anime List</title>
+        <title>{t('tier.pageTitle')}</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
       <AnimePageLayout sidebar={sidebar} ref={scrollContainerRef}>
@@ -336,19 +335,19 @@ export default function TierPage() {
           {error && <div className="error-banner">{error} <button onClick={() => setError('')}>×</button></div>}
 
           <div className="tier-header">
-            <h1 className="tier-title">🏆 Tier list</h1>
-            <span className="tier-count">{ratedCount} notés · {buckets.get(0)!.length} à noter</span>
+            <h1 className="tier-title">{t('nav.tierList')}</h1>
+            <span className="tier-count">{t('tier.headerCount', { rated: ratedCount, toRate: buckets.get(0)!.length })}</span>
           </div>
 
           {!isReady || isLoading ? (
-            <div className="loading-state">Loading...</div>
+            <div className="loading-state">{t('common.loading')}</div>
           ) : (
             <div className="board">
               {TIER_SCORES.map(s => (
                 <div key={s} className="tier-row" onDragOver={allowDrop} onDrop={(e) => onDropTo(e, s)}>
                   <div className="tier-label" style={{ background: scoreColor(s) }}>
                     <span className="tier-num">{s}</span>
-                    <span className="tier-word">{SCORE_WORDS[s]}</span>
+                    <span className="tier-word">{t(`tierWord.${s}` as TranslationKey)}</span>
                   </div>
                   <div className="tier-cards">
                     {buckets.get(s)!.map(renderCard)}
@@ -357,7 +356,7 @@ export default function TierPage() {
               ))}
 
               <div className="tray" onDragOver={allowDrop} onDrop={(e) => onDropTo(e, 0)}>
-                <div className="tray-label">À noter · {buckets.get(0)!.length}</div>
+                <div className="tray-label">{t('tier.trayLabel', { count: buckets.get(0)!.length })}</div>
                 <div className="tier-cards">
                   {buckets.get(0)!.map(renderCard)}
                 </div>

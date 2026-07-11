@@ -1,4 +1,5 @@
 import type { AnimeForDisplay, SeasonName, SeasonInfo } from '@/models/anime';
+import type { TFunction, TranslationKey } from '@/lib/i18n';
 
 // ============================================================================
 // Display titles (English-first)
@@ -87,7 +88,7 @@ export function applyNarrowingFilters<T extends AnimeForDisplay>(
 
 // Utility function to format season display with nice labels and colors
 
-export const formatSeason = (year: number, season: string) => {
+export const formatSeason = (year: number, season: string, t?: TFunction) => {
   const seasonMap: Record<string, { label: string; color: string }> = {
     'spring': { label: 'Spring', color: '#10B981' }, // Green
     'summer': { label: 'Summer', color: '#F59E0B' }, // Orange
@@ -96,8 +97,11 @@ export const formatSeason = (year: number, season: string) => {
   };
 
   const seasonInfo = seasonMap[season] || { label: season, color: '#6B7280' };
+  // When a translator is supplied (client components), localize the season word;
+  // server callers (no `t`) keep the English label.
+  const seasonWord = t && seasonMap[season] ? t(`seasonName.${season}` as TranslationKey) : seasonInfo.label;
   return {
-    label: `${seasonInfo.label} ${year}`,
+    label: `${seasonWord} ${year}`,
     color: seasonInfo.color
   };
 }

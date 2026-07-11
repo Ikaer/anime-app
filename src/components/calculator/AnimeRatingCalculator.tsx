@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { RATING_GRIDS, DEFAULT_GRID_ID, getGrid, RatingGrid } from '@/lib/ratingGrids';
+import { useT } from '@/lib/i18n';
 import styles from './AnimeRatingCalculator.module.css';
 
 /** Map a 0–10 score to the shared --score-N palette (red → green). */
@@ -34,6 +35,7 @@ function computeScore(scores: Record<string, number>, grid: RatingGrid) {
 }
 
 export default function AnimeRatingCalculator() {
+  const t = useT();
   const [gridId, setGridId] = useState<string>(DEFAULT_GRID_ID);
   const [scores, setScores] = useState<Record<string, number>>({});
 
@@ -56,7 +58,7 @@ export default function AnimeRatingCalculator() {
     <div className={styles.page}>
       <div className={styles.calculator}>
         <div className={styles.gridRow}>
-          <label className={styles.gridLabel} htmlFor="grid-select">Grille</label>
+          <label className={styles.gridLabel} htmlFor="grid-select">{t('calc.grid')}</label>
           <select
             id="grid-select"
             className={styles.gridSelect}
@@ -125,7 +127,7 @@ export default function AnimeRatingCalculator() {
             <span className={styles.scoreRaw}>{totalPoints}/{maxPoints} pts</span>
           </div>
           <div className={styles.scoreActions}>
-            <button className={styles.resetBtn} onClick={handleReset}>Reset</button>
+            <button className={styles.resetBtn} onClick={handleReset}>{t('calc.reset')}</button>
           </div>
         </div>
       </div>

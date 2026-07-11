@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useT } from '@/lib/i18n';
 import styles from './ConnectionLogPanel.module.css';
 
 type LogLevel = 'info' | 'success' | 'error';
@@ -15,6 +16,7 @@ interface LogEntry {
 const POLL_INTERVAL_MS = 2000;
 
 const ConnectionLogPanel: React.FC = () => {
+  const t = useT();
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const lastIdRef = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -52,10 +54,10 @@ const ConnectionLogPanel: React.FC = () => {
 
   return (
     <div className={styles.panel}>
-      <h3 className={styles.title}>Connection & Sync Log</h3>
+      <h3 className={styles.title}>{t('connLog.title')}</h3>
       <div className={styles.list} ref={listRef}>
         {entries.length === 0 ? (
-          <div className={styles.empty}>No activity yet.</div>
+          <div className={styles.empty}>{t('connLog.empty')}</div>
         ) : (
           entries.map(entry => (
             <div key={entry.id} className={`${styles.entry} ${styles[entry.level]}`}>

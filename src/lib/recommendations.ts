@@ -17,6 +17,7 @@ import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/an
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { MAL_ANIME_FIELDS } from '@/lib/mal';
+import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 const RECOMMENDATIONS_FILE = dataFile('recommendations.json');
 const DISMISSED_FILE = dataFile('recommendations_dismissed.json');
@@ -220,6 +221,8 @@ export interface FeedOptions {
    * ordering; higher values re-rank the feed to spread genres/studios apart.
    */
   diversity?: number | null;
+  /** Language for the server-built "Pourquoi ?" detail strings. Defaults to `fr`. */
+  lang?: Lang;
 }
 
 const EMPTY_DATA: RecommendationsData = {
@@ -435,6 +438,8 @@ function mmrRerank(items: RecommendationItem[], lambda: number): RecommendationI
  */
 export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const data = getRecommendationsData();
+  const lang = options.lang ?? DEFAULT_LANG;
+  const t = makeT(lang);
   const threshold = options.threshold ?? data.seedThreshold ?? TUNING.DEFAULT_SEED_THRESHOLD;
 
   const all = getAnimeForDisplay();
@@ -623,15 +628,15 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
     const staffById = new Map((anime.anilistMeta?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
-      crowd: allSeedTitles.length ? `Fans de ${allSeedTitles.join(', ')}` : undefined,
-      anilistCrowd: anilistAllTitles.length ? `Fans AniList de ${anilistAllTitles.join(', ')}` : undefined,
-      suggestions: values.suggestions ? 'Dans tes suggestions MAL' : undefined,
+      crowd: allSeedTitles.length ? t('recoDetail.crowd', { titles: allSeedTitles.join(', ') }) : undefined,
+      anilistCrowd: anilistAllTitles.length ? t('recoDetail.anilistCrowd', { titles: anilistAllTitles.join(', ') }) : undefined,
+      suggestions: values.suggestions ? t('recoDetail.suggestions') : undefined,
       feedback: (() => {
         const parts = [
           ...(fbGenreM.matched as string[]),
           ...fbStudioM.matched.map(id => studioNames.get(id as number) || `#${id}`),
         ];
-        return parts.length ? `Comme tes bonnes pioches : ${parts.join(', ')}` : undefined;
+        return parts.length ? t('recoDetail.feedback', { parts: parts.join(', ') }) : undefined;
       })(),
       genre: genreM.matched.length ? (genreM.matched as string[]).join(', ') : undefined,
       studio: studioM.matched.length
@@ -973,8 +978,10 @@ export function computeSimilarTo(
   targetId: number,
   malEdges: RecoEdge[],
   anilistEdges: AniListEdgeInput[],
-  limit: number = SIMILAR_LIMIT
+  limit: number = SIMILAR_LIMIT,
+  lang: Lang = DEFAULT_LANG
 ): SimilarItem[] {
+  const t = makeT(lang);
   const all = getAnimeForDisplay();
   const byId = new Map<number, AnimeForDisplay>(all.map(a => [a.id, a]));
   const target = byId.get(targetId);
@@ -1081,23 +1088,23 @@ export function computeSimilarTo(
     };
 
     const details: Partial<Record<RecoSource, string | undefined>> = {
-      crowd: crowdNum > 0 ? `${crowdNum} fan${crowdNum > 1 ? 's' : ''} de ce titre le recommandent` : undefined,
-      anilistCrowd: anilistNum > 0 ? `${anilistNum} recommandation${anilistNum > 1 ? 's' : ''} AniList depuis ce titre` : undefined,
-      genre: genreM.matched.length ? `En commun : ${(genreM.matched as string[]).join(', ')}` : undefined,
+      crowd: crowdNum > 0 ? t(crowdNum > 1 ? 'recoDetail.similarCrowd' : 'recoDetail.similarCrowdOne', { count: crowdNum }) : undefined,
+      anilistCrowd: anilistNum > 0 ? t(anilistNum > 1 ? 'recoDetail.similarAnilistCrowd' : 'recoDetail.similarAnilistCrowdOne', { count: anilistNum }) : undefined,
+      genre: genreM.matched.length ? t('recoDetail.inCommon', { parts: (genreM.matched as string[]).join(', ') }) : undefined,
       studio: studioM.matched.length
-        ? `En commun : ${studioM.matched.map(id => targetStudioNames.get(id as number) || `#${id}`).join(', ')}`
+        ? t('recoDetail.inCommon', { parts: studioM.matched.map(id => targetStudioNames.get(id as number) || `#${id}`).join(', ') })
         : undefined,
-      nsfw: values.nsfw > 0 && anime.nsfw ? `Même classement NSFW : ${anime.nsfw}` : undefined,
-      rating: values.rating > 0 && anime.rating ? `Même classification : ${anime.rating.toUpperCase()}` : undefined,
-      anilistTags: tagsM.matched.length ? `En commun : ${(tagsM.matched as string[]).join(', ')}` : undefined,
+      nsfw: values.nsfw > 0 && anime.nsfw ? t('recoDetail.sameNsfw', { value: anime.nsfw }) : undefined,
+      rating: values.rating > 0 && anime.rating ? t('recoDetail.sameRating', { value: anime.rating.toUpperCase() }) : undefined,
+      anilistTags: tagsM.matched.length ? t('recoDetail.inCommon', { parts: (tagsM.matched as string[]).join(', ') }) : undefined,
       anilistStaff: staffM.matched.length
-        ? `En commun : ${staffM.matched
+        ? t('recoDetail.inCommon', { parts: staffM.matched
             .map(id => {
               const s = targetStaffById.get(id as number);
               if (!s) return `#${id}`;
               return s.role ? `${s.role} : ${s.name}` : s.name;
             })
-            .join(', ')}`
+            .join(', ') })
         : undefined,
       rejection: (() => {
         const candStudioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
@@ -1105,9 +1112,9 @@ export function computeSimilarTo(
           ...(negGenreM.matched as string[]),
           ...negStudioM.matched.map(id => candStudioNames.get(id as number) || `#${id}`),
         ];
-        return parts.length ? `Proche de tes rejets : ${parts.join(', ')}` : undefined;
+        return parts.length ? t('recoDetail.closeToRejects', { parts: parts.join(', ') }) : undefined;
       })(),
-      popularity: `${(anime.num_list_users || 0).toLocaleString('fr-FR')} membres`,
+      popularity: t('recoDetail.members', { count: (anime.num_list_users || 0).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') }),
     };
 
     let score = 0;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { MalConnectionBadge, SimklConnectionBadge } from '@/components/anime';
+import { useI18n, LANG_LABELS, type Lang } from '@/lib/i18n';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,8 +11,25 @@ interface LayoutProps {
 // Routes grouped under the "Others" dropdown.
 const OTHER_ROUTES = ['/rate', '/discrepancies'];
 
+function LanguageToggle() {
+  const { lang, setLang, t } = useI18n();
+  const next: Lang = lang === 'fr' ? 'en' : 'fr';
+  return (
+    <button
+      type="button"
+      className="nav-link lang-toggle"
+      onClick={() => setLang(next)}
+      title={t('lang.switchTo', { lang: LANG_LABELS[next] })}
+      aria-label={t('lang.switchTo', { lang: LANG_LABELS[next] })}
+    >
+      {lang.toUpperCase()}
+    </button>
+  );
+}
+
 function OthersDropdown() {
   const router = useRouter();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -41,7 +59,7 @@ function OthersDropdown() {
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
-        Others <span className="nav-dropdown-caret">▾</span>
+        {t('nav.others')} <span className="nav-dropdown-caret">▾</span>
       </button>
       {open && (
         <div className="nav-dropdown-menu" role="menu">
@@ -50,14 +68,14 @@ function OthersDropdown() {
             role="menuitem"
             className={`nav-dropdown-item ${router.pathname === '/rate' ? 'active' : ''}`}
           >
-            Rating Calculator
+            {t('nav.ratingCalculator')}
           </Link>
           <Link
             href="/discrepancies"
             role="menuitem"
             className={`nav-dropdown-item ${router.pathname === '/discrepancies' ? 'active' : ''}`}
           >
-            MAL/SIMKL discrepancies
+            {t('nav.discrepancies')}
           </Link>
         </div>
       )}
@@ -67,6 +85,7 @@ function OthersDropdown() {
 
 export default function Layout({ children }: LayoutProps) {
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <div>
@@ -74,7 +93,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="container">
           <div className="header-content">
             <Link href="/" className="logo">
-              Anime Tracker
+              {t('brand')}
             </Link>
             <div className="header-right">
               <nav className="nav">
@@ -82,29 +101,30 @@ export default function Layout({ children }: LayoutProps) {
                   href="/"
                   className={`nav-link ${router.pathname === '/' ? 'active' : ''}`}
                 >
-                  Anime
+                  {t('nav.anime')}
                 </Link>
                 <Link
                   href="/recommendations"
                   className={`nav-link ${router.pathname === '/recommendations' ? 'active' : ''}`}
                 >
-                  ✨ Pour toi
+                  {t('nav.forYou')}
                 </Link>
                 <Link
                   href="/tier"
                   className={`nav-link ${router.pathname === '/tier' ? 'active' : ''}`}
                 >
-                  🏆 Tier list
+                  {t('nav.tierList')}
                 </Link>
                 <OthersDropdown />
                 <Link
                   href="/connections"
                   className={`nav-link ${router.pathname === '/connections' ? 'active' : ''}`}
                 >
-                  Connections
+                  {t('nav.connections')}
                 </Link>
               </nav>
               <div className="connection-badges">
+                <LanguageToggle />
                 <MalConnectionBadge />
                 <SimklConnectionBadge />
               </div>

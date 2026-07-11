@@ -9,6 +9,7 @@ import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis } from '@/components/anime';
+import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 interface Props {
   anime: AnimeForDisplay;
@@ -41,16 +42,23 @@ function fmtScore(n?: number | null): string {
   return n != null && n > 0 ? String(n) : '—';
 }
 
-function airingLabel(status?: string): string {
+function airingLabel(status: string | undefined, t: TFunction): string {
   switch (status) {
-    case 'currently_airing': return 'En diffusion';
-    case 'finished_airing': return 'Terminé';
-    case 'not_yet_aired': return 'À venir';
+    case 'currently_airing':
+    case 'finished_airing':
+    case 'not_yet_aired':
+      return t(`airing.${status}` as TranslationKey);
     default: return status || '—';
   }
 }
 
+/** Localize a personal watch status ('watching' → "En cours"), '—' when absent. */
+function statusLabel(status: string | null | undefined, t: TFunction): string {
+  return status ? t(`statusShort.${status}` as TranslationKey) : '—';
+}
+
 export default function AnimeDetailPage({ anime, similar }: Props) {
+  const t = useT();
   const router = useRouter();
   const poster = anime.main_picture?.large || anime.main_picture?.medium || '';
   const en = anime.alternative_titles?.en;
@@ -93,7 +101,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   return (
     <>
       <Head>
-        <title>{primaryTitle} — Détails locaux</title>
+        <title>{t('detail.pageTitle', { title: primaryTitle })}</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
 
@@ -110,7 +118,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
 
       <div className="page">
         <div className="topbar">
-          <Link href="/" className="back">← Retour</Link>
+          <Link href="/" className="back">{t('detail.back')}</Link>
           <div className="ext-links">
             <RefreshButton
               animeId={anime.id}
@@ -135,22 +143,22 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <header className="hero">
           {poster
             ? <img className="poster" src={poster} alt={primaryTitle} />
-            : <div className="poster noimg">No image</div>}
+            : <div className="poster noimg">{t('common.noImage')}</div>}
           <div className="head-info">
             <h1>{primaryTitle}</h1>
             {secondaryTitle && <div className="alt">{secondaryTitle}</div>}
             {ja && <div className="alt ja">{ja}</div>}
-            {synonyms.length > 0 && <div className="synonyms">Aussi : {synonyms.join(' · ')}</div>}
+            {synonyms.length > 0 && <div className="synonyms">{t('detail.alsoKnown', { names: synonyms.join(' · ') })}</div>}
             <div className="badges">
-              <span className={`airing ${anime.status || ''}`}>{airingLabel(anime.status)}</span>
+              <span className={`airing ${anime.status || ''}`}>{airingLabel(anime.status, t)}</span>
               {anime.media_type && <span className="pill">{anime.media_type.toUpperCase()}</span>}
               {anime.start_season && (
-                <span className="pill" style={{ color: formatSeason(anime.start_season.year, anime.start_season.season).color }}>
-                  {formatSeason(anime.start_season.year, anime.start_season.season).label}
+                <span className="pill" style={{ color: formatSeason(anime.start_season.year, anime.start_season.season, t).color }}>
+                  {formatSeason(anime.start_season.year, anime.start_season.season, t).label}
                 </span>
               )}
               {anime.nsfw && anime.nsfw !== 'white' && <span className="pill nsfw">NSFW: {anime.nsfw}</span>}
-              {anime.hidden && <span className="pill hidden">Masqué</span>}
+              {anime.hidden && <span className="pill hidden">{t('detail.hidden')}</span>}
             </div>
             {anime.synopsis && <p className="prose synopsis">{anime.synopsis}</p>}
           </div>
@@ -179,8 +187,8 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           {/* ---------- Similar by staff & studio (production-credit recos) ---------- */}
           {similar.length > 0 && (
             <section className="section">
-              <h2>Dans le même studio / staff</h2>
-              <p className="reco-sub">Recommandations basées uniquement sur les studios et le staff technique partagés.</p>
+              <h2>{t('detail.sameStudioStaff')}</h2>
+              <p className="reco-sub">{t('detail.sameStudioStaffSub')}</p>
               <div className="reco-cards">
                 {similar.map(s => (
                   <Link key={s.id} href={`/anime/${s.id}`} className="reco-card" title={s.title}>
@@ -209,7 +217,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           {/* ---------- Related anime ---------- */}
           {anime.related_anime && anime.related_anime.length > 0 && (
             <section className="section">
-              <h2>Anime liés</h2>
+              <h2>{t('detail.relatedAnime')}</h2>
               <div className="related">
                 {anime.related_anime.map(r => (
                   <Link key={r.node.id} href={`/anime/${r.node.id}`} className="related-card" title={r.node.title}>
@@ -229,26 +237,26 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
 
         {/* ---------- Personal state reconciliation (the point of this page) ---------- */}
         <section className="section">
-          <h2>État personnel (MAL vs SIMKL vs effectif)</h2>
+          <h2>{t('detail.personalState')}</h2>
           <table className="reco-table">
             <thead>
-              <tr><th></th><th>MAL</th><th>SIMKL</th><th>Effectif</th></tr>
+              <tr><th></th><th>MAL</th><th>SIMKL</th><th>{t('detail.effective')}</th></tr>
             </thead>
             <tbody>
               <tr>
-                <td className="rowlabel">Statut</td>
-                <td>{mal?.status ? formatUserStatus(mal.status) : '—'}</td>
-                <td>{simkl?.status ? formatUserStatus(simkl.status) : '—'}</td>
-                <td className="eff">{effStatus ? formatUserStatus(effStatus) : '—'}</td>
+                <td className="rowlabel">{t('detail.status')}</td>
+                <td>{statusLabel(mal?.status, t)}</td>
+                <td>{statusLabel(simkl?.status, t)}</td>
+                <td className="eff">{statusLabel(effStatus, t)}</td>
               </tr>
               <tr>
-                <td className="rowlabel">Note</td>
+                <td className="rowlabel">{t('detail.score')}</td>
                 <td>{fmtScore(mal?.score)}</td>
                 <td>{fmtScore(simkl?.score)}</td>
                 <td className="eff">{effScore ?? '—'}</td>
               </tr>
               <tr>
-                <td className="rowlabel">Progression</td>
+                <td className="rowlabel">{t('detail.progress')}</td>
                 <td>{mal?.num_episodes_watched ?? '—'}{anime.num_episodes ? ` / ${anime.num_episodes}` : ''}</td>
                 <td>{simkl?.num_episodes_watched ?? '—'}{simkl?.total_episodes ? ` / ${simkl.total_episodes}` : ''}</td>
                 <td className="eff">{effProgress ?? '—'}</td>
@@ -256,19 +264,19 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
             </tbody>
           </table>
           <div className="meta-lines">
-            {mal?.is_rewatching && <span>🔁 En re-visionnage (MAL)</span>}
-            {mal?.updated_at && <span>MAL mis à jour : {fmtDate(mal.updated_at)}</span>}
-            {simkl?.watched_at && <span>SIMKL vu le : {fmtDate(simkl.watched_at)}</span>}
+            {mal?.is_rewatching && <span>{t('detail.rewatching')}</span>}
+            {mal?.updated_at && <span>{t('detail.malUpdated', { date: fmtDate(mal.updated_at) })}</span>}
+            {simkl?.watched_at && <span>{t('detail.simklWatched', { date: fmtDate(simkl.watched_at) })}</span>}
           </div>
 
           {disc && (
             <div className="discrepancy">
-              <strong>⚠ Divergence MAL / SIMKL détectée</strong>
+              <strong>{t('detail.discTitle')}</strong>
               <ul>
-                {disc.presence === 'simkl_only' && <li>Présent sur SIMKL mais absent de ta liste MAL</li>}
-                {disc.status && <li>Statut : MAL <b>{disc.status.mal ? formatUserStatus(disc.status.mal) : '—'}</b> vs SIMKL <b>{formatUserStatus(disc.status.simkl)}</b></li>}
-                {disc.score && <li>Note : MAL <b>{disc.score.mal ?? '—'}</b> vs SIMKL <b>{disc.score.simkl ?? '—'}</b></li>}
-                {disc.progress && <li>Progression : MAL <b>{disc.progress.mal ?? '—'}</b> vs SIMKL <b>{disc.progress.simkl ?? '—'}</b></li>}
+                {disc.presence === 'simkl_only' && <li>{t('detail.discSimklOnly')}</li>}
+                {disc.status && <li>{t('detail.status')} : MAL <b>{statusLabel(disc.status.mal, t)}</b> vs SIMKL <b>{statusLabel(disc.status.simkl, t)}</b></li>}
+                {disc.score && <li>{t('detail.score')} : MAL <b>{disc.score.mal ?? '—'}</b> vs SIMKL <b>{disc.score.simkl ?? '—'}</b></li>}
+                {disc.progress && <li>{t('detail.progress')} : MAL <b>{disc.progress.mal ?? '—'}</b> vs SIMKL <b>{disc.progress.simkl ?? '—'}</b></li>}
               </ul>
             </div>
           )}
@@ -276,21 +284,21 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
 
         {/* ---------- Catalog facts (MAL authority) ---------- */}
         <section className="section">
-          <h2>Fiche catalogue (MAL)</h2>
+          <h2>{t('detail.catalogSheet')}</h2>
           <div className="grid">
-            <Field label="Score moyen" value={anime.mean != null ? anime.mean.toFixed(2) : '—'} />
-            <Field label="Rang" value={anime.rank != null ? `#${anime.rank}` : '—'} />
-            <Field label="Popularité" value={anime.popularity != null ? `#${anime.popularity}` : '—'} />
-            <Field label="Membres" value={fmtNum(anime.num_list_users)} />
-            <Field label="Votants" value={fmtNum(anime.num_scoring_users)} />
-            <Field label="Épisodes" value={anime.num_episodes ? String(anime.num_episodes) : 'TBA'} />
-            <Field label="Durée / ép." value={fmtDuration(anime.average_episode_duration)} />
-            <Field label="Source" value={anime.source ? formatUserStatus(anime.source) : '—'} />
-            <Field label="Classification" value={anime.rating || '—'} />
-            <Field label="Début" value={fmtDate(anime.start_date)} />
-            <Field label="Fin" value={fmtDate(anime.end_date)} />
-            <Field label="Ajouté (MAL)" value={fmtDate(anime.created_at)} />
-            <Field label="Maj (MAL)" value={fmtDate(anime.updated_at)} />
+            <Field label={t('detail.meanScore')} value={anime.mean != null ? anime.mean.toFixed(2) : '—'} />
+            <Field label={t('field.rank')} value={anime.rank != null ? `#${anime.rank}` : '—'} />
+            <Field label={t('field.popularity')} value={anime.popularity != null ? `#${anime.popularity}` : '—'} />
+            <Field label={t('field.users')} value={fmtNum(anime.num_list_users)} />
+            <Field label={t('field.scorers')} value={fmtNum(anime.num_scoring_users)} />
+            <Field label={t('field.episodes')} value={anime.num_episodes ? String(anime.num_episodes) : t('common.tba')} />
+            <Field label={t('detail.durationPerEp')} value={fmtDuration(anime.average_episode_duration)} />
+            <Field label={t('detail.source')} value={anime.source ? formatUserStatus(anime.source) : '—'} />
+            <Field label={t('detail.rating')} value={anime.rating || '—'} />
+            <Field label={t('detail.start')} value={fmtDate(anime.start_date)} />
+            <Field label={t('detail.end')} value={fmtDate(anime.end_date)} />
+            <Field label={t('detail.addedMal')} value={fmtDate(anime.created_at)} />
+            <Field label={t('detail.updatedMal')} value={fmtDate(anime.updated_at)} />
           </div>
         </section>
 
@@ -300,11 +308,11 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
             <h2>AniList</h2>
             {tags.length > 0 && (
               <>
-                <h3>Tags ({tags.length})</h3>
+                <h3>{t('detail.tagsCount', { count: tags.length })}</h3>
                 <div className="chips">
-                  {tags.map(t => (
-                    <span key={t.name} className="chip tag" title={t.category ? `${t.category} · rang ${t.rank}` : `rang ${t.rank}`}>
-                      {t.name}<span className="rank">{t.rank}</span>
+                  {tags.map(tag => (
+                    <span key={tag.name} className="chip tag" title={tag.category ? t('detail.tagRankCategory', { category: tag.category, rank: tag.rank }) : t('detail.tagRank', { rank: tag.rank })}>
+                      {tag.name}<span className="rank">{tag.rank}</span>
                     </span>
                   ))}
                 </div>
@@ -312,7 +320,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
             )}
             {staff.length > 0 && (
               <>
-                <h3>Staff ({staff.length})</h3>
+                <h3>{t('detail.staffCount', { count: staff.length })}</h3>
                 <div className="staff-list">
                   {staff.map(s => (
                     <div key={`${s.id}-${s.role}`} className="staff-row">
@@ -328,7 +336,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
 
         {/* ---------- Cross-source id crosswalk ---------- */}
         <section className="section">
-          <h2>Identifiants (crosswalk)</h2>
+          <h2>{t('detail.crosswalk')}</h2>
           <div className="grid ids">
             {idRows.filter(([, v]) => v != null && v !== '').map(([label, value, href]) => (
               <div key={label} className="field">
@@ -346,7 +354,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         {/* ---------- Background ---------- */}
         {anime.background && (
           <section className="section">
-            <h2>Contexte</h2>
+            <h2>{t('detail.background')}</h2>
             <p className="prose">{anime.background}</p>
           </section>
         )}

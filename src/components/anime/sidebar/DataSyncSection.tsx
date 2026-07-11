@@ -3,6 +3,7 @@ import styles from './DataSyncSection.module.css';
 import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
 import type { HistoricalCrawlStats } from '@/lib/malSync';
+import { useT } from '@/lib/i18n';
 
 interface DataSyncSectionProps {
   authState: MALAuthState;
@@ -43,6 +44,7 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   simklSyncMessage,
   onSimklSync,
 }) => {
+  const t = useT();
   const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isSimklSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
 
@@ -50,14 +52,14 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
     <div className={styles.dataSyncSection}>
       <div className={styles.buttonGroup}>
         <Button onClick={onSync} disabled={!authState.isAuthenticated || anyBusy}>
-          {isSyncing ? 'Syncing...' : 'Sync MAL Data'}
+          {isSyncing ? t('dataSync.syncing') : t('dataSync.syncMal')}
         </Button>
         <Button
           onClick={onBigSync}
           disabled={!authState.isAuthenticated || anyBusy}
           variant="primary-negative"
         >
-          {isBigSyncing ? 'Big Syncing...' : 'MAL Big Sync'}
+          {isBigSyncing ? t('dataSync.bigSyncing') : t('dataSync.bigSync')}
         </Button>
       </div>
       <div className={styles.buttonGroup}>
@@ -66,31 +68,31 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
           disabled={!authState.isAuthenticated || anyBusy || crawlDone}
           variant="secondary"
         >
-          {isHistoricalCrawling ? 'Crawling...' : crawlDone ? 'MAL History Complete' : 'Crawl MAL History'}
+          {isHistoricalCrawling ? t('dataSync.crawling') : crawlDone ? t('dataSync.historyComplete') : t('dataSync.crawlHistory')}
         </Button>
       </div>
       {historicalStats !== null && (
         <div className={styles.crawlStats}>
           {crawlDone
-            ? `All ${historicalStats.total} historical seasons synced`
-            : `${historicalStats.synced} / ${historicalStats.total} seasons synced${historicalStats.oldestSyncedYear ? ` (back to ${historicalStats.oldestSyncedYear})` : ''}`}
+            ? t('dataSync.allSeasonsSynced', { total: historicalStats.total })
+            : `${t('dataSync.seasonsSynced', { synced: historicalStats.synced, total: historicalStats.total })}${historicalStats.oldestSyncedYear ? t('dataSync.backTo', { year: historicalStats.oldestSyncedYear }) : ''}`}
         </div>
       )}
       {syncError && <div className={styles.error}>{syncError}</div>}
       <div className={styles.buttonGroup}>
         <Button onClick={onSimklSync} disabled={!simklConnected || anyBusy}>
-          {isSimklSyncing ? 'Syncing...' : 'Sync SIMKL'}
+          {isSimklSyncing ? t('dataSync.syncing') : t('dataSync.syncSimkl')}
         </Button>
       </div>
       {simklSyncMessage && <div className={styles.crawlStats}>{simklSyncMessage}</div>}
       <div className={styles.buttonGroup}>
         <Button onClick={onAnilistMetaSync} disabled={anyBusy} variant="secondary">
-          {isAnilistMetaSyncing ? 'Starting...' : 'Sync AniList Metadata'}
+          {isAnilistMetaSyncing ? t('dataSync.starting') : t('dataSync.syncAnilist')}
         </Button>
       </div>
       {anilistMetaStats !== null && (
         <div className={styles.crawlStats}>
-          {anilistMetaStats.taggedCount} / {anilistMetaStats.totalAnime} anime enrichis
+          {t('dataSync.animeEnriched', { tagged: anilistMetaStats.taggedCount, total: anilistMetaStats.totalAnime })}
         </div>
       )}
       {anilistMetaSyncMessage && <div className={styles.crawlStats}>{anilistMetaSyncMessage}</div>}

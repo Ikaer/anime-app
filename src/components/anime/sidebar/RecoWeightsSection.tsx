@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { SourceWeights } from '@/models/anime';
 import { SOURCE_META } from '@/lib/recoWeights';
+import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './RecoWeightsSection.module.css';
 
 /**
@@ -20,6 +21,7 @@ interface RecoWeightsSectionProps {
 }
 
 const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeightsChange }) => {
+  const t = useT();
   const [draft, setDraft] = useState<SourceWeights>(weights);
 
   // Resync when the committed weights change externally (preset, URL nav).
@@ -29,7 +31,10 @@ const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeig
 
   return (
     <div className={styles.weightsSection}>
-      {SOURCE_META.map(({ source, label, hint, min, max, step }) => (
+      {SOURCE_META.map(({ source, min, max, step }) => {
+        const label = t(`reco.source.${source}.label` as TranslationKey);
+        const hint = t(`reco.source.${source}.hint` as TranslationKey);
+        return (
         <div key={source} className={styles.weightRow}>
           <div className={styles.weightHead}>
             <span className={styles.weightLabel}>{label}</span>
@@ -49,7 +54,8 @@ const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeig
           />
           <span className={styles.weightHint}>{hint}</span>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 };

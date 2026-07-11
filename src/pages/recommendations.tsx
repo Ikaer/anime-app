@@ -13,10 +13,12 @@ import { AnimeForDisplay, MALAuthState, ImageSize } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
 import { encodeSourceWeights } from '@/lib/recoWeights';
+import { useI18n } from '@/lib/i18n';
 
 type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
 
 export default function RecommendationsPage() {
+  const { t, lang } = useI18n();
   const { state, update, isReady } = useRecommendationsUrlState();
 
   // Auth (needed to gate the refresh button).
@@ -71,6 +73,7 @@ export default function RecommendationsPage() {
       // Per-source weights (only non-defaults are emitted).
       const wStr = encodeSourceWeights(state.weights);
       if (wStr) params.set('w', wStr);
+      params.set('lang', lang);
 
       if (state.review) {
         params.set('review', state.review);
@@ -87,14 +90,14 @@ export default function RecommendationsPage() {
         if (!state.review) setRecoLastRefresh(data.lastRefresh ?? null);
       } else {
         const errorData = await res.json().catch(() => ({}));
-        setError(errorData.error || 'Failed to load recommendations');
+        setError(errorData.error || t('reco.loadFailed'));
       }
     } catch {
-      setError('Failed to load recommendations');
+      setError(t('reco.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [state]);
+  }, [state, lang, t]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -105,7 +108,7 @@ export default function RecommendationsPage() {
     if (!authState.isAuthenticated) return;
     setIsRefreshingRecos(true);
     setRecoError('');
-    setRecoProgress('Démarrage...');
+    setRecoProgress(t('dataSync.starting'));
     try {
       const startParams = new URLSearchParams();
       if (state.nicheMode) startParams.set('nicheMode', 'true');
@@ -128,7 +131,7 @@ export default function RecommendationsPage() {
           es.close();
           setIsRefreshingRecos(false);
           setRecoProgress('');
-          setRecoError(p.details || p.error || 'Refresh failed');
+          setRecoError(p.details || p.error || t('reco.refreshFailed'));
         }
       };
       es.onerror = () => {
@@ -136,7 +139,7 @@ export default function RecommendationsPage() {
         setIsRefreshingRecos(false);
       };
     } catch {
-      setRecoError('Failed to start recommendations refresh.');
+      setRecoError(t('reco.refreshStartFailed'));
       setIsRefreshingRecos(false);
       setRecoProgress('');
     }
@@ -153,10 +156,10 @@ export default function RecommendationsPage() {
       if (response.ok) {
         setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
-        setError('Impossible d’enregistrer le retour.');
+        setError(t('reco.feedbackSaveFailed'));
       }
     } catch {
-      setError('Impossible d’enregistrer le retour.');
+      setError(t('reco.feedbackSaveFailed'));
     }
   };
 
@@ -169,16 +172,16 @@ export default function RecommendationsPage() {
       if (response.ok) {
         setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
-        setError('Impossible de retirer le retour.');
+        setError(t('reco.feedbackRemoveFailed'));
       }
     } catch {
-      setError('Impossible de retirer le retour.');
+      setError(t('reco.feedbackRemoveFailed'));
     }
   };
 
   const sidebar = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
-      <CollapsibleSection title="Recommandations" isExpanded={expanded.recos} onToggle={() => toggle('recos')}>
+      <CollapsibleSection title={t('section.recommendations')} isExpanded={expanded.recos} onToggle={() => toggle('recos')}>
         <RecommendationsSection
           authState={authState}
           isRefreshingRecos={isRefreshingRecos}
@@ -197,18 +200,18 @@ export default function RecommendationsPage() {
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Views" isExpanded={expanded.views} onToggle={() => toggle('views')}>
+      <CollapsibleSection title={t('section.views')} isExpanded={expanded.views} onToggle={() => toggle('views')}>
         <RecoWeightPresetsSection onApply={(w) => update({ weights: w })} />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Pondération des sources" isExpanded={expanded.weights} onToggle={() => toggle('weights')}>
+      <CollapsibleSection title={t('reco.sourceWeights')} isExpanded={expanded.weights} onToggle={() => toggle('weights')}>
         <RecoWeightsSection
           weights={state.weights}
           onWeightsChange={(w) => update({ weights: w })}
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Filtres" isExpanded={expanded.filters} onToggle={() => toggle('filters')}>
+      <CollapsibleSection title={t('section.filters')} isExpanded={expanded.filters} onToggle={() => toggle('filters')}>
         <RecoFiltersSection
           search={state.search}
           onSearchChange={(v) => update({ search: v })}
@@ -224,7 +227,7 @@ export default function RecommendationsPage() {
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Display" isExpanded={expanded.display} onToggle={() => toggle('display')}>
+      <CollapsibleSection title={t('section.display')} isExpanded={expanded.display} onToggle={() => toggle('display')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <DisplaySection
             imageSize={state.imageSize}
@@ -233,7 +236,7 @@ export default function RecommendationsPage() {
             onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
           />
           <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
-            {showAllExplains ? 'Masquer les explications' : 'Afficher les explications'}
+            {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}
           </Button>
         </div>
       </CollapsibleSection>
@@ -243,7 +246,7 @@ export default function RecommendationsPage() {
   return (
     <>
       <Head>
-        <title>Pour toi - Anime List</title>
+        <title>{t('reco.pageTitle')}</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
       <AnimePageLayout sidebar={sidebar}>
@@ -256,22 +259,22 @@ export default function RecommendationsPage() {
 
           <div className="reco-header">
             <h1 className="reco-title">
-              {state.review === 'up' ? '👍 Bonnes pioches'
-                : state.review === 'down' ? '👎 Pas pour moi'
-                : '✨ Pour toi'}
+              {state.review === 'up' ? t('reco.goodPicks')
+                : state.review === 'down' ? t('reco.notForMe')
+                : t('nav.forYou')}
             </h1>
             {state.review ? (
               <Button variant="secondary" size="xs" onClick={() => update({ review: null })}>
-                ← Retour aux recommandations
+                {t('reco.backToRecos')}
               </Button>
             ) : (
-              <span className="reco-count">{animes.length} titres</span>
+              <span className="reco-count">{t('reco.countTitles', { count: animes.length })}</span>
             )}
           </div>
 
           <div className="table-container">
             {!isReady || isLoading ? (
-              <div className="loading-state">Loading...</div>
+              <div className="loading-state">{t('common.loading')}</div>
             ) : (
               <AnimeCardView
                 animes={animes}

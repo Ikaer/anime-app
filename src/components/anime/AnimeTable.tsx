@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { AnimeForDisplay, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
-import { formatSeason, formatUserStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
+import { formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
 import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
+import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './AnimeTable.module.css';
 
 const formatNumber = (num?: number) => {
@@ -49,6 +50,7 @@ interface AnimeTableProps {
 }
 
 export default function AnimeTable({ animes, imageSize, visibleColumns, sortColumn, sortDirection, onUpdateMALStatus, onHideToggle }: AnimeTableProps) {
+  const t = useT();
   const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
   const imageDimensions = getImageDimensions(imageSize);
 
@@ -227,11 +229,11 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   };
 
   const formatStatus = (status?: string) => {
-    return formatUserStatus(status);
+    return status ? t(`airing.${status}` as TranslationKey) : t('common.unknown');
   };
 
   const formatGenres = (genres: Array<{ name: string }> = []) => {
-    if (!genres || genres.length === 0) return 'No genres';
+    if (!genres || genres.length === 0) return t('common.noGenres');
     // Show full genre list without suffix abbreviation
     return genres.map(g => g.name).join(', ');
   };
@@ -276,7 +278,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   if (animes.length === 0) {
     return (
       <div className={styles.emptyState}>
-        <p>No anime found. Try syncing data or adjusting your filters.</p>
+        <p>{t('table.emptyState')}</p>
       </div>
     );
   }
@@ -287,27 +289,27 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
         <table className={styles.animeTable}>
           <thead>
             <tr>
-              <th>Image</th>
-              <th>Title {getSortIcon('title')}</th>
-              <th>Status {getSortIcon('status')}</th>
-              <th>Episodes {getSortIcon('num_episodes')}</th>
-              <th>Starting Season</th>
-              <th>Me</th>
-              <th>Links</th>
+              <th>{t('table.image')}</th>
+              <th>{t('field.title')} {getSortIcon('title')}</th>
+              <th>{t('field.status')} {getSortIcon('status')}</th>
+              <th>{t('field.episodes')} {getSortIcon('num_episodes')}</th>
+              <th>{t('table.startingSeason')}</th>
+              <th>{t('table.me')}</th>
+              <th>{t('table.links')}</th>
               {(visibleColumns?.score ?? true) && (
-                <th title="Score">S {getSortIcon('mean')}</th>
+                <th title={t('field.score')}>S {getSortIcon('mean')}</th>
               )}
               {(visibleColumns?.rank ?? true) && (
-                <th title="Rank">R {getSortIcon('rank')}</th>
+                <th title={t('field.rank')}>R {getSortIcon('rank')}</th>
               )}
               {(visibleColumns?.popularity ?? true) && (
-                <th title="Popularity">P {getSortIcon('popularity')}</th>
+                <th title={t('field.popularity')}>P {getSortIcon('popularity')}</th>
               )}
               {(visibleColumns?.users ?? true) && (
-                <th title="Users">U {getSortIcon('num_list_users')}</th>
+                <th title={t('field.users')}>U {getSortIcon('num_list_users')}</th>
               )}
               {(visibleColumns?.scorers ?? true) && (
-                <th title="Scorers">X {getSortIcon('num_scoring_users')}</th>
+                <th title={t('field.scorers')}>X {getSortIcon('num_scoring_users')}</th>
               )}
             </tr>
           </thead>
@@ -326,7 +328,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       unoptimized
                     />
                   ) : (
-                    <div className={`${styles.noImage} ${styles[`imageSize${imageSize}`]}`}>No Image</div>
+                    <div className={`${styles.noImage} ${styles[`imageSize${imageSize}`]}`}>{t('common.noImage')}</div>
                   )}
                 </td>
                 <td className={styles.titleCell}>
@@ -344,7 +346,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                   </span>
                 </td>
                 <td className={styles.episodesCell}>
-                  {anime.num_episodes || 'TBA'}
+                  {anime.num_episodes || t('common.tba')}
                 </td>
                 <td className={styles.seasonCell}>
                   {anime.start_season ? (
@@ -354,10 +356,10 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                         fontWeight: 'bold'
                       }}
                     >
-                      {formatSeason(anime.start_season.year, anime.start_season.season).label}
+                      {formatSeason(anime.start_season.year, anime.start_season.season, t).label}
                     </span>
                   ) : (
-                    <span style={{ color: '#6B7280' }}>Unknown</span>
+                    <span style={{ color: '#6B7280' }}>{t('common.unknown')}</span>
                   )}
                 </td>
                 <td className={styles.meCell}>
@@ -367,12 +369,12 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       onChange={(e) => handleStatusChange(anime.id, e.target.value)}
                       className={`${styles.malStatus} ${getStatusClass(getDisplayStatus(anime))}`}
                     >
-                      <option value="">Select Status</option>
-                      <option value="watching">Watching</option>
-                      <option value="completed">Completed</option>
-                      <option value="on_hold">On Hold</option>
-                      <option value="dropped">Dropped</option>
-                      <option value="plan_to_watch">Plan to Watch</option>
+                      <option value="">{t('table.selectStatus')}</option>
+                      <option value="watching">{t('statusShort.watching')}</option>
+                      <option value="completed">{t('statusShort.completed')}</option>
+                      <option value="on_hold">{t('statusShort.on_hold')}</option>
+                      <option value="dropped">{t('statusShort.dropped')}</option>
+                      <option value="plan_to_watch">{t('statusShort.plan_to_watch')}</option>
                     </select>
                     <SimklDiscrepancyBadge anime={anime} />
                   </div>
@@ -382,7 +384,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       onChange={(e) => handleScoreChange(anime.id, parseInt(e.target.value))}
                       className={`${styles.malScore} ${styles.editable}`}
                     >
-                      <option value={0}>No Score</option>
+                      <option value={0}>{t('table.noScore')}</option>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(score => (
                         <option key={score} value={score}>{score}</option>
                       ))}
@@ -395,7 +397,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       size="xs"
                       square
                       onClick={() => handleEpisodeChange(anime.id, getDisplayEpisodes(anime) - 1)}
-                      title="Decrease episode count"
+                      title={t('table.decreaseEp')}
                     >
                       -
                     </Button>
@@ -408,7 +410,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       size="xs"
                       square
                       onClick={() => handleEpisodeChange(anime.id, getDisplayEpisodes(anime) + 1)}
-                      title="Watch next episode"
+                      title={t('table.watchNext')}
                     >
                       +
                     </Button>
@@ -423,7 +425,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       variant="secondary"
                       size="xs"
                       square
-                      title="Voir toutes les infos locales"
+                      title={t('table.localInfo')}
                     >
                       ↗
                     </Button>
@@ -441,7 +443,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       variant="primary-positive"
                       size="xs"
                       square
-                      title="Search this anime on Google"
+                      title={t('table.searchGoogle')}
                     >
                       🔍
                     </Button>
@@ -450,7 +452,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       variant="secondary"
                       size="xs"
                       square
-                      title="Search on JustWatch"
+                      title={t('table.searchJustwatch')}
                     >
                       <Image
                         src="/justwatch.png"
@@ -464,18 +466,18 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       onClick={() => onHideToggle?.(anime.id, !anime.hidden)}
                       variant={anime.hidden ? 'primary-positive' : 'primary-negative'}
                       size="sm"
-                      title={anime.hidden ? 'Show this anime' : 'Hide this anime'}
+                      title={anime.hidden ? t('table.showAnime') : t('table.hideAnime')}
                     >
-                      {anime.hidden ? 'Unhide' : 'Hide'}
+                      {anime.hidden ? t('table.unhide') : t('table.hide')}
                     </Button>
                     {hasPendingUpdates(anime.id) && (
                       <Button
                         onClick={() => handleUpdateMAL(anime.id)}
                         variant="primary"
                         size="sm"
-                        title="Update MAL status"
+                        title={t('table.updateMalStatus')}
                       >
-                        Update
+                        {t('table.update')}
                       </Button>
                     )}
                   </div>

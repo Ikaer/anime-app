@@ -1,15 +1,17 @@
 import Head from 'next/head';
 import { AccountSection, SimklSection, DataSyncSection, ConnectionLogPanel } from '@/components/anime';
 import { useConnections } from '@/hooks';
+import { useT } from '@/lib/i18n';
 
 export default function ConnectionsPage() {
+  const t = useT();
   const { mal, simkl, anilist } = useConnections();
 
   return (
     <>
       <Head>
-        <title>Connections - MyHomeApp</title>
-        <meta name="description" content="Manage MyAnimeList/SIMKL connections and sync activity" />
+        <title>{t('conn.pageTitle')}</title>
+        <meta name="description" content={t('conn.metaDescription')} />
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
       <div className="connections-page">
@@ -36,7 +38,7 @@ export default function ConnectionsPage() {
             />
           </section>
           <section className="connections-section">
-            <h2>Sync</h2>
+            <h2>{t('conn.sync')}</h2>
             <DataSyncSection
               authState={mal.authState}
               isSyncing={mal.isSyncing}

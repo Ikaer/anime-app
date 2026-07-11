@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './RecoFiltersSection.module.css';
+import { useT } from '@/lib/i18n';
 
 /**
  * Narrowing filters that make sense on the ranked recommendations feed:
@@ -39,6 +40,7 @@ const YearRange: React.FC<{
   maxYear: number | null;
   onYearChange: (min: number | null, max: number | null) => void;
 }> = ({ minYear, maxYear, onYearChange }) => {
+  const t = useT();
   const lo = minYear ?? MIN_YEAR;
   const hi = maxYear ?? MAX_YEAR;
   const [draft, setDraft] = useState<[number, number]>([lo, hi]);
@@ -63,7 +65,7 @@ const YearRange: React.FC<{
   return (
     <div className={styles.fieldGroup}>
       <label className={styles.label}>
-        Année : <span className={styles.yearValue}>{dMin} – {dMax}</span>
+        {t('reco.year')} <span className={styles.yearValue}>{dMin} – {dMax}</span>
       </label>
       <div className={styles.yearSlider}>
         <div className={styles.yearTrack} />
@@ -76,14 +78,14 @@ const YearRange: React.FC<{
           onChange={(e) => setDraft(([, mx]) => [Math.min(parseInt(e.target.value, 10), mx), mx])}
           onPointerUp={commit} onKeyUp={commit}
           className={`${styles.yearInput} ${styles.yearInputMin}`}
-          aria-label="Année minimum"
+          aria-label={t('reco.yearMin')}
         />
         <input
           type="range" min={MIN_YEAR} max={MAX_YEAR} value={dMax}
           onChange={(e) => setDraft(([mn]) => [mn, Math.max(parseInt(e.target.value, 10), mn)])}
           onPointerUp={commit} onKeyUp={commit}
           className={`${styles.yearInput} ${styles.yearInputMax}`}
-          aria-label="Année maximum"
+          aria-label={t('reco.yearMax')}
         />
       </div>
     </div>
@@ -103,18 +105,19 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   maxYear,
   onYearChange,
 }) => {
+  const t = useT();
   return (
     <div className={styles.filtersSection}>
       <input
         type="text"
-        placeholder="Rechercher..."
+        placeholder={t('reco.searchPlaceholder')}
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
         className={styles.searchInput}
       />
 
       <div className={styles.filterGroup}>
-        <label className={styles.label}>Type:</label>
+        <label className={styles.label}>{t('reco.type')}</label>
         {MEDIA_TYPES.map(mt => (
           <label key={mt} className={styles.checkboxLabel}>
             <input
@@ -132,11 +135,11 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
       </div>
 
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>Note MAL (mean):</label>
+        <label className={styles.label}>{t('reco.malMean')}</label>
         <div className={styles.scoreRangeInputs}>
           <input
             type="number"
-            placeholder="Min"
+            placeholder={t('common.min')}
             min="0"
             max="10"
             step="0.1"
@@ -147,7 +150,7 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
           <span className={styles.rangeSeparator}>-</span>
           <input
             type="number"
-            placeholder="Max"
+            placeholder={t('common.max')}
             min="0"
             max="10"
             step="0.1"

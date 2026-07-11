@@ -3,6 +3,7 @@ import styles from './RecommendationsSection.module.css';
 import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
 import { DIVERSITY_MAX, DIVERSITY_STEP } from '@/lib/recoWeights';
+import { useT } from '@/lib/i18n';
 
 interface RecommendationsSectionProps {
   authState: MALAuthState;
@@ -39,6 +40,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   onShowLiked,
   onShowDisliked,
 }) => {
+  const t = useT();
   // Slider position tracked locally; committed to the URL only on release so a
   // drag fires one router.push + one refetch, not one per tick (mirrors
   // RecoWeightsSection). null diversity renders as 0 ("Ciblé").
@@ -53,7 +55,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
         disabled={!authState.isAuthenticated || isRefreshingRecos}
         variant="primary"
       >
-        {isRefreshingRecos ? 'Rafraîchissement...' : '↻ Rafraîchir les recos'}
+        {isRefreshingRecos ? t('reco.refreshing') : t('reco.refresh')}
       </Button>
 
       {isRefreshingRecos && recoProgress && (
@@ -61,7 +63,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
       )}
 
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>Seuil de note des graines:</label>
+        <label className={styles.label}>{t('reco.seedThreshold')}</label>
         <input
           type="number"
           min="1"
@@ -80,12 +82,12 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
           checked={nicheMode}
           onChange={(e) => onNicheModeChange(e.target.checked)}
         />
-        Mode niche (2-hop, plus lent)
+        {t('reco.nicheMode')}
       </label>
 
       <div className={styles.fieldGroup}>
         <div className={styles.sliderHead}>
-          <span className={styles.label}>Diversité</span>
+          <span className={styles.label}>{t('reco.diversity')}</span>
           <span className={styles.sliderValue}>{divDraft.toFixed(2)}</span>
         </div>
         <input
@@ -98,26 +100,26 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
           onPointerUp={commitDiversity}
           onKeyUp={commitDiversity}
           className={styles.slider}
-          title="Rééquilibre le haut du feed pour éviter les grappes de mêmes genres / studios"
+          title={t('reco.diversityHint')}
         />
         <div className={styles.sliderEnds}>
-          <span>Ciblé</span>
-          <span>Varié</span>
+          <span>{t('reco.targeted')}</span>
+          <span>{t('reco.varied')}</span>
         </div>
       </div>
 
       <div className={styles.lastRefresh}>
         {recoLastRefresh
-          ? `Dernier refresh : ${new Date(recoLastRefresh).toLocaleString()}`
-          : 'Jamais rafraîchi'}
+          ? t('reco.lastRefresh', { date: new Date(recoLastRefresh).toLocaleString() })
+          : t('reco.neverRefreshed')}
       </div>
 
       <div className={styles.reviewLinks}>
         <Button onClick={onShowLiked} variant="secondary" size="xs">
-          👍 Bonnes pioches
+          {t('reco.goodPicks')}
         </Button>
         <Button onClick={onShowDisliked} variant="secondary" size="xs">
-          👎 Pas pour moi
+          {t('reco.notForMe')}
         </Button>
       </div>
 

@@ -3,9 +3,11 @@ import styles from './ViewsSection.module.css';
 import { VIEW_PRESETS } from '@/lib/animeUrlParams';
 import { useAnimeUrlState } from '@/hooks';
 import { Button } from '@/components/shared';
+import { useT, type TranslationKey } from '@/lib/i18n';
 
 const ViewsSection: React.FC = () => {
   const { applyPreset } = useAnimeUrlState();
+  const t = useT();
 
   const handlePresetClick = (getState: () => any) => {
     applyPreset(getState());
@@ -20,9 +22,9 @@ const ViewsSection: React.FC = () => {
           size="xs"
           className={styles.viewButton}
           onClick={() => handlePresetClick(preset.getState)}
-          title={preset.description}
+          title={t(`views.${preset.key}.description` as TranslationKey)}
         >
-          {preset.label}
+          {t(`views.${preset.key}.label` as TranslationKey)}
         </Button>
       ))}
     </div>

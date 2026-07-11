@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import ConnectionStatusBadge from './ConnectionStatusBadge';
+import { useT } from '@/lib/i18n';
 
 const SimklConnectionBadge: React.FC = () => {
   const router = useRouter();
+  const t = useT();
   const [connected, setConnected] = useState(false);
   const [userName, setUserName] = useState<string | undefined>(undefined);
 
@@ -29,7 +31,11 @@ const SimklConnectionBadge: React.FC = () => {
       iconSrc="/simkl.png"
       alt="SIMKL"
       connected={connected}
-      title={connected ? `SIMKL : connecté${userName ? ` (${userName})` : ''}` : 'SIMKL : non connecté'}
+      title={connected
+        ? (userName
+          ? t('badge.connectedAs', { provider: 'SIMKL', name: userName })
+          : t('badge.connected', { provider: 'SIMKL' }))
+        : t('badge.notConnected', { provider: 'SIMKL' })}
     />
   );
 };

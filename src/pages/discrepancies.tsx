@@ -2,19 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
-import type { AnimeForDisplay, UserAnimeStatus } from '@/models/anime';
+import type { AnimeForDisplay } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/animeUtils';
+import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
-const STATUS_LABEL: Record<UserAnimeStatus, string> = {
-  watching: 'Watching',
-  completed: 'Completed',
-  on_hold: 'On Hold',
-  dropped: 'Dropped',
-  plan_to_watch: 'Plan',
-};
-
-const fmtStatus = (s: UserAnimeStatus | string | null | undefined): string =>
-  s ? STATUS_LABEL[s as UserAnimeStatus] ?? String(s) : '—';
+const fmtStatus = (s: string | null | undefined, t: TFunction): string =>
+  s ? t(`statusShort.${s}` as TranslationKey) : '—';
 
 const malUrl = (id: number) => `https://myanimelist.net/anime/${id}`;
 const simklUrl = (anime: AnimeForDisplay): string | null => {
@@ -30,6 +23,7 @@ function Cell({ value, mismatch }: { value: React.ReactNode; mismatch?: boolean 
 }
 
 export default function DiscrepanciesPage() {
+  const t = useT();
   const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,14 +34,14 @@ export default function DiscrepanciesPage() {
       const res = await fetch('/api/anime/animes?discrepancies=true&limit=all&sortBy=title&sortDir=asc');
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to load discrepancies');
+        throw new Error(data.error || t('discPage.loadFailed'));
       }
       const data = await res.json();
       setAnimes(data.animes || []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load discrepancies');
+      setError(e instanceof Error ? e.message : t('discPage.loadFailed'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,21 +58,21 @@ export default function DiscrepanciesPage() {
   return (
     <>
       <Head>
-        <title>MAL/SIMKL discrepancies</title>
+        <title>{t('nav.discrepancies')}</title>
       </Head>
       <div className={styles.page}>
         <div className={styles.header}>
-          <h1 className={styles.title}>MAL/SIMKL discrepancies</h1>
+          <h1 className={styles.title}>{t('nav.discrepancies')}</h1>
           {!isLoading && !error && (
-            <span className={styles.count}>{animes.length} title{animes.length === 1 ? '' : 's'}</span>
+            <span className={styles.count}>{t(animes.length === 1 ? 'discPage.countOne' : 'discPage.countOther', { count: animes.length })}</span>
           )}
         </div>
 
-        {isLoading && <div className={styles.state}>Loading…</div>}
+        {isLoading && <div className={styles.state}>{t('common.loading')}</div>}
         {error && <div className={styles.error}>{error}</div>}
 
         {!isLoading && !error && animes.length === 0 && (
-          <div className={styles.state}>No discrepancies between MAL and SIMKL. 🎉</div>
+          <div className={styles.state}>{t('discPage.empty')}</div>
         )}
 
         {!isLoading && !error && animes.length > 0 && (
@@ -86,15 +80,15 @@ export default function DiscrepanciesPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Image</th>
-                  <th>Title</th>
-                  <th className={styles.groupMal}>MAL status</th>
-                  <th>SIMKL status</th>
-                  <th className={styles.groupMal}>MAL score</th>
-                  <th>SIMKL score</th>
-                  <th className={styles.groupMal}>MAL ep</th>
-                  <th>SIMKL ep</th>
-                  <th>Links</th>
+                  <th>{t('table.image')}</th>
+                  <th>{t('field.title')}</th>
+                  <th className={styles.groupMal}>{t('discPage.malStatus')}</th>
+                  <th>{t('discPage.simklStatus')}</th>
+                  <th className={styles.groupMal}>{t('discPage.malScore')}</th>
+                  <th>{t('discPage.simklScore')}</th>
+                  <th className={styles.groupMal}>{t('discPage.malEp')}</th>
+                  <th>{t('discPage.simklEp')}</th>
+                  <th>{t('table.links')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -122,15 +116,15 @@ export default function DiscrepanciesPage() {
                         {simklOnly && (
                           <>
                             {' '}
-                            <span className={styles.presenceTag}>SIMKL only</span>
+                            <span className={styles.presenceTag}>{t('disc.simklOnly')}</span>
                           </>
                         )}
                       </td>
                       <td className={styles.groupMal}>
-                        <Cell value={fmtStatus(mal?.status)} mismatch={!!d?.status || simklOnly} />
+                        <Cell value={fmtStatus(mal?.status, t)} mismatch={!!d?.status || simklOnly} />
                       </td>
                       <td>
-                        <Cell value={fmtStatus(simkl?.status)} mismatch={!!d?.status || simklOnly} />
+                        <Cell value={fmtStatus(simkl?.status, t)} mismatch={!!d?.status || simklOnly} />
                       </td>
                       <td className={styles.groupMal}>
                         <Cell value={mal?.score ? mal.score : '—'} mismatch={!!d?.score} />

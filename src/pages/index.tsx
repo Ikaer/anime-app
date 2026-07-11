@@ -3,8 +3,10 @@ import Head from 'next/head';
 import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
 import { AnimeForDisplay, UserAnimeStatus, StatsColumn } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
+import { useT } from '@/lib/i18n';
 
 export default function AnimePage() {
+  const t = useT();
   const { filters, display, updateFilters, updateDisplay, isReady } = useAnimeUrlState();
 
   // Data state
@@ -60,15 +62,15 @@ export default function AnimePage() {
         setAnimes(data.animes || []);
       } else {
         const errorData = await response.json();
-        setError(errorData.error || 'Failed to load anime list');
+        setError(errorData.error || t('index.loadFailed'));
       }
     } catch (error) {
       console.error('Error loading animes:', error);
-      setError('Failed to load anime list');
+      setError(t('index.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [filters]);
+  }, [filters, t]);
 
   // Load animes when filters change
   useEffect(() => {
@@ -152,10 +154,10 @@ export default function AnimePage() {
       if (response.ok) {
         setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
-        setError(`Failed to ${hide ? 'hide' : 'unhide'} anime.`);
+        setError(hide ? t('index.hideFailed') : t('index.unhideFailed'));
       }
     } catch {
-      setError(`Failed to ${hide ? 'hide' : 'unhide'} anime.`);
+      setError(hide ? t('index.hideFailed') : t('index.unhideFailed'));
     }
   };
 
@@ -176,7 +178,7 @@ export default function AnimePage() {
         throw new Error('Failed to update MAL status');
       }
     } catch (error) {
-      setError('Failed to update MAL status.');
+      setError(t('index.updateStatusFailed'));
       throw error;
     }
   };
@@ -220,8 +222,8 @@ export default function AnimePage() {
   return (
     <>
       <Head>
-        <title>Anime List - MyHomeApp</title>
-        <meta name="description" content="Track seasonal anime with MyAnimeList integration" />
+        <title>{t('index.pageTitle')}</title>
+        <meta name="description" content={t('index.metaDescription')} />
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
       <AnimePageLayout sidebar={sidebar}>
@@ -233,7 +235,7 @@ export default function AnimePage() {
           )}
           <div className="table-container">
             {!isReady || isLoading ? (
-              <div className="loading-state">Loading...</div>
+              <div className="loading-state">{t('common.loading')}</div>
             ) : display.layout === 'card' ? (
               <AnimeCardView
                 animes={animes}

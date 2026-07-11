@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
+import { useT } from '@/lib/i18n';
 
 const AnimeRatingCalculator = dynamic(
   () => import('@/components/calculator/AnimeRatingCalculator'),
@@ -7,10 +8,11 @@ const AnimeRatingCalculator = dynamic(
 );
 
 export default function RatePage() {
+  const t = useT();
   return (
     <>
       <Head>
-        <title>Anime Rating Calculator</title>
+        <title>{t('calc.pageTitle')}</title>
       </Head>
       <AnimeRatingCalculator />
     </>

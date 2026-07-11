@@ -54,6 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const limitRaw = parseInt(String(req.query.limit), 10);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? limitRaw : SIMILAR_LIMIT;
+  const lang = req.query.lang === 'en' ? 'en' : 'fr';
 
   try {
     const [mal, anilist] = await Promise.all([loadMalEdges(animeId), loadAnilistEdges(animeId)]);
@@ -66,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const items = computeSimilarTo(animeId, mal.edges, anilist.edges, limit);
+    const items = computeSimilarTo(animeId, mal.edges, anilist.edges, limit, lang);
     res.json({ items, sources: { mal: mal.outcome, anilist: anilist.outcome } });
   } catch (error) {
     console.error(`Similar-to ${animeId} error:`, error);

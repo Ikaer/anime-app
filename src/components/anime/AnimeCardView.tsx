@@ -1,16 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoSource, RecoVerdict } from '@/models/anime';
-import {  formatUserStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
+import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoVerdict } from '@/models/anime';
+import { getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
-import { SOURCE_META } from '@/lib/recoWeights';
+import { useT, TFunction, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
 import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
 import styles from './AnimeCardView.module.css';
-
-const SOURCE_LABELS: Record<RecoSource, string> = Object.fromEntries(
-    SOURCE_META.map(m => [m.source, m.label])
-) as Record<RecoSource, string>;
 
 type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
 
@@ -29,14 +25,14 @@ interface AnimeCardViewProps {
     allExplainsOpen?: boolean;
 }
 
-function formatRecoHint(meta: RecoMeta): string {
+function formatRecoHint(meta: RecoMeta, t: TFunction): string {
     if (meta.topSeeds.length > 0) {
         const top = meta.topSeeds[0];
         const others = meta.totalSeeds - 1;
-        const suffix = others > 0 ? ` (+${others} autre${others > 1 ? 's' : ''} anime${others > 1 ? 's' : ''})` : '';
-        return `Recommandé par les fans de ${top.title}${suffix}`;
+        const suffix = others > 0 ? t(others > 1 ? 'recoHint.andOthers' : 'recoHint.andOther', { count: others }) : '';
+        return t('recoHint.recommendedBy', { title: top.title }) + suffix;
     }
-    if (meta.fromSuggestions) return 'Suggéré pour toi';
+    if (meta.fromSuggestions) return t('recoHint.suggested');
     return '';
 }
 
@@ -51,6 +47,7 @@ export default function AnimeCardView({
     feedbackMode,
     allExplainsOpen
 }: AnimeCardViewProps) {
+    const t = useT();
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const [explainOpen, setExplainOpen] = useState<Set<number>>(new Set());
 
@@ -85,7 +82,7 @@ export default function AnimeCardView({
     if (animes.length === 0) {
         return (
             <div className={styles.emptyState}>
-                <p>No anime found. Try syncing data or adjusting your filters.</p>
+                <p>{t('table.emptyState')}</p>
             </div>
         );
     }
@@ -120,8 +117,7 @@ export default function AnimeCardView({
     };
 
     const formatStatus = (status?: string) => {
-        if (!status) return 'Unknown';
-        return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return status ? t(`airing.${status}` as TranslationKey) : t('common.unknown');
     };
 
     const getMALStatusClass = (status: string) => {
@@ -158,7 +154,7 @@ export default function AnimeCardView({
                     return (
                         <div key={r.source} className={styles.explainRow}>
                             <div className={styles.explainHead}>
-                                <span className={styles.explainLabel}>{SOURCE_LABELS[r.source] ?? r.source}</span>
+                                <span className={styles.explainLabel}>{t(`reco.source.${r.source}.label` as TranslationKey)}</span>
                                 <span className={`${styles.explainValue} ${positive ? styles.explainPos : styles.explainNeg}`}>
                                     {positive ? '+' : ''}{r.contribution.toFixed(2)}
                                 </span>
@@ -197,7 +193,7 @@ export default function AnimeCardView({
                                 unoptimized
                             />
                         ) : (
-                            <div className={styles.noImage}>No Image</div>
+                            <div className={styles.noImage}>{t('common.noImage')}</div>
                         )}
                         <div className={`${styles.airingBadge} ${anime.status === 'currently_airing' ? styles.currentlyAiring : anime.status === 'finished_airing' ? styles.finishedAiring : styles.notYetAired}`}>
                             {anime.status === 'currently_airing' && <div className={styles.pulsingDot} />}
@@ -207,7 +203,7 @@ export default function AnimeCardView({
                             <button
                                 className={styles.closeBtn}
                                 onClick={() => onHideToggle(anime.id, !anime.hidden)}
-                                title={anime.hidden ? 'Unhide' : 'Hide'}
+                                title={anime.hidden ? t('table.unhide') : t('table.hide')}
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -225,7 +221,7 @@ export default function AnimeCardView({
                                     variant="secondary"
                                     size="xs"
                                     square
-                                    title="Voir toutes les infos locales"
+                                    title={t('table.localInfo')}
                                 >
                                     ↗
                                 </Button>
@@ -235,7 +231,7 @@ export default function AnimeCardView({
                                     variant="secondary"
                                     size="xs"
                                     square
-                                    title="Search on Google"
+                                    title={t('card.searchGoogle')}
                                 >
                                     🔍
                                 </Button>
@@ -245,7 +241,7 @@ export default function AnimeCardView({
                                     variant="secondary"
                                     size="xs"
                                     square
-                                    title="Search on JustWatch"
+                                    title={t('table.searchJustwatch')}
                                 >
                                     <Image src="/justwatch.png" alt="JustWatch" width={20} height={20} className={styles.imageActionIcon} />
                                 </Button>
@@ -257,7 +253,7 @@ export default function AnimeCardView({
                                     variant="secondary"
                                     size="xs"
                                     square
-                                    title="Open on MyAnimeList"
+                                    title={t('card.openMal')}
                                 >
                                     <Image src="/mal.png" alt="MAL" width={20} height={20} className={styles.imageActionIcon} />
                                 </Button>
@@ -270,7 +266,7 @@ export default function AnimeCardView({
                                         variant="secondary"
                                         size="xs"
                                         square
-                                        title="Open on SIMKL"
+                                        title={t('card.openSimkl')}
                                     >
                                         <Image src="/simkl.png" alt="SIMKL" width={20} height={20} className={styles.imageActionIcon} />
                                     </Button>
@@ -284,7 +280,7 @@ export default function AnimeCardView({
                             <button
                                 className={`${styles.copyBtn} ${copiedKey === `${anime.id}-title` ? styles.copyBtnCopied : ''}`}
                                 onClick={() => copyToClipboard(getPrimaryTitle(anime), `${anime.id}-title`)}
-                                title="Copier le titre"
+                                title={t('card.copyTitle')}
                             >
                                 {copiedKey === `${anime.id}-title` ? (
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -304,7 +300,7 @@ export default function AnimeCardView({
                                 <button
                                     className={`${styles.copyBtn} ${copiedKey === `${anime.id}-alt` ? styles.copyBtnCopied : ''}`}
                                     onClick={() => copyToClipboard(getSecondaryTitle(anime)!, `${anime.id}-alt`)}
-                                    title="Copier le titre alternatif"
+                                    title={t('card.copyAltTitle')}
                                 >
                                     {copiedKey === `${anime.id}-alt` ? (
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -323,7 +319,7 @@ export default function AnimeCardView({
                             {getDisplayStatus(anime) && (
                                 <span className={`${styles.malStatusLabel} ${getMALStatusClass(getDisplayStatus(anime))}`}>
                                     <span style={{ fontSize: '0.8rem' }}>{getMALStatusIcon(getDisplayStatus(anime))}</span>
-                                    {formatUserStatus(getDisplayStatus(anime))}
+                                    {t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}
                                 </span>
                             )}
                             {(visibleColumns?.score ?? true) && (
@@ -332,8 +328,8 @@ export default function AnimeCardView({
                                 </span>
                             )}
                         </div>
-                        {anime.recoMeta && formatRecoHint(anime.recoMeta) && (
-                            <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta)}</div>
+                        {anime.recoMeta && formatRecoHint(anime.recoMeta, t) && (
+                            <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta, t)}</div>
                         )}
                         {anime.recoMeta && anime.recoMeta.breakdown.length > 0 && (
                             <div className={styles.explainWrap}>
@@ -343,7 +339,7 @@ export default function AnimeCardView({
                                         onClick={() => toggleExplain(anime.id)}
                                         aria-expanded={explainOpen.has(anime.id)}
                                     >
-                                        {explainOpen.has(anime.id) ? '▾ Pourquoi ?' : '▸ Pourquoi ?'}
+                                        {(explainOpen.has(anime.id) ? '▾ ' : '▸ ') + t('card.why')}
                                     </button>
                                 )}
                                 {(allExplainsOpen || explainOpen.has(anime.id)) && renderExplain(anime.recoMeta)}
@@ -359,7 +355,7 @@ export default function AnimeCardView({
                                     size="xs"
                                     className={styles.actionButton}
                                 >
-                                    ↩ Remettre
+                                    {t('card.putBack')}
                                 </Button>
                             ) : feedbackMode === 'feed' ? (
                                 <>
@@ -368,18 +364,18 @@ export default function AnimeCardView({
                                         variant="primary-positive"
                                         size="xs"
                                         className={styles.actionButton}
-                                        title="Bonne pioche — renforce ce type de suggestion"
+                                        title={t('card.goodPickTitle')}
                                     >
-                                        👍 Bonne pioche
+                                        {t('card.goodPick')}
                                     </Button>
                                     <Button
                                         onClick={() => onFeedback?.(anime.id, 'down')}
                                         variant="primary-negative"
                                         size="xs"
                                         className={styles.actionButton}
-                                        title="Pas pour moi — masque et pénalise ce type de suggestion"
+                                        title={t('card.notForMeTitle')}
                                     >
-                                        👎 Pas pour moi
+                                        {t('card.notForMe')}
                                     </Button>
                                 </>
                             ) : null}

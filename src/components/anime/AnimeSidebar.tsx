@@ -3,6 +3,7 @@ import styles from './AnimeSidebar.module.css';
 import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
 import type { SeasonInfo } from '@/models/anime';
 import { Button, CollapsibleSection } from '@/components/shared';
+import { useT } from '@/lib/i18n';
 import {
   SortOrderSection,
   ViewsSection,
@@ -73,6 +74,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   sortBy, sortDir, onSortByChange, onSortDirChange,
   layout, onLayoutChange,
 }) => {
+  const t = useT();
   // Section toggle now uses URL state
   const toggle = (key: string) => {
     onSidebarExpandedChange(key, !sidebarExpanded[key]);
@@ -83,7 +85,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
       <div className={styles.topRow}>
         <input
           type="text"
-          placeholder="Search anime..."
+          placeholder={t('filters.searchPlaceholder')}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className={styles.searchInput}
@@ -92,24 +94,24 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           <Button
             className={`${styles.layoutBtn}`}
             onClick={() => onLayoutChange('table')}
-            title="Table View"
+            title={t('display.tableView')}
             variant={layout === 'table' ? 'primary' : 'secondary'}
           >
-            Table
+            {t('layout.table')}
           </Button>
           <Button
             className={`${styles.layoutBtn}`}
             onClick={() => onLayoutChange('card')}
-            title="Card View"
+            title={t('display.cardView')}
             variant={layout === 'card' ? 'primary' : 'secondary'}
           >
-            Card
+            {t('layout.card')}
           </Button>
         </div>
       </div>
 
       <CollapsibleSection
-        title="Views"
+        title={t('section.views')}
         isExpanded={sidebarExpanded.views}
         onToggle={() => toggle('views')}
       >
@@ -117,7 +119,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="Display"
+        title={t('section.display')}
         isExpanded={sidebarExpanded.display}
         onToggle={() => toggle('display')}
       >
@@ -130,7 +132,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="Filters"
+        title={t('section.filters')}
         isExpanded={sidebarExpanded.filters}
         onToggle={() => toggle('filters')}
       >
@@ -153,7 +155,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="Sort & Order"
+        title={t('section.sortOrder')}
         isExpanded={sidebarExpanded.sort}
         onToggle={() => toggle('sort')}
       >
@@ -166,7 +168,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
       </CollapsibleSection>
 
       <CollapsibleSection
-        title="Stats"
+        title={t('section.stats')}
         isExpanded={sidebarExpanded.stats}
         onToggle={() => toggle('stats')}
       >

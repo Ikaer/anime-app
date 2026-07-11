@@ -1,14 +1,9 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import type { RecoContribution, RecoSource } from '@/models/anime';
+import type { RecoContribution } from '@/models/anime';
 import type { SimilarItem } from '@/lib/recommendations';
-import { formatUserStatus } from '@/lib/animeUtils';
-import { SOURCE_META } from '@/lib/recoWeights';
+import { useI18n, TranslationKey } from '@/lib/i18n';
 import styles from './MoreLikeThis.module.css';
-
-const SOURCE_LABELS: Record<RecoSource, string> = Object.fromEntries(
-  SOURCE_META.map(m => [m.source, m.label])
-) as Record<RecoSource, string>;
 
 interface SourceOutcome {
   ok: boolean;
@@ -36,6 +31,7 @@ export interface MoreLikeThisProps {
  * recommend, re-ranked by what each candidate shares with this title.
  */
 export default function MoreLikeThis({ animeId }: MoreLikeThisProps) {
+  const { t, lang } = useI18n();
   const [items, setItems] = useState<SimilarItem[] | null>(null);
   const [sources, setSources] = useState<SimilarResponse['sources'] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,13 +51,13 @@ export default function MoreLikeThis({ animeId }: MoreLikeThisProps) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/anime/recommendations/similar/${animeId}`);
+      const res = await fetch(`/api/anime/recommendations/similar/${animeId}?lang=${lang}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setItems((data as SimilarResponse).items);
       setSources((data as SimilarResponse).sources);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Échec du chargement');
+      setError(e instanceof Error ? e.message : t('mlt.loadFailed'));
     } finally {
       setBusy(false);
     }
@@ -77,7 +73,7 @@ export default function MoreLikeThis({ animeId }: MoreLikeThisProps) {
           return (
             <div key={r.source} className={styles.explainRow}>
               <div className={styles.explainHead}>
-                <span className={styles.explainLabel}>{SOURCE_LABELS[r.source] ?? r.source}</span>
+                <span className={styles.explainLabel}>{t(`reco.source.${r.source}.label` as TranslationKey)}</span>
                 <span className={`${styles.explainValue} ${positive ? styles.explainPos : styles.explainNeg}`}>
                   {positive ? '+' : ''}{r.contribution.toFixed(2)}
                 </span>
@@ -107,26 +103,23 @@ export default function MoreLikeThis({ animeId }: MoreLikeThisProps) {
 
   return (
     <section className={styles.section}>
-      <h2>Plus comme ça</h2>
-      <p className={styles.sub}>
-        Ce que les communautés MAL et AniList recommandent à partir de ce titre, re-classé
-        par ce que chaque candidat partage avec lui.
-      </p>
+      <h2>{t('mlt.title')}</h2>
+      <p className={styles.sub}>{t('mlt.sub')}</p>
 
       {items === null && (
         <button className={styles.loadBtn} onClick={load} disabled={busy}>
-          {busy ? '⏳ Chargement…' : '🔍 Voir des titres similaires'}
+          {busy ? t('mlt.loadingBtn') : t('mlt.loadBtn')}
         </button>
       )}
 
       {error && <div className={styles.error}>⚠ {error}</div>}
 
       {failed.length > 0 && (
-        <div className={styles.warn}>⚠ Source indisponible : {failed.join(' · ')}</div>
+        <div className={styles.warn}>⚠ {t('mlt.sourceUnavailable', { sources: failed.join(' · ') })}</div>
       )}
 
       {items !== null && items.length === 0 && !error && (
-        <div className={styles.empty}>Aucune recommandation exploitable pour ce titre.</div>
+        <div className={styles.empty}>{t('mlt.empty')}</div>
       )}
 
       {items !== null && items.length > 0 && (
@@ -146,17 +139,19 @@ export default function MoreLikeThis({ animeId }: MoreLikeThisProps) {
                   {item.mean != null && <span className={styles.mean}>★ {item.mean.toFixed(2)}</span>}
                   {item.mediaType && <span>{item.mediaType.toUpperCase()}</span>}
                   {item.year && <span>{item.year}</span>}
-                  <span className={styles.affinity} title="Score d'affinité">{item.score.toFixed(2)}</span>
+                  <span className={styles.affinity} title={t('mlt.affinityScore')}>{item.score.toFixed(2)}</span>
                 </div>
                 {item.status && (
                   <span className={`${styles.seen} ${item.seen ? styles.seenWatched : ''}`}>
-                    {item.seen ? `👁 Déjà vu · ${formatUserStatus(item.status)}` : `📅 ${formatUserStatus(item.status)}`}
+                    {item.seen
+                      ? `${t('mlt.alreadySeen')} · ${t(`statusShort.${item.status}` as TranslationKey)}`
+                      : `📅 ${t(`statusShort.${item.status}` as TranslationKey)}`}
                   </span>
                 )}
                 {item.breakdown.length > 0 && (
                   <>
                     <button className={styles.explainBtn} onClick={() => toggleExplain(item.id)}>
-                      {explainOpen.has(item.id) ? '▾ Pourquoi ?' : '▸ Pourquoi ?'}
+                      {(explainOpen.has(item.id) ? '▾ ' : '▸ ') + t('card.why')}
                     </button>
                     {explainOpen.has(item.id) && renderExplain(item.breakdown)}
                   </>

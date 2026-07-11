@@ -2,6 +2,7 @@ import React from 'react';
 import styles from './DisplaySection.module.css';
 import { ImageSize } from '@/models/anime';
 import { Button } from '@/components/shared';
+import { useT } from '@/lib/i18n';
 
 interface DisplaySectionProps {
   imageSize: ImageSize;
@@ -16,6 +17,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
   cardsPerRow,
   onCardsPerRowChange,
 }) => {
+  const t = useT();
   const handleCardsPerRowInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.trim();
     if (raw === '') {
@@ -28,7 +30,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
 
   return (
     <div className={styles.displaySection}>
-      <label className={styles.label}>Image Size:</label>
+      <label className={styles.label}>{t('display.imageSize')}</label>
       <div className={styles.sizeButtons}>
         <Button
           variant="secondary"
@@ -36,7 +38,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
           className={`${styles.sizeButton} ${imageSize === 0 ? styles.activeSizeButton : ''}`}
           onClick={() => onImageSizeChange(0)}
         >
-          Original
+          {t('display.original')}
         </Button>
         <Button
           variant="secondary"
@@ -64,7 +66,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
         </Button>
       </div>
 
-      <label className={styles.label}>Cards per row:</label>
+      <label className={styles.label}>{t('display.cardsPerRow')}</label>
       <div className={styles.cardsPerRow}>
         <input
           type="number"
@@ -72,9 +74,9 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
           step={1}
           value={cardsPerRow ?? ''}
           onChange={handleCardsPerRowInput}
-          placeholder="Auto"
+          placeholder={t('display.auto')}
           className={styles.cardsPerRowInput}
-          aria-label="Cards per row"
+          aria-label={t('display.cardsPerRow')}
         />
         <Button
           variant="secondary"
@@ -83,7 +85,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
           onClick={() => onCardsPerRowChange(null)}
           disabled={cardsPerRow === null}
         >
-          Clear
+          {t('common.clear')}
         </Button>
       </div>
     </div>

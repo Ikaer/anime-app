@@ -2,6 +2,7 @@ import React from 'react';
 import Image from 'next/image';
 import styles from './SimklSection.module.css';
 import { Button } from '@/components/shared';
+import { useT } from '@/lib/i18n';
 
 interface SimklSectionProps {
   isConnected: boolean;
@@ -16,22 +17,23 @@ const SimklSection: React.FC<SimklSectionProps> = ({
   isConnected, userName, isAuthLoading, authError,
   onConnect, onDisconnect,
 }) => {
+  const t = useT();
   return (
     <div className={styles.simklSection}>
       {isAuthLoading ? (
-        <Button variant="secondary" disabled>Loading...</Button>
+        <Button variant="secondary" disabled>{t('common.loading')}</Button>
       ) : isConnected ? (
         <div className={styles.connectedAccount}>
           <div className={styles.identity}>
             <Image src="/simkl.png" alt="SIMKL" width={24} height={24} className={styles.providerIcon} />
-            <span>Connected as <strong>{userName || 'SIMKL user'}</strong></span>
+            <span>{t('account.connectedAs')} <strong>{userName || t('account.simklUser')}</strong></span>
           </div>
           <Button variant="primary-negative" onClick={onDisconnect}>
-            Disconnect
+            {t('account.disconnect')}
           </Button>
         </div>
       ) : (
-        <Button onClick={onConnect}>Connect to SIMKL</Button>
+        <Button onClick={onConnect}>{t('account.connectSimkl')}</Button>
       )}
       {authError && <div className={styles.error}>{authError}</div>}
     </div>

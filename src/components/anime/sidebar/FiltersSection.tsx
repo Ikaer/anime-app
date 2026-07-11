@@ -3,6 +3,7 @@ import styles from './FiltersSection.module.css';
 import { UserAnimeStatus } from '@/models/anime';
 import SeasonSelector from '../SeasonSelector';
 import type { SeasonInfo } from '@/models/anime';
+import { useT, type TranslationKey } from '@/lib/i18n';
 
 const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
   "watching", 
@@ -46,6 +47,7 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
   maxScore,
   onMaxScoreChange,
 }) => {
+  const t = useT();
   return (
     <div className={styles.filtersSection}>
       <div className={styles.filterGroup}>
@@ -56,18 +58,18 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
               checked={statusFilters.includes(status)}
               onChange={(e) => onStatusFilterChange(status, e.target.checked)}
             />
-            {status === 'not_defined' ? 'No Status' : status.replace(/_/g, ' ')}
+            {t(`status.${status}` as TranslationKey)}
           </label>
         ))}
       </div>
 
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>Season:</label>
+        <label className={styles.label}>{t('filters.season')}</label>
         <SeasonSelector value={seasons} onChange={onSeasonsChange} />
       </div>
 
       <div className={styles.filterGroup}>
-        <label className={styles.label}>Media Type:</label>
+        <label className={styles.label}>{t('filters.mediaType')}</label>
         {['tv', 'movie', 'ona', 'ova', 'special', 'music'].map(mt => (
           <label key={mt} className={styles.checkboxLabel}>
             <input
@@ -88,25 +90,25 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
         <label className={styles.checkboxLabel}>
           <input 
             type="checkbox" 
-            checked={hiddenOnly} 
-            onChange={(e) => onHiddenOnlyChange(e.target.checked)} 
-          /> Hidden only
+            checked={hiddenOnly}
+            onChange={(e) => onHiddenOnlyChange(e.target.checked)}
+          /> {t('filters.hiddenOnly')}
         </label>
         <label className={styles.checkboxLabel}>
           <input
             type="checkbox"
             checked={discrepanciesOnly}
             onChange={(e) => onDiscrepanciesOnlyChange(e.target.checked)}
-          /> MAL/SIMKL discrepancies only
+          /> {t('filters.discrepanciesOnly')}
         </label>
       </div>
 
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>Score Range:</label>
+        <label className={styles.label}>{t('filters.scoreRange')}</label>
         <div className={styles.scoreRangeInputs}>
           <input
             type="number"
-            placeholder="Min"
+            placeholder={t('common.min')}
             min="0"
             max="10"
             step="0.1"
@@ -117,7 +119,7 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
           <span className={styles.rangeSeparator}>-</span>
           <input
             type="number"
-            placeholder="Max"
+            placeholder={t('common.max')}
             min="0"
             max="10"
             step="0.1"
