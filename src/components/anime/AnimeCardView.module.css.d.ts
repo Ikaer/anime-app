@@ -34,7 +34,9 @@ declare const styles: {
   readonly "imageActions": string;
   readonly "imageContainer": string;
   readonly "infoRow": string;
+  readonly "malStatusIcon": string;
   readonly "malStatusLabel": string;
+  readonly "malStatusText": string;
   readonly "noImage": string;
   readonly "notYetAired": string;
   readonly "onHold": string;

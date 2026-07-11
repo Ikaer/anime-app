@@ -135,6 +135,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.4rem;
     font-size: 0.85rem;
     margin-top: auto;
 }
@@ -209,6 +210,7 @@
     border-radius: 6px;
     color: white;
     margin-left: auto;
+    flex-shrink: 0;
 }
 
 .score10 {
@@ -432,16 +434,29 @@
 
 /* User MAL Status Labels */
 .malStatusLabel {
-    padding: 0.25rem 0.6rem;
+    padding: 0.2rem 0.45rem;
     border-radius: 6px;
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     font-weight: 800;
     text-transform: uppercase;
     display: flex;
     align-items: center;
-    gap: 0.3rem;
-    letter-spacing: 0.02em;
+    gap: 0.25rem;
+    letter-spacing: 0.01em;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    min-width: 0;
+}
+
+.malStatusIcon {
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.malStatusText {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .watching {

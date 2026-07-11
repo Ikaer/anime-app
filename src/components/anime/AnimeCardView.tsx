@@ -318,8 +318,8 @@ export default function AnimeCardView({
                         <div className={styles.infoRow}>
                             {getDisplayStatus(anime) && (
                                 <span className={`${styles.malStatusLabel} ${getMALStatusClass(getDisplayStatus(anime))}`}>
-                                    <span style={{ fontSize: '0.8rem' }}>{getMALStatusIcon(getDisplayStatus(anime))}</span>
-                                    {t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}
+                                    <span className={styles.malStatusIcon}>{getMALStatusIcon(getDisplayStatus(anime))}</span>
+                                    <span className={styles.malStatusText}>{t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}</span>
                                 </span>
                             )}
                             {(visibleColumns?.score ?? true) && (
