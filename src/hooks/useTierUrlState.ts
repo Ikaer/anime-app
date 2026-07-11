@@ -17,6 +17,8 @@ export interface TierUrlState {
   maxScore: number | null;
   minYear: number | null;
   maxYear: number | null;
+  /** MAL genre names (not AniList tags) — AND semantics, empty = no filter. */
+  genres: string[];
   /** Thumbnail size for the board (small by default — hover zooms to large). */
   thumbSize: ImageSize;
 }
@@ -28,6 +30,7 @@ export const TIER_DEFAULTS: TierUrlState = {
   maxScore: null,
   minYear: null,
   maxYear: null,
+  genres: [],
   thumbSize: 1,
 };
 
@@ -38,6 +41,7 @@ const KEYS = {
   maxScore: 'max',
   minYear: 'miny',
   maxYear: 'maxy',
+  genres: 'g',
   thumbSize: 'ts',
 } as const;
 
@@ -54,6 +58,7 @@ function decode(params: URLSearchParams): TierUrlState {
     maxScore: num(params.get(KEYS.maxScore)),
     minYear: num(params.get(KEYS.minYear)),
     maxYear: num(params.get(KEYS.maxYear)),
+    genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
     thumbSize: params.has(KEYS.thumbSize)
       ? (parseInt(params.get(KEYS.thumbSize)!, 10) as ImageSize)
       : TIER_DEFAULTS.thumbSize,
@@ -68,6 +73,7 @@ function encode(state: TierUrlState): string {
   if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
   if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
+  if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
   if (state.thumbSize !== TIER_DEFAULTS.thumbSize) params.set(KEYS.thumbSize, String(state.thumbSize));
   const qs = params.toString().replace(/%2C/g, ',');
   return qs ? `/tier?${qs}` : '/tier';

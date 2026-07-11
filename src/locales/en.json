@@ -188,6 +188,7 @@
   "tier.networkError": "Network error",
   "tier.headerCount": "{rated} rated · {toRate} to rate",
   "tier.trayLabel": "To rate · {count}",
+  "tier.genres": "Genres:",
 
   "detail.pageTitle": "{title} — Local details",
   "detail.back": "← Back",

@@ -29,6 +29,8 @@ export interface NarrowingFilters {
   maxScore?: number | null;
   minYear?: number | null;
   maxYear?: number | null;
+  /** MAL genre names (not AniList tags) — AND semantics: every listed genre must be present. */
+  genres?: string[];
 }
 
 /** Release year, preferring the season year, falling back to the start date. */
@@ -81,6 +83,14 @@ export function applyNarrowingFilters<T extends AnimeForDisplay>(
 
   if (f.maxYear != null && Number.isFinite(f.maxYear)) {
     out = out.filter(a => { const y = animeYear(a); return y != null && y <= f.maxYear!; });
+  }
+
+  if (f.genres && f.genres.length > 0) {
+    const wanted = f.genres;
+    out = out.filter(a => {
+      const names = new Set((a.genres || []).map(g => g.name));
+      return wanted.every(g => names.has(g));
+    });
   }
 
   return out;

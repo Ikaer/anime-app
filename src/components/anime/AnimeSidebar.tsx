@@ -2,7 +2,7 @@ import React from 'react';
 import styles from './AnimeSidebar.module.css';
 import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
 import type { SeasonInfo } from '@/models/anime';
-import { Button, CollapsibleSection } from '@/components/shared';
+import { Button, CollapsibleSection, DebouncedSearchInput } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 import {
   SortOrderSection,
@@ -83,11 +83,10 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   return (
     <div className={styles.sidebar}>
       <div className={styles.topRow}>
-        <input
-          type="text"
+        <DebouncedSearchInput
           placeholder={t('filters.searchPlaceholder')}
           value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
+          onChange={onSearchChange}
           className={styles.searchInput}
         />
         <div className={styles.layoutSelector}>

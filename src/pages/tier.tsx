@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
+import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeForDisplay, ImageSize } from '@/models/anime';
 import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/animeUtils';
@@ -131,7 +132,7 @@ export default function TierPage() {
     [overrides, baseScore],
   );
 
-  // Client-side narrowing (search / media type / mean range / year range).
+  // Client-side narrowing (search / media type / mean range / year range / genres).
   const filtered = useMemo(
     () => applyNarrowingFilters(animes, {
       search: state.search,
@@ -140,9 +141,17 @@ export default function TierPage() {
       maxScore: state.maxScore,
       minYear: state.minYear,
       maxYear: state.maxYear,
+      genres: state.genres,
     }),
-    [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear],
+    [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres],
   );
+
+  // Distinct MAL genre names (not AniList tags) across the loaded list, alphabetized.
+  const availableGenres = useMemo(() => {
+    const names = new Set<string>();
+    for (const a of animes) for (const g of a.genres || []) names.add(g.name);
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [animes]);
 
   // Bucket the filtered list by effective score. Index 0 holds the tray.
   // Still-watching anime aren't done yet, so they're excluded from the tray
@@ -301,6 +310,28 @@ export default function TierPage() {
           maxYear={state.maxYear}
           onYearChange={(min: number | null, max: number | null) => update({ minYear: min, maxYear: max })}
         />
+
+        {availableGenres.length > 0 && (
+          <div className={filterStyles.filterGroup}>
+            <label className={filterStyles.label}>{t('tier.genres')}</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
+              {availableGenres.map(g => (
+                <label key={g} className={filterStyles.checkboxLabel}>
+                  <input
+                    type="checkbox"
+                    checked={state.genres.includes(g)}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...state.genres, g]
+                        : state.genres.filter(x => x !== g);
+                      update({ genres: next });
+                    }}
+                  /> {g}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection title={t('section.display')} isExpanded={expanded.display} onToggle={() => toggle('display')}>

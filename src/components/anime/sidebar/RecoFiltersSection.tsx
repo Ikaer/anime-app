@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './RecoFiltersSection.module.css';
 import { useT } from '@/lib/i18n';
+import { DebouncedSearchInput } from '@/components/shared';
 
 /**
  * Narrowing filters that make sense on the ranked recommendations feed:
@@ -108,11 +109,10 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   const t = useT();
   return (
     <div className={styles.filtersSection}>
-      <input
-        type="text"
+      <DebouncedSearchInput
         placeholder={t('reco.searchPlaceholder')}
         value={search}
-        onChange={(e) => onSearchChange(e.target.value)}
+        onChange={onSearchChange}
         className={styles.searchInput}
       />
 

@@ -188,6 +188,7 @@
   "tier.networkError": "Erreur réseau",
   "tier.headerCount": "{rated} notés · {toRate} à noter",
   "tier.trayLabel": "À noter · {count}",
+  "tier.genres": "Genres :",
 
   "detail.pageTitle": "{title} — Détails locaux",
   "detail.back": "← Retour",
