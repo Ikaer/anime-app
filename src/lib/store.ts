@@ -21,7 +21,7 @@ import { getSeasonInfos } from '@/lib/animeUtils';
 
 const ANIME_MAL_FILE = dataFile('animes_mal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
-const ANIME_SIMKL_FILE = dataFile('animes_SIMKL.json');
+const ANIME_SIMKL_FILE = dataFile('animes_simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
 
 // ============================================================================

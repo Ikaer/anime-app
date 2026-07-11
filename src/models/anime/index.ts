@@ -85,7 +85,7 @@ export interface Studio {
   name: string;
 }
 
-// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in animes_SIMKL.json.
+// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in animes_simkl.json.
 export interface SimklPersonalEntry {
   simkl_id: number;          // kept for deletion reconciliation (diff on ids.simkl)
   mal_id: number;

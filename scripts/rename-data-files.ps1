@@ -24,7 +24,8 @@ $renames = @(
     @{ Old = 'sync_checkpoint.json';     New = 'mal_season_checkpoint.json' },
     @{ Old = 'recommendations_MAL.json'; New = 'recommendations.json' },
     @{ Old = 'animes_anilist_tags.json'; New = 'animes_anilist_meta.json' },
-    @{ Old = 'animes_MAL.json';          New = 'animes_mal.json' }   # case-only
+    @{ Old = 'animes_MAL.json';          New = 'animes_mal.json' },   # case-only
+    @{ Old = 'animes_SIMKL.json';        New = 'animes_simkl.json' }  # case-only
 )
 
 if (-not (Test-Path -LiteralPath $Path)) {
