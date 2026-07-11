@@ -22,6 +22,58 @@ export interface CriteriaSection {
   id: string;
   name: string;
   criteria: Criterion[];
+  /**
+   * Marks this section as a template placeholder: `criteria` is left empty in
+   * the static grid definition and gets filled in at rating time by
+   * `expandGrid`, from the genres of the anime actually being rated. Lets a
+   * grid say "the current anime's genres go here" without listing genres by
+   * name — the only variant today is `'genres'`.
+   */
+  dynamicCriteria?: 'genres';
+}
+
+/** Minimal genre shape the grids need — matches MAL's `Genre` without importing it (client-safe). */
+export interface GenreLike {
+  id: number;
+  name: string;
+}
+
+/** The anime a rating session targets. */
+export interface RatingTarget {
+  id: number;
+  title: string;
+  genres: GenreLike[];
+  poster?: string | null;
+}
+
+const GENRE_STEPS: Array<{ value: number; label: string }> = [
+  { value: 1, label: 'Raté' },
+  { value: 2, label: 'Faible' },
+  { value: 3, label: 'Correct' },
+  { value: 4, label: 'Réussi' },
+  { value: 5, label: 'Exemplaire' },
+];
+
+/** Builds one 1-5 criterion per genre of the anime being rated. */
+export function buildGenreCriteria(genres: GenreLike[]): Criterion[] {
+  return genres.map(genre => ({
+    id: `genre_${genre.id}`,
+    name: genre.name,
+    steps: GENRE_STEPS.map(s => ({
+      value: s.value,
+      label: s.label,
+      description: `Note la réussite de l'anime dans le registre "${genre.name}".`,
+    })),
+  }));
+}
+
+/** Fills every `dynamicCriteria` placeholder section with the target anime's genres. */
+export function expandGrid(grid: RatingGrid, genres: GenreLike[]): CriteriaSection[] {
+  return grid.sections.map(section =>
+    section.dynamicCriteria === 'genres'
+      ? { ...section, criteria: buildGenreCriteria(genres) }
+      : section
+  );
 }
 
 export interface RatingGrid {
@@ -199,6 +251,17 @@ const COMPLETE_GRID: CriteriaSection[] = [
         ],
       },
     ],
+  },
+  // Placeholder section: filled at rating time with one 1-5 criterion per
+  // genre of the anime being rated (see `dynamicCriteria` / `expandGrid`).
+  // Not added to the "Droppée" grid: its point scale is deliberately capped
+  // low against a fixed `pointsForTen` reference, and a handful of episodes
+  // isn't enough sample to fairly rate delivery across every genre tag.
+  {
+    id: 'genres',
+    name: 'Rapport aux Genres',
+    criteria: [],
+    dynamicCriteria: 'genres',
   },
   {
     id: 'realisation_visuelle',

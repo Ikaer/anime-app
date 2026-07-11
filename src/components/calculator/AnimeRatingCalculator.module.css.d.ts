@@ -1,5 +1,11 @@
 declare const styles: {
+  readonly "animeHeader": string;
+  readonly "animeHeaderBody": string;
+  readonly "animePoster": string;
+  readonly "animePosterEmpty": string;
+  readonly "animeTitle": string;
   readonly "calculator": string;
+  readonly "changeAnimeLink": string;
   readonly "criterionName": string;
   readonly "criterionRow": string;
   readonly "gridDescription": string;

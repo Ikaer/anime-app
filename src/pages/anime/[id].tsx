@@ -120,6 +120,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <div className="topbar">
           <Link href="/" className="back">{t('detail.back')}</Link>
           <div className="ext-links">
+            <Link href={`/rate?id=${anime.id}`}>{t('detail.rate')}</Link>
             <RefreshButton
               animeId={anime.id}
               onRefreshed={() => {

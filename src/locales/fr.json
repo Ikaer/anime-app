@@ -164,6 +164,11 @@
   "calc.pageTitle": "Calculateur de note d'anime",
   "calc.grid": "Grille",
   "calc.reset": "Réinitialiser",
+  "calc.pickAnime": "Quel anime noter ?",
+  "calc.pickAnimePrompt": "Cherche un titre dans ta liste pour commencer à le noter.",
+  "calc.searchPlaceholder": "Rechercher un anime…",
+  "calc.noResults": "Aucun résultat.",
+  "calc.changeAnime": "Changer d'anime",
 
   "tierWord.10": "Chef-d’œuvre",
   "tierWord.9": "Excellent",
@@ -186,6 +191,7 @@
 
   "detail.pageTitle": "{title} — Détails locaux",
   "detail.back": "← Retour",
+  "detail.rate": "Noter",
   "detail.alsoKnown": "Aussi : {names}",
   "detail.hidden": "Masqué",
   "detail.sameStudioStaff": "Dans le même studio / staff",

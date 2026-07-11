@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
-import { RATING_GRIDS, DEFAULT_GRID_ID, getGrid, RatingGrid } from '@/lib/ratingGrids';
+import { useState, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { RATING_GRIDS, DEFAULT_GRID_ID, getGrid, expandGrid, RatingGrid, RatingTarget, CriteriaSection } from '@/lib/ratingGrids';
 import { useT } from '@/lib/i18n';
 import styles from './AnimeRatingCalculator.module.css';
 
@@ -17,10 +18,10 @@ function stepColor(value: number, max: number) {
   return 'var(--score-9)';
 }
 
-function computeScore(scores: Record<string, number>, grid: RatingGrid) {
+function computeScore(scores: Record<string, number>, grid: RatingGrid, sections: CriteriaSection[]) {
   let totalPoints = 0;
   let maxPoints = 0;
-  for (const section of grid.sections) {
+  for (const section of sections) {
     for (const criterion of section.criteria) {
       const maxStep = Math.max(...criterion.steps.map(s => s.value));
       maxPoints += maxStep;
@@ -34,13 +35,18 @@ function computeScore(scores: Record<string, number>, grid: RatingGrid) {
   return { totalPoints, maxPoints, scoreOutOfTen };
 }
 
-export default function AnimeRatingCalculator() {
+interface Props {
+  anime: RatingTarget;
+}
+
+export default function AnimeRatingCalculator({ anime }: Props) {
   const t = useT();
   const [gridId, setGridId] = useState<string>(DEFAULT_GRID_ID);
   const [scores, setScores] = useState<Record<string, number>>({});
 
   const grid = getGrid(gridId);
-  const { totalPoints, maxPoints, scoreOutOfTen } = computeScore(scores, grid);
+  const sections = useMemo(() => expandGrid(grid, anime.genres), [grid, anime.genres]);
+  const { totalPoints, maxPoints, scoreOutOfTen } = computeScore(scores, grid, sections);
 
   const handleStep = useCallback((criterionId: string, value: number) => {
     setScores(prev => ({ ...prev, [criterionId]: value }));
@@ -57,6 +63,16 @@ export default function AnimeRatingCalculator() {
   return (
     <div className={styles.page}>
       <div className={styles.calculator}>
+        <div className={styles.animeHeader}>
+          {anime.poster
+            ? <img className={styles.animePoster} src={anime.poster} alt={anime.title} />
+            : <div className={styles.animePosterEmpty} />}
+          <div className={styles.animeHeaderBody}>
+            <span className={styles.animeTitle}>{anime.title}</span>
+            <Link href="/rate" className={styles.changeAnimeLink}>{t('calc.changeAnime')}</Link>
+          </div>
+        </div>
+
         <div className={styles.gridRow}>
           <label className={styles.gridLabel} htmlFor="grid-select">{t('calc.grid')}</label>
           <select
@@ -72,7 +88,7 @@ export default function AnimeRatingCalculator() {
           {grid.description && <span className={styles.gridDescription}>{grid.description}</span>}
         </div>
 
-        {grid.sections.map(section => {
+        {sections.filter(section => section.criteria.length > 0).map(section => {
           const ratedCount = section.criteria.filter(c => scores[c.id] !== undefined).length;
           const complete = ratedCount === section.criteria.length;
           return (

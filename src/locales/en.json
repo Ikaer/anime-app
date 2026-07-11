@@ -164,6 +164,11 @@
   "calc.pageTitle": "Anime Rating Calculator",
   "calc.grid": "Grid",
   "calc.reset": "Reset",
+  "calc.pickAnime": "Which anime to rate?",
+  "calc.pickAnimePrompt": "Search a title from your list to start rating it.",
+  "calc.searchPlaceholder": "Search an anime…",
+  "calc.noResults": "No results.",
+  "calc.changeAnime": "Change anime",
 
   "tierWord.10": "Masterpiece",
   "tierWord.9": "Great",
@@ -186,6 +191,7 @@
 
   "detail.pageTitle": "{title} — Local details",
   "detail.back": "← Back",
+  "detail.rate": "Rate",
   "detail.alsoKnown": "Also: {names}",
   "detail.hidden": "Hidden",
   "detail.sameStudioStaff": "Same studio / staff",
