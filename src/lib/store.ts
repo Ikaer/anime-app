@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeForDisplay, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, AnimeRecord, MergedAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
@@ -345,14 +345,20 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
     const simkl = simklByMalId[anime.id.toString()];
     const anilistMeta = anilistMetaByMalId[anime.id.toString()];
     const canonicalId = malIndex.get(anime.id);
-    return {
+    const merged: MergedAnime = {
       ...anime,
       hidden: hiddenIds.includes(anime.id),
       simkl,
       discrepancy: computeDiscrepancy(anime, simkl),
       anilistMeta,
       crosswalk: canonicalId ? registry[canonicalId] : assembleCrosswalk(anime.id, simkl, anilistMeta),
+      canonicalId,
     };
+    // Attach the Phase 2 provider-neutral projection (docs/PROVIDER-FREE.md) so
+    // consumers can read `.catalog.*` / `.personal.*` / `.sources.*` off the
+    // compat record while the raw MAL fields still exist for un-migrated reads.
+    const { catalog, personal, sources } = toAnimeRecord(merged, canonicalId);
+    return { ...merged, catalog, personal, sources };
   });
   lastCacheTime = now;
   return cachedAnime;
@@ -378,14 +384,17 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
   const malIndex = reconcileRegistry([{ malId: mal.id, crosswalk }]);
   const canonicalId = malIndex.get(mal.id);
   const registry = canonicalId ? getRegistry() : undefined;
-  return {
+  const merged: MergedAnime = {
     ...mal,
     hidden: hidden.includes(mal.id),
     simkl,
     discrepancy: computeDiscrepancy(mal, simkl),
     anilistMeta,
     crosswalk: canonicalId && registry ? registry[canonicalId] : crosswalk,
+    canonicalId,
   };
+  const { catalog, personal, sources } = toAnimeRecord(merged, canonicalId);
+  return { ...merged, catalog, personal, sources };
 }
 
 // ============================================================================
@@ -398,21 +407,32 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
 // `getAnimeForDisplay()`/`getAnimeByIdForDisplay()`.
 
 /**
- * Builds the mal->canonical index ONCE and reuses it across the whole catalog.
- * `resolveByMalId` rebuilds that index (full registry read + O(n) scan) on
- * every call, so mapping it per-anime over ~thousands of rows would be O(n^2)
- * plus a synchronous file read per row — call `getAnimeForDisplay()` first
- * (it reconciles the registry) then build the index a single time.
+ * The `AnimeRecord` view of the catalog. The `catalog`/`personal`/`sources`
+ * projection is already attached onto each `AnimeForDisplay` by
+ * `getAnimeForDisplay` (and the canonical id carried on `.canonicalId`), so
+ * this just lifts those into the standalone record shape — no re-projection,
+ * no extra registry read.
  */
 export function getAnimeRecords(): AnimeRecord[] {
-  const display = getAnimeForDisplay();
-  const malIndex = buildMalIndex(getRegistry());
-  return display.map(a => toAnimeRecord(a, malIndex.get(a.id)));
+  return getAnimeForDisplay().map(toRecordView);
 }
 
 export function getAnimeRecordById(id: number): AnimeRecord | undefined {
   const anime = getAnimeByIdForDisplay(id);
-  return anime ? toAnimeRecord(anime, resolveByMalId(id)) : undefined;
+  return anime ? toRecordView(anime) : undefined;
+}
+
+/** Lift an already-projected `AnimeForDisplay` into the standalone `AnimeRecord`. */
+function toRecordView(a: AnimeForDisplay): AnimeRecord {
+  return {
+    id: a.canonicalId ?? `a_mal_${a.id}`,
+    crosswalk: a.crosswalk ?? { mal: a.id },
+    catalog: a.catalog,
+    personal: a.personal,
+    sources: a.sources,
+    hidden: a.hidden,
+    discrepancy: a.discrepancy,
+  };
 }
 
 // ============================================================================

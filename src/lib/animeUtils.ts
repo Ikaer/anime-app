@@ -1,4 +1,4 @@
-import type { AnimeForDisplay, AnimeRecord, CatalogSource, SeasonName, SeasonInfo } from '@/models/anime';
+import type { AnimeForDisplay, AnimeRecord, CatalogSource, MergedAnime, SeasonName, SeasonInfo } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
 // ============================================================================
@@ -180,7 +180,7 @@ export function getSeasonInfos(): SeasonInfos {
  * already normalized to MAL vocabulary at sync time, so callers get one
  * vocabulary regardless of source.
  */
-export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
+export function getEffectiveStatus(anime: MergedAnime): string | undefined {
   return anime.simkl?.status ?? anime.my_list_status?.status;
 }
 
@@ -189,7 +189,7 @@ export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
  * fallback). Both `0` and `null` mean "unrated" and collapse to `undefined`,
  * preserving the threshold / `unrated` semantics that keyed off a falsy score.
  */
-export function getEffectiveScore(anime: AnimeForDisplay): number | undefined {
+export function getEffectiveScore(anime: MergedAnime): number | undefined {
   const simkl = anime.simkl?.score;
   if (simkl != null && simkl > 0) return simkl;
   const mal = anime.my_list_status?.score;
@@ -197,7 +197,7 @@ export function getEffectiveScore(anime: AnimeForDisplay): number | undefined {
 }
 
 /** Effective watched-episode progress (SIMKL-first, MAL fallback). */
-export function getEffectiveProgress(anime: AnimeForDisplay): number | undefined {
+export function getEffectiveProgress(anime: MergedAnime): number | undefined {
   const simkl = anime.simkl?.num_episodes_watched;
   if (simkl != null) return simkl;
   return anime.my_list_status?.num_episodes_watched ?? undefined;
@@ -253,7 +253,7 @@ function resolveCatalogField<T>(
  * `AnimeRecord.id`'s doc comment.
  */
 export function toAnimeRecord(
-  anime: AnimeForDisplay,
+  anime: MergedAnime,
   canonicalId?: string,
   precedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE
 ): AnimeRecord {
@@ -301,7 +301,12 @@ export function toAnimeRecord(
       // that deliberately want one source's raw value (see the type's doc
       // comment), not the merged `AnimeForDisplay`.
       mal: (() => {
-        const { hidden, simkl, discrepancy, anilistMeta, crosswalk, ...mal } = anime;
+        // Strip the merged local-record bolt-ons so `sources.mal` is the RAW
+        // MAL slice. `MergedAnime` is the pre-projection shape (no catalog/
+        // personal/sources), so only these join-time fields need removing.
+        const {
+          hidden, simkl, discrepancy, anilistMeta, crosswalk, canonicalId, ...mal
+        } = anime;
         return mal;
       })(),
       simkl: anime.simkl,

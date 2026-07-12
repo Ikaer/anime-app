@@ -167,8 +167,15 @@ export interface AniListMetaEntry {
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 
-// Combined data for display
-export interface AnimeForDisplay extends MALAnime {
+/**
+ * The merged local record BEFORE the Phase 2 provider-neutral projection is
+ * attached: raw MAL fields (`extends MALAnime`) plus the side-objects joined at
+ * display time. This is exactly what `getAnimeForDisplay` assembles and what
+ * `toAnimeRecord` consumes to PRODUCE the `catalog`/`personal`/`sources`
+ * projection — so it must NOT itself require those fields (that would be
+ * circular). `AnimeForDisplay` below is this plus the attached projection.
+ */
+export interface MergedAnime extends MALAnime {
   hidden?: boolean;
   simkl?: SimklPersonalEntry;       // joined at display time by MAL id
   discrepancy?: Discrepancy | null; // computed at display / filter time
@@ -181,6 +188,28 @@ export interface AnimeForDisplay extends MALAnime {
    * promoted from — no re-derivation needed. Non-load-bearing for now.
    */
   crosswalk?: SourceIds;
+  /**
+   * The synthetic canonical id (Phase 1 registry) for this record, when one is
+   * anchored. Reachable but NOT the outward id — `.id` stays the MAL id. Lets a
+   * consumer thread the canonical id through without a second registry lookup.
+   */
+  canonicalId?: string;
+}
+
+// Combined data for display.
+//
+// The Phase 2 provider-neutral projection (`catalog`/`personal`/`sources`) is
+// attached onto every merged record by `getAnimeForDisplay`/
+// `getAnimeByIdForDisplay` (see docs/PROVIDER-FREE.md). These are the SAME
+// blocks `toAnimeRecord` produces, carried on the compat `AnimeForDisplay` so
+// consumers can migrate off the raw MAL fields (`mean`, `genres`,
+// `my_list_status`, …) area by area — reading `.catalog.*` / `.personal.*` /
+// `.sources.*` — while the build stays green. The P2b capstone drops
+// `extends MALAnime` (and these become the only shape) once every reader moved.
+export interface AnimeForDisplay extends MergedAnime {
+  catalog: AnimeCatalog;
+  personal: AnimePersonal;
+  sources: AnimeSources;
 }
 
 // ============================================================================
