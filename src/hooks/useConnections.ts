@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { MALAuthState } from '@/models/anime';
 import type { HistoricalCrawlStats } from '@/lib/malSync';
+import type { AniListPersonalImportResult } from '@/lib/anilistPersonalSync';
 
 interface UseConnectionsOptions {
   onDataChanged?: () => void;
@@ -41,6 +42,12 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [anilistCatalogCrawlMessage, setAnilistCatalogCrawlMessage] = useState('');
   const [anilistCatalogStats, setAnilistCatalogStats] = useState<{ totalCanonicalIds: number; anilistOnlyIds: number } | null>(null);
 
+  // AniList personal-list import state (docs/PROVIDER-FREE.md P3b, anonymous by username)
+  const [isAnilistImporting, setIsAnilistImporting] = useState(false);
+  const [anilistImportResult, setAnilistImportResult] = useState<AniListPersonalImportResult | null>(null);
+  const [anilistImportUsername, setAnilistImportUsername] = useState<string | undefined>(undefined);
+  const [anilistImportStoredCount, setAnilistImportStoredCount] = useState<number | null>(null);
+
   const fetchHistoricalStats = async () => {
     try {
       const res = await fetch('/api/anime/mal/historical-crawl');
@@ -63,6 +70,19 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     try {
       const res = await fetch('/api/anime/anilist/catalog-crawl');
       if (res.ok) setAnilistCatalogStats(await res.json());
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
+  const fetchAnilistImportConfig = async () => {
+    try {
+      const res = await fetch('/api/anime/anilist/personal-import');
+      if (res.ok) {
+        const data = await res.json();
+        setAnilistImportUsername(data.username || undefined);
+        setAnilistImportStoredCount(typeof data.storedCount === 'number' ? data.storedCount : null);
+      }
     } catch {
       // non-critical, silently ignore
     }
@@ -103,6 +123,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     checkSimklStatus();
     fetchAnilistMetaStats();
     fetchAnilistCatalogStats();
+    fetchAnilistImportConfig();
   }, []);
 
   // Handle OAuth callback
@@ -292,6 +313,31 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const handleAnilistPersonalImport = async (username: string) => {
+    const u = username.trim();
+    if (!u) return;
+    setIsAnilistImporting(true);
+    setAnilistImportResult(null);
+    try {
+      const response = await fetch('/api/anime/anilist/personal-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u }),
+      });
+      const data: AniListPersonalImportResult = await response.json();
+      setAnilistImportResult(data);
+      if (data.ok) {
+        setAnilistImportUsername(u);
+        fetchAnilistImportConfig();
+        onDataChanged?.();
+      }
+    } catch {
+      setAnilistImportResult({ ok: false, imported: 0, skippedNoMal: 0, errorKind: 'network', error: 'Network error' });
+    } finally {
+      setIsAnilistImporting(false);
+    }
+  };
+
   // One group per source. The nesting is what carries the "which source?"
   // information — no field inside a group needs its source as a prefix.
   return {
@@ -330,6 +376,11 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       catalogCrawlMessage: anilistCatalogCrawlMessage,
       catalogStats: anilistCatalogStats,
       onCatalogCrawl: handleAnilistCatalogCrawl,
+      isImporting: isAnilistImporting,
+      importResult: anilistImportResult,
+      importUsername: anilistImportUsername,
+      importStoredCount: anilistImportStoredCount,
+      onPersonalImport: handleAnilistPersonalImport,
     },
   };
 }

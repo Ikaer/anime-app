@@ -57,6 +57,11 @@ export default function ConnectionsPage() {
               anilistCatalogCrawlMessage={anilist.catalogCrawlMessage}
               anilistCatalogStats={anilist.catalogStats}
               onAnilistCatalogCrawl={anilist.onCatalogCrawl}
+              isAnilistImporting={anilist.isImporting}
+              anilistImportResult={anilist.importResult}
+              anilistImportUsername={anilist.importUsername}
+              anilistImportStoredCount={anilist.importStoredCount}
+              onAnilistPersonalImport={anilist.onPersonalImport}
               simklConnected={simkl.isConnected}
               isSimklSyncing={simkl.isSyncing}
               simklSyncMessage={simkl.syncMessage}

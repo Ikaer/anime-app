@@ -170,37 +170,44 @@ export function getSeasonInfos(): SeasonInfos {
 // ============================================================================
 //
 // The user notes anime in SIMKL (SIMKL → MAL one-way), so SIMKL is the
-// authority for PERSONAL fields; MAL is the fallback. Every personal read used
-// for filtering, seeding, or exclusion goes through these three helpers so the
-// SIMKL-first precedence lives in exactly one place. Catalog fields (mean,
-// genres, studios…) stay MAL — these helpers are personal-only.
+// authority for PERSONAL fields; MAL is the fallback; an anonymously-imported
+// AniList list (docs/PROVIDER-FREE.md P3b) is the LOWEST fallback tier, so an
+// AniList-only user still gets their state while existing MAL/SIMKL users are
+// unaffected (their higher tiers win). Precedence: SIMKL > MAL > AniList. Every
+// personal read used for filtering, seeding, or exclusion goes through these
+// three helpers so the precedence lives in exactly one place. Catalog fields
+// (mean, genres, studios…) stay MAL — these helpers are personal-only.
 
 /**
- * Effective personal watch status (SIMKL-first, MAL fallback). SIMKL status is
- * already normalized to MAL vocabulary at sync time, so callers get one
- * vocabulary regardless of source.
+ * Effective personal watch status (SIMKL-first, then MAL, then AniList). All
+ * three are normalized to MAL vocabulary at write/import time, so callers get
+ * one vocabulary regardless of source.
  */
 export function getEffectiveStatus(anime: MergedAnime): string | undefined {
-  return anime.simkl?.status ?? anime.my_list_status?.status;
+  return anime.simkl?.status ?? anime.my_list_status?.status ?? anime.anilistPersonal?.status;
 }
 
 /**
- * Effective personal score on the shared 1–10 scale (SIMKL-first, MAL
- * fallback). Both `0` and `null` mean "unrated" and collapse to `undefined`,
+ * Effective personal score on the shared 1–10 scale (SIMKL-first, then MAL,
+ * then AniList). Both `0` and `null` mean "unrated" and collapse to `undefined`,
  * preserving the threshold / `unrated` semantics that keyed off a falsy score.
  */
 export function getEffectiveScore(anime: MergedAnime): number | undefined {
   const simkl = anime.simkl?.score;
   if (simkl != null && simkl > 0) return simkl;
   const mal = anime.my_list_status?.score;
-  return mal != null && mal > 0 ? mal : undefined;
+  if (mal != null && mal > 0) return mal;
+  const anilist = anime.anilistPersonal?.score;
+  return anilist != null && anilist > 0 ? anilist : undefined;
 }
 
-/** Effective watched-episode progress (SIMKL-first, MAL fallback). */
+/** Effective watched-episode progress (SIMKL-first, then MAL, then AniList). */
 export function getEffectiveProgress(anime: MergedAnime): number | undefined {
   const simkl = anime.simkl?.num_episodes_watched;
   if (simkl != null) return simkl;
-  return anime.my_list_status?.num_episodes_watched ?? undefined;
+  const mal = anime.my_list_status?.num_episodes_watched;
+  if (mal != null) return mal;
+  return anime.anilistPersonal?.progress ?? undefined;
 }
 
 export function formatUserStatus(status?: string) {
@@ -308,12 +315,13 @@ export function toAnimeRecord(
         // MAL slice. `MergedAnime` is the pre-projection shape (no catalog/
         // personal/sources), so only these join-time fields need removing.
         const {
-          hidden, simkl, discrepancy, anilistMeta, crosswalk, canonicalId, ...mal
+          hidden, simkl, discrepancy, anilistMeta, anilistPersonal, crosswalk, canonicalId, ...mal
         } = anime;
         return mal;
       })(),
       simkl: anime.simkl,
       anilist: anime.anilistMeta,
+      anilistPersonal: anime.anilistPersonal,
     },
     hidden: anime.hidden,
     discrepancy: anime.discrepancy,

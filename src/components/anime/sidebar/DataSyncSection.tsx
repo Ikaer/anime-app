@@ -3,6 +3,7 @@ import styles from './DataSyncSection.module.css';
 import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
 import type { HistoricalCrawlStats } from '@/lib/malSync';
+import type { AniListPersonalImportResult } from '@/lib/anilistPersonalSync';
 import { useT } from '@/lib/i18n';
 
 interface DataSyncSectionProps {
@@ -23,6 +24,11 @@ interface DataSyncSectionProps {
   anilistCatalogCrawlMessage: string;
   anilistCatalogStats: { totalCanonicalIds: number; anilistOnlyIds: number } | null;
   onAnilistCatalogCrawl: () => void;
+  isAnilistImporting: boolean;
+  anilistImportResult: AniListPersonalImportResult | null;
+  anilistImportUsername?: string;
+  anilistImportStoredCount: number | null;
+  onAnilistPersonalImport: (username: string) => void;
   simklConnected: boolean;
   isSimklSyncing: boolean;
   simklSyncMessage: string;
@@ -47,14 +53,40 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   anilistCatalogCrawlMessage,
   anilistCatalogStats,
   onAnilistCatalogCrawl,
+  isAnilistImporting,
+  anilistImportResult,
+  anilistImportUsername,
+  anilistImportStoredCount,
+  onAnilistPersonalImport,
   simklConnected,
   isSimklSyncing,
   simklSyncMessage,
   onSimklSync,
 }) => {
   const t = useT();
-  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isAnilistCatalogCrawling || isSimklSyncing;
+  const [anilistUsername, setAnilistUsername] = React.useState('');
+  // Pre-fill the field once the saved username loads, without clobbering typing.
+  React.useEffect(() => {
+    if (anilistImportUsername) setAnilistUsername(prev => prev || anilistImportUsername);
+  }, [anilistImportUsername]);
+  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistImporting || isSimklSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
+
+  const importMessage = (() => {
+    if (!anilistImportResult) return null;
+    if (anilistImportResult.ok) {
+      return t('dataSync.anilistImportDone', {
+        imported: anilistImportResult.imported,
+        skipped: anilistImportResult.skippedNoMal,
+      });
+    }
+    switch (anilistImportResult.errorKind) {
+      case 'private': return t('dataSync.anilistImportPrivate');
+      case 'not_found': return t('dataSync.anilistImportNotFound');
+      case 'empty': return t('dataSync.anilistImportEmpty');
+      default: return t('dataSync.anilistImportError');
+    }
+  })();
 
   return (
     <div className={styles.dataSyncSection}>
@@ -115,6 +147,35 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
         </div>
       )}
       {anilistCatalogCrawlMessage && <div className={styles.crawlStats}>{anilistCatalogCrawlMessage}</div>}
+      <div className={styles.importRow}>
+        <input
+          type="text"
+          className={styles.usernameInput}
+          placeholder={t('dataSync.anilistUsernamePlaceholder')}
+          value={anilistUsername}
+          onChange={e => setAnilistUsername(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && anilistUsername.trim() && !anyBusy) onAnilistPersonalImport(anilistUsername);
+          }}
+          disabled={anyBusy}
+          spellCheck={false}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <Button
+          onClick={() => onAnilistPersonalImport(anilistUsername)}
+          disabled={anyBusy || !anilistUsername.trim()}
+          variant="secondary"
+        >
+          {isAnilistImporting ? t('dataSync.anilistImporting') : t('dataSync.anilistImport')}
+        </Button>
+      </div>
+      {anilistImportStoredCount !== null && anilistImportStoredCount > 0 && (
+        <div className={styles.crawlStats}>
+          {t('dataSync.anilistImportStored', { count: anilistImportStoredCount, user: anilistImportUsername ?? '' })}
+        </div>
+      )}
+      {importMessage && <div className={styles.crawlStats}>{importMessage}</div>}
     </div>
   );
 };

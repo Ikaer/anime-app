@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeForDisplay, AnimeRecord, MergedAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, AnimeRecord, MergedAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
@@ -23,6 +23,7 @@ const ANIME_MAL_FILE = dataFile('animes_mal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
 const ANIME_SIMKL_FILE = dataFile('animes_simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
+const ANIME_ANILIST_PERSONAL_FILE = dataFile('animes_anilist_personal.json');
 
 // ============================================================================
 // Hidden anime ids
@@ -149,6 +150,33 @@ export function upsertAnilistCatalogFields(
       : { mal_id, anilist_id, tags: [], catalog, fetched_at: now };
   });
   writeJsonFile(ANIME_ANILIST_META_FILE, existing);
+  cachedAnime = null;
+}
+
+// ============================================================================
+// AniList personal-list slice (keyed by MAL id, as string) — docs/PROVIDER-FREE.md
+// P3b. Anonymously imported from a public AniList username; lowest personal-state
+// fallback tier (see getEffective* in animeUtils.ts). A username import is always
+// a FULL pull, so the mutator REPLACES the whole file — removals from the AniList
+// list drop out for free, no delta/reconcile needed (unlike SIMKL).
+// ============================================================================
+
+export function getAllAnilistPersonalEntries(): Record<string, AniListPersonalEntry> {
+  return readJsonFile<Record<string, AniListPersonalEntry>>(ANIME_ANILIST_PERSONAL_FILE, {});
+}
+
+export function getAnilistPersonalCount(): number {
+  return Object.keys(getAllAnilistPersonalEntries()).length;
+}
+
+/**
+ * Replace the entire AniList personal-list store with a fresh MAL-id-keyed map.
+ * The caller (anilistPersonalSync) builds the map so the stored entry stays the
+ * locked 4-field `AniListPersonalEntry` shape (no `mal_id` bolted on). Invalidates
+ * the merged-record cache like every other write here.
+ */
+export function replaceAnilistPersonalEntries(entriesByMalId: Record<string, AniListPersonalEntry>): void {
+  writeJsonFile(ANIME_ANILIST_PERSONAL_FILE, entriesByMalId);
   cachedAnime = null;
 }
 
@@ -331,6 +359,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   const hiddenIds = getHiddenAnimeIds();
   const simklByMalId = getAllSimklEntries();
   const anilistMetaByMalId = getAllAnilistMeta();
+  const anilistPersonalByMalId = getAllAnilistPersonalEntries();
   const animeList = Object.values(malAnime);
 
   const malIndex = reconcileRegistry(
@@ -344,6 +373,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   cachedAnime = animeList.map(anime => {
     const simkl = simklByMalId[anime.id.toString()];
     const anilistMeta = anilistMetaByMalId[anime.id.toString()];
+    const anilistPersonal = anilistPersonalByMalId[anime.id.toString()];
     const canonicalId = malIndex.get(anime.id);
     const merged: MergedAnime = {
       ...anime,
@@ -351,6 +381,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
       simkl,
       discrepancy: computeDiscrepancy(anime, simkl),
       anilistMeta,
+      anilistPersonal,
       crosswalk: canonicalId ? registry[canonicalId] : assembleCrosswalk(anime.id, simkl, anilistMeta),
       canonicalId,
     };
@@ -380,6 +411,7 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
   const hidden = getHiddenAnimeIds();
   const simkl = getAllSimklEntries()[id.toString()];
   const anilistMeta = getAllAnilistMeta()[id.toString()];
+  const anilistPersonal = getAllAnilistPersonalEntries()[id.toString()];
   const crosswalk = assembleCrosswalk(mal.id, simkl, anilistMeta) || {};
   const malIndex = reconcileRegistry([{ malId: mal.id, crosswalk }]);
   const canonicalId = malIndex.get(mal.id);
@@ -390,6 +422,7 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
     simkl,
     discrepancy: computeDiscrepancy(mal, simkl),
     anilistMeta,
+    anilistPersonal,
     crosswalk: canonicalId && registry ? registry[canonicalId] : crosswalk,
     canonicalId,
   };

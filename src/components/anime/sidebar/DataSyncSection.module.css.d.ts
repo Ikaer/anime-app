@@ -3,6 +3,8 @@ declare const styles: {
   readonly "crawlStats": string;
   readonly "dataSyncSection": string;
   readonly "error": string;
+  readonly "importRow": string;
+  readonly "usernameInput": string;
 };
 export = styles;
 

@@ -98,6 +98,22 @@ export interface SimklPersonalEntry {
 }
 
 /**
+ * AniList personal-list data (read-only, anonymous public import by username —
+ * docs/PROVIDER-FREE.md Phase 3 "P3b"). Keyed by MAL id in
+ * animes_anilist_personal.json. It is the LOWEST personal-state fallback tier
+ * (SIMKL > MAL > AniList) — see `getEffective*` in animeUtils.ts — so an
+ * existing MAL/SIMKL user is unaffected, while an AniList-only user still gets
+ * their state. Deliberately the locked 4-field shape (no `mal_id`): the store
+ * keys the record by MAL id externally, so the entry itself stays source-pure.
+ */
+export interface AniListPersonalEntry {
+  status?: UserAnimeStatus;  // normalized to MAL vocabulary at import time
+  score?: number;            // 1-10 scale (AniList POINT_10); 0/undefined = unrated
+  progress?: number;         // episodes watched
+  anilist_id: number;        // AniList media id
+}
+
+/**
  * Cross-source id crosswalk. SIMKL's all-items response carries a rich `ids`
  * block (mal, anilist, anidb, kitsu, tmdb, imdb, tvdb…); we store it verbatim.
  * `mal` may arrive as a string from SIMKL. Kept deliberately open-ended.
@@ -197,6 +213,7 @@ export interface MergedAnime extends MALAnime {
   simkl?: SimklPersonalEntry;       // joined at display time by MAL id
   discrepancy?: Discrepancy | null; // computed at display / filter time
   anilistMeta?: AniListMetaEntry;   // joined at display time by MAL id
+  anilistPersonal?: AniListPersonalEntry; // joined at display time by MAL id (P3b)
   /**
    * Unified cross-source id crosswalk, assembled at display time from every
    * pipe (MAL self-id + SIMKL's ids block + AniList's id). Materially
@@ -321,6 +338,7 @@ export interface AnimeSources {
   mal?: MALAnime;
   simkl?: SimklPersonalEntry;
   anilist?: AniListMetaEntry;
+  anilistPersonal?: AniListPersonalEntry;
 }
 
 /**
