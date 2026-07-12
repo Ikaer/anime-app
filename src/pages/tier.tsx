@@ -13,6 +13,9 @@ import { useT, TranslationKey } from '@/lib/i18n';
 // (localized via `tierWord.<n>`).
 const TIER_SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
+// The four statuses the board's fetch already scopes to (plan_to_watch excluded).
+const TIER_STATUSES = ['watching', 'completed', 'on_hold', 'dropped'] as const;
+
 // green (10) → red (1)
 function scoreColor(n: number): string {
   return `hsl(${Math.round(((n - 1) / 9) * 120)}, 55%, 42%)`;
@@ -132,9 +135,12 @@ export default function TierPage() {
     [overrides, baseScore],
   );
 
-  // Client-side narrowing (search / media type / mean range / year range / genres).
-  const filtered = useMemo(
-    () => applyNarrowingFilters(animes, {
+  // Client-side narrowing (search / media type / mean range / year range / genres),
+  // plus the tier board's own status filter (page-specific, so not in
+  // applyNarrowingFilters — same reasoning as the main list page). OR semantics:
+  // no box checked = no filter (show all four statuses already fetched).
+  const filtered = useMemo(() => {
+    let out = applyNarrowingFilters(animes, {
       search: state.search,
       mediaTypes: state.mediaTypes,
       minScore: state.minScore,
@@ -142,9 +148,16 @@ export default function TierPage() {
       minYear: state.minYear,
       maxYear: state.maxYear,
       genres: state.genres,
-    }),
-    [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres],
-  );
+    });
+    if (state.statuses.length > 0) {
+      const wanted = new Set(state.statuses);
+      out = out.filter(a => {
+        const s = getEffectiveStatus(a);
+        return !!s && wanted.has(s);
+      });
+    }
+    return out;
+  }, [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres, state.statuses]);
 
   // Distinct MAL genre names (not AniList tags) across the loaded list, alphabetized.
   const availableGenres = useMemo(() => {
@@ -310,6 +323,26 @@ export default function TierPage() {
           maxYear={state.maxYear}
           onYearChange={(min: number | null, max: number | null) => update({ minYear: min, maxYear: max })}
         />
+
+        <div className={filterStyles.filterGroup}>
+          <label className={filterStyles.label}>{t('tier.statuses')}</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {TIER_STATUSES.map(s => (
+              <label key={s} className={filterStyles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={state.statuses.includes(s)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...state.statuses, s]
+                      : state.statuses.filter(x => x !== s);
+                    update({ statuses: next });
+                  }}
+                /> {t(`status.${s}` as TranslationKey)}
+              </label>
+            ))}
+          </div>
+        </div>
 
         {availableGenres.length > 0 && (
           <div className={filterStyles.filterGroup}>

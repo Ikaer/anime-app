@@ -189,6 +189,7 @@
   "tier.headerCount": "{rated} rated · {toRate} to rate",
   "tier.trayLabel": "To rate · {count}",
   "tier.genres": "Genres:",
+  "tier.statuses": "Status:",
 
   "detail.pageTitle": "{title} — Local details",
   "detail.back": "← Back",

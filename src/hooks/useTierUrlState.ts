@@ -19,6 +19,8 @@ export interface TierUrlState {
   maxYear: number | null;
   /** MAL genre names (not AniList tags) — AND semantics, empty = no filter. */
   genres: string[];
+  /** Effective (SIMKL-first) personal status — OR semantics, empty = no filter (show all). */
+  statuses: string[];
   /** Thumbnail size for the board (small by default — hover zooms to large). */
   thumbSize: ImageSize;
 }
@@ -31,6 +33,7 @@ export const TIER_DEFAULTS: TierUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  statuses: [],
   thumbSize: 1,
 };
 
@@ -42,6 +45,7 @@ const KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   genres: 'g',
+  statuses: 'st',
   thumbSize: 'ts',
 } as const;
 
@@ -59,6 +63,7 @@ function decode(params: URLSearchParams): TierUrlState {
     minYear: num(params.get(KEYS.minYear)),
     maxYear: num(params.get(KEYS.maxYear)),
     genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
+    statuses: (params.get(KEYS.statuses) || '').split(',').map(s => s.trim()).filter(Boolean),
     thumbSize: params.has(KEYS.thumbSize)
       ? (parseInt(params.get(KEYS.thumbSize)!, 10) as ImageSize)
       : TIER_DEFAULTS.thumbSize,
@@ -74,6 +79,7 @@ function encode(state: TierUrlState): string {
   if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
+  if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
   if (state.thumbSize !== TIER_DEFAULTS.thumbSize) params.set(KEYS.thumbSize, String(state.thumbSize));
   const qs = params.toString().replace(/%2C/g, ',');
   return qs ? `/tier?${qs}` : '/tier';

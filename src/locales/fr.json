@@ -189,6 +189,7 @@
   "tier.headerCount": "{rated} notés · {toRate} à noter",
   "tier.trayLabel": "À noter · {count}",
   "tier.genres": "Genres :",
+  "tier.statuses": "Statut :",
 
   "detail.pageTitle": "{title} — Détails locaux",
   "detail.back": "← Retour",
