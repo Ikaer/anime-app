@@ -384,6 +384,8 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
       idMal
       title { romaji english }
       averageScore
+      genres
+      studios { nodes { id name } }
     }
   }
 }`;
@@ -393,6 +395,8 @@ interface RawCatalogMedia {
   idMal?: number | null;
   title?: { romaji?: string | null; english?: string | null };
   averageScore?: number | null;
+  genres?: (string | null)[] | null;
+  studios?: { nodes?: ({ id?: number | null; name?: string | null } | null)[] | null } | null;
 }
 interface RawCatalogPage {
   pageInfo?: { hasNextPage?: boolean };
@@ -477,8 +481,20 @@ export async function performAnilistCatalogCrawl(
         const title = m.title?.english || m.title?.romaji;
         if (!title) continue;
         const mean = typeof m.averageScore === 'number' ? m.averageScore / 10 : undefined;
+        // AniList genres are names only → synthetic id 0 (consumers key on name).
+        const genres = (m.genres ?? [])
+          .filter((g): g is string => !!g)
+          .map(name => ({ id: 0, name }));
+        // AniList studios carry AniList-namespace ids (see AniListMetaEntry.catalog caveat).
+        const studios = (m.studios?.nodes ?? [])
+          .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
+          .map(s => ({ id: s.id ?? 0, name: s.name as string }));
         if (m.idMal) {
-          withMalEntries.push({ mal_id: m.idMal, anilist_id: m.id, catalog: { title, mean } });
+          withMalEntries.push({
+            mal_id: m.idMal,
+            anilist_id: m.id,
+            catalog: { title, mean, genres, studios },
+          });
         } else {
           anilistOnlyIds.push(m.id);
         }

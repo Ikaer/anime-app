@@ -163,6 +163,23 @@ export interface AniListMetaEntry {
   catalog?: {
     title: string;
     mean?: number; // AniList averageScore/10, on MAL's 1-10 scale
+    /**
+     * AniList genres (Phase 3 P3a). AniList exposes genres as NAMES only (no
+     * id), so these carry a synthetic `id: 0` — safe because every genre
+     * consumer keys off `name` (filters, the reco genre IDF profile). Merged
+     * via catalog precedence in `toAnimeRecord`; MAL-first by default, so this
+     * only wins for AniList-only titles or a future anilist-first flip.
+     */
+    genres?: Genre[];
+    /**
+     * AniList studios (Phase 3 P3a). Ids are AniList's namespace, NOT MAL's —
+     * so a title present on BOTH keeps MAL studios under the default MAL-first
+     * precedence. Caveat if precedence ever flips to anilist-first: the reco
+     * studio IDF profile keys off studio `id`, so cross-source id mismatch
+     * would fragment studio affinity. Not a problem today (MAL wins for
+     * MAL-linked titles; AniList-only titles have no MAL studio profile anyway).
+     */
+    studios?: Studio[];
   };
   fetched_at: string; // ISO timestamp of last successful fetch
 }

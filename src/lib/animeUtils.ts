@@ -278,7 +278,10 @@ export function toAnimeRecord(
       numListUsers: anime.num_list_users,
       numScoringUsers: anime.num_scoring_users,
       nsfw: anime.nsfw,
-      genres: anime.genres,
+      // Phase 3 P3a: genres/studios flow through catalog precedence like
+      // title/mean. MAL-first by default so on-screen behavior is unchanged
+      // for MAL-linked titles; AniList wins only where MAL has none.
+      genres: resolveCatalogField(precedence, { mal: anime.genres, anilist: anilistCatalog?.genres }) ?? anime.genres ?? [],
       mediaType: anime.media_type,
       airingStatus: anime.status,
       numEpisodes: anime.num_episodes,
@@ -288,7 +291,7 @@ export function toAnimeRecord(
       averageEpisodeDuration: anime.average_episode_duration,
       rating: anime.rating,
       relatedAnime: anime.related_anime,
-      studios: anime.studios,
+      studios: resolveCatalogField(precedence, { mal: anime.studios, anilist: anilistCatalog?.studios }) ?? anime.studios ?? [],
     },
     personal: {
       status: getEffectiveStatus(anime) as AnimeRecord['personal']['status'],
