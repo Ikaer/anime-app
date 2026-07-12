@@ -149,7 +149,7 @@ export default function TierPage() {
   // Distinct MAL genre names (not AniList tags) across the loaded list, alphabetized.
   const availableGenres = useMemo(() => {
     const names = new Set<string>();
-    for (const a of animes) for (const g of a.genres || []) names.add(g.name);
+    for (const a of animes) for (const g of a.catalog.genres || []) names.add(g.name);
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [animes]);
 
@@ -261,7 +261,7 @@ export default function TierPage() {
   }, [buckets]);
 
   const renderCard = (a: AnimeForDisplay) => {
-    const thumb = a.main_picture?.medium || a.main_picture?.large || '';
+    const thumb = a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large || '';
     const isSaving = saving.has(a.id);
     const fail = failed.get(a.id);
     return (
@@ -399,9 +399,9 @@ export default function TierPage() {
 
       {preview && (
         <div className="hover-preview" style={{ left: preview.x, top: preview.y }}>
-          <img src={preview.anime.main_picture?.large || preview.anime.main_picture?.medium || ''} alt="" />
+          <img src={preview.anime.catalog.mainPicture?.large || preview.anime.catalog.mainPicture?.medium || ''} alt="" />
           <div className="hover-title">{getPrimaryTitle(preview.anime)}</div>
-          {preview.anime.mean != null && <div className="hover-mean">MAL {preview.anime.mean.toFixed(2)}</div>}
+          {preview.anime.catalog.mean != null && <div className="hover-mean">MAL {preview.anime.catalog.mean.toFixed(2)}</div>}
         </div>
       )}
 

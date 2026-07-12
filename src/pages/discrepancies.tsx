@@ -97,7 +97,7 @@ export default function DiscrepanciesPage() {
                   const d = anime.discrepancy;
                   const mal = anime.my_list_status;
                   const simkl = anime.simkl;
-                  const img = anime.main_picture?.medium || anime.main_picture?.large;
+                  const img = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
                   const sUrl = simklUrl(anime);
                   const simklOnly = d?.presence === 'simkl_only';
 

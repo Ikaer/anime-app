@@ -62,7 +62,7 @@ export default function AnimeRatePicker() {
         )}
         <div className={styles.results}>
           {results.map(anime => {
-            const poster = anime.main_picture?.medium || anime.main_picture?.large;
+            const poster = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
             return (
               <button key={anime.id} className={styles.resultCard} onClick={() => pick(anime)}>
                 {poster
@@ -70,8 +70,8 @@ export default function AnimeRatePicker() {
                   : <div className={styles.resultPosterEmpty} />}
                 <div className={styles.resultBody}>
                   <span className={styles.resultTitle}>{getPrimaryTitle(anime)}</span>
-                  {anime.genres && anime.genres.length > 0 && (
-                    <span className={styles.resultGenres}>{anime.genres.map(g => g.name).join(', ')}</span>
+                  {anime.catalog.genres && anime.catalog.genres.length > 0 && (
+                    <span className={styles.resultGenres}>{anime.catalog.genres.map(g => g.name).join(', ')}</span>
                   )}
                 </div>
               </button>
