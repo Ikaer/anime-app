@@ -41,6 +41,14 @@ next-env.d.ts
 
 
 /data
+/logs
+
+# Runtime config stores — keep secrets-bearing settings out of git even if a user
+# points DATA_PATH at the repo (see docs/SETUP-AND-CONFIG.md § Security posture).
+# The out-of-checkout default (~/.anime-app) is the primary defense; these are
+# belt-and-suspenders.
+/settings.json
+/config.json
 
 __pycache__/
 *.pyc

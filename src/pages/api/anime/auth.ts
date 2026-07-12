@@ -5,6 +5,8 @@ import { appendLog } from '@/lib/connectionLog';
 import crypto from 'crypto';
 import fs from 'fs';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { getMalClientId } from '@/lib/settings';
+import { getMalRedirectUri } from '@/lib/redirectUri';
 
 /**
  * MAL OAuth. This route deliberately does NOT live under `/api/anime/mal/`
@@ -13,8 +15,9 @@ import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
  * outside this repo. Moving it breaks login on the next deploy.
  */
 
-const MAL_CLIENT_ID = process.env.MAL_CLIENT_ID;
-const MAL_REDIRECT_URI = process.env.MAL_REDIRECT_URI || 'http://localhost:3000/api/anime/auth';
+// MAL client id / redirect uri now resolve at request time through the settings
+// store (settings.json ?? env ?? default), so UI edits take effect without an
+// env change. See @/lib/settings.
 const MAL_AUTH_URL = 'https://myanimelist.net/v1/oauth2/authorize';
 const MAL_TOKEN_URL = 'https://myanimelist.net/v1/oauth2/token';
 
@@ -161,7 +164,8 @@ async function getAuthStatus(req: NextApiRequest, res: NextApiResponse) {
 }
 
 async function initiateOAuthFlow(req: NextApiRequest, res: NextApiResponse) {
-  if (!MAL_CLIENT_ID) {
+  const malClientId = getMalClientId();
+  if (!malClientId) {
     res.status(500).json({ error: 'MAL client ID not configured' });
     return;
   }
@@ -175,8 +179,8 @@ async function initiateOAuthFlow(req: NextApiRequest, res: NextApiResponse) {
 
   const authUrl = new URL(MAL_AUTH_URL);
   authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('client_id', MAL_CLIENT_ID);
-  authUrl.searchParams.set('redirect_uri', MAL_REDIRECT_URI);
+  authUrl.searchParams.set('client_id', malClientId);
+  authUrl.searchParams.set('redirect_uri', getMalRedirectUri(req));
   authUrl.searchParams.set('state', state);
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'plain'); // MAL uses 'plain', not 'S256'
@@ -205,10 +209,10 @@ async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, co
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        client_id: MAL_CLIENT_ID!,
+        client_id: getMalClientId()!,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: MAL_REDIRECT_URI,
+        redirect_uri: getMalRedirectUri(req),
         code_verifier: codeVerifier,
       }),
     });

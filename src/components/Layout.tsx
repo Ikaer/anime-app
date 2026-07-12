@@ -9,7 +9,7 @@ interface LayoutProps {
 }
 
 // Routes grouped under the "Others" dropdown.
-const OTHER_ROUTES = ['/rate', '/discrepancies'];
+const OTHER_ROUTES = ['/rate', '/discrepancies', '/settings'];
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -76,6 +76,13 @@ function OthersDropdown() {
             className={`nav-dropdown-item ${router.pathname === '/discrepancies' ? 'active' : ''}`}
           >
             {t('nav.discrepancies')}
+          </Link>
+          <Link
+            href="/settings"
+            role="menuitem"
+            className={`nav-dropdown-item ${router.pathname === '/settings' ? 'active' : ''}`}
+          >
+            {t('nav.settings')}
           </Link>
         </div>
       )}

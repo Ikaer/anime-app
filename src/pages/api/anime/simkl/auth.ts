@@ -11,12 +11,12 @@ import {
   SimklAuthData,
   SimklUser,
 } from '@/lib/simkl';
+import { getSimklClientId, getSimklClientSecret, getSimklAppName } from '@/lib/settings';
+import { getSimklRedirectUri } from '@/lib/redirectUri';
 
-const SIMKL_CLIENT_ID = process.env.SIMKL_CLIENT_ID;
-const SIMKL_CLIENT_SECRET = process.env.SIMKL_CLIENT_SECRET;
-const SIMKL_APP_NAME = process.env.SIMKL_APP_NAME || 'my-app-name';
+// SIMKL credentials resolve at request time via the settings store
+// (settings.json ?? env ?? default). See @/lib/settings.
 const SIMKL_APP_VERSION = '1.0';
-const SIMKL_REDIRECT_URI = process.env.SIMKL_REDIRECT_URI || 'http://localhost:3000/api/anime/simkl/auth';
 const SIMKL_AUTH_URL = 'https://simkl.com/oauth/authorize';
 const SIMKL_TOKEN_URL = 'https://api.simkl.com/oauth/token';
 const SIMKL_USER_URL = 'https://api.simkl.com/users/settings';
@@ -44,13 +44,13 @@ async function handleGetAuth(req: NextApiRequest, res: NextApiResponse) {
   const { code, state, action } = req.query;
 
   if (code && state) {
-    await handleOAuthCallback(res, code as string, state as string);
+    await handleOAuthCallback(req, res, code as string, state as string);
     return;
   }
 
   switch (action) {
     case 'login':
-      await initiateOAuthFlow(res);
+      await initiateOAuthFlow(req, res);
       break;
     case 'logout':
       await logout(res);
@@ -81,8 +81,9 @@ async function getAuthStatus(res: NextApiResponse) {
   res.json({ isAuthenticated: true, user });
 }
 
-async function initiateOAuthFlow(res: NextApiResponse) {
-  if (!SIMKL_CLIENT_ID) {
+async function initiateOAuthFlow(req: NextApiRequest, res: NextApiResponse) {
+  const clientId = getSimklClientId();
+  if (!clientId) {
     res.status(500).json({ error: 'Simkl client ID not configured' });
     return;
   }
@@ -92,9 +93,9 @@ async function initiateOAuthFlow(res: NextApiResponse) {
 
   const authUrl = new URL(SIMKL_AUTH_URL);
   authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('client_id', SIMKL_CLIENT_ID);
-  authUrl.searchParams.set('redirect_uri', SIMKL_REDIRECT_URI);
-  authUrl.searchParams.set('app-name', SIMKL_APP_NAME);
+  authUrl.searchParams.set('client_id', clientId);
+  authUrl.searchParams.set('redirect_uri', getSimklRedirectUri(req));
+  authUrl.searchParams.set('app-name', getSimklAppName());
   authUrl.searchParams.set('app-version', SIMKL_APP_VERSION);
   authUrl.searchParams.set('state', state);
   appendLog('simkl-auth', 'info', 'SIMKL login initiated');
@@ -102,7 +103,7 @@ async function initiateOAuthFlow(res: NextApiResponse) {
   res.json({ authUrl: authUrl.toString() });
 }
 
-async function handleOAuthCallback(res: NextApiResponse, code: string, state: string) {
+async function handleOAuthCallback(req: NextApiRequest, res: NextApiResponse, code: string, state: string) {
   if (!consumeOAuthState(state)) {
     appendLog('simkl-auth', 'error', 'SIMKL OAuth callback failed: invalid or expired state');
     res.status(400).json({ error: 'Invalid or expired state parameter' });
@@ -115,9 +116,9 @@ async function handleOAuthCallback(res: NextApiResponse, code: string, state: st
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         code,
-        client_id: SIMKL_CLIENT_ID,
-        client_secret: SIMKL_CLIENT_SECRET,
-        redirect_uri: SIMKL_REDIRECT_URI,
+        client_id: getSimklClientId(),
+        client_secret: getSimklClientSecret(),
+        redirect_uri: getSimklRedirectUri(req),
         grant_type: 'authorization_code',
       }),
     });
@@ -130,15 +131,16 @@ async function handleOAuthCallback(res: NextApiResponse, code: string, state: st
     const tokenData = (await tokenResponse.json()) as SimklAuthData;
     tokenData.created_at = Date.now();
 
+    const appName = getSimklAppName();
     const userUrl = new URL(SIMKL_USER_URL);
-    userUrl.searchParams.set('client_id', SIMKL_CLIENT_ID || '');
-    userUrl.searchParams.set('app-name', SIMKL_APP_NAME);
+    userUrl.searchParams.set('client_id', getSimklClientId());
+    userUrl.searchParams.set('app-name', appName);
     userUrl.searchParams.set('app-version', SIMKL_APP_VERSION);
 
     const userResponse = await fetch(userUrl.toString(), {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
-        'User-Agent': `${SIMKL_APP_NAME}/${SIMKL_APP_VERSION}`,
+        'User-Agent': `${appName}/${SIMKL_APP_VERSION}`,
       },
     });
 

@@ -1,4 +1,5 @@
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { getSimklAppName, getSimklClientId } from '@/lib/settings';
 
 const SIMKL_AUTH_FILE = dataFile('simkl_auth.json');
 const SIMKL_STATE_FILE = dataFile('simkl_oauth_state.json');
@@ -62,9 +63,9 @@ export function consumeOAuthState(state: string): boolean {
 }
 
 const SIMKL_CHECKPOINT_FILE = dataFile('simkl_sync_checkpoint.json');
-const SIMKL_APP_NAME = process.env.SIMKL_APP_NAME || 'my-app-name';
 const SIMKL_APP_VERSION = '1.0';
-const SIMKL_CLIENT_ID = process.env.SIMKL_CLIENT_ID || '';
+// client_id / app-name resolve at request time via the settings store
+// (settings.json ?? env ?? default). See @/lib/settings.
 
 export interface SimklCheckpoint {
   // The activities.anime.all timestamp, stored EXACTLY as received (ISO 8601 UTC).
@@ -96,14 +97,15 @@ export function saveSimklCheckpoint(cp: SimklCheckpoint): void {
  * `pathAndQuery` starts with '/' (e.g. '/sync/all-items/anime?extended=ids_only').
  */
 export async function simklFetch(pathAndQuery: string, accessToken: string): Promise<Response> {
+  const appName = getSimklAppName();
   const url = new URL(`https://api.simkl.com${pathAndQuery}`);
-  url.searchParams.set('client_id', SIMKL_CLIENT_ID);
-  url.searchParams.set('app-name', SIMKL_APP_NAME);
+  url.searchParams.set('client_id', getSimklClientId());
+  url.searchParams.set('app-name', appName);
   url.searchParams.set('app-version', SIMKL_APP_VERSION);
   return fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'User-Agent': `${SIMKL_APP_NAME}/${SIMKL_APP_VERSION}`,
+      'User-Agent': `${appName}/${SIMKL_APP_VERSION}`,
     },
   });
 }
@@ -115,15 +117,16 @@ export async function simklFetch(pathAndQuery: string, accessToken: string): Pro
  * callers must issue writes serially (see docs/simkl/apirules.md).
  */
 export async function simklPost(pathAndQuery: string, accessToken: string, body: unknown): Promise<Response> {
+  const appName = getSimklAppName();
   const url = new URL(`https://api.simkl.com${pathAndQuery}`);
-  url.searchParams.set('client_id', SIMKL_CLIENT_ID);
-  url.searchParams.set('app-name', SIMKL_APP_NAME);
+  url.searchParams.set('client_id', getSimklClientId());
+  url.searchParams.set('app-name', appName);
   url.searchParams.set('app-version', SIMKL_APP_VERSION);
   return fetch(url.toString(), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'User-Agent': `${SIMKL_APP_NAME}/${SIMKL_APP_VERSION}`,
+      'User-Agent': `${appName}/${SIMKL_APP_VERSION}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),

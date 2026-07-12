@@ -7,6 +7,7 @@ import {
   performRecommendationsRefresh,
 } from '@/lib/recommendations';
 import { appendLog } from '@/lib/connectionLog';
+import { getCronSecret } from '@/lib/settings';
 
 /**
  * Cron entry point. This route deliberately does NOT live under
@@ -86,7 +87,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Basic security check: can be improved with a secret key
   const authHeader = req.headers.authorization;
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = getCronSecret();
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

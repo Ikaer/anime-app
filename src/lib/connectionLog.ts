@@ -1,8 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveDataPath, resolveLogsPath } from '@/lib/bootstrap';
 
-const DATA_PATH = process.env.DATA_PATH || '/app/data';
-const LOGS_PATH = process.env.LOGS_PATH || DATA_PATH;
+const DATA_PATH = resolveDataPath();
+// Exported so the settings page can show the log folder actually in use (frozen
+// at boot — a config change only takes effect on restart).
+export const LOGS_PATH = resolveLogsPath();
 const LOG_FILE = path.join(LOGS_PATH, 'connection_log.json');
 
 /**

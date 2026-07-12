@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { resolveDataPath } from '@/lib/bootstrap';
 
 /**
  * The JSON-file store that stands in for a database. Every persisted file lives
@@ -7,9 +8,13 @@ import path from 'path';
  * "does the directory exist / is the file missing / is it corrupt" handling
  * lives in exactly one place.
  *
+ * `DATA_PATH` comes from the Tier-0 bootstrap resolver (env → OS-config file →
+ * out-of-checkout default), resolved once here at import time — so changing the
+ * data folder at runtime requires a restart. See bootstrap.ts / docs/SETUP-AND-CONFIG.md.
+ *
  * Server-only: this module uses `fs` and must never reach the client bundle.
  */
-export const DATA_PATH = process.env.DATA_PATH || '/app/data';
+export const DATA_PATH = resolveDataPath();
 
 /** Absolute path of a data file, e.g. `dataFile('animes_mal.json')`. */
 export function dataFile(name: string): string {
