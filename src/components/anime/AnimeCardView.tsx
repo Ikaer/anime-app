@@ -88,13 +88,13 @@ export default function AnimeCardView({
     }
 
     const handleManualSearch = (anime: AnimeForDisplay) => {
-        const searchTitle = anime.alternative_titles?.en || anime.title;
+        const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
         const googleUrl = generateGoogleORQuery(searchTitle);
         window.open(googleUrl, '_blank');
     };
 
     const handleJustWatchSearch = (anime: AnimeForDisplay) => {
-        const searchTitle = anime.alternative_titles?.en || anime.title;
+        const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
         const justWatchUrl = generateJustWatchQuery(searchTitle);
         window.open(justWatchUrl, '_blank');
     };
@@ -183,9 +183,9 @@ export default function AnimeCardView({
                 return (
                 <div key={anime.id} className={styles.card}>
                     <div className={styles.imageContainer}>
-                        {anime.main_picture?.large || anime.main_picture?.medium ? (
+                        {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
                             <Image
-                                src={anime.main_picture?.large || anime.main_picture?.medium}
+                                src={anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium}
                                 alt={getPrimaryTitle(anime)}
                                 className={styles.animeImage}
                                 fill
@@ -195,9 +195,9 @@ export default function AnimeCardView({
                         ) : (
                             <div className={styles.noImage}>{t('common.noImage')}</div>
                         )}
-                        <div className={`${styles.airingBadge} ${anime.status === 'currently_airing' ? styles.currentlyAiring : anime.status === 'finished_airing' ? styles.finishedAiring : styles.notYetAired}`}>
-                            {anime.status === 'currently_airing' && <div className={styles.pulsingDot} />}
-                            {formatStatus(anime.status)}
+                        <div className={`${styles.airingBadge} ${anime.catalog.airingStatus === 'currently_airing' ? styles.currentlyAiring : anime.catalog.airingStatus === 'finished_airing' ? styles.finishedAiring : styles.notYetAired}`}>
+                            {anime.catalog.airingStatus === 'currently_airing' && <div className={styles.pulsingDot} />}
+                            {formatStatus(anime.catalog.airingStatus)}
                         </div>
                         {onHideToggle && (
                             <button
@@ -323,8 +323,8 @@ export default function AnimeCardView({
                                 </span>
                             )}
                             {(visibleColumns?.score ?? true) && (
-                                <span className={`${styles.score} ${getScoreClass(anime.mean)}`}>
-                                    {anime.mean ? anime.mean.toFixed(2) : 'N/A'}
+                                <span className={`${styles.score} ${getScoreClass(anime.catalog.mean)}`}>
+                                    {anime.catalog.mean ? anime.catalog.mean.toFixed(2) : 'N/A'}
                                 </span>
                             )}
                         </div>

@@ -71,10 +71,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           return { year: Number(yy), season: ss as 'winter'|'spring'|'summer'|'fall' };
         });
         animeList = animeList.filter(anime => {
-          if (!anime.start_season) return false;
+          if (!anime.catalog.startSeason) return false;
           return seasonFilters.some(s =>
-            anime.start_season!.year === s.year &&
-            anime.start_season!.season === s.season
+            anime.catalog.startSeason!.year === s.year &&
+            anime.catalog.startSeason!.season === s.season
           );
         });
       }
@@ -114,7 +114,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (genres && typeof genres === 'string') {
       const genreList = genres.split(',').map(g => g.trim().toLowerCase());
       animeList = animeList.filter(anime =>
-        (anime.genres || []).some(genre => genreList.includes((genre.name || '').toLowerCase()))
+        (anime.catalog.genres || []).some(genre => genreList.includes((genre.name || '').toLowerCase()))
       );
     }
 
@@ -144,24 +144,24 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           bValue = getPrimaryTitle(b).toLowerCase();
           break;
         case 'mean':
-          aValue = a.mean || 0;
-          bValue = b.mean || 0;
+          aValue = a.catalog.mean || 0;
+          bValue = b.catalog.mean || 0;
           break;
         case 'start_date':
-          aValue = a.start_date ? new Date(a.start_date).getTime() : 0;
-          bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
+          aValue = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : 0;
+          bValue = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : 0;
           break;
         case 'status':
-          aValue = a.status || '';
-          bValue = b.status || '';
+          aValue = a.catalog.airingStatus || '';
+          bValue = b.catalog.airingStatus || '';
           break;
         case 'num_episodes':
-          aValue = a.num_episodes || 0;
-          bValue = b.num_episodes || 0;
+          aValue = a.catalog.numEpisodes || 0;
+          bValue = b.catalog.numEpisodes || 0;
           break;
         default:
-          aValue = a.mean || 0;
-          bValue = b.mean || 0;
+          aValue = a.catalog.mean || 0;
+          bValue = b.catalog.mean || 0;
       }
 
       if (aValue < bValue) {
