@@ -271,7 +271,7 @@ fall back to AniList-OAuth-only as the Phase 3 entry point. The one product
 detail to carry into Phase 3: surface the private/not-found distinction in the
 username-entry UI rather than a generic failure.
 
-### Phase 1 — Persist the synthetic-id anchor registry `Todo`
+### Phase 1 — Persist the synthetic-id anchor registry `Done`
 
 The concrete deliverable now. Additive; no consumer touches `AnimeRecord` yet.
 
@@ -296,9 +296,25 @@ The concrete deliverable now. Additive; no consumer touches `AnimeRecord` yet.
   good standalone PR, and the honest **stop point** if Phase 0 comes back
   negative.
 
-### Phase 2 — Introduce `AnimeRecord`, retire `extends MALAnime` `Todo`
+### Phase 2 — Introduce `AnimeRecord`, retire `extends MALAnime` `WIP`
 
 CLEANUP.md §1.2 proper. The wide, mechanical one.
+
+> **Landed:** `AnimeRecord`/`AnimeCatalog`/`AnimePersonal`/`AnimeSources` +
+> `toAnimeRecord`; the `catalog`/`personal`/`sources` projection is **attached
+> onto every merged record** (`MergedAnime` = pre-projection base;
+> `AnimeForDisplay` = base + projection) so consumers migrate off raw MAL fields
+> while the build stays green. **All ~182 catalog reads across 21 files migrated
+> to `record.catalog.*`** (reco engine, main list + cards, detail/rating/tier/
+> calculator/discrepancies). Personal reads **audited**: every `my_list_status`
+> read is legitimately raw (the `getEffective*` seam source, MAL write paths,
+> discrepancy comparison, the intentional "MAL status" display) — no flips
+> needed. **Remaining (the coordinated capstone):** drop `extends MALAnime`
+> (move the deliberately-raw readers onto `record.sources.mal.*`), flip
+> `applyNarrowingFilters`/`animeYear`/`getPrimaryTitle` onto catalog, switch the
+> **internal** join key to the canonical id, and de-bloat API payloads (the
+> compact-mode field-strip in `api/anime/animes` no longer shrinks output since
+> data also lives in the serialized `catalog` block).
 
 - Define `AnimeRecord`; build the merge in `getAnimeForDisplay()` (catalog ←
   MAL-first; personal ← reuse the existing `getEffective*` helpers; raw slices →
@@ -324,11 +340,24 @@ CLEANUP.md §1.2 proper. The wide, mechanical one.
   dropped** — but note that if Phase 0 killed Phase 3, this becomes a large
   refactor with no *user-facing* payoff, so weigh it as cleanup, not feature.
 
-### Phase 3 — No-key default: AniList-first, providers optional `Todo`
+### Phase 3 — No-key default: AniList-first, providers optional `WIP`
 
 Where the north star becomes real. **Gated on Phase 0** — if the anonymous
 list-read failed there, this phase is re-scoped around AniList OAuth as the
 entry tier (the anonymous-username bullet below drops, everything else holds).
+
+> **Landed:** the AniList **catalog crawler** (season/popularity, seeds the
+> registry independently of MAL); the **per-field catalog precedence** seam now
+> covers title/mean **and genres/studios** (P3a — MAL-first by default, so it
+> only wins for AniList-only titles / a future flip; live-verified); the
+> **anonymous AniList personal-list import by username** (P3b — the no-key
+> path, lowest personal tier SIMKL > MAL > AniList, private/not-found UX from
+> Phase 0). **Remaining:** promote the **outward** id to synthetic (the deferred
+> half of Phase 2's join switch — every route/deep-link/reco-`w=` param, with
+> MAL-id redirects; required before any AniList-only title is reachable);
+> flip the default catalog precedence to `['anilist','mal']`; AniList **OAuth
+> login** (private lists + write-back — `Todo`, needs a deployer OAuth app);
+> provider-enablement-as-config / a real `Provider` abstraction (`Todo`).
 
 - Make catalog authority a per-field precedence list (`['mal','anilist']` →
   default `['anilist','mal']` once the crawler lands). No behavior change until
