@@ -3,9 +3,12 @@
 > A **design + plan** document for an independent, self-contained refactor.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Todo`.** Large, high blast radius. Pure code-health / extensibility
-> — no user-facing payoff on its own. Worth it only when adding a 4th+ provider
-> (Jikan / Kitsu / Shikimori) is actually on the table.
+> **Status: `Dropped`** (the full registry) **→ superseded by a light
+> task-interface, itself `Todo` / defer-until-needed.** Large, high blast radius,
+> no user-facing payoff. The registry-over-a-finite-set is speculative generality;
+> the value it chases is captured far more cheaply by a small shared interface over
+> the *uniform* seams only. See **[Evaluation & decision](#evaluation--decision-2026-07-12)**
+> at the bottom.
 
 ## What
 
@@ -81,3 +84,65 @@ Not before there's a concrete 4th provider to add. Until then this is
 speculative generality — the three-provider hand-wiring is legible and cheap to
 read. Revisit when Jikan / Kitsu / Shikimori (all no-key-friendly, ids already
 in the `SourceIds` crosswalk) actually get scheduled.
+
+## Evaluation & decision (2026-07-12)
+
+**Verdict: drop the full registry. Keep a light task-interface over the uniform
+seams only, and even that is defer-until-a-concrete-need.**
+
+### Why the registry doesn't pay off
+
+A registry earns its keep when the member set is **open / dynamic / runtime-loaded**
+(plugin systems, arbitrary gateways). This set is the opposite — **compile-time-known
+and finite** (3 today; Jikan / Kitsu / Shikimori are named in advance). A registry
+over a finite known set trades three legible explicit calls for a
+`for (provider of PROVIDERS)` loop + capability-flag branching + lowest-common-denominator
+interfaces. That's ceremony, not leverage — and the "When to do it" section above already
+concedes it's speculative until a 4th provider is real.
+
+### The seams are not one axis — sort them
+
+"Provider" is treated here as a single axis; it's several orthogonal ones, and only
+some are uniform enough to abstract. This split is the whole decision:
+
+- **Uniform → worth a light interface:** per-title **refill / status**. The template
+  already exists — [`/api/anime/animes/[id]/refresh`](../src/pages/api/anime/animes/[id]/refresh.ts)
+  fans out to all three sources and returns a per-source `{ mal, anilist, simkl }`
+  outcome. Formalizing that one operation into a small `SourceRefill` shape each
+  module implements is cheap and legible. Crosswalk/`SourceIds` is already abstracted.
+- **Heterogeneous → hand-wiring is correct; a registry forces conditionals / LCD:**
+  - **Sync orchestration** — MAL seasonal 8-year crawl vs SIMKL two-phase
+    `activities`+`date_from` delta vs AniList GraphQL batch are *not the same
+    operation*; a common `fetchPersonalList()` hides genuinely different machinery.
+  - **Connection UI** — MAL OAuth vs SIMKL OAuth+secret vs AniList no-auth /
+    anonymous-by-username. A "generic connect" component is a conditional pile-up
+    *worse* than three explicit ones. [`useConnections`](../src/hooks/useConnections.ts)
+    is honestly hardcoded because the three flows are honestly different.
+
+### The `RecoSource` claim is the weakest part of the case above
+
+The "Motivation" section lists `RecoSource` as provider-hardcoded needing a
+URL-param migration. But only **3 of its 12 members** (`crowd`, `anilistCrowd`,
+`suggestions`) are provider-tied; the other 9 (`genre`, `studio`, `feedback`,
+`rejection`, `popularity`, `anilistTags`…) are **cross-provider taste dimensions**
+a provider registry has no claim on. And the provider-tied ones need *per-source*
+normalization anyway (`anilistCrowd` has its own denominator because AniList
+`rating` ≠ MAL `num_recommendations`). Making `RecoSource` registry-driven would
+force a URL-param migration to abstract a set that is ~25% providers and
+heterogeneous exactly where it *is* providers — **cost for negative benefit**.
+
+### Relationship to PROVIDER-FREE
+
+[PROVIDER-FREE.md](PROVIDER-FREE.md) (provider-neutral *record* + no-key onboarding)
+is the effort carrying the real user value, and it delivers most of the "sources are
+interchangeable" promise at the **data layer** — where it matters — without needing a
+registry at the **wiring layer**. Once PROVIDER-FREE matures, the registry is largely
+redundant.
+
+### What to actually do (if/when a 4th provider lands)
+
+Define a small shared shape for the *uniform* task only — per-source refill/status
+returning `{ ok, outcome }` — and have `mal*` / `simkl*` / `anilist*` implement just
+that slice. Leave sync orchestration and connection UI hand-wired. This makes "plug
+the source you want" true where it's cheap to be true, and skips the migration and
+LCD interfaces the full registry would impose.
