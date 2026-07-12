@@ -1,4 +1,4 @@
-import type { AnimeForDisplay, SeasonName, SeasonInfo } from '@/models/anime';
+import type { AnimeForDisplay, AnimeRecord, SeasonName, SeasonInfo } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
 // ============================================================================
@@ -6,6 +6,7 @@ import type { TFunction, TranslationKey } from '@/lib/i18n';
 // ============================================================================
 
 type TitleFields = Pick<AnimeForDisplay, 'title' | 'alternative_titles'>;
+type CatalogTitleFields = { title: string; alternativeTitles?: { en: string } };
 
 /** Primary display title: MAL's English title when present, else the original (romaji) title. */
 export function getPrimaryTitle(a: TitleFields): string {
@@ -16,6 +17,11 @@ export function getPrimaryTitle(a: TitleFields): string {
 export function getSecondaryTitle(a: TitleFields): string | undefined {
   const primary = getPrimaryTitle(a);
   return a.title && a.title !== primary ? a.title : undefined;
+}
+
+/** `getPrimaryTitle` for `AnimeRecord.catalog` (camelCase field names). */
+export function getCatalogPrimaryTitle(c: CatalogTitleFields): string {
+  return c.alternativeTitles?.en || c.title;
 }
 
 // ============================================================================
@@ -200,4 +206,72 @@ export function getEffectiveProgress(anime: AnimeForDisplay): number | undefined
 export function formatUserStatus(status?: string) {
   if (!status) return 'Unknown';
   return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+// ============================================================================
+// AnimeRecord projection (docs/PROVIDER-FREE.md Phase 2)
+// ============================================================================
+
+/**
+ * Project the merged `AnimeForDisplay` (still MAL-shaped) into the
+ * provider-neutral `AnimeRecord`. Catalog is MAL-first (mirrors `MALAnime`
+ * verbatim today — no crawler exists yet to prefer another source); personal
+ * reuses the exact `getEffective*` precedence above so there is one
+ * implementation of "which source wins", not two; `sources` keeps every raw
+ * slice so nothing is lost in the merge. `id` is the synthetic canonical id
+ * from the Phase 1 registry, falling back to a MAL-anchored placeholder for
+ * any (should-be-rare) record the registry hasn't reconciled yet — never used
+ * outward, see `AnimeRecord.id`'s doc comment.
+ */
+export function toAnimeRecord(anime: AnimeForDisplay, canonicalId?: string): AnimeRecord {
+  return {
+    id: canonicalId ?? `a_mal_${anime.id}`,
+    crosswalk: anime.crosswalk ?? { mal: anime.id },
+    catalog: {
+      title: anime.title,
+      alternativeTitles: anime.alternative_titles,
+      mainPicture: anime.main_picture,
+      pictures: anime.pictures,
+      synopsis: anime.synopsis,
+      background: anime.background,
+      startDate: anime.start_date,
+      endDate: anime.end_date,
+      mean: anime.mean,
+      rank: anime.rank,
+      popularity: anime.popularity,
+      numListUsers: anime.num_list_users,
+      numScoringUsers: anime.num_scoring_users,
+      nsfw: anime.nsfw,
+      genres: anime.genres,
+      mediaType: anime.media_type,
+      airingStatus: anime.status,
+      numEpisodes: anime.num_episodes,
+      startSeason: anime.start_season,
+      broadcast: anime.broadcast,
+      source: anime.source,
+      averageEpisodeDuration: anime.average_episode_duration,
+      rating: anime.rating,
+      relatedAnime: anime.related_anime,
+      studios: anime.studios,
+    },
+    personal: {
+      status: getEffectiveStatus(anime) as AnimeRecord['personal']['status'],
+      score: getEffectiveScore(anime),
+      progress: getEffectiveProgress(anime),
+    },
+    sources: {
+      // Strip the local-record bolt-ons (`simkl`/`anilistMeta`/`crosswalk`/
+      // `hidden`/`discrepancy`) so this is the RAW MAL slice — needed by reads
+      // that deliberately want one source's raw value (see the type's doc
+      // comment), not the merged `AnimeForDisplay`.
+      mal: (() => {
+        const { hidden, simkl, discrepancy, anilistMeta, crosswalk, ...mal } = anime;
+        return mal;
+      })(),
+      simkl: anime.simkl,
+      anilist: anime.anilistMeta,
+    },
+    hidden: anime.hidden,
+    discrepancy: anime.discrepancy,
+  };
 }

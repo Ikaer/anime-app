@@ -14,10 +14,10 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeForDisplay, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
-import { getSeasonInfos } from '@/lib/animeUtils';
+import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
 
 const ANIME_MAL_FILE = dataFile('animes_mal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
@@ -302,6 +302,33 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
     anilistMeta,
     crosswalk: canonicalId && registry ? registry[canonicalId] : crosswalk,
   };
+}
+
+// ============================================================================
+// AnimeRecord projections (docs/PROVIDER-FREE.md Phase 2)
+// ============================================================================
+//
+// Thin wrappers over the existing merged reads: project `AnimeForDisplay` ->
+// `AnimeRecord` via `toAnimeRecord`, attaching the Phase 1 registry's
+// canonical id. New/rewritten call sites should prefer these over
+// `getAnimeForDisplay()`/`getAnimeByIdForDisplay()`.
+
+/**
+ * Builds the mal->canonical index ONCE and reuses it across the whole catalog.
+ * `resolveByMalId` rebuilds that index (full registry read + O(n) scan) on
+ * every call, so mapping it per-anime over ~thousands of rows would be O(n^2)
+ * plus a synchronous file read per row — call `getAnimeForDisplay()` first
+ * (it reconciles the registry) then build the index a single time.
+ */
+export function getAnimeRecords(): AnimeRecord[] {
+  const display = getAnimeForDisplay();
+  const malIndex = buildMalIndex(getRegistry());
+  return display.map(a => toAnimeRecord(a, malIndex.get(a.id)));
+}
+
+export function getAnimeRecordById(id: number): AnimeRecord | undefined {
+  const anime = getAnimeByIdForDisplay(id);
+  return anime ? toAnimeRecord(anime, resolveByMalId(id)) : undefined;
 }
 
 // ============================================================================

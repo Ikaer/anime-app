@@ -15,8 +15,13 @@
  * No `fs` — reusable client-side. The catalog is passed in.
  */
 
-import type { AnimeForDisplay } from '@/models/anime';
-import { getPrimaryTitle } from '@/lib/animeUtils';
+import type { AnimeRecord } from '@/models/anime';
+import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
+
+function malIdOf(a: AnimeRecord): number {
+  const mal = a.crosswalk.mal;
+  return typeof mal === 'string' ? parseInt(mal, 10) : (mal as number);
+}
 
 export interface SharedStaffCredit {
   name: string;
@@ -45,15 +50,15 @@ function isTechnicalStaff(role: string): boolean {
 }
 
 /** Technical (non-source-author) staff credits for one anime. */
-function technicalStaff(a: AnimeForDisplay) {
-  return (a.anilistMeta?.staff || []).filter(s => isTechnicalStaff(s.role));
+function technicalStaff(a: AnimeRecord) {
+  return (a.sources.anilist?.staff || []).filter(s => isTechnicalStaff(s.role));
 }
 
 /**
  * IDF per discrete value over the whole catalog: `max(0, log(N / (1 + df)))`.
  * Clamped at 0 so an ultra-common shared value can never *reduce* similarity.
  */
-function computeIdf<T>(catalog: AnimeForDisplay[], extract: (a: AnimeForDisplay) => T[]): Map<T, number> {
+function computeIdf<T>(catalog: AnimeRecord[], extract: (a: AnimeRecord) => T[]): Map<T, number> {
   const df = new Map<T, number>();
   for (const a of catalog) {
     for (const v of new Set(extract(a))) df.set(v, (df.get(v) || 0) + 1);
@@ -72,30 +77,32 @@ function computeIdf<T>(catalog: AnimeForDisplay[], extract: (a: AnimeForDisplay)
  * entry trivially shares its whole crew and already has its own section).
  */
 export function computeSimilarByCredits(
-  target: AnimeForDisplay,
-  catalog: AnimeForDisplay[],
+  target: AnimeRecord,
+  catalog: AnimeRecord[],
   limit = 3,
 ): SimilarByCredits[] {
-  const targetStudios = target.studios || [];
+  const targetStudios = target.catalog.studios || [];
   const targetStaff = technicalStaff(target);
   const targetStudioIds = new Set(targetStudios.map(s => s.id));
   const targetStaffIds = new Set(targetStaff.map(s => s.id));
   if (targetStudioIds.size === 0 && targetStaffIds.size === 0) return [];
 
-  const studioIdf = computeIdf(catalog, a => (a.studios || []).map(s => s.id));
+  const studioIdf = computeIdf(catalog, a => (a.catalog.studios || []).map(s => s.id));
   const staffIdf = computeIdf(catalog, a => technicalStaff(a).map(s => s.id));
 
   // Display lookups from the target (names/roles as the target credits them).
   const studioName = new Map(targetStudios.map(s => [s.id, s.name]));
   const staffById = new Map(targetStaff.map(s => [s.id, s]));
 
-  const excluded = new Set<number>([target.id, ...(target.related_anime || []).map(r => r.node.id)]);
+  const targetMalId = malIdOf(target);
+  const excluded = new Set<number>([targetMalId, ...(target.catalog.relatedAnime || []).map(r => r.node.id)]);
 
   const scored: Array<SimilarByCredits & { mean: number }> = [];
   for (const cand of catalog) {
-    if (excluded.has(cand.id)) continue;
+    const candMalId = malIdOf(cand);
+    if (excluded.has(candMalId)) continue;
 
-    const candStudioIds = new Set((cand.studios || []).map(s => s.id));
+    const candStudioIds = new Set((cand.catalog.studios || []).map(s => s.id));
     const candStaffIds = new Set(technicalStaff(cand).map(s => s.id));
 
     let score = 0;
@@ -118,13 +125,13 @@ export function computeSimilarByCredits(
     if (sharedStudios.length === 0 && sharedStaff.length === 0) continue;
 
     scored.push({
-      id: cand.id,
-      title: getPrimaryTitle(cand),
-      poster: cand.main_picture?.medium || cand.main_picture?.large,
+      id: candMalId,
+      title: getCatalogPrimaryTitle(cand.catalog),
+      poster: cand.catalog.mainPicture?.medium || cand.catalog.mainPicture?.large,
       score,
       sharedStudios,
       sharedStaff,
-      mean: cand.mean ?? 0,
+      mean: cand.catalog.mean ?? 0,
     });
   }
 

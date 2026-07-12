@@ -2,7 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { getAnimeByIdForDisplay, getAnimeForDisplay } from '@/lib/store';
+import { getAnimeByIdForDisplay, getAnimeRecordById, getAnimeRecords } from '@/lib/store';
 import type { AnimeForDisplay } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
@@ -601,7 +601,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
   // Similar-by-credits reads catalog fields (studios/staff) only, so the
   // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
-  const similar = computeSimilarByCredits(anime, getAnimeForDisplay(), 3);
+  const targetRecord = getAnimeRecordById(id)!;
+  const similar = computeSimilarByCredits(targetRecord, getAnimeRecords(), 3);
   // AnimeForDisplay carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.
   return {
