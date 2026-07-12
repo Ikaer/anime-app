@@ -36,6 +36,11 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [anilistMetaSyncMessage, setAnilistMetaSyncMessage] = useState('');
   const [anilistMetaStats, setAnilistMetaStats] = useState<{ totalAnime: number; taggedCount: number } | null>(null);
 
+  // AniList catalog crawl state (docs/PROVIDER-FREE.md Phase 3, public API, no auth)
+  const [isAnilistCatalogCrawling, setIsAnilistCatalogCrawling] = useState(false);
+  const [anilistCatalogCrawlMessage, setAnilistCatalogCrawlMessage] = useState('');
+  const [anilistCatalogStats, setAnilistCatalogStats] = useState<{ totalCanonicalIds: number; anilistOnlyIds: number } | null>(null);
+
   const fetchHistoricalStats = async () => {
     try {
       const res = await fetch('/api/anime/mal/historical-crawl');
@@ -49,6 +54,15 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     try {
       const res = await fetch('/api/anime/anilist/meta-sync');
       if (res.ok) setAnilistMetaStats(await res.json());
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
+  const fetchAnilistCatalogStats = async () => {
+    try {
+      const res = await fetch('/api/anime/anilist/catalog-crawl');
+      if (res.ok) setAnilistCatalogStats(await res.json());
     } catch {
       // non-critical, silently ignore
     }
@@ -88,6 +102,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     fetchHistoricalStats();
     checkSimklStatus();
     fetchAnilistMetaStats();
+    fetchAnilistCatalogStats();
   }, []);
 
   // Handle OAuth callback
@@ -261,6 +276,22 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const handleAnilistCatalogCrawl = async () => {
+    setIsAnilistCatalogCrawling(true);
+    setAnilistCatalogCrawlMessage('');
+    try {
+      const response = await fetch('/api/anime/anilist/catalog-crawl', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AniList catalog crawl failed');
+      setAnilistCatalogCrawlMessage('Crawl started — see the log below for progress.');
+      fetchAnilistCatalogStats();
+    } catch (error) {
+      setAnilistCatalogCrawlMessage(error instanceof Error ? error.message : 'Failed to start AniList catalog crawl.');
+    } finally {
+      setIsAnilistCatalogCrawling(false);
+    }
+  };
+
   // One group per source. The nesting is what carries the "which source?"
   // information — no field inside a group needs its source as a prefix.
   return {
@@ -295,6 +326,10 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       syncMessage: anilistMetaSyncMessage,
       tagStats: anilistMetaStats,
       onSync: handleAnilistMetaSync,
+      isCatalogCrawling: isAnilistCatalogCrawling,
+      catalogCrawlMessage: anilistCatalogCrawlMessage,
+      catalogStats: anilistCatalogStats,
+      onCatalogCrawl: handleAnilistCatalogCrawl,
     },
   };
 }

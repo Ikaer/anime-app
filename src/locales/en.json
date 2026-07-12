@@ -269,6 +269,8 @@
   "dataSync.starting": "Starting…",
   "dataSync.syncAnilist": "Sync AniList Metadata",
   "dataSync.animeEnriched": "{tagged} / {total} anime enriched",
+  "dataSync.crawlAnilistCatalog": "Crawl AniList Catalog",
+  "dataSync.anilistCatalogAnchored": "{total} anchored records ({anilistOnly} AniList-only)",
 
   "reco.refreshing": "Refreshing...",
   "reco.refresh": "↻ Refresh recommendations",

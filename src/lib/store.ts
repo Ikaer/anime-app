@@ -118,7 +118,35 @@ export function getAnilistMetaCount(): number {
 export function upsertAnilistMeta(entries: AniListMetaEntry[]): void {
   const existing = getAllAnilistMeta();
   entries.forEach(entry => {
-    existing[entry.mal_id.toString()] = entry;
+    // Merge onto any existing entry rather than overwrite: `entry` here never
+    // carries `catalog` (only the tags/staff/banner sync writes through this
+    // function), so a plain overwrite would silently erase a `catalog` block
+    // the AniList catalog crawler (Phase 3) already wrote for this title.
+    existing[entry.mal_id.toString()] = { ...existing[entry.mal_id.toString()], ...entry };
+  });
+  writeJsonFile(ANIME_ANILIST_META_FILE, existing);
+  cachedAnime = null;
+}
+
+/**
+ * Merge the AniList catalog crawler's `catalog` block onto each entry, WITHOUT
+ * touching `tags`/`staff`/`banner_image` (unlike `upsertAnilistMeta`, which
+ * overwrites the whole entry — fine for the tags/staff sync since it always
+ * fetches all three together, wrong here since the crawler only ever has
+ * `catalog`). Creates a bare entry (empty `tags`) if the tags/staff sync
+ * hasn't reached this title yet.
+ */
+export function upsertAnilistCatalogFields(
+  entries: Array<{ mal_id: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }>
+): void {
+  const existing = getAllAnilistMeta();
+  const now = new Date().toISOString();
+  entries.forEach(({ mal_id, anilist_id, catalog }) => {
+    const key = mal_id.toString();
+    const current = existing[key];
+    existing[key] = current
+      ? { ...current, catalog }
+      : { mal_id, anilist_id, tags: [], catalog, fetched_at: now };
   });
   writeJsonFile(ANIME_ANILIST_META_FILE, existing);
   cachedAnime = null;
@@ -158,6 +186,62 @@ function buildMalIndex(registry: Record<string, SourceIds>): Map<number, string>
 /** Resolves the canonical id already anchored to a MAL id. Read-only — never mints. */
 export function resolveByMalId(malId: number): string | undefined {
   return buildMalIndex(getRegistry()).get(malId);
+}
+
+/** Same as `buildMalIndex`, keyed by the `anilist` crosswalk field instead. */
+function buildAnilistIndex(registry: Record<string, SourceIds>): Map<number, string> {
+  const index = new Map<number, string>();
+  for (const [canonicalId, ids] of Object.entries(registry)) {
+    const anilist = typeof ids.anilist === 'string' ? parseInt(ids.anilist, 10) : ids.anilist;
+    if (typeof anilist === 'number' && !Number.isNaN(anilist) && !index.has(anilist)) {
+      index.set(anilist, canonicalId);
+    }
+  }
+  return index;
+}
+
+/**
+ * Mint-or-confirm canonical ids for AniList ids the registry doesn't already
+ * anchor by ANY provider — i.e. genuinely AniList-only titles with no MAL id
+ * (docs/PROVIDER-FREE.md Phase 3: "AniList can seed the registry independently
+ * of MAL"). Titles the AniList catalog crawler finds that DO have a MAL id are
+ * NOT this function's job — they flow through the existing MAL-keyed
+ * `reconcileRegistry` path via `upsertAnilistCatalogFields` below, same as the
+ * tags/staff sync.
+ *
+ * Collision-safe by construction: an id already anchored (by `anilist` or any
+ * other provider key) is left alone, never re-minted. Returns which ids were
+ * newly minted vs already present, for the caller to log/report — this module
+ * doesn't log (see file header: local-record data layer, no I/O side effects
+ * beyond the JSON files).
+ */
+export function seedAnilistOnlyCanonicalIds(anilistIds: number[]): { minted: number; alreadyAnchored: number } {
+  const registry = getRegistry();
+  const anilistIndex = buildAnilistIndex(registry);
+  let counter = 0;
+  for (const id of Object.keys(registry)) {
+    const m = /^a_(\d+)$/.exec(id);
+    if (m) counter = Math.max(counter, parseInt(m[1], 10));
+  }
+
+  let minted = 0;
+  let alreadyAnchored = 0;
+  let changed = false;
+  for (const anilistId of anilistIds) {
+    if (anilistIndex.has(anilistId)) {
+      alreadyAnchored++;
+      continue;
+    }
+    counter += 1;
+    const canonicalId = `a_${counter}`;
+    registry[canonicalId] = { anilist: anilistId };
+    anilistIndex.set(anilistId, canonicalId);
+    minted++;
+    changed = true;
+  }
+
+  if (changed) saveRegistry(registry);
+  return { minted, alreadyAnchored };
 }
 
 /**

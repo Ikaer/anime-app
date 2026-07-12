@@ -4,8 +4,9 @@
  * locally (via animes_mal.json) and persists them via store.ts. Read-only
  * against AniList; no writes.
  */
-import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta } from '@/lib/store';
+import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, seedAnilistOnlyCanonicalIds, getRegistry } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
+import { getSeasonInfos } from '@/lib/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry } from '@/models/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
@@ -355,4 +356,176 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
   } finally {
     isAnilistMetaSyncRunning = false;
   }
+}
+
+// ============================================================================
+// AniList catalog crawler (docs/PROVIDER-FREE.md Phase 3)
+// ============================================================================
+//
+// Unlike the tags/staff sync above (which enriches titles ALREADY known via
+// `animes_mal.json`, one MAL id at a time), this browses AniList's OWN catalog
+// by season — the capability that lets AniList seed the registry
+// INDEPENDENTLY of MAL, verified unauthenticated in Phase 0 (see
+// docs/PROVIDER-FREE.md). Titles it finds WITH a MAL id enrich the existing
+// per-MAL-id AniList meta entry (`catalog` block, merged not overwritten —
+// see `upsertAnilistCatalogFields`); titles it finds WITHOUT one (AniList-only)
+// only get a bare canonical id minted in the registry — there is nowhere yet
+// to put their catalog data, since `AnimeForDisplay`/`getAnimeForDisplay()`
+// are still exclusively keyed by MAL id. Surfacing AniList-only titles is the
+// outward-id join switch (Phase 3's own later sub-project), not this crawler's
+// job — see docs/PROVIDER-FREE.md's "Standalone worth" note on the join switch.
+
+const CATALOG_QUERY = `
+query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
+  Page(page: $page, perPage: ${BATCH_SIZE}) {
+    pageInfo { hasNextPage }
+    media(season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC, type: ANIME) {
+      id
+      idMal
+      title { romaji english }
+      averageScore
+    }
+  }
+}`;
+
+interface RawCatalogMedia {
+  id: number;
+  idMal?: number | null;
+  title?: { romaji?: string | null; english?: string | null };
+  averageScore?: number | null;
+}
+interface RawCatalogPage {
+  pageInfo?: { hasNextPage?: boolean };
+  media: RawCatalogMedia[];
+}
+
+async function fetchCatalogPage(season: string, seasonYear: number, page: number, retryOn429 = true): Promise<RawCatalogPage> {
+  const res = await fetch(ANILIST_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ query: CATALOG_QUERY, variables: { season, seasonYear, page } }),
+  });
+
+  if (res.status === 429) {
+    if (!retryOn429) throw new Error('AniList rate limit exceeded (retry already attempted)');
+    const retryAfterHeader = res.headers.get('Retry-After');
+    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
+    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
+    return fetchCatalogPage(season, seasonYear, page, false);
+  }
+
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '');
+    throw new Error(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 500)}` : ''}`);
+  }
+
+  const json = await res.json();
+  if (Array.isArray(json?.errors) && json.errors.length > 0) {
+    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
+    throw new Error(`AniList GraphQL error: ${messages}`);
+  }
+  return (json?.data?.Page ?? { media: [] }) as RawCatalogPage;
+}
+
+export interface AniListCatalogCrawlResult {
+  ok: boolean;
+  alreadyRunning: boolean;
+  season: string;
+  seasonYear: number;
+  pagesFetched: number;
+  withMal: number;
+  anilistOnlyMinted: number;
+  anilistOnlyAlreadyAnchored: number;
+  error?: string;
+}
+
+let isAnilistCatalogCrawlRunning = false;
+
+/**
+ * Crawl one AniList season (default: the current season, from `getSeasonInfos`)
+ * by popularity, capped at `maxPages` pages (default 3, i.e. ≤150 titles) — a
+ * bounded first slice proving the capability end-to-end, not an attempt at
+ * AniList's full historical catalog (that scale-up mirrors how MAL's own
+ * `historical-crawl` came AFTER its lightweight sync, not before).
+ */
+export async function performAnilistCatalogCrawl(
+  season?: string,
+  seasonYear?: number,
+  maxPages = 3
+): Promise<AniListCatalogCrawlResult> {
+  const resolvedSeason = season?.toUpperCase() ?? getSeasonInfos().current.season.toUpperCase();
+  const resolvedYear = seasonYear ?? getSeasonInfos().current.year;
+
+  if (isAnilistCatalogCrawlRunning) {
+    appendLog('anilist-catalog-crawl', 'info', 'AniList catalog crawl skipped: already running');
+    return { ok: false, alreadyRunning: true, season: resolvedSeason, seasonYear: resolvedYear, pagesFetched: 0, withMal: 0, anilistOnlyMinted: 0, anilistOnlyAlreadyAnchored: 0 };
+  }
+
+  isAnilistCatalogCrawlRunning = true;
+  try {
+    appendLog('anilist-catalog-crawl', 'info', `AniList catalog crawl started: ${resolvedSeason} ${resolvedYear}, up to ${maxPages} pages`);
+
+    const withMalEntries: Array<{ mal_id: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }> = [];
+    const anilistOnlyIds: number[] = [];
+    let pagesFetched = 0;
+
+    for (let page = 1; page <= maxPages; page++) {
+      const result = await fetchCatalogPage(resolvedSeason, resolvedYear, page);
+      pagesFetched++;
+
+      for (const m of result.media ?? []) {
+        const title = m.title?.english || m.title?.romaji;
+        if (!title) continue;
+        const mean = typeof m.averageScore === 'number' ? m.averageScore / 10 : undefined;
+        if (m.idMal) {
+          withMalEntries.push({ mal_id: m.idMal, anilist_id: m.id, catalog: { title, mean } });
+        } else {
+          anilistOnlyIds.push(m.id);
+        }
+      }
+
+      appendLog('anilist-catalog-crawl', 'info', `AniList catalog: page ${page}/${maxPages} fetched`, { page, maxPages });
+
+      if (!result.pageInfo?.hasNextPage) break;
+      if (page < maxPages) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
+    }
+
+    if (withMalEntries.length > 0) upsertAnilistCatalogFields(withMalEntries);
+    const { minted, alreadyAnchored } = anilistOnlyIds.length > 0
+      ? seedAnilistOnlyCanonicalIds(anilistOnlyIds)
+      : { minted: 0, alreadyAnchored: 0 };
+
+    appendLog(
+      'anilist-catalog-crawl',
+      'success',
+      `AniList catalog crawl complete: ${withMalEntries.length} with MAL id enriched, ${minted} AniList-only canonical ids minted (${alreadyAnchored} already anchored)`,
+      { pagesFetched, withMal: withMalEntries.length, anilistOnlyMinted: minted, anilistOnlyAlreadyAnchored: alreadyAnchored }
+    );
+
+    return {
+      ok: true,
+      alreadyRunning: false,
+      season: resolvedSeason,
+      seasonYear: resolvedYear,
+      pagesFetched,
+      withMal: withMalEntries.length,
+      anilistOnlyMinted: minted,
+      anilistOnlyAlreadyAnchored: alreadyAnchored,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('AniList catalog crawl error:', error);
+    appendLog('anilist-catalog-crawl', 'error', 'AniList catalog crawl failed', { error: message });
+    return { ok: false, alreadyRunning: false, season: resolvedSeason, seasonYear: resolvedYear, pagesFetched: 0, withMal: 0, anilistOnlyMinted: 0, anilistOnlyAlreadyAnchored: 0, error: message };
+  } finally {
+    isAnilistCatalogCrawlRunning = false;
+  }
+}
+
+/** Registry-wide stats for the connections-page crawl button (canonical id counts by anchoring). */
+export function getAnilistCatalogCrawlStats(): { totalCanonicalIds: number; anilistOnlyIds: number } {
+  const registry = getRegistry();
+  const entries = Object.values(registry);
+  const anilistOnlyIds = entries.filter(ids => ids.mal === undefined && ids.anilist !== undefined).length;
+  return { totalCanonicalIds: entries.length, anilistOnlyIds };
 }

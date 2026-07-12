@@ -150,6 +150,20 @@ export interface AniListMetaEntry {
    * means never fetched, and is the backfill signal (same pattern as `staff`).
    */
   banner_image?: string | null;
+  /**
+   * AniList's OWN catalog view of this title (docs/PROVIDER-FREE.md Phase 3),
+   * populated by the season/popularity crawler in anilistSync.ts — distinct
+   * from `tags`/`staff`/`banner_image`, which come from the per-MAL-id
+   * enrichment sync. Optional as a whole: `undefined` means "never crawled",
+   * the backfill signal (same pattern as `staff`/`banner_image`). Deliberately
+   * a NARROW subset (title + mean only) — genres/studios carry incompatible
+   * shapes from MAL's (`Genre[]`/`Studio[]` with ids) and are left MAL-only
+   * until a real cross-source genre/studio identity exists.
+   */
+  catalog?: {
+    title: string;
+    mean?: number; // AniList averageScore/10, on MAL's 1-10 scale
+  };
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 
@@ -185,6 +199,13 @@ export interface AnimeForDisplay extends MALAnime {
 // reads go through — migrating them off raw MAL fields happens incrementally,
 // area by area (see docs/PROVIDER-FREE.md Phase 2). New/rewritten call sites
 // should prefer `AnimeRecord`.
+
+/**
+ * Per-field catalog authority order (docs/PROVIDER-FREE.md Phase 3). Only
+ * `title`/`mean` are resolved through this today — see `AniListMetaEntry.catalog`
+ * for why the rest stay MAL-only for now.
+ */
+export type CatalogSource = 'mal' | 'anilist';
 
 /**
  * Catalog-authority fields. Currently sourced MAL-first (mirrors `MALAnime`

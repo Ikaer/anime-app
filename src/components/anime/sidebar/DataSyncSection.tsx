@@ -19,6 +19,10 @@ interface DataSyncSectionProps {
   anilistMetaSyncMessage: string;
   anilistMetaStats: { totalAnime: number; taggedCount: number } | null;
   onAnilistMetaSync: () => void;
+  isAnilistCatalogCrawling: boolean;
+  anilistCatalogCrawlMessage: string;
+  anilistCatalogStats: { totalCanonicalIds: number; anilistOnlyIds: number } | null;
+  onAnilistCatalogCrawl: () => void;
   simklConnected: boolean;
   isSimklSyncing: boolean;
   simklSyncMessage: string;
@@ -39,13 +43,17 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   anilistMetaSyncMessage,
   anilistMetaStats,
   onAnilistMetaSync,
+  isAnilistCatalogCrawling,
+  anilistCatalogCrawlMessage,
+  anilistCatalogStats,
+  onAnilistCatalogCrawl,
   simklConnected,
   isSimklSyncing,
   simklSyncMessage,
   onSimklSync,
 }) => {
   const t = useT();
-  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isSimklSyncing;
+  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isAnilistCatalogCrawling || isSimklSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
 
   return (
@@ -96,6 +104,17 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
         </div>
       )}
       {anilistMetaSyncMessage && <div className={styles.crawlStats}>{anilistMetaSyncMessage}</div>}
+      <div className={styles.buttonGroup}>
+        <Button onClick={onAnilistCatalogCrawl} disabled={anyBusy} variant="secondary">
+          {isAnilistCatalogCrawling ? t('dataSync.starting') : t('dataSync.crawlAnilistCatalog')}
+        </Button>
+      </div>
+      {anilistCatalogStats !== null && (
+        <div className={styles.crawlStats}>
+          {t('dataSync.anilistCatalogAnchored', { total: anilistCatalogStats.totalCanonicalIds, anilistOnly: anilistCatalogStats.anilistOnlyIds })}
+        </div>
+      )}
+      {anilistCatalogCrawlMessage && <div className={styles.crawlStats}>{anilistCatalogCrawlMessage}</div>}
     </div>
   );
 };

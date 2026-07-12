@@ -269,6 +269,8 @@
   "dataSync.starting": "Démarrage…",
   "dataSync.syncAnilist": "Synchroniser les métadonnées AniList",
   "dataSync.animeEnriched": "{tagged} / {total} anime enrichis",
+  "dataSync.crawlAnilistCatalog": "Explorer le catalogue AniList",
+  "dataSync.anilistCatalogAnchored": "{total} fiches ancrées ({anilistOnly} AniList uniquement)",
 
   "reco.refreshing": "Rafraîchissement...",
   "reco.refresh": "↻ Rafraîchir les recos",

@@ -1,4 +1,4 @@
-import type { AnimeForDisplay, AnimeRecord, SeasonName, SeasonInfo } from '@/models/anime';
+import type { AnimeForDisplay, AnimeRecord, CatalogSource, SeasonName, SeasonInfo } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
 // ============================================================================
@@ -209,26 +209,62 @@ export function formatUserStatus(status?: string) {
 }
 
 // ============================================================================
-// AnimeRecord projection (docs/PROVIDER-FREE.md Phase 2)
+// AnimeRecord projection (docs/PROVIDER-FREE.md Phase 2 + Phase 3 catalog seam)
 // ============================================================================
 
 /**
- * Project the merged `AnimeForDisplay` (still MAL-shaped) into the
- * provider-neutral `AnimeRecord`. Catalog is MAL-first (mirrors `MALAnime`
- * verbatim today — no crawler exists yet to prefer another source); personal
- * reuses the exact `getEffective*` precedence above so there is one
- * implementation of "which source wins", not two; `sources` keeps every raw
- * slice so nothing is lost in the merge. `id` is the synthetic canonical id
- * from the Phase 1 registry, falling back to a MAL-anchored placeholder for
- * any (should-be-rare) record the registry hasn't reconciled yet — never used
- * outward, see `AnimeRecord.id`'s doc comment.
+ * Default catalog field precedence: MAL-first, matching today's behavior
+ * exactly. Flips to `['anilist', 'mal']` only where a caller explicitly opts
+ * in — the AniList catalog crawler (Phase 3) populates coverage gradually, so
+ * flipping the DEFAULT before coverage is broad would blank out `title`/`mean`
+ * for every not-yet-crawled title. See `resolveCatalogField`.
  */
-export function toAnimeRecord(anime: AnimeForDisplay, canonicalId?: string): AnimeRecord {
+export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist'];
+
+/**
+ * Resolve one catalog field through a source-precedence order, skipping
+ * sources whose value is missing. Generic over field type so it works for
+ * both `title` (string) and `mean` (number) — the only two fields the AniList
+ * catalog crawler currently populates (see `AniListMetaEntry.catalog`'s doc
+ * comment for why genres/studios aren't included: incompatible shapes).
+ */
+function resolveCatalogField<T>(
+  precedence: CatalogSource[],
+  values: Partial<Record<CatalogSource, T | undefined>>
+): T | undefined {
+  for (const source of precedence) {
+    const value = values[source];
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Project the merged `AnimeForDisplay` (still MAL-shaped) into the
+ * provider-neutral `AnimeRecord`. Most of `catalog` is still MAL-first only
+ * (no other source populates it yet); `title`/`mean` go through
+ * `resolveCatalogField` against `precedence` so the AniList catalog crawler's
+ * data (Phase 3) is actually reachable, not just stored. Personal reuses the
+ * exact `getEffective*` precedence above so there is one implementation of
+ * "which source wins", not two; `sources` keeps every raw slice so nothing is
+ * lost in the merge. `id` is the synthetic canonical id from the Phase 1
+ * registry, falling back to a MAL-anchored placeholder for any (should-be-rare)
+ * record the registry hasn't reconciled yet — never used outward, see
+ * `AnimeRecord.id`'s doc comment.
+ */
+export function toAnimeRecord(
+  anime: AnimeForDisplay,
+  canonicalId?: string,
+  precedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE
+): AnimeRecord {
+  const anilistCatalog = anime.anilistMeta?.catalog;
   return {
     id: canonicalId ?? `a_mal_${anime.id}`,
     crosswalk: anime.crosswalk ?? { mal: anime.id },
     catalog: {
-      title: anime.title,
+      // Falls back to the MAL title even if `precedence` omits 'mal' or AniList
+      // has none — `title` is non-optional on `AnimeCatalog`, unlike `mean`.
+      title: resolveCatalogField(precedence, { mal: anime.title, anilist: anilistCatalog?.title }) ?? anime.title,
       alternativeTitles: anime.alternative_titles,
       mainPicture: anime.main_picture,
       pictures: anime.pictures,
@@ -236,7 +272,7 @@ export function toAnimeRecord(anime: AnimeForDisplay, canonicalId?: string): Ani
       background: anime.background,
       startDate: anime.start_date,
       endDate: anime.end_date,
-      mean: anime.mean,
+      mean: resolveCatalogField(precedence, { mal: anime.mean, anilist: anilistCatalog?.mean }),
       rank: anime.rank,
       popularity: anime.popularity,
       numListUsers: anime.num_list_users,
