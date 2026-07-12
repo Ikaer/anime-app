@@ -5,8 +5,8 @@
  * similarByCredits.ts.
  */
 
-import type { AnimeForDisplay } from '@/models/anime';
-import { getPrimaryTitle } from '@/lib/animeUtils';
+import type { AnimeRecord } from '@/models/anime';
+import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
 
 export interface CreditedAnime {
   id: number;
@@ -24,14 +24,19 @@ export interface CreditsResult {
   items: CreditedAnime[];
 }
 
-function toCredited(a: AnimeForDisplay, role?: string): CreditedAnime {
+// Studio/staff credits and MAL score are catalog-only fields, so this reads
+// exclusively from `AnimeRecord.catalog`/`sources.anilist` — no personal
+// state involved. `id` is the outward MAL id (from `crosswalk`), never the
+// internal synthetic `AnimeRecord.id` (see that type's doc comment).
+function toCredited(a: AnimeRecord, role?: string): CreditedAnime {
+  const malId = typeof a.crosswalk.mal === 'string' ? parseInt(a.crosswalk.mal, 10) : a.crosswalk.mal;
   return {
-    id: a.id,
-    title: getPrimaryTitle(a),
-    poster: a.main_picture?.medium || a.main_picture?.large,
-    mean: a.mean ?? null,
-    mediaType: a.media_type,
-    year: a.start_season?.year,
+    id: malId!,
+    title: getCatalogPrimaryTitle(a.catalog),
+    poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
+    mean: a.catalog.mean ?? null,
+    mediaType: a.catalog.mediaType,
+    year: a.catalog.startSeason?.year,
     role,
   };
 }
@@ -41,11 +46,11 @@ function sortCredited(items: CreditedAnime[]): CreditedAnime[] {
   return items.sort((a, b) => (b.mean ?? -1) - (a.mean ?? -1) || a.id - b.id);
 }
 
-export function listAnimeByStudio(studioId: number, catalog: AnimeForDisplay[]): CreditsResult | null {
+export function listAnimeByStudio(studioId: number, catalog: AnimeRecord[]): CreditsResult | null {
   let name: string | null = null;
   const items: CreditedAnime[] = [];
   for (const a of catalog) {
-    const studio = (a.studios || []).find(s => s.id === studioId);
+    const studio = (a.catalog.studios || []).find(s => s.id === studioId);
     if (!studio) continue;
     if (!name) name = studio.name;
     items.push(toCredited(a));
@@ -54,11 +59,11 @@ export function listAnimeByStudio(studioId: number, catalog: AnimeForDisplay[]):
   return { name, items: sortCredited(items) };
 }
 
-export function listAnimeByStaff(staffId: number, catalog: AnimeForDisplay[]): CreditsResult | null {
+export function listAnimeByStaff(staffId: number, catalog: AnimeRecord[]): CreditsResult | null {
   let name: string | null = null;
   const items: CreditedAnime[] = [];
   for (const a of catalog) {
-    const credit = (a.anilistMeta?.staff || []).find(s => s.id === staffId);
+    const credit = (a.sources.anilist?.staff || []).find(s => s.id === staffId);
     if (!credit) continue;
     if (!name) name = credit.name;
     items.push(toCredited(a, credit.role));

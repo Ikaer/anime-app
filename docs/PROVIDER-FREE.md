@@ -132,41 +132,6 @@ Personal-field precedence is *already* provider-neutral behind the
 [animeUtils.ts](../src/lib/animeUtils.ts) (SIMKL-first, MAL fallback). Catalog
 fields have no such seam yet — they read MAL raw.
 
-### How hardcoded is the provider set? (codebase review)
-
-Reviewed the tree for a provider abstraction. **There is essentially none** —
-the exact three providers are hand-coded, name by name, across ~53 files (907
-occurrences of `mal`/`simkl`/`anilist`). Adding a 4th provider today means
-editing all of the following by hand:
-
-- **Types** — `RecoSource` is a closed union with provider-specific members
-  (`crowd`, `anilistCrowd`, `suggestions`…) in [models/anime](../src/models/anime/index.ts);
-  `DEFAULT_WEIGHTS` in [recoWeights.ts](../src/lib/recoWeights.ts) enumerates them,
-  and they're persisted in the URL weights param, so the set isn't even free to
-  change without a migration.
-- **Sync modules** — one bespoke file per provider (`mal.ts`/`malSync.ts`/`malWrite.ts`,
-  `simkl*.ts`, `anilistSync.ts`); no shared "provider" interface they implement.
-- **Hooks / UI** — `useConnections` returns a fixed `{ mal, simkl, anilist }`;
-  components are provider-named (`SimklSection`, `SimklConnectionBadge`,
-  `SimklDiscrepancyBadge`), not driven off a provider list.
-- **Storage & config** — one hardcoded filename per provider in
-  [store.ts](../src/lib/store.ts); `LogSource` channels in
-  [connectionLog.ts](../src/lib/connectionLog.ts); env vars in `.env.example`.
-
-**The one thing that IS abstracted:** `SourceIds` is open-ended (`[key: string]:
-number | string`), so the *crosswalk / identity* layer already accepts arbitrary
-providers for free. That is exactly why Phase 1 (the anchor registry) is cheap
-and the rest is not.
-
-**Implication for the plan — a design choice to make, not necessarily now:**
-whether to introduce a real `Provider` abstraction (a common interface: `id`,
-`fetchCatalog?`, `fetchPersonalList?`, `fetchRecos?`, `write?`, capability flags)
-so providers become a registered list instead of hand-wired names. It's the
-difference between "plug the source you want" as a *slogan* and as an actual
-extension point. **Not required for Phases 1–2**, but it's the thing that makes
-Phase 3's "boots on AniList alone / add Jikan/Kitsu" real rather than another
-round of copy-paste. Flagged here; decide when Phase 3 is scoped.
-
 ---
 
 ## Target model
@@ -271,7 +236,7 @@ fall back to AniList-OAuth-only as the Phase 3 entry point. The one product
 detail to carry into Phase 3: surface the private/not-found distinction in the
 username-entry UI rather than a generic failure.
 
-### Phase 1 — Persist the synthetic-id anchor registry `Todo`
+### Phase 1 — Persist the synthetic-id anchor registry `Done`
 
 The concrete deliverable now. Additive; no consumer touches `AnimeRecord` yet.
 
@@ -296,9 +261,25 @@ The concrete deliverable now. Additive; no consumer touches `AnimeRecord` yet.
   good standalone PR, and the honest **stop point** if Phase 0 comes back
   negative.
 
-### Phase 2 — Introduce `AnimeRecord`, retire `extends MALAnime` `Todo`
+### Phase 2 — Introduce `AnimeRecord`, retire `extends MALAnime` `WIP`
 
 CLEANUP.md §1.2 proper. The wide, mechanical one.
+
+> **Landed:** `AnimeRecord`/`AnimeCatalog`/`AnimePersonal`/`AnimeSources` +
+> `toAnimeRecord`; the `catalog`/`personal`/`sources` projection is **attached
+> onto every merged record** (`MergedAnime` = pre-projection base;
+> `AnimeForDisplay` = base + projection) so consumers migrate off raw MAL fields
+> while the build stays green. **All ~182 catalog reads across 21 files migrated
+> to `record.catalog.*`** (reco engine, main list + cards, detail/rating/tier/
+> calculator/discrepancies). Personal reads **audited**: every `my_list_status`
+> read is legitimately raw (the `getEffective*` seam source, MAL write paths,
+> discrepancy comparison, the intentional "MAL status" display) — no flips
+> needed. **Remaining (the coordinated capstone):** drop `extends MALAnime`
+> (move the deliberately-raw readers onto `record.sources.mal.*`), flip
+> `applyNarrowingFilters`/`animeYear`/`getPrimaryTitle` onto catalog, switch the
+> **internal** join key to the canonical id, and de-bloat API payloads (the
+> compact-mode field-strip in `api/anime/animes` no longer shrinks output since
+> data also lives in the serialized `catalog` block).
 
 - Define `AnimeRecord`; build the merge in `getAnimeForDisplay()` (catalog ←
   MAL-first; personal ← reuse the existing `getEffective*` helpers; raw slices →
@@ -324,11 +305,22 @@ CLEANUP.md §1.2 proper. The wide, mechanical one.
   dropped** — but note that if Phase 0 killed Phase 3, this becomes a large
   refactor with no *user-facing* payoff, so weigh it as cleanup, not feature.
 
-### Phase 3 — No-key default: AniList-first, providers optional `Todo`
+### Phase 3 — No-key default: AniList-first, providers optional `WIP`
 
 Where the north star becomes real. **Gated on Phase 0** — if the anonymous
 list-read failed there, this phase is re-scoped around AniList OAuth as the
 entry tier (the anonymous-username bullet below drops, everything else holds).
+
+> **Landed:** the AniList **catalog crawler** (season/popularity, seeds the
+> registry independently of MAL); the **per-field catalog precedence** seam now
+> covers title/mean **and genres/studios** (P3a — MAL-first by default, so it
+> only wins for AniList-only titles / a future flip; live-verified); the
+> **anonymous AniList personal-list import by username** (P3b — the no-key
+> path, lowest personal tier SIMKL > MAL > AniList, private/not-found UX from
+> Phase 0). **Remaining:** promote the **outward** id to synthetic (the deferred
+> half of Phase 2's join switch — every route/deep-link/reco-`w=` param, with
+> MAL-id redirects; required before any AniList-only title is reachable);
+> and flip the default catalog precedence to `['anilist','mal']`.
 
 - Make catalog authority a per-field precedence list (`['mal','anilist']` →
   default `['anilist','mal']` once the crawler lands). No behavior change until
@@ -345,9 +337,12 @@ entry tier (the anonymous-username bullet below drops, everything else holds).
   `w=` weights param off the MAL id and onto the canonical id, with MAL-id URLs
   redirect-preserved for existing bookmarks. Required before any MAL-less title
   is reachable — it is not optional polish.
-- Add optional **AniList OAuth login** as the tier above it — unlocks private
-  lists + AniList write-back — then MAL/SIMKL as further opt-in providers.
-- Provider enablement becomes config, not code: the app boots on AniList alone.
+
+> Two once-coupled follow-ups now live as their own independent documents and
+> are **out of scope for this initiative**: **AniList OAuth login** (private
+> lists + write-back) → [ANILIST-OAUTH.md](ANILIST-OAUTH.md); a real
+> **`Provider` abstraction** (sources as a configured list) →
+> [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md).
 
 ---
 
@@ -366,16 +361,9 @@ entry tier (the anonymous-username bullet below drops, everything else holds).
   provider (AniList included), so the anonymous tier is read-only for personal
   state. Is read-only-personal an acceptable first-run default, with **AniList
   OAuth login** as the natural upgrade for writes? (Product call.)
-- **AniList OAuth scope** — what does registering an AniList OAuth app cost the
-  *deployer* (redirect URI, client id), and is it low enough that shipping it
-  enabled-by-default makes sense, or does it stay a self-host opt-in? (Phase 3.)
 - **Jikan vs AniList-first** — **decided: AniList-first** (see Decisions locked).
   Jikan is a MAL proxy and would re-entrench MAL coupling, so it is not the
   default. Residual, low-priority: does Jikan ship *at all* as an optional
   MAL-import for MAL-native users who won't register the official OAuth, or not
   at all? (Defer past Phase 3.)
-- **A real `Provider` abstraction?** — introduce a common provider interface +
-  registry so sources are a configured list, not hand-wired names? Not needed for
-  Phases 1–2; it's what makes Phase 3's "add Jikan/Kitsu" not-a-copy-paste.
-  (Decide at Phase 3.)
 ```

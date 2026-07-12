@@ -28,6 +28,8 @@ export type LogSource =
   | 'simkl-auth'
   | 'simkl-sync'
   | 'anilist-meta-sync'
+  | 'anilist-catalog-crawl'
+  | 'anilist-personal-import'
   | 'cron-sync'
   | 'refresh';
 

@@ -46,8 +46,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const target: RatingTarget = {
     id: anime.id,
     title: getPrimaryTitle(anime),
-    genres: (anime.genres || []).map(g => ({ id: g.id, name: g.name })),
-    poster: anime.main_picture?.large || anime.main_picture?.medium || null,
+    genres: (anime.catalog.genres || []).map(g => ({ id: g.id, name: g.name })),
+    poster: anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || null,
   };
   return { props: { anime: target } };
 };

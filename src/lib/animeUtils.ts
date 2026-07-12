@@ -1,4 +1,4 @@
-import type { AnimeForDisplay, SeasonName, SeasonInfo } from '@/models/anime';
+import type { AnimeForDisplay, AnimeRecord, CatalogSource, MergedAnime, SeasonName, SeasonInfo } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
 // ============================================================================
@@ -6,6 +6,7 @@ import type { TFunction, TranslationKey } from '@/lib/i18n';
 // ============================================================================
 
 type TitleFields = Pick<AnimeForDisplay, 'title' | 'alternative_titles'>;
+type CatalogTitleFields = { title: string; alternativeTitles?: { en: string } };
 
 /** Primary display title: MAL's English title when present, else the original (romaji) title. */
 export function getPrimaryTitle(a: TitleFields): string {
@@ -16,6 +17,11 @@ export function getPrimaryTitle(a: TitleFields): string {
 export function getSecondaryTitle(a: TitleFields): string | undefined {
   const primary = getPrimaryTitle(a);
   return a.title && a.title !== primary ? a.title : undefined;
+}
+
+/** `getPrimaryTitle` for `AnimeRecord.catalog` (camelCase field names). */
+export function getCatalogPrimaryTitle(c: CatalogTitleFields): string {
+  return c.alternativeTitles?.en || c.title;
 }
 
 // ============================================================================
@@ -164,40 +170,160 @@ export function getSeasonInfos(): SeasonInfos {
 // ============================================================================
 //
 // The user notes anime in SIMKL (SIMKL → MAL one-way), so SIMKL is the
-// authority for PERSONAL fields; MAL is the fallback. Every personal read used
-// for filtering, seeding, or exclusion goes through these three helpers so the
-// SIMKL-first precedence lives in exactly one place. Catalog fields (mean,
-// genres, studios…) stay MAL — these helpers are personal-only.
+// authority for PERSONAL fields; MAL is the fallback; an anonymously-imported
+// AniList list (docs/PROVIDER-FREE.md P3b) is the LOWEST fallback tier, so an
+// AniList-only user still gets their state while existing MAL/SIMKL users are
+// unaffected (their higher tiers win). Precedence: SIMKL > MAL > AniList. Every
+// personal read used for filtering, seeding, or exclusion goes through these
+// three helpers so the precedence lives in exactly one place. Catalog fields
+// (mean, genres, studios…) stay MAL — these helpers are personal-only.
 
 /**
- * Effective personal watch status (SIMKL-first, MAL fallback). SIMKL status is
- * already normalized to MAL vocabulary at sync time, so callers get one
- * vocabulary regardless of source.
+ * Effective personal watch status (SIMKL-first, then MAL, then AniList). All
+ * three are normalized to MAL vocabulary at write/import time, so callers get
+ * one vocabulary regardless of source.
  */
-export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
-  return anime.simkl?.status ?? anime.my_list_status?.status;
+export function getEffectiveStatus(anime: MergedAnime): string | undefined {
+  return anime.simkl?.status ?? anime.my_list_status?.status ?? anime.anilistPersonal?.status;
 }
 
 /**
- * Effective personal score on the shared 1–10 scale (SIMKL-first, MAL
- * fallback). Both `0` and `null` mean "unrated" and collapse to `undefined`,
+ * Effective personal score on the shared 1–10 scale (SIMKL-first, then MAL,
+ * then AniList). Both `0` and `null` mean "unrated" and collapse to `undefined`,
  * preserving the threshold / `unrated` semantics that keyed off a falsy score.
  */
-export function getEffectiveScore(anime: AnimeForDisplay): number | undefined {
+export function getEffectiveScore(anime: MergedAnime): number | undefined {
   const simkl = anime.simkl?.score;
   if (simkl != null && simkl > 0) return simkl;
   const mal = anime.my_list_status?.score;
-  return mal != null && mal > 0 ? mal : undefined;
+  if (mal != null && mal > 0) return mal;
+  const anilist = anime.anilistPersonal?.score;
+  return anilist != null && anilist > 0 ? anilist : undefined;
 }
 
-/** Effective watched-episode progress (SIMKL-first, MAL fallback). */
-export function getEffectiveProgress(anime: AnimeForDisplay): number | undefined {
+/** Effective watched-episode progress (SIMKL-first, then MAL, then AniList). */
+export function getEffectiveProgress(anime: MergedAnime): number | undefined {
   const simkl = anime.simkl?.num_episodes_watched;
   if (simkl != null) return simkl;
-  return anime.my_list_status?.num_episodes_watched ?? undefined;
+  const mal = anime.my_list_status?.num_episodes_watched;
+  if (mal != null) return mal;
+  return anime.anilistPersonal?.progress ?? undefined;
 }
 
 export function formatUserStatus(status?: string) {
   if (!status) return 'Unknown';
   return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+// ============================================================================
+// AnimeRecord projection (docs/PROVIDER-FREE.md Phase 2 + Phase 3 catalog seam)
+// ============================================================================
+
+/**
+ * Default catalog field precedence: MAL-first, matching today's behavior
+ * exactly. Flips to `['anilist', 'mal']` only where a caller explicitly opts
+ * in — the AniList catalog crawler (Phase 3) populates coverage gradually, so
+ * flipping the DEFAULT before coverage is broad would blank out `title`/`mean`
+ * for every not-yet-crawled title. See `resolveCatalogField`.
+ */
+export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist'];
+
+/**
+ * Resolve one catalog field through a source-precedence order, skipping
+ * sources whose value is missing. Generic over field type so it works for
+ * both `title` (string) and `mean` (number) — the only two fields the AniList
+ * catalog crawler currently populates (see `AniListMetaEntry.catalog`'s doc
+ * comment for why genres/studios aren't included: incompatible shapes).
+ */
+function resolveCatalogField<T>(
+  precedence: CatalogSource[],
+  values: Partial<Record<CatalogSource, T | undefined>>
+): T | undefined {
+  for (const source of precedence) {
+    const value = values[source];
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Project the merged `AnimeForDisplay` (still MAL-shaped) into the
+ * provider-neutral `AnimeRecord`. Most of `catalog` is still MAL-first only
+ * (no other source populates it yet); `title`/`mean` go through
+ * `resolveCatalogField` against `precedence` so the AniList catalog crawler's
+ * data (Phase 3) is actually reachable, not just stored. Personal reuses the
+ * exact `getEffective*` precedence above so there is one implementation of
+ * "which source wins", not two; `sources` keeps every raw slice so nothing is
+ * lost in the merge. `id` is the synthetic canonical id from the Phase 1
+ * registry, falling back to a MAL-anchored placeholder for any (should-be-rare)
+ * record the registry hasn't reconciled yet — never used outward, see
+ * `AnimeRecord.id`'s doc comment.
+ */
+export function toAnimeRecord(
+  anime: MergedAnime,
+  canonicalId?: string,
+  precedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE
+): AnimeRecord {
+  const anilistCatalog = anime.anilistMeta?.catalog;
+  return {
+    id: canonicalId ?? `a_mal_${anime.id}`,
+    crosswalk: anime.crosswalk ?? { mal: anime.id },
+    catalog: {
+      // Falls back to the MAL title even if `precedence` omits 'mal' or AniList
+      // has none — `title` is non-optional on `AnimeCatalog`, unlike `mean`.
+      title: resolveCatalogField(precedence, { mal: anime.title, anilist: anilistCatalog?.title }) ?? anime.title,
+      alternativeTitles: anime.alternative_titles,
+      mainPicture: anime.main_picture,
+      pictures: anime.pictures,
+      synopsis: anime.synopsis,
+      background: anime.background,
+      startDate: anime.start_date,
+      endDate: anime.end_date,
+      mean: resolveCatalogField(precedence, { mal: anime.mean, anilist: anilistCatalog?.mean }),
+      rank: anime.rank,
+      popularity: anime.popularity,
+      numListUsers: anime.num_list_users,
+      numScoringUsers: anime.num_scoring_users,
+      nsfw: anime.nsfw,
+      // Phase 3 P3a: genres/studios flow through catalog precedence like
+      // title/mean. MAL-first by default so on-screen behavior is unchanged
+      // for MAL-linked titles; AniList wins only where MAL has none.
+      genres: resolveCatalogField(precedence, { mal: anime.genres, anilist: anilistCatalog?.genres }) ?? anime.genres ?? [],
+      mediaType: anime.media_type,
+      airingStatus: anime.status,
+      numEpisodes: anime.num_episodes,
+      startSeason: anime.start_season,
+      broadcast: anime.broadcast,
+      source: anime.source,
+      averageEpisodeDuration: anime.average_episode_duration,
+      rating: anime.rating,
+      relatedAnime: anime.related_anime,
+      studios: resolveCatalogField(precedence, { mal: anime.studios, anilist: anilistCatalog?.studios }) ?? anime.studios ?? [],
+    },
+    personal: {
+      status: getEffectiveStatus(anime) as AnimeRecord['personal']['status'],
+      score: getEffectiveScore(anime),
+      progress: getEffectiveProgress(anime),
+    },
+    sources: {
+      // Strip the local-record bolt-ons (`simkl`/`anilistMeta`/`crosswalk`/
+      // `hidden`/`discrepancy`) so this is the RAW MAL slice — needed by reads
+      // that deliberately want one source's raw value (see the type's doc
+      // comment), not the merged `AnimeForDisplay`.
+      mal: (() => {
+        // Strip the merged local-record bolt-ons so `sources.mal` is the RAW
+        // MAL slice. `MergedAnime` is the pre-projection shape (no catalog/
+        // personal/sources), so only these join-time fields need removing.
+        const {
+          hidden, simkl, discrepancy, anilistMeta, anilistPersonal, crosswalk, canonicalId, ...mal
+        } = anime;
+        return mal;
+      })(),
+      simkl: anime.simkl,
+      anilist: anime.anilistMeta,
+      anilistPersonal: anime.anilistPersonal,
+    },
+    hidden: anime.hidden,
+    discrepancy: anime.discrepancy,
+  };
 }

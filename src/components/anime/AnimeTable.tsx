@@ -65,40 +65,40 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
           bValue = getPrimaryTitle(b).toLowerCase();
           break;
         case 'mean':
-          aValue = a.mean || 0;
-          bValue = b.mean || 0;
+          aValue = a.catalog.mean || 0;
+          bValue = b.catalog.mean || 0;
           break;
         case 'start_date':
-          aValue = a.start_date ? new Date(a.start_date).getTime() : 0;
-          bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
+          aValue = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : 0;
+          bValue = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : 0;
           break;
         case 'status':
-          aValue = a.status || '';
-          bValue = b.status || '';
+          aValue = a.catalog.airingStatus || '';
+          bValue = b.catalog.airingStatus || '';
           break;
         case 'num_episodes':
-          aValue = a.num_episodes || 0;
-          bValue = b.num_episodes || 0;
+          aValue = a.catalog.numEpisodes || 0;
+          bValue = b.catalog.numEpisodes || 0;
           break;
         case 'rank':
-          aValue = a.rank || Infinity;
-          bValue = b.rank || Infinity;
+          aValue = a.catalog.rank || Infinity;
+          bValue = b.catalog.rank || Infinity;
           break;
         case 'popularity':
-          aValue = a.popularity || Infinity;
-          bValue = b.popularity || Infinity;
+          aValue = a.catalog.popularity || Infinity;
+          bValue = b.catalog.popularity || Infinity;
           break;
         case 'num_list_users':
-          aValue = a.num_list_users || 0;
-          bValue = b.num_list_users || 0;
+          aValue = a.catalog.numListUsers || 0;
+          bValue = b.catalog.numListUsers || 0;
           break;
         case 'num_scoring_users':
-          aValue = a.num_scoring_users || 0;
-          bValue = b.num_scoring_users || 0;
+          aValue = a.catalog.numScoringUsers || 0;
+          bValue = b.catalog.numScoringUsers || 0;
           break;
         default:
-          aValue = a.mean || 0;
-          bValue = b.mean || 0;
+          aValue = a.catalog.mean || 0;
+          bValue = b.catalog.mean || 0;
       }
 
       if (aValue < bValue) {
@@ -116,13 +116,13 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   // Sorting is controlled by parent via props; no header click sorting here.
 
   const handleManualSearch = (anime: AnimeForDisplay) => {
-    const searchTitle = anime.alternative_titles?.en || anime.title;
+    const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
     const googleUrl = generateGoogleORQuery(searchTitle);
     window.open(googleUrl, '_blank');
   };
 
   const handleJustWatchSearch = (anime: AnimeForDisplay) => {
-    const searchTitle = anime.alternative_titles?.en || anime.title;
+    const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
     const justWatchUrl = generateJustWatchQuery(searchTitle);
     window.open(justWatchUrl, '_blank');
   };
@@ -247,11 +247,11 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   ) => {
     let latestValue: number | undefined;
     switch (metric) {
-      case 'rank': latestValue = anime.rank; break;
-      case 'popularity': latestValue = anime.popularity; break;
-      case 'num_list_users': latestValue = anime.num_list_users; break;
-      case 'num_scoring_users': latestValue = anime.num_scoring_users; break;
-      case 'mean': latestValue = anime.mean; break;
+      case 'rank': latestValue = anime.catalog.rank; break;
+      case 'popularity': latestValue = anime.catalog.popularity; break;
+      case 'num_list_users': latestValue = anime.catalog.numListUsers; break;
+      case 'num_scoring_users': latestValue = anime.catalog.numScoringUsers; break;
+      case 'mean': latestValue = anime.catalog.mean; break;
     }
 
     let formattedValue;
@@ -320,9 +320,9 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
             {sortedAnimes.map((anime) => (
               <tr key={anime.id}>
                 <td className={`${styles.imageCell} ${imageSize === 0 ? styles.imageCellOriginal : ''}`}>
-                  {anime.main_picture?.large || anime.main_picture?.medium ? (
+                  {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
                     <Image
-                      src={anime.main_picture?.large || anime.main_picture?.medium}
+                      src={anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium}
                       alt={getPrimaryTitle(anime)}
                       className={`${styles.animeImage} ${styles[`imageSize${imageSize}`]}`}
                       width={imageDimensions.width}
@@ -341,25 +341,25 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       <div className={styles.altTitle}>{getSecondaryTitle(anime)}</div>
                     )}
                   </div>
-                  <div className={styles.genresInTitle}>{formatGenres(anime.genres || [])}</div>
+                  <div className={styles.genresInTitle}>{formatGenres(anime.catalog.genres || [])}</div>
                 </td>
                 <td className={styles.statusCell}>
-                  <span className={`${styles.status} ${anime.status === 'currently_airing' ? styles.currentlyAiring : anime.status === 'finished_airing' ? styles.finishedAiring : anime.status === 'not_yet_aired' ? styles.notYetAired : ''}`}>
-                    {formatStatus(anime.status)}
+                  <span className={`${styles.status} ${anime.catalog.airingStatus === 'currently_airing' ? styles.currentlyAiring : anime.catalog.airingStatus === 'finished_airing' ? styles.finishedAiring : anime.catalog.airingStatus === 'not_yet_aired' ? styles.notYetAired : ''}`}>
+                    {formatStatus(anime.catalog.airingStatus)}
                   </span>
                 </td>
                 <td className={styles.episodesCell}>
-                  {anime.num_episodes || t('common.tba')}
+                  {anime.catalog.numEpisodes || t('common.tba')}
                 </td>
                 <td className={styles.seasonCell}>
-                  {anime.start_season ? (
+                  {anime.catalog.startSeason ? (
                     <span
                       style={{
-                        color: formatSeason(anime.start_season.year, anime.start_season.season).color,
+                        color: formatSeason(anime.catalog.startSeason.year, anime.catalog.startSeason.season).color,
                         fontWeight: 'bold'
                       }}
                     >
-                      {formatSeason(anime.start_season.year, anime.start_season.season, t).label}
+                      {formatSeason(anime.catalog.startSeason.year, anime.catalog.startSeason.season, t).label}
                     </span>
                   ) : (
                     <span style={{ color: '#6B7280' }}>{t('common.unknown')}</span>
@@ -405,7 +405,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       -
                     </Button>
                     <div className={styles.episodeCounter}>
-                      {getDisplayEpisodes(anime)}/{anime.num_episodes || '?'}
+                      {getDisplayEpisodes(anime)}/{anime.catalog.numEpisodes || '?'}
                     </div>
 
                     <Button

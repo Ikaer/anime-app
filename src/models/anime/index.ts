@@ -98,6 +98,22 @@ export interface SimklPersonalEntry {
 }
 
 /**
+ * AniList personal-list data (read-only, anonymous public import by username —
+ * docs/PROVIDER-FREE.md Phase 3 "P3b"). Keyed by MAL id in
+ * animes_anilist_personal.json. It is the LOWEST personal-state fallback tier
+ * (SIMKL > MAL > AniList) — see `getEffective*` in animeUtils.ts — so an
+ * existing MAL/SIMKL user is unaffected, while an AniList-only user still gets
+ * their state. Deliberately the locked 4-field shape (no `mal_id`): the store
+ * keys the record by MAL id externally, so the entry itself stays source-pure.
+ */
+export interface AniListPersonalEntry {
+  status?: UserAnimeStatus;  // normalized to MAL vocabulary at import time
+  score?: number;            // 1-10 scale (AniList POINT_10); 0/undefined = unrated
+  progress?: number;         // episodes watched
+  anilist_id: number;        // AniList media id
+}
+
+/**
  * Cross-source id crosswalk. SIMKL's all-items response carries a rich `ids`
  * block (mal, anilist, anidb, kitsu, tmdb, imdb, tvdb…); we store it verbatim.
  * `mal` may arrive as a string from SIMKL. Kept deliberately open-ended.
@@ -150,15 +166,54 @@ export interface AniListMetaEntry {
    * means never fetched, and is the backfill signal (same pattern as `staff`).
    */
   banner_image?: string | null;
+  /**
+   * AniList's OWN catalog view of this title (docs/PROVIDER-FREE.md Phase 3),
+   * populated by the season/popularity crawler in anilistSync.ts — distinct
+   * from `tags`/`staff`/`banner_image`, which come from the per-MAL-id
+   * enrichment sync. Optional as a whole: `undefined` means "never crawled",
+   * the backfill signal (same pattern as `staff`/`banner_image`). Deliberately
+   * a NARROW subset (title + mean only) — genres/studios carry incompatible
+   * shapes from MAL's (`Genre[]`/`Studio[]` with ids) and are left MAL-only
+   * until a real cross-source genre/studio identity exists.
+   */
+  catalog?: {
+    title: string;
+    mean?: number; // AniList averageScore/10, on MAL's 1-10 scale
+    /**
+     * AniList genres (Phase 3 P3a). AniList exposes genres as NAMES only (no
+     * id), so these carry a synthetic `id: 0` — safe because every genre
+     * consumer keys off `name` (filters, the reco genre IDF profile). Merged
+     * via catalog precedence in `toAnimeRecord`; MAL-first by default, so this
+     * only wins for AniList-only titles or a future anilist-first flip.
+     */
+    genres?: Genre[];
+    /**
+     * AniList studios (Phase 3 P3a). Ids are AniList's namespace, NOT MAL's —
+     * so a title present on BOTH keeps MAL studios under the default MAL-first
+     * precedence. Caveat if precedence ever flips to anilist-first: the reco
+     * studio IDF profile keys off studio `id`, so cross-source id mismatch
+     * would fragment studio affinity. Not a problem today (MAL wins for
+     * MAL-linked titles; AniList-only titles have no MAL studio profile anyway).
+     */
+    studios?: Studio[];
+  };
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 
-// Combined data for display
-export interface AnimeForDisplay extends MALAnime {
+/**
+ * The merged local record BEFORE the Phase 2 provider-neutral projection is
+ * attached: raw MAL fields (`extends MALAnime`) plus the side-objects joined at
+ * display time. This is exactly what `getAnimeForDisplay` assembles and what
+ * `toAnimeRecord` consumes to PRODUCE the `catalog`/`personal`/`sources`
+ * projection — so it must NOT itself require those fields (that would be
+ * circular). `AnimeForDisplay` below is this plus the attached projection.
+ */
+export interface MergedAnime extends MALAnime {
   hidden?: boolean;
   simkl?: SimklPersonalEntry;       // joined at display time by MAL id
   discrepancy?: Discrepancy | null; // computed at display / filter time
   anilistMeta?: AniListMetaEntry;   // joined at display time by MAL id
+  anilistPersonal?: AniListPersonalEntry; // joined at display time by MAL id (P3b)
   /**
    * Unified cross-source id crosswalk, assembled at display time from every
    * pipe (MAL self-id + SIMKL's ids block + AniList's id). Materially
@@ -167,6 +222,141 @@ export interface AnimeForDisplay extends MALAnime {
    * promoted from — no re-derivation needed. Non-load-bearing for now.
    */
   crosswalk?: SourceIds;
+  /**
+   * The synthetic canonical id (Phase 1 registry) for this record, when one is
+   * anchored. Reachable but NOT the outward id — `.id` stays the MAL id. Lets a
+   * consumer thread the canonical id through without a second registry lookup.
+   */
+  canonicalId?: string;
+}
+
+// Combined data for display.
+//
+// The Phase 2 provider-neutral projection (`catalog`/`personal`/`sources`) is
+// attached onto every merged record by `getAnimeForDisplay`/
+// `getAnimeByIdForDisplay` (see docs/PROVIDER-FREE.md). These are the SAME
+// blocks `toAnimeRecord` produces, carried on the compat `AnimeForDisplay` so
+// consumers can migrate off the raw MAL fields (`mean`, `genres`,
+// `my_list_status`, …) area by area — reading `.catalog.*` / `.personal.*` /
+// `.sources.*` — while the build stays green. The P2b capstone drops
+// `extends MALAnime` (and these become the only shape) once every reader moved.
+export interface AnimeForDisplay extends MergedAnime {
+  catalog: AnimeCatalog;
+  personal: AnimePersonal;
+  sources: AnimeSources;
+}
+
+// ============================================================================
+// AnimeRecord — the provider-neutral local record (docs/PROVIDER-FREE.md Phase 2)
+// ============================================================================
+//
+// `AnimeForDisplay` above is CLEANUP.md §1.2's "extends MALAnime" coupling: a
+// MAL response with side-objects bolted on. `AnimeRecord` is the target shape
+// — catalog/personal/sources are merge PROJECTIONS instead of raw MAL fields,
+// so no single provider's shape is baked into the record. It's built from
+// `AnimeForDisplay` by `toAnimeRecord()` in animeUtils.ts (catalog ← MAL-first,
+// personal ← the existing `getEffective*` precedence helpers, sources → the
+// verbatim per-provider slices), so nothing is re-derived or lost.
+//
+// `AnimeForDisplay` stays the compatibility shape most of the ~150 existing
+// reads go through — migrating them off raw MAL fields happens incrementally,
+// area by area (see docs/PROVIDER-FREE.md Phase 2). New/rewritten call sites
+// should prefer `AnimeRecord`.
+
+/**
+ * Per-field catalog authority order (docs/PROVIDER-FREE.md Phase 3). Only
+ * `title`/`mean` are resolved through this today — see `AniListMetaEntry.catalog`
+ * for why the rest stay MAL-only for now.
+ */
+export type CatalogSource = 'mal' | 'anilist';
+
+/**
+ * Catalog-authority fields. Currently sourced MAL-first (mirrors `MALAnime`
+ * 1:1 today); the doc's plan is a per-field precedence list that can flip to
+ * `['anilist','mal']` once an AniList catalog crawler exists (Phase 3) — this
+ * type is what makes that flip a projection change, not a field rename at 150
+ * call sites.
+ *
+ * Field names are deliberately camelCase, NOT a mirror of MAL's snake_case
+ * (`MALAnime`). That is a conscious choice, not an oversight: this type
+ * should read as source-neutral, and camelCase is the rest of this
+ * codebase's convention outside raw MAL payloads. The cost is real — any
+ * shared helper that takes both shapes needs a twin (see
+ * `getCatalogPrimaryTitle` next to `getPrimaryTitle` in animeUtils.ts) — but
+ * a snake_case mirror would read as "still secretly MAL", which is the exact
+ * coupling this type exists to shed. Future consumer migrations should
+ * expect one-off adapter functions like that, not a pure find-replace.
+ */
+export interface AnimeCatalog {
+  title: string;
+  alternativeTitles?: MALAnime['alternative_titles'];
+  mainPicture?: MALAnime['main_picture'];
+  pictures: Picture[];
+  synopsis?: string;
+  background?: string;
+  startDate?: string;
+  endDate?: string;
+  mean?: number;
+  rank?: number;
+  popularity?: number;
+  numListUsers?: number;
+  numScoringUsers?: number;
+  nsfw?: string;
+  genres: Genre[];
+  mediaType?: string;
+  /** Airing status: 'finished_airing' | 'currently_airing' | 'not_yet_aired'. Named to not collide with `AnimePersonal.status`. */
+  airingStatus?: string;
+  numEpisodes?: number;
+  startSeason?: MALAnime['start_season'];
+  broadcast?: MALAnime['broadcast'];
+  source?: string;
+  averageEpisodeDuration?: number;
+  rating?: string;
+  relatedAnime: RelatedAnime[];
+  studios: Studio[];
+}
+
+/**
+ * Personal-state fields, already provider-neutral: SIMKL-first / MAL-fallback,
+ * exactly the `getEffective*` precedence in animeUtils.ts. `undefined` score
+ * means unrated (0 and null both collapse here, same as `getEffectiveScore`).
+ */
+export interface AnimePersonal {
+  status?: UserAnimeStatus;
+  score?: number;
+  progress?: number;
+}
+
+/**
+ * Raw, verbatim per-provider slices — nothing is lost in the catalog/personal
+ * merge. Needed for reads that deliberately want ONE source's raw value, not
+ * the effective/merged one (e.g. `computeDiscrepancy` compares raw MAL vs raw
+ * SIMKL; the card's "MAL status" label is intentionally not flipped to
+ * effective — see CLAUDE.md "Local cache authority").
+ */
+export interface AnimeSources {
+  mal?: MALAnime;
+  simkl?: SimklPersonalEntry;
+  anilist?: AniListMetaEntry;
+  anilistPersonal?: AniListPersonalEntry;
+}
+
+/**
+ * The provider-neutral local record (docs/PROVIDER-FREE.md target model).
+ * `id` is the SYNTHETIC canonical id minted by the Phase 1 registry — tied to
+ * no provider. It is an INTERNAL identifier only: outward consumers (URLs,
+ * API route params, React keys) keep using the MAL id, reachable here via
+ * `crosswalk.mal` (or `sources.mal.id`). Promoting the canonical id to the
+ * OUTWARD id is Phase 3's job, not this type's.
+ */
+export interface AnimeRecord {
+  id: string;
+  crosswalk: SourceIds;
+  catalog: AnimeCatalog;
+  personal: AnimePersonal;
+  sources: AnimeSources;
+  hidden?: boolean;
+  discrepancy?: Discrepancy | null;
 }
 
 // MAL Authentication

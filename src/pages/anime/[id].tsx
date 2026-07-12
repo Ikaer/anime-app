@@ -2,7 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { getAnimeByIdForDisplay, getAnimeForDisplay } from '@/lib/store';
+import { getAnimeByIdForDisplay, getAnimeRecordById, getAnimeRecords } from '@/lib/store';
 import type { AnimeForDisplay } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
@@ -65,10 +65,10 @@ function statusLabel(status: string | null | undefined, t: TFunction): string {
 export default function AnimeDetailPage({ anime, similar }: Props) {
   const t = useT();
   const router = useRouter();
-  const poster = anime.main_picture?.large || anime.main_picture?.medium || '';
-  const en = anime.alternative_titles?.en;
-  const ja = anime.alternative_titles?.ja;
-  const synonyms = anime.alternative_titles?.synonyms || [];
+  const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
+  const en = anime.catalog.alternativeTitles?.en;
+  const ja = anime.catalog.alternativeTitles?.ja;
+  const synonyms = anime.catalog.alternativeTitles?.synonyms || [];
   const primaryTitle = getPrimaryTitle(anime);
   const secondaryTitle = getSecondaryTitle(anime);
 
@@ -83,7 +83,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const effScore = getEffectiveScore(anime);
   const effProgress = getEffectiveProgress(anime);
 
-  const searchTitle = en || anime.title;
+  const searchTitle = en || anime.catalog.title;
   const anilistId = anime.anilistMeta?.anilist_id ?? crosswalk.anilist;
 
   // Page backdrop. AniList's landscape banner is the real thing (it's what Plex
@@ -156,29 +156,29 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
             {ja && <div className="alt ja">{ja}</div>}
             {synonyms.length > 0 && <div className="synonyms">{t('detail.alsoKnown', { names: synonyms.join(' · ') })}</div>}
             <div className="badges">
-              <span className={`airing ${anime.status || ''}`}>{airingLabel(anime.status, t)}</span>
-              {anime.media_type && <span className="pill">{anime.media_type.toUpperCase()}</span>}
-              {anime.start_season && (
-                <span className="pill" style={{ color: formatSeason(anime.start_season.year, anime.start_season.season, t).color }}>
-                  {formatSeason(anime.start_season.year, anime.start_season.season, t).label}
+              <span className={`airing ${anime.catalog.airingStatus || ''}`}>{airingLabel(anime.catalog.airingStatus, t)}</span>
+              {anime.catalog.mediaType && <span className="pill">{anime.catalog.mediaType.toUpperCase()}</span>}
+              {anime.catalog.startSeason && (
+                <span className="pill" style={{ color: formatSeason(anime.catalog.startSeason.year, anime.catalog.startSeason.season, t).color }}>
+                  {formatSeason(anime.catalog.startSeason.year, anime.catalog.startSeason.season, t).label}
                 </span>
               )}
-              {anime.nsfw && anime.nsfw !== 'white' && <span className="pill nsfw">NSFW: {anime.nsfw}</span>}
+              {anime.catalog.nsfw && anime.catalog.nsfw !== 'white' && <span className="pill nsfw">NSFW: {anime.catalog.nsfw}</span>}
               {anime.hidden && <span className="pill hidden">{t('detail.hidden')}</span>}
             </div>
-            {anime.synopsis && <p className="prose synopsis">{anime.synopsis}</p>}
+            {anime.catalog.synopsis && <p className="prose synopsis">{anime.catalog.synopsis}</p>}
           </div>
           {/* Third column, sitting under the action buttons of the topbar. */}
-          {((anime.genres && anime.genres.length > 0) || (anime.studios && anime.studios.length > 0)) && (
+          {((anime.catalog.genres && anime.catalog.genres.length > 0) || (anime.catalog.studios && anime.catalog.studios.length > 0)) && (
             <div className="head-meta">
-              {anime.genres && anime.genres.length > 0 && (
+              {anime.catalog.genres && anime.catalog.genres.length > 0 && (
                 <div className="head-chips">
-                  {anime.genres.map(g => <span key={g.id} className="chip">{g.name}</span>)}
+                  {anime.catalog.genres.map(g => <span key={g.id} className="chip">{g.name}</span>)}
                 </div>
               )}
-              {anime.studios && anime.studios.length > 0 && (
+              {anime.catalog.studios && anime.catalog.studios.length > 0 && (
                 <div className="head-chips">
-                  {anime.studios.map(s => (
+                  {anime.catalog.studios.map(s => (
                     <Link key={s.id} href={`/credits/studio/${s.id}`} className="chip studio">🎬 {s.name}</Link>
                   ))}
                 </div>
@@ -223,11 +223,11 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           )}
 
           {/* ---------- Related anime ---------- */}
-          {anime.related_anime && anime.related_anime.length > 0 && (
+          {anime.catalog.relatedAnime && anime.catalog.relatedAnime.length > 0 && (
             <section className="section">
               <h2>{t('detail.relatedAnime')}</h2>
               <div className="related">
-                {anime.related_anime.map(r => (
+                {anime.catalog.relatedAnime.map(r => (
                   <Link key={r.node.id} href={`/anime/${r.node.id}`} className="related-card" title={r.node.title}>
                     {r.node.main_picture?.medium
                       ? <img src={r.node.main_picture.medium} alt="" />
@@ -265,7 +265,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
               </tr>
               <tr>
                 <td className="rowlabel">{t('detail.progress')}</td>
-                <td>{mal?.num_episodes_watched ?? '—'}{anime.num_episodes ? ` / ${anime.num_episodes}` : ''}</td>
+                <td>{mal?.num_episodes_watched ?? '—'}{anime.catalog.numEpisodes ? ` / ${anime.catalog.numEpisodes}` : ''}</td>
                 <td>{simkl?.num_episodes_watched ?? '—'}{simkl?.total_episodes ? ` / ${simkl.total_episodes}` : ''}</td>
                 <td className="eff">{effProgress ?? '—'}</td>
               </tr>
@@ -294,17 +294,17 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <section className="section">
           <h2>{t('detail.catalogSheet')}</h2>
           <div className="grid">
-            <Field label={t('detail.meanScore')} value={anime.mean != null ? anime.mean.toFixed(2) : '—'} />
-            <Field label={t('field.rank')} value={anime.rank != null ? `#${anime.rank}` : '—'} />
-            <Field label={t('field.popularity')} value={anime.popularity != null ? `#${anime.popularity}` : '—'} />
-            <Field label={t('field.users')} value={fmtNum(anime.num_list_users)} />
-            <Field label={t('field.scorers')} value={fmtNum(anime.num_scoring_users)} />
-            <Field label={t('field.episodes')} value={anime.num_episodes ? String(anime.num_episodes) : t('common.tba')} />
-            <Field label={t('detail.durationPerEp')} value={fmtDuration(anime.average_episode_duration)} />
-            <Field label={t('detail.source')} value={anime.source ? formatUserStatus(anime.source) : '—'} />
-            <Field label={t('detail.rating')} value={anime.rating || '—'} />
-            <Field label={t('detail.start')} value={fmtDate(anime.start_date)} />
-            <Field label={t('detail.end')} value={fmtDate(anime.end_date)} />
+            <Field label={t('detail.meanScore')} value={anime.catalog.mean != null ? anime.catalog.mean.toFixed(2) : '—'} />
+            <Field label={t('field.rank')} value={anime.catalog.rank != null ? `#${anime.catalog.rank}` : '—'} />
+            <Field label={t('field.popularity')} value={anime.catalog.popularity != null ? `#${anime.catalog.popularity}` : '—'} />
+            <Field label={t('field.users')} value={fmtNum(anime.catalog.numListUsers)} />
+            <Field label={t('field.scorers')} value={fmtNum(anime.catalog.numScoringUsers)} />
+            <Field label={t('field.episodes')} value={anime.catalog.numEpisodes ? String(anime.catalog.numEpisodes) : t('common.tba')} />
+            <Field label={t('detail.durationPerEp')} value={fmtDuration(anime.catalog.averageEpisodeDuration)} />
+            <Field label={t('detail.source')} value={anime.catalog.source ? formatUserStatus(anime.catalog.source) : '—'} />
+            <Field label={t('detail.rating')} value={anime.catalog.rating || '—'} />
+            <Field label={t('detail.start')} value={fmtDate(anime.catalog.startDate)} />
+            <Field label={t('detail.end')} value={fmtDate(anime.catalog.endDate)} />
             <Field label={t('detail.addedMal')} value={fmtDate(anime.created_at)} />
             <Field label={t('detail.updatedMal')} value={fmtDate(anime.updated_at)} />
           </div>
@@ -360,10 +360,10 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         </section>
 
         {/* ---------- Background ---------- */}
-        {anime.background && (
+        {anime.catalog.background && (
           <section className="section">
             <h2>{t('detail.background')}</h2>
-            <p className="prose">{anime.background}</p>
+            <p className="prose">{anime.catalog.background}</p>
           </section>
         )}
 
@@ -601,7 +601,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
   // Similar-by-credits reads catalog fields (studios/staff) only, so the
   // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
-  const similar = computeSimilarByCredits(anime, getAnimeForDisplay(), 3);
+  const targetRecord = getAnimeRecordById(id)!;
+  const similar = computeSimilarByCredits(targetRecord, getAnimeRecords(), 3);
   // AnimeForDisplay carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.
   return {
