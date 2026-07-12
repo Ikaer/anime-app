@@ -218,7 +218,7 @@ wide, expensive reshape it would justify. Each phase below also states what it's
 worth **on its own**, so the plan has an honest stopping point if Phase 0 comes
 back negative.
 
-### Phase 0 — Spike: does anonymous AniList actually work? `Todo`
+### Phase 0 — Spike: does anonymous AniList actually work? `Done`
 
 Cheap, ~an hour, no production code. The gate for everything downstream.
 
@@ -239,6 +239,37 @@ Cheap, ~an hour, no production code. The gate for everything downstream.
   its name.
 - **Standalone worth:** pure information. Produces a short findings note, no code
   to maintain.
+
+**Findings (live-verified 2026-07-12, raw `curl` against `graphql.anilist.co`,
+no auth header):**
+
+1. **Catalog browse: confirmed.** `Page(media(season: SUMMER, seasonYear: 2026,
+   sort: POPULARITY_DESC))` returns full results (id, `idMal`, title,
+   popularity) with no auth.
+2. **Public personal list: confirmed, with a caveat.** `MediaListCollection
+   (userName: "...", type: ANIME)` returns per-entry `status`/`score`/
+   `progress`/`media.idMal` with no auth — **but only for profiles whose list
+   is public**, which is not universal. Observed three response shapes across
+   test usernames: a real result (`Rue`, `test`, `testuser`, `AnimeFan`), an
+   explicit `"Private User"` 404 for a private profile that exists (`josh`),
+   and a plain `"User not found"` 404 for a username that doesn't exist. The
+   app-facing contract is therefore: *username exists + public → works;
+   username exists + private → distinguishable 404, show "this profile is
+   private, log in with AniList instead"; username doesn't exist → distinguishable
+   404, show "user not found"* — both failure modes are already
+   cleanly separable from the error `message`, so the anonymous-username UX
+   degrades gracefully rather than failing opaquely.
+3. **Rate limit: confirmed as documented elsewhere in this codebase.** Response
+   headers show `x-ratelimit-limit: 30` (`x-ratelimit-remaining` ticking down
+   per call) — the same **degraded 30/min** ceiling already noted in CLAUDE.md
+   for the existing AniList meta-sync, not the normal 90/min. No separate
+   higher complexity cost observed on either query in this spike.
+
+**Conclusion: gate passed.** Both north-star assumptions hold. Phases 1–3
+proceed as written; the anonymous-username tier is real and does not need to
+fall back to AniList-OAuth-only as the Phase 3 entry point. The one product
+detail to carry into Phase 3: surface the private/not-found distinction in the
+username-entry UI rather than a generic failure.
 
 ### Phase 1 — Persist the synthetic-id anchor registry `Todo`
 
@@ -323,10 +354,10 @@ entry tier (the anonymous-username bullet below drops, everything else holds).
 ## Open questions
 
 - **Synthetic id format** — ULID / uuid / monotonic counter? (Phase 1 kickoff.)
-- **AniList anonymous user-list** — does `MediaListCollection(userName:)` work
-  without auth for public profiles, and what's the rate/complexity cost? **This
-  is now Phase 0** — the spike that gates the whole plan, no longer a "before
-  Phase 3" afterthought.
+- ~~**AniList anonymous user-list**~~ — **Resolved in Phase 0 (2026-07-12):**
+  `MediaListCollection(userName:)` works without auth for public profiles
+  (30/min degraded rate limit, no extra complexity cost); private/nonexistent
+  usernames return distinguishable 404s. See Phase 0 findings above.
 - **Collision policy** — when SIMKL and AniList disagree on a crosswalk id for
   the same title, which wins? **Moved up to Phase 1** — the migration script can
   already mint duplicate provider-id claims, so the registry needs at least
