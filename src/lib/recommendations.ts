@@ -57,10 +57,10 @@ type MetaField = 'genre' | 'studio' | 'nsfw' | 'rating' | 'anilistTags' | 'anili
 type FieldValue = string | number;
 
 const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> = {
-  genre: a => (a.genres || []).map(g => g.name),
-  studio: a => (a.studios || []).map(s => s.id),
-  nsfw: a => (a.nsfw ? [a.nsfw] : []),
-  rating: a => (a.rating ? [a.rating] : []),
+  genre: a => (a.catalog.genres || []).map(g => g.name),
+  studio: a => (a.catalog.studios || []).map(s => s.id),
+  nsfw: a => (a.catalog.nsfw ? [a.catalog.nsfw] : []),
+  rating: a => (a.catalog.rating ? [a.catalog.rating] : []),
   anilistTags: a => (a.anilistMeta?.tags || []).map(t => t.name),
   anilistStaff: a => (a.anilistMeta?.staff || []).map(s => s.id),
 };
@@ -346,7 +346,7 @@ const SEQUEL_TITLE_REGEX =
  * its title matches the pattern (the user is caught up).
  */
 function isPrematureSequel(anime: AnimeForDisplay, byId: Map<number, AnimeForDisplay>): boolean {
-  const prequels = (anime.related_anime || []).filter(r => r.relation_type === 'prequel');
+  const prequels = (anime.catalog.relatedAnime || []).filter(r => r.relation_type === 'prequel');
   if (prequels.length > 0) {
     return prequels.some(rel => {
       const target = byId.get(rel.node.id);
@@ -355,7 +355,7 @@ function isPrematureSequel(anime: AnimeForDisplay, byId: Map<number, AnimeForDis
     });
   }
   // No relation data — fall back to the title heuristic.
-  return SEQUEL_TITLE_REGEX.test(anime.title);
+  return SEQUEL_TITLE_REGEX.test(anime.catalog.title);
 }
 
 // ============================================================================
@@ -376,8 +376,8 @@ interface Accumulator {
  */
 function diversitySignature(anime: AnimeForDisplay): Set<string> {
   const s = new Set<string>();
-  for (const g of anime.genres || []) s.add(`g:${g.name}`);
-  for (const st of anime.studios || []) s.add(`s:${st.id}`);
+  for (const g of anime.catalog.genres || []) s.add(`g:${g.name}`);
+  for (const st of anime.catalog.studios || []) s.add(`s:${st.id}`);
   return s;
 }
 
@@ -571,7 +571,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (a.affinity > maxRaw) maxRaw = a.affinity;
     const anilistAffinity = anilistAcc.get(candId)?.affinity ?? 0;
     if (anilistAffinity > maxAnilistRaw) maxAnilistRaw = anilistAffinity;
-    const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
+    const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
     if (users > maxUsers) maxUsers = users;
   }
   const crowdDenom = Math.log(1 + maxRaw) || 1;
@@ -594,7 +594,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const fbStudioM = fieldMatch(anime, fb.studio);
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
-    const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
+    const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
     const anilistA = anilistAcc.get(candId);
     const anilistAffinity = anilistA?.affinity ?? 0;
 
@@ -625,7 +625,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       .sort((x, y) => y[1] - x[1])
       .map(([sid]) => seedTitle(sid));
 
-    const studioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
+    const studioNames = new Map((anime.catalog.studios || []).map(s => [s.id, s.name]));
     const staffById = new Map((anime.anilistMeta?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: allSeedTitles.length ? t('recoDetail.crowd', { titles: allSeedTitles.join(', ') }) : undefined,
@@ -642,8 +642,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       studio: studioM.matched.length
         ? studioM.matched.map(id => studioNames.get(id as number) || `#${id}`).join(', ')
         : undefined,
-      nsfw: values.nsfw > 0 && anime.nsfw ? anime.nsfw : undefined,
-      rating: values.rating > 0 && anime.rating ? anime.rating.toUpperCase() : undefined,
+      nsfw: values.nsfw > 0 && anime.catalog.nsfw ? anime.catalog.nsfw : undefined,
+      rating: values.rating > 0 && anime.catalog.rating ? anime.catalog.rating.toUpperCase() : undefined,
       anilistTags: anilistTagsM.matched.length ? (anilistTagsM.matched as string[]).join(', ') : undefined,
       anilistStaff: anilistStaffM.matched.length
         ? anilistStaffM.matched
@@ -661,7 +661,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
         ];
         return parts.length ? parts.join(', ') : undefined;
       })(),
-      popularity: `${(anime.num_list_users || 0).toLocaleString('fr-FR')} membres`,
+      popularity: `${(anime.catalog.numListUsers || 0).toLocaleString('fr-FR')} membres`,
     };
 
     let score = 0;
@@ -693,7 +693,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (y.recoMeta.affinityScore !== x.recoMeta.affinityScore) {
       return y.recoMeta.affinityScore - x.recoMeta.affinityScore;
     }
-    return (y.mean || 0) - (x.mean || 0);
+    return (y.catalog.mean || 0) - (x.catalog.mean || 0);
   });
 
   // Optional diversity re-rank (MMR). λ = 0 (default) leaves `items` untouched.
@@ -991,7 +991,7 @@ export function computeSimilarTo(
   // page already lists relations in its own section.
   const excluded = new Set<number>([
     targetId,
-    ...(target.related_anime || []).map(r => r.node.id),
+    ...(target.catalog.relatedAnime || []).map(r => r.node.id),
     ...getHiddenAnimeIds(),
     ...feedbackIds(getFeedback(), 'down'),
   ]);
@@ -1019,7 +1019,7 @@ export function computeSimilarTo(
     eligible.push(anime);
     maxCrowd = Math.max(maxCrowd, crowd.get(candId) || 0);
     maxAnilist = Math.max(maxAnilist, anilistCrowd.get(candId) || 0);
-    maxUsers = Math.max(maxUsers, anime.num_list_users || 0);
+    maxUsers = Math.max(maxUsers, anime.catalog.numListUsers || 0);
   }
   if (eligible.length === 0) return [];
 
@@ -1052,7 +1052,7 @@ export function computeSimilarTo(
 
   // Names/roles as the TARGET credits them — the explain says what the candidate
   // shares with the anime you're looking at.
-  const targetStudioNames = new Map((target.studios || []).map(s => [s.id, s.name]));
+  const targetStudioNames = new Map((target.catalog.studios || []).map(s => [s.id, s.name]));
   const targetStaffById = new Map((target.anilistMeta?.staff || []).map(s => [s.id, s]));
 
   // Pass 2: score with the same additive weighted sum as the feed.
@@ -1070,7 +1070,7 @@ export function computeSimilarTo(
     const staffM = fieldMatch(anime, self.anilistStaff);
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
-    const users = Math.max(anime.num_list_users || 0, TUNING.POPULARITY_FLOOR);
+    const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
 
     const values: SourceWeights = {
       crowd: maxCrowd > 0 ? Math.log(1 + crowdNum) / crowdDenom : 0,
@@ -1094,8 +1094,8 @@ export function computeSimilarTo(
       studio: studioM.matched.length
         ? t('recoDetail.inCommon', { parts: studioM.matched.map(id => targetStudioNames.get(id as number) || `#${id}`).join(', ') })
         : undefined,
-      nsfw: values.nsfw > 0 && anime.nsfw ? t('recoDetail.sameNsfw', { value: anime.nsfw }) : undefined,
-      rating: values.rating > 0 && anime.rating ? t('recoDetail.sameRating', { value: anime.rating.toUpperCase() }) : undefined,
+      nsfw: values.nsfw > 0 && anime.catalog.nsfw ? t('recoDetail.sameNsfw', { value: anime.catalog.nsfw }) : undefined,
+      rating: values.rating > 0 && anime.catalog.rating ? t('recoDetail.sameRating', { value: anime.catalog.rating.toUpperCase() }) : undefined,
       anilistTags: tagsM.matched.length ? t('recoDetail.inCommon', { parts: (tagsM.matched as string[]).join(', ') }) : undefined,
       anilistStaff: staffM.matched.length
         ? t('recoDetail.inCommon', { parts: staffM.matched
@@ -1107,14 +1107,14 @@ export function computeSimilarTo(
             .join(', ') })
         : undefined,
       rejection: (() => {
-        const candStudioNames = new Map((anime.studios || []).map(s => [s.id, s.name]));
+        const candStudioNames = new Map((anime.catalog.studios || []).map(s => [s.id, s.name]));
         const parts = [
           ...(negGenreM.matched as string[]),
           ...negStudioM.matched.map(id => candStudioNames.get(id as number) || `#${id}`),
         ];
         return parts.length ? t('recoDetail.closeToRejects', { parts: parts.join(', ') }) : undefined;
       })(),
-      popularity: t('recoDetail.members', { count: (anime.num_list_users || 0).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') }),
+      popularity: t('recoDetail.members', { count: (anime.catalog.numListUsers || 0).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') }),
     };
 
     let score = 0;
@@ -1134,10 +1134,10 @@ export function computeSimilarTo(
     items.push({
       id: candId,
       title: getPrimaryTitle(anime),
-      poster: anime.main_picture?.medium || anime.main_picture?.large,
-      mean: anime.mean,
-      mediaType: anime.media_type,
-      year: anime.start_season?.year,
+      poster: anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large,
+      mean: anime.catalog.mean,
+      mediaType: anime.catalog.mediaType,
+      year: anime.catalog.startSeason?.year,
       status,
       seen: !!status && SEEN_STATUSES.has(status),
       score,
