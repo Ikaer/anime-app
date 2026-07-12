@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { MalConnectionBadge, SimklConnectionBadge } from '@/components/anime';
+import GlobalSearch from '@/components/GlobalSearch';
 import { useI18n, LANG_LABELS, type Lang } from '@/lib/i18n';
 
 interface LayoutProps {
@@ -102,6 +103,7 @@ export default function Layout({ children }: LayoutProps) {
             <Link href="/" className="logo">
               {t('brand')}
             </Link>
+            <GlobalSearch />
             <div className="header-right">
               <nav className="nav">
                 <Link

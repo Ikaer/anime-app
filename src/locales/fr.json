@@ -262,6 +262,14 @@
   "credits.countOne": "{count} anime",
   "credits.countOther": "{count} anime",
 
+  "search.placeholder": "Rechercher un anime, un studio, un staff…",
+  "search.group.anime": "Anime",
+  "search.group.studios": "Studios",
+  "search.group.staff": "Staff",
+  "search.animeCount": "{count} anime",
+  "search.noResults": "Aucun résultat",
+  "search.searching": "Recherche…",
+
   "refresh.title": "Rafraîchir depuis MAL / AniList / SIMKL",
   "refresh.refreshing": "⏳ Rafraîchissement…",
   "refresh.refresh": "🔄 Rafraîchir",
