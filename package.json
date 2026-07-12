@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "screenshots": "node scripts/capture-screenshots.js",
+    "registry:migrate": "node scripts/migrate-registry.js",
     "css:types": "npx tcm -p \"src/**/*.module.css\" . --camelCase",
     "css:types:watch": "npx tcm -w -p \"src/**/*.module.css\" . --camelCase",
     "data:copy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/copy-data.ps1",
