@@ -26,8 +26,21 @@ Two goals, ranked:
    over a provider-neutral record — exactly the "local cache authority" model
    already asserted in CLAUDE.md but not yet true in the types.
 
-These two goals point at the same design. You can't have (1) without (2),
-because "works with no MAL key" means "the record cannot *be* a MAL response."
+These two goals are **aligned but distinct** — not the same design, and it's
+worth being precise about why. It is tempting to claim "works with no MAL key"
+forces "the record cannot *be* a MAL response," but that's false: **Jikan**
+(see the candidate table) serves MAL's own data, in MAL's shape, keyed by MAL
+id, with no OAuth app — so no-key onboarding is achievable while the record
+stays a MAL response. Goal 1 alone does **not** require the reshape.
+
+The reason we still pursue goal 2 (and pick **AniList** as the default) is goal
+2 **on its own merits**: AniList is an independent catalog database, not a
+re-serving of MAL. Jikan is the most MAL-*coupled* option on the board — a
+proxy of the exact provider we're trying to stop baking in — so leaning on it
+would satisfy the no-key goal while entrenching the coupling the second goal
+exists to remove. We accept the wider reshape because a genuinely
+provider-neutral core is the prize; no-key onboarding is its by-product, not
+the other way around.
 
 ---
 
@@ -77,7 +90,7 @@ crosswalk (`SourceIds`) is already open-ended, so adding any of these to
 | Provider | Key needed | Catalog | Personal list | Writes | Notes |
 |---|---|---|---|---|---|
 | **AniList** | none (OAuth for writes/private) | ✅ | ✅ public by username | via OAuth | The default. Already wired for enrichment. |
-| **Jikan** (unofficial MAL) | **none** | ✅ (MAL data) | ✅ public MAL lists | ❌ | **MAL catalog + public MAL list with no OAuth app.** The zero-friction way to get MAL data — the exact barrier the owner wants gone. Read-only, rate-limited. |
+| **Jikan** (unofficial MAL) | **none** | ✅ (MAL data) | ✅ public MAL lists | ❌ | **MAL proxy** — re-serves MAL's own data by scraping, no independent catalog, no SLA. Zero-friction MAL data, but maximally MAL-coupled. **Optional import only, never the default** (see verdict below). Read-only, rate-limited. |
 | **Kitsu** | none for reads | ✅ | ✅ | via OAuth | Public JSON:API, no key for reads. `kitsu` id already in the crosswalk. |
 | **Shikimori** | none for reads | ✅ | ✅ public | via OAuth | MAL-like; public reads, OAuth for writes. |
 | **AniDB** | client registration | ✅ (authoritative) | ✅ | limited | Strong catalog authority but restrictive/rate-limited API + registration. `anidb` id already in the crosswalk. |
@@ -85,12 +98,16 @@ crosswalk (`SourceIds`) is already open-ended, so adding any of these to
 | **MAL (official)** | client id + OAuth | ✅ | ✅ | ✅ | Wired today. The friction being removed. |
 | **Trakt / TMDB** | key | partial (TV/movie-centric) | ✅ (Trakt) | ✅ (Trakt) | Weak anime coverage; `tmdb`/`imdb` ids already in the crosswalk for cross-linking. |
 
-**Standout for the no-key goal: Jikan.** It exposes MAL's *catalog* and *public
-user lists* with no OAuth app at all — so "MAL data, zero setup" is achievable
-without ever touching the official MAL OAuth flow. It can't write and can't read
-private lists, but as a first-run catalog + public-list source it directly
-attacks the friction the owner called out. Worth weighing against AniList-first,
-or alongside it (Jikan for MAL-id-anchored catalog, AniList for tags/recos).
+**Jikan verdict: kept, but demoted — never the default.** It exposes MAL's
+*catalog* and *public user lists* with no OAuth app, so on paper it's the
+zero-setup way to get MAL data. But it is a **scraper/proxy of MyAnimeList**: no
+catalog of its own, no service guarantee, and it breaks when MAL changes. For a
+design whose thesis is "no single provider's shape baked in," making Jikan
+load-bearing is self-defeating — it's MAL coupling with the OAuth filed off, the
+opposite of goal 2. So its only legitimate role is an **optional import source**
+for users who live on MAL and won't register the official OAuth app (MAL-id-
+anchored catalog + public-MAL-list read). The default is **AniList** — an
+independent database — precisely because it does *not* depend on MAL.
 
 ---
 
@@ -184,10 +201,44 @@ AnimeRecord {
 - **Data migration is acceptable.** The owner will re-sync / run a migration
   script; no dual-read fallback is required (same coordinated-cutover approach as
   CLEANUP.md §3.0).
+- **AniList is the default provider, not Jikan.** Jikan would be the smaller
+  change (MAL-shaped, keeps the join key), but it is a MAL *proxy* and would
+  entrench the very coupling goal 2 removes. AniList is chosen because it is an
+  independent catalog — the no-key win must not come at the cost of re-baking MAL
+  in. Jikan stays a possible opt-in import, never load-bearing.
 
 ---
 
 ## Phased plan
+
+**Ordering principle: de-risk before you refactor.** The entire payoff (Phase 3)
+is gated on an AniList capability that has *never been exercised in this
+codebase*. That verification is nearly free, so it goes **first** — before the
+wide, expensive reshape it would justify. Each phase below also states what it's
+worth **on its own**, so the plan has an honest stopping point if Phase 0 comes
+back negative.
+
+### Phase 0 — Spike: does anonymous AniList actually work? `Todo`
+
+Cheap, ~an hour, no production code. The gate for everything downstream.
+
+- Hit `graphql.anilist.co` **unauthenticated** and confirm two things the north
+  star assumes but the codebase has never done (all current calls are
+  `Media(idMal_in:)` enrichment):
+  1. **Catalog browse** — `Page(media(season, seasonYear, sort: POPULARITY_DESC))`
+     returns a browsable catalog with no auth.
+  2. **Public personal list** — `MediaListCollection(userName: "...", type: ANIME)`
+     returns a public profile's list with no auth, *with* per-item status/score/
+     progress. Note the rate + query-complexity cost of both.
+- **Decision this unblocks:** if both work, the zero-friction north star is
+  reachable and Phases 1–3 proceed as written. **If the list read fails**, the
+  no-key story degrades from *"enter your username"* to *"log in with AniList
+  OAuth"* — still better than MAL, but a **materially different product** (no
+  anonymous first-run). Phase 3 would then be re-scoped around AniList OAuth as
+  the entry tier, and that's worth knowing *before* migrating 25 files partly in
+  its name.
+- **Standalone worth:** pure information. Produces a short findings note, no code
+  to maintain.
 
 ### Phase 1 — Persist the synthetic-id anchor registry `Todo`
 
@@ -198,12 +249,21 @@ The concrete deliverable now. Additive; no consumer touches `AnimeRecord` yet.
   counter — pick in Phase 1 kickoff). Holds **only** the provider-id crosswalk.
 - Migration script (owner-run): allocate one canonical id per existing MAL id,
   seed each entry's crosswalk from today's `assembleCrosswalk` output.
+- **Collision/uniqueness policy is a Phase 1 concern, not a Phase 2 one.** The
+  migration can already mint two synthetic ids whose crosswalks both claim the
+  same `anilist` id (MAL has split/duplicate entries that AniList merges, and
+  vice-versa). The registry needs a uniqueness rule up front — at minimum,
+  detect-and-report duplicate provider ids during migration; decide the merge/
+  conflict resolution before any second provider seeds the registry.
 - `store.ts` gains `getRegistry()` / `upsertCrosswalk()` / `resolveByMalId()` and
   `getAnimeForDisplay()` reads the registry instead of re-deriving the crosswalk.
 - **The synthetic id is minted but NOT yet load-bearing:** `anime.id` stays the
   MAL id outward (URLs, `/anime/[id]`, API routes) so nothing downstream changes.
   The registry is the identity table, ready for Phase 2 to switch the join onto.
-- Reversible, self-contained — a good standalone PR.
+- **Standalone worth:** reversible, self-contained, and useful on its own — it
+  makes the crosswalk durable and queryable even if Phases 2–3 never happen. A
+  good standalone PR, and the honest **stop point** if Phase 0 comes back
+  negative.
 
 ### Phase 2 — Introduce `AnimeRecord`, retire `extends MALAnime` `Todo`
 
@@ -215,12 +275,29 @@ CLEANUP.md §1.2 proper. The wide, mechanical one.
 - Migrate the ~31 consumers off raw MAL fields onto `record.catalog.*` /
   `record.personal.*`, in small area-grouped PRs (API handlers → reco engine →
   pages → components), behind a temporary `AnimeForDisplay` compatibility alias.
-- Switch the internal join key to the synthetic canonical id; keep MAL id
-  reachable via `crosswalk.mal` for MAL API calls.
+- Switch the **internal** join key to the synthetic canonical id; keep MAL id
+  reachable via `crosswalk.mal` for MAL API calls. **This is the internal join
+  only** — the outward/URL id does NOT change here (see the contradiction below).
+- **Outward-id contradiction — resolved by deferral, called out here so it isn't
+  lost.** Phase 1 keeps MAL ids in URLs (`/anime/[id]`, API routes, the reco
+  `w=` weights param). That works *only while every title has a MAL id*. The
+  moment Phase 3 introduces an **AniList-only title, it has no MAL id and
+  therefore no URL** under this scheme. So "make the id synthetic" is genuinely
+  **two** projects: the internal join (this phase) and the *outward* id (Phase 3,
+  its own sub-project touching every route, deep link, bookmark, and the reco
+  URL param). Phase 2 deliberately does not attempt the outward switch; it just
+  stops blocking it.
+- **Standalone worth:** this is CLEANUP.md §1.2 on its own terms — it kills the
+  `extends MALAnime` coupling and gives catalog fields the same precedence seam
+  personal fields already have. Real code-health value **even if Phase 3 is
+  dropped** — but note that if Phase 0 killed Phase 3, this becomes a large
+  refactor with no *user-facing* payoff, so weigh it as cleanup, not feature.
 
 ### Phase 3 — No-key default: AniList-first, providers optional `Todo`
 
-Where the north star becomes real. Gated on the AniList-user-list verification.
+Where the north star becomes real. **Gated on Phase 0** — if the anonymous
+list-read failed there, this phase is re-scoped around AniList OAuth as the
+entry tier (the anonymous-username bullet below drops, everything else holds).
 
 - Make catalog authority a per-field precedence list (`['mal','anilist']` →
   default `['anilist','mal']` once the crawler lands). No behavior change until
@@ -229,7 +306,14 @@ Where the north star becomes real. Gated on the AniList-user-list verification.
   seed the registry *independently of MAL* — the point at which the app first
   functions with no MAL key.
 - Add the **anonymous AniList personal-list read by username** (no key) as the
-  default personal source.
+  default personal source. *(Drops to AniList-OAuth-only if Phase 0 disproved
+  anonymous list read.)*
+- **Promote the outward id to synthetic (the deferred half of Phase 2's join
+  switch).** This is the sub-project that lets an AniList-only title *have a URL*
+  at all: migrate `/anime/[id]`, every API route param, deep links, and the reco
+  `w=` weights param off the MAL id and onto the canonical id, with MAL-id URLs
+  redirect-preserved for existing bookmarks. Required before any MAL-less title
+  is reachable — it is not optional polish.
 - Add optional **AniList OAuth login** as the tier above it — unlocks private
   lists + AniList write-back — then MAL/SIMKL as further opt-in providers.
 - Provider enablement becomes config, not code: the app boots on AniList alone.
@@ -240,10 +324,13 @@ Where the north star becomes real. Gated on the AniList-user-list verification.
 
 - **Synthetic id format** — ULID / uuid / monotonic counter? (Phase 1 kickoff.)
 - **AniList anonymous user-list** — does `MediaListCollection(userName:)` work
-  without auth for public profiles, and what's the rate/complexity cost? (Verify
-  before Phase 3.)
+  without auth for public profiles, and what's the rate/complexity cost? **This
+  is now Phase 0** — the spike that gates the whole plan, no longer a "before
+  Phase 3" afterthought.
 - **Collision policy** — when SIMKL and AniList disagree on a crosswalk id for
-  the same title, which wins? (Registry needs a conflict rule by Phase 2.)
+  the same title, which wins? **Moved up to Phase 1** — the migration script can
+  already mint duplicate provider-id claims, so the registry needs at least
+  detect-and-report before a second provider seeds it.
 - **Personal write-back with no MAL/SIMKL** — writes need OAuth on every
   provider (AniList included), so the anonymous tier is read-only for personal
   state. Is read-only-personal an acceptable first-run default, with **AniList
@@ -251,9 +338,11 @@ Where the north star becomes real. Gated on the AniList-user-list verification.
 - **AniList OAuth scope** — what does registering an AniList OAuth app cost the
   *deployer* (redirect URI, client id), and is it low enough that shipping it
   enabled-by-default makes sense, or does it stay a self-host opt-in? (Phase 3.)
-- **Jikan vs AniList-first** — Jikan gives MAL catalog + public MAL list with no
-  key. Is the no-key default AniList, Jikan, or both (Jikan for MAL-anchored
-  catalog, AniList for tags/recos)? (Phase 3 scoping.)
+- **Jikan vs AniList-first** — **decided: AniList-first** (see Decisions locked).
+  Jikan is a MAL proxy and would re-entrench MAL coupling, so it is not the
+  default. Residual, low-priority: does Jikan ship *at all* as an optional
+  MAL-import for MAL-native users who won't register the official OAuth, or not
+  at all? (Defer past Phase 3.)
 - **A real `Provider` abstraction?** — introduce a common provider interface +
   registry so sources are a configured list, not hand-wired names? Not needed for
   Phases 1–2; it's what makes Phase 3's "add Jikan/Kitsu" not-a-copy-paste.
