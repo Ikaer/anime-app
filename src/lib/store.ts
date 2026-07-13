@@ -149,10 +149,12 @@ export function upsertAnilistMeta(entries: AniListMetaEntry[]): void {
  * overwrites the whole entry — fine for the tags/staff sync since it always
  * fetches all three together, wrong here since the crawler only ever has
  * `catalog`). Creates a bare entry (empty `tags`) if the tags/staff sync
- * hasn't reached this title yet.
+ * hasn't reached this title yet. `mal_id` is omitted for an AniList-only title
+ * (no MAL id) — the entry then carries only `catalog`/`anilist_id`, and the
+ * canonical id is resolved/minted off the `anilist` crosswalk alone.
  */
 export function upsertAnilistCatalogFields(
-  entries: Array<{ mal_id: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }>
+  entries: Array<{ mal_id?: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }>
 ): void {
   if (entries.length === 0) return;
   const existing = getAllAnilistMeta();
@@ -420,8 +422,8 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
     // Attach the Phase 2 provider-neutral projection (docs/PROVIDER-FREE.md) so
     // consumers can read `.catalog.*` / `.personal.*` / `.sources.*` off the
     // compat record while the raw MAL fields still exist for un-migrated reads.
-    const { catalog, personal, sources } = toAnimeRecord(merged, canonicalId);
-    return { ...merged, catalog, personal, sources };
+    const { catalog, personal, sources, provenance } = toAnimeRecord(merged, canonicalId);
+    return { ...merged, catalog, personal, sources, provenance };
   });
   lastCacheTime = now;
   return cachedAnime;
@@ -460,8 +462,8 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
     crosswalk: registry[canonicalId] ?? assembleCrosswalk(mal.id, simkl, anilistMeta),
     canonicalId,
   };
-  const { catalog, personal, sources } = toAnimeRecord(merged, canonicalId);
-  return { ...merged, catalog, personal, sources };
+  const { catalog, personal, sources, provenance } = toAnimeRecord(merged, canonicalId);
+  return { ...merged, catalog, personal, sources, provenance };
 }
 
 // ============================================================================
@@ -497,6 +499,7 @@ function toRecordView(a: AnimeForDisplay): AnimeRecord {
     catalog: a.catalog,
     personal: a.personal,
     sources: a.sources,
+    provenance: a.provenance,
     hidden: a.hidden,
     discrepancy: a.discrepancy,
   };

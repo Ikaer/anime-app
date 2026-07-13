@@ -548,8 +548,9 @@ export async function performAnilistCatalogCrawl(
   try {
     appendLog('anilist-catalog-crawl', 'info', `AniList catalog crawl started: ${resolvedSeason} ${resolvedYear}, up to ${maxPages} pages`);
 
-    const withMalEntries: Array<{ mal_id: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }> = [];
-    const anilistOnlyIds: number[] = [];
+    const catalogEntries: Array<{ mal_id?: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }> = [];
+    let withMalCount = 0;
+    let anilistOnlyCount = 0;
     let pagesFetched = 0;
 
     for (let page = 1; page <= maxPages; page++) {
@@ -590,9 +591,15 @@ export async function performAnilistCatalogCrawl(
           numListUsers: typeof m.popularity === 'number' ? m.popularity : undefined,
         };
         if (m.idMal) {
-          withMalEntries.push({ mal_id: m.idMal, anilist_id: m.id, catalog });
+          catalogEntries.push({ mal_id: m.idMal, anilist_id: m.id, catalog });
+          withMalCount++;
         } else {
-          anilistOnlyIds.push(m.id);
+          // No MAL id: still persist the catalog block, keyed off the `anilist`
+          // crosswalk alone — this is what lets an AniList-only title render a
+          // full row (docs/PROVIDER-FREE-CUTOVER.md Phase C). Previously this
+          // data was computed then discarded, only minting a bare canonical id.
+          catalogEntries.push({ anilist_id: m.id, catalog });
+          anilistOnlyCount++;
         }
       }
 
@@ -602,21 +609,22 @@ export async function performAnilistCatalogCrawl(
       if (page < maxPages) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
     }
 
-    // with-MAL titles: upsertAnilistCatalogFields resolves-before-mint internally
-    // and writes the catalog block under the canonical key (registering the
-    // {mal, anilist} crosswalk). AniList-only titles have no slice to write, so
-    // they mint a bare {anilist} canonical id straight through the resolver. The
-    // registry is the identity spine — the crawl is a first-class writer of it.
-    if (withMalEntries.length > 0) upsertAnilistCatalogFields(withMalEntries);
-    const { minted, resolved: alreadyAnchored } = anilistOnlyIds.length > 0
-      ? resolveCanonicalIds(anilistOnlyIds.map(id => ({ anilist: id })))
+    // Resolve first (ourselves) purely to capture mint/resolve counts for
+    // logging — upsertAnilistCatalogFields resolves-before-mint internally too,
+    // and re-resolving the same crosswalks here is idempotent (no double mint).
+    // Both with-MAL and AniList-only entries now persist their `catalog` block
+    // under the canonical key, registering the crosswalk — the registry is the
+    // identity spine, and this crawl is a first-class writer of it.
+    const { minted, resolved: alreadyAnchored } = catalogEntries.length > 0
+      ? resolveCanonicalIds(catalogEntries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id })))
       : { minted: 0, resolved: 0 };
+    if (catalogEntries.length > 0) upsertAnilistCatalogFields(catalogEntries);
 
     appendLog(
       'anilist-catalog-crawl',
       'success',
-      `AniList catalog crawl complete: ${withMalEntries.length} with MAL id enriched, ${minted} AniList-only canonical ids minted (${alreadyAnchored} already anchored)`,
-      { pagesFetched, withMal: withMalEntries.length, anilistOnlyMinted: minted, anilistOnlyAlreadyAnchored: alreadyAnchored }
+      `AniList catalog crawl complete: ${withMalCount} with MAL id enriched, ${anilistOnlyCount} AniList-only titles hydrated (${minted} canonical ids minted, ${alreadyAnchored} already anchored)`,
+      { pagesFetched, withMal: withMalCount, anilistOnlyMinted: minted, anilistOnlyAlreadyAnchored: alreadyAnchored }
     );
 
     return {
@@ -625,7 +633,7 @@ export async function performAnilistCatalogCrawl(
       season: resolvedSeason,
       seasonYear: resolvedYear,
       pagesFetched,
-      withMal: withMalEntries.length,
+      withMal: withMalCount,
       anilistOnlyMinted: minted,
       anilistOnlyAlreadyAnchored: alreadyAnchored,
     };

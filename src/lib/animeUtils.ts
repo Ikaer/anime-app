@@ -1,4 +1,7 @@
-import type { AnimeForDisplay, AnimeRecord, CatalogSource, MergedAnime, SeasonName, SeasonInfo } from '@/models/anime';
+import type {
+  AnimeForDisplay, AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource, MergedAnime,
+  ProvenanceSource, SeasonName, SeasonInfo, MALAnime, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
+} from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
 // ============================================================================
@@ -216,109 +219,220 @@ export function formatUserStatus(status?: string) {
 }
 
 // ============================================================================
-// AnimeRecord projection (docs/PROVIDER-FREE.md Phase 2 + Phase 3 catalog seam)
+// Hydration engine (docs/PROVIDER-FREE-CUTOVER.md Phase C)
 // ============================================================================
+//
+// One generic mechanism for both `catalog` and `personal`: each provider
+// exposes a partial extractor (`catalogFromMal`, `catalogFromAnilist`, …), a
+// precedence-merge walks every field the extractors produced and picks the
+// first source in precedence order that has a defined value, and records that
+// source in a sibling `provenance` map. Values stay flat — `record.catalog.title`
+// is the string, no `.value` wrapper — so no consumer needs to change shape.
 
 /**
- * Default catalog field precedence: MAL-first, matching today's behavior
- * exactly. Flips to `['anilist', 'mal']` only where a caller explicitly opts
- * in — the AniList catalog crawler (Phase 3) populates coverage gradually, so
- * flipping the DEFAULT before coverage is broad would blank out `title`/`mean`
- * for every not-yet-crawled title. See `resolveCatalogField`.
+ * Default catalog field precedence: MAL-first, matching pre-Phase-C behavior
+ * exactly. AniList wins only where MAL is absent (e.g. an AniList-only title)
+ * — flipping the DEFAULT before MAL coverage is universal would blank fields
+ * for titles the AniList crawler hasn't reached yet. `simkl` is included for
+ * uniformity (see `catalogFromSimkl`) but never wins today: it contributes no
+ * catalog fields.
  */
-export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist'];
+export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 'simkl'];
+
+/** Personal-state precedence: SIMKL > MAL > AniList — exactly the pre-Phase-C `getEffective*` order. */
+export const DEFAULT_PERSONAL_PRECEDENCE: ProvenanceSource[] = ['simkl', 'mal', 'anilist'];
 
 /**
- * Resolve one catalog field through a source-precedence order, skipping
- * sources whose value is missing. Generic over field type so it works for
- * both `title` (string) and `mean` (number) — the only two fields the AniList
- * catalog crawler currently populates (see `AniListMetaEntry.catalog`'s doc
- * comment for why genres/studios aren't included: incompatible shapes).
+ * Generic precedence merge: for every field any extractor produced, walk
+ * `precedence` and take the first source with a defined value, recording which
+ * source won in a sibling provenance map. A field no source touched is simply
+ * absent from both `merged` and `provenance`.
  */
-function resolveCatalogField<T>(
-  precedence: CatalogSource[],
-  values: Partial<Record<CatalogSource, T | undefined>>
-): T | undefined {
-  for (const source of precedence) {
-    const value = values[source];
-    if (value !== undefined) return value;
+function mergeWithProvenance<T extends object>(
+  precedence: ProvenanceSource[],
+  extracted: Partial<Record<ProvenanceSource, Partial<T>>>
+): { merged: Partial<T>; provenance: Partial<Record<keyof T, ProvenanceSource>> } {
+  const merged: Partial<T> = {};
+  const provenance: Partial<Record<keyof T, ProvenanceSource>> = {};
+  const allKeys = new Set<keyof T>();
+  for (const values of Object.values(extracted)) {
+    if (!values) continue;
+    for (const key of Object.keys(values) as (keyof T)[]) allKeys.add(key);
   }
-  return undefined;
+  for (const key of allKeys) {
+    for (const source of precedence) {
+      const values = extracted[source];
+      const value = values ? values[key] : undefined;
+      if (value !== undefined) {
+        merged[key] = value;
+        provenance[key] = source;
+        break;
+      }
+    }
+  }
+  return { merged, provenance };
+}
+
+/** MAL's raw shape → the provider-neutral `AnimeCatalog` field names. */
+function catalogFromMal(mal?: MALAnime): Partial<AnimeCatalog> {
+  if (!mal) return {};
+  return {
+    title: mal.title,
+    alternativeTitles: mal.alternative_titles,
+    mainPicture: mal.main_picture,
+    pictures: mal.pictures,
+    synopsis: mal.synopsis,
+    background: mal.background,
+    startDate: mal.start_date,
+    endDate: mal.end_date,
+    mean: mal.mean,
+    rank: mal.rank,
+    popularity: mal.popularity,
+    numListUsers: mal.num_list_users,
+    numScoringUsers: mal.num_scoring_users,
+    nsfw: mal.nsfw,
+    genres: mal.genres,
+    mediaType: mal.media_type,
+    airingStatus: mal.status,
+    numEpisodes: mal.num_episodes,
+    startSeason: mal.start_season,
+    broadcast: mal.broadcast,
+    source: mal.source,
+    averageEpisodeDuration: mal.average_episode_duration,
+    rating: mal.rating,
+    relatedAnime: mal.related_anime,
+    studios: mal.studios,
+  };
+}
+
+/**
+ * AniList's catalog crawler shape → `AnimeCatalog` field names (see
+ * `AniListMetaEntry.catalog`'s doc comment — already MAL-vocabulary-normalized
+ * at crawl time). This is what lets an AniList-only title (no MAL slice)
+ * render a full row.
+ */
+function catalogFromAnilist(entry?: AniListMetaEntry): Partial<AnimeCatalog> {
+  const c = entry?.catalog;
+  if (!c) return {};
+  return {
+    title: c.title,
+    alternativeTitles: c.titleEnglish ? { synonyms: [], en: c.titleEnglish, ja: c.titleRomaji ?? '' } : undefined,
+    mainPicture: c.coverImage,
+    pictures: c.coverImage ? [c.coverImage] : undefined,
+    synopsis: c.synopsis,
+    startDate: c.startDate,
+    mean: c.mean,
+    numListUsers: c.numListUsers,
+    genres: c.genres,
+    mediaType: c.mediaType,
+    airingStatus: c.airingStatus,
+    numEpisodes: c.numEpisodes,
+    startSeason: c.startSeason,
+    studios: c.studios,
+  };
+}
+
+/**
+ * SIMKL contributes no catalog fields today (its public API has no tags/genre
+ * detail beyond what MAL already gives — see CLAUDE.md's SIMKL section). Wired
+ * uniformly with the other extractors so a future SIMKL catalog field is a
+ * one-line addition here, not a new merge path.
+ */
+function catalogFromSimkl(): Partial<AnimeCatalog> {
+  return {};
+}
+
+/** MAL's `my_list_status` → the provider-neutral `AnimePersonal` field names. */
+function personalFromMal(mal?: MALAnime): Partial<AnimePersonal> {
+  const status = mal?.my_list_status;
+  if (!status) return {};
+  return {
+    status: status.status as AnimePersonal['status'],
+    score: status.score > 0 ? status.score : undefined,
+    progress: status.num_episodes_watched,
+  };
+}
+
+/** SIMKL's personal entry → `AnimePersonal` field names. */
+function personalFromSimkl(simkl?: SimklPersonalEntry): Partial<AnimePersonal> {
+  if (!simkl) return {};
+  return {
+    status: simkl.status,
+    score: simkl.score != null && simkl.score > 0 ? simkl.score : undefined,
+    progress: simkl.num_episodes_watched ?? undefined,
+  };
+}
+
+/** AniList's (anonymously-imported) personal entry → `AnimePersonal` field names. */
+function personalFromAnilist(entry?: AniListPersonalEntry): Partial<AnimePersonal> {
+  if (!entry) return {};
+  return {
+    status: entry.status,
+    score: entry.score != null && entry.score > 0 ? entry.score : undefined,
+    progress: entry.progress,
+  };
 }
 
 /**
  * Project the merged `AnimeForDisplay` (still MAL-shaped) into the
- * provider-neutral `AnimeRecord`. Most of `catalog` is still MAL-first only
- * (no other source populates it yet); `title`/`mean` go through
- * `resolveCatalogField` against `precedence` so the AniList catalog crawler's
- * data (Phase 3) is actually reachable, not just stored. Personal reuses the
- * exact `getEffective*` precedence above so there is one implementation of
- * "which source wins", not two; `sources` keeps every raw slice so nothing is
- * lost in the merge. `id` is the synthetic canonical id from the Phase 1
- * registry, falling back to a MAL-anchored placeholder for any (should-be-rare)
- * record the registry hasn't reconciled yet — never used outward, see
- * `AnimeRecord.id`'s doc comment.
+ * provider-neutral `AnimeRecord` via the generic hydration engine above.
+ * `personal` reproduces the exact `getEffective*` precedence (SIMKL > MAL >
+ * AniList) so there remains one implementation of "which source wins" for
+ * personal state; `sources` keeps every raw slice so nothing is lost in the
+ * merge. `id` is the synthetic canonical id from the Phase 1 registry, falling
+ * back to a MAL-anchored placeholder for any (should-be-rare) record the
+ * registry hasn't reconciled yet — never used outward, see `AnimeRecord.id`'s
+ * doc comment.
  */
 export function toAnimeRecord(
   anime: MergedAnime,
   canonicalId?: string,
-  precedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE
+  catalogPrecedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
+  personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE
 ): AnimeRecord {
-  const anilistCatalog = anime.anilistMeta?.catalog;
+  // `anime.id`/`title`/`genres`/`pictures`/`related_anime`/`studios` are only
+  // present when a MAL slice actually exists for this record (Phase C widens
+  // the row set beyond MAL-anchored titles — see `getAnimeForDisplay`), so
+  // treat MAL fields as optional here rather than relying on `MergedAnime`'s
+  // `extends MALAnime` non-optionality.
+  const mal = anime.id !== undefined ? (anime as MALAnime) : undefined;
+
+  const { merged: catalogMerged, provenance: catalogProvenance } = mergeWithProvenance<AnimeCatalog>(
+    catalogPrecedence,
+    { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anime.anilistMeta), simkl: catalogFromSimkl() }
+  );
+  const { merged: personalMerged, provenance: personalProvenance } = mergeWithProvenance<AnimePersonal>(
+    personalPrecedence,
+    { mal: personalFromMal(mal), simkl: personalFromSimkl(anime.simkl), anilist: personalFromAnilist(anime.anilistPersonal) }
+  );
+
   return {
     id: canonicalId ?? `a_mal_${anime.id}`,
     crosswalk: anime.crosswalk ?? { mal: anime.id },
     catalog: {
-      // Falls back to the MAL title even if `precedence` omits 'mal' or AniList
-      // has none — `title` is non-optional on `AnimeCatalog`, unlike `mean`.
-      title: resolveCatalogField(precedence, { mal: anime.title, anilist: anilistCatalog?.title }) ?? anime.title,
-      alternativeTitles: anime.alternative_titles,
-      mainPicture: anime.main_picture,
-      pictures: anime.pictures,
-      synopsis: anime.synopsis,
-      background: anime.background,
-      startDate: anime.start_date,
-      endDate: anime.end_date,
-      mean: resolveCatalogField(precedence, { mal: anime.mean, anilist: anilistCatalog?.mean }),
-      rank: anime.rank,
-      popularity: anime.popularity,
-      numListUsers: anime.num_list_users,
-      numScoringUsers: anime.num_scoring_users,
-      nsfw: anime.nsfw,
-      // Phase 3 P3a: genres/studios flow through catalog precedence like
-      // title/mean. MAL-first by default so on-screen behavior is unchanged
-      // for MAL-linked titles; AniList wins only where MAL has none.
-      genres: resolveCatalogField(precedence, { mal: anime.genres, anilist: anilistCatalog?.genres }) ?? anime.genres ?? [],
-      mediaType: anime.media_type,
-      airingStatus: anime.status,
-      numEpisodes: anime.num_episodes,
-      startSeason: anime.start_season,
-      broadcast: anime.broadcast,
-      source: anime.source,
-      averageEpisodeDuration: anime.average_episode_duration,
-      rating: anime.rating,
-      relatedAnime: anime.related_anime,
-      studios: resolveCatalogField(precedence, { mal: anime.studios, anilist: anilistCatalog?.studios }) ?? anime.studios ?? [],
+      // `title`/`genres`/`pictures`/`relatedAnime`/`studios` are non-optional on
+      // `AnimeCatalog` — fall back to empty rather than `undefined` when no
+      // source had a value (should only happen for a not-yet-hydrated record).
+      ...catalogMerged,
+      title: catalogMerged.title ?? '',
+      genres: catalogMerged.genres ?? [],
+      pictures: catalogMerged.pictures ?? [],
+      relatedAnime: catalogMerged.relatedAnime ?? [],
+      studios: catalogMerged.studios ?? [],
     },
-    personal: {
-      status: getEffectiveStatus(anime) as AnimeRecord['personal']['status'],
-      score: getEffectiveScore(anime),
-      progress: getEffectiveProgress(anime),
-    },
+    personal: personalMerged,
+    provenance: { catalog: catalogProvenance, personal: personalProvenance },
     sources: {
-      // Strip the local-record bolt-ons (`simkl`/`anilistMeta`/`crosswalk`/
-      // `hidden`/`discrepancy`) so this is the RAW MAL slice — needed by reads
-      // that deliberately want one source's raw value (see the type's doc
-      // comment), not the merged `AnimeForDisplay`.
-      mal: (() => {
-        // Strip the merged local-record bolt-ons so `sources.mal` is the RAW
-        // MAL slice. `MergedAnime` is the pre-projection shape (no catalog/
-        // personal/sources), so only these join-time fields need removing.
+      // Strip the local-record bolt-ons so `sources.mal` is the RAW MAL slice —
+      // needed by reads that deliberately want one source's raw value (see the
+      // type's doc comment), not the merged/hydrated view. `undefined` when no
+      // MAL slice exists for this record (AniList-only title).
+      mal: mal ? (() => {
         const {
-          hidden, simkl, discrepancy, anilistMeta, anilistPersonal, crosswalk, canonicalId, ...mal
+          hidden, simkl, discrepancy, anilistMeta, anilistPersonal, crosswalk, canonicalId: _canonicalId, ...malOnly
         } = anime;
-        return mal;
-      })(),
+        return malOnly as MALAnime;
+      })() : undefined,
       simkl: anime.simkl,
       anilist: anime.anilistMeta,
       anilistPersonal: anime.anilistPersonal,

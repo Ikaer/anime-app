@@ -153,7 +153,13 @@ export interface AniListStaffEntry {
   role: string;
 }
 export interface AniListMetaEntry {
-  mal_id: number;
+  /**
+   * Absent for an AniList-only title (no MAL id) — the crawler mints a bare
+   * canonical id for those (see `performAnilistCatalogCrawl`) and this entry
+   * carries only `catalog`/`anilist_id`. Presence of `mal_id` is what lets the
+   * tags/staff enrichment sync (which IS MAL-id-keyed) find this entry.
+   */
+  mal_id?: number;
   anilist_id: number;
   tags: AniListTagEntry[];
   // Top-relevance staff credits. Optional so entries written before staff was
@@ -262,6 +268,7 @@ export interface AnimeForDisplay extends MergedAnime {
   catalog: AnimeCatalog;
   personal: AnimePersonal;
   sources: AnimeSources;
+  provenance: RecordProvenance;
 }
 
 // ============================================================================
@@ -282,11 +289,12 @@ export interface AnimeForDisplay extends MergedAnime {
 // should prefer `AnimeRecord`.
 
 /**
- * Per-field catalog authority order (docs/PROVIDER-FREE.md Phase 3). Only
- * `title`/`mean` are resolved through this today — see `AniListMetaEntry.catalog`
- * for why the rest stay MAL-only for now.
+ * Per-field catalog authority order (docs/PROVIDER-FREE-CUTOVER.md Phase C).
+ * Reuses `ProvenanceSource` — any provider the hydration engine knows about can
+ * appear in a precedence list, including `simkl` (a no-op catalog contributor
+ * today, wired uniformly so a future SIMKL catalog field needs no type change).
  */
-export type CatalogSource = 'mal' | 'anilist';
+export type CatalogSource = ProvenanceSource;
 
 /**
  * Catalog-authority fields. Currently sourced MAL-first (mirrors `MALAnime`
@@ -359,6 +367,25 @@ export interface AnimeSources {
   anilistPersonal?: AniListPersonalEntry;
 }
 
+/** The providers the hydration engine can pull a field from. */
+export type ProvenanceSource = 'mal' | 'anilist' | 'simkl';
+
+/** Per-field origin of the hydrated `catalog` block: which provider's value won. */
+export type CatalogProvenance = Partial<Record<keyof AnimeCatalog, ProvenanceSource>>;
+
+/** Per-field origin of the hydrated `personal` block: which provider's value won. */
+export type PersonalProvenance = Partial<Record<keyof AnimePersonal, ProvenanceSource>>;
+
+/**
+ * Per-field origin map produced by the hydration engine (docs/PROVIDER-FREE-CUTOVER.md
+ * Phase C) alongside `catalog`/`personal`. A field absent from the map means no
+ * source had a value for it (stayed `undefined`/default).
+ */
+export interface RecordProvenance {
+  catalog: CatalogProvenance;
+  personal: PersonalProvenance;
+}
+
 /**
  * The provider-neutral local record (docs/PROVIDER-FREE.md target model).
  * `id` is the SYNTHETIC canonical id minted by the Phase 1 registry — tied to
@@ -373,6 +400,7 @@ export interface AnimeRecord {
   catalog: AnimeCatalog;
   personal: AnimePersonal;
   sources: AnimeSources;
+  provenance: RecordProvenance;
   hidden?: boolean;
   discrepancy?: Discrepancy | null;
 }
