@@ -869,8 +869,10 @@ export async function performRecommendationsRefresh(
       }
     }
 
-    // Hydrate missing titles so the feed can render them.
-    const existing = getAllAnime();
+    // Hydrate missing titles so the feed can render them. The store is
+    // canonical-keyed now, but candidate/edge ids are MAL ids — test coverage
+    // against the records' own `.id` (still the MAL id), not the slice key.
+    const existingMalIds = new Set(Object.values(getAllAnime()).map(a => a.id));
     const candidateIds = new Set<number>();
     for (const edges of Object.values(data.seeds)) {
       for (const e of edges) candidateIds.add(e.id);
@@ -880,7 +882,7 @@ export async function performRecommendationsRefresh(
     }
     for (const s of data.suggestions) candidateIds.add(s.id);
 
-    const missing = Array.from(candidateIds).filter(id => !existing[id.toString()]);
+    const missing = Array.from(candidateIds).filter(id => !existingMalIds.has(id));
     report({ type: 'hydrate', candidates: candidateIds.size, message: `Hydrating ${missing.length} missing titles` });
 
     const hydrated: MALAnime[] = [];

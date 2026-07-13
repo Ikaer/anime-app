@@ -4,7 +4,7 @@
  * locally (via animes_mal.json) and persists them via store.ts. Read-only
  * against AniList; no writes.
  */
-import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, seedAnilistOnlyCanonicalIds, getRegistry } from '@/lib/store';
+import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
 import { getSeasonInfos } from '@/lib/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry } from '@/models/anime';
@@ -270,14 +270,16 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
   isAnilistMetaSyncRunning = true;
   try {
     const malAnime = getAllAnime();
-    const existingMeta = getAllAnilistMeta();
+    // Both slices are canonical-keyed now, so index the meta by its own `mal_id`
+    // to test coverage against the MAL slice's `a.id` (still the MAL id).
+    const metaByMal = new Map(Object.values(getAllAnilistMeta()).map(e => [e.mal_id, e]));
     // Fetch anime with no AniList entry yet, OR an entry predating staff / banner
     // support (field === undefined) so those backfill onto already-tagged titles.
     // A banner AniList doesn't have is stored as null, so it never re-queues.
     const missingIds = Object.values(malAnime)
       .map(a => a.id)
       .filter(id => {
-        const e = existingMeta[id.toString()];
+        const e = metaByMal.get(id);
         return !e || e.staff === undefined || e.banner_image === undefined;
       });
 
@@ -383,6 +385,15 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
       id
       idMal
       title { romaji english }
+      coverImage { medium large }
+      description
+      format
+      episodes
+      status
+      season
+      seasonYear
+      startDate { year month day }
+      popularity
       averageScore
       genres
       studios { nodes { id name } }
@@ -394,9 +405,77 @@ interface RawCatalogMedia {
   id: number;
   idMal?: number | null;
   title?: { romaji?: string | null; english?: string | null };
+  coverImage?: { medium?: string | null; large?: string | null } | null;
+  description?: string | null;
+  format?: string | null;
+  episodes?: number | null;
+  status?: string | null;
+  season?: string | null;
+  seasonYear?: number | null;
+  startDate?: { year?: number | null; month?: number | null; day?: number | null } | null;
+  popularity?: number | null;
   averageScore?: number | null;
   genres?: (string | null)[] | null;
   studios?: { nodes?: ({ id?: number | null; name?: string | null } | null)[] | null } | null;
+}
+
+// ── AniList → MAL vocabulary maps (the widened catalog fields normalize to MAL's
+// shape at crawl time, so a hydrated AniList-only row reads identically to a MAL
+// one downstream). ──
+
+/** AniList `format` → MAL `media_type` (lowercase). */
+function mapFormat(format?: string | null): string | undefined {
+  switch (format) {
+    case 'TV': return 'tv';
+    case 'TV_SHORT': return 'tv';
+    case 'MOVIE': return 'movie';
+    case 'SPECIAL': return 'special';
+    case 'OVA': return 'ova';
+    case 'ONA': return 'ona';
+    case 'MUSIC': return 'music';
+    default: return format ? format.toLowerCase() : undefined;
+  }
+}
+
+/** AniList `status` → MAL airing status (`finished_airing`|`currently_airing`|`not_yet_aired`). */
+function mapAiringStatus(status?: string | null): string | undefined {
+  switch (status) {
+    case 'FINISHED':
+    case 'CANCELLED': return 'finished_airing';
+    case 'RELEASING':
+    case 'HIATUS': return 'currently_airing';
+    case 'NOT_YET_RELEASED': return 'not_yet_aired';
+    default: return undefined;
+  }
+}
+
+/** AniList `startDate` fuzzy-date → MAL `start_date` string ("YYYY" / "YYYY-MM" / "YYYY-MM-DD"). */
+function mapStartDate(d?: { year?: number | null; month?: number | null; day?: number | null } | null): string | undefined {
+  if (!d?.year) return undefined;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  let s = `${d.year}`;
+  if (d.month) {
+    s += `-${pad(d.month)}`;
+    if (d.day) s += `-${pad(d.day)}`;
+  }
+  return s;
+}
+
+/** AniList HTML description → plain text (MAL synopsis is plain). Strips tags + decodes the few entities AniList emits. */
+function stripHtml(html?: string | null): string | undefined {
+  if (!html) return undefined;
+  const text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&mdash;/g, '—')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text || undefined;
 }
 interface RawCatalogPage {
   pageInfo?: { hasNextPage?: boolean };
@@ -489,12 +568,29 @@ export async function performAnilistCatalogCrawl(
         const studios = (m.studios?.nodes ?? [])
           .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
           .map(s => ({ id: s.id ?? 0, name: s.name as string }));
+        const cover = m.coverImage?.medium || m.coverImage?.large
+          ? { medium: m.coverImage?.medium ?? m.coverImage?.large ?? '', large: m.coverImage?.large ?? m.coverImage?.medium ?? '' }
+          : undefined;
+        const catalog: NonNullable<AniListMetaEntry['catalog']> = {
+          title,
+          titleRomaji: m.title?.romaji ?? undefined,
+          titleEnglish: m.title?.english ?? undefined,
+          mean,
+          genres,
+          studios,
+          coverImage: cover,
+          synopsis: stripHtml(m.description),
+          mediaType: mapFormat(m.format),
+          airingStatus: mapAiringStatus(m.status),
+          numEpisodes: typeof m.episodes === 'number' ? m.episodes : undefined,
+          startDate: mapStartDate(m.startDate),
+          startSeason: m.season && typeof m.seasonYear === 'number'
+            ? { year: m.seasonYear, season: m.season.toLowerCase() }
+            : undefined,
+          numListUsers: typeof m.popularity === 'number' ? m.popularity : undefined,
+        };
         if (m.idMal) {
-          withMalEntries.push({
-            mal_id: m.idMal,
-            anilist_id: m.id,
-            catalog: { title, mean, genres, studios },
-          });
+          withMalEntries.push({ mal_id: m.idMal, anilist_id: m.id, catalog });
         } else {
           anilistOnlyIds.push(m.id);
         }
@@ -506,10 +602,15 @@ export async function performAnilistCatalogCrawl(
       if (page < maxPages) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
     }
 
+    // with-MAL titles: upsertAnilistCatalogFields resolves-before-mint internally
+    // and writes the catalog block under the canonical key (registering the
+    // {mal, anilist} crosswalk). AniList-only titles have no slice to write, so
+    // they mint a bare {anilist} canonical id straight through the resolver. The
+    // registry is the identity spine — the crawl is a first-class writer of it.
     if (withMalEntries.length > 0) upsertAnilistCatalogFields(withMalEntries);
-    const { minted, alreadyAnchored } = anilistOnlyIds.length > 0
-      ? seedAnilistOnlyCanonicalIds(anilistOnlyIds)
-      : { minted: 0, alreadyAnchored: 0 };
+    const { minted, resolved: alreadyAnchored } = anilistOnlyIds.length > 0
+      ? resolveCanonicalIds(anilistOnlyIds.map(id => ({ anilist: id })))
+      : { minted: 0, resolved: 0 };
 
     appendLog(
       'anilist-catalog-crawl',

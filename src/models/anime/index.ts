@@ -178,6 +178,10 @@ export interface AniListMetaEntry {
    */
   catalog?: {
     title: string;
+    /** AniList's romaji title, kept as the `alternative_titles`-less fallback secondary. */
+    titleRomaji?: string;
+    /** AniList's English title — mapped onto `alternative_titles.en` at hydration. */
+    titleEnglish?: string;
     mean?: number; // AniList averageScore/10, on MAL's 1-10 scale
     /**
      * AniList genres (Phase 3 P3a). AniList exposes genres as NAMES only (no
@@ -196,6 +200,20 @@ export interface AniListMetaEntry {
      * MAL-linked titles; AniList-only titles have no MAL studio profile anyway).
      */
     studios?: Studio[];
+    // ── Wider catalog fields (added so an AniList-only title renders a full row
+    // with no MAL record behind it). All optional and normalized to MAL's
+    // vocabulary at crawl time (see anilistSync.ts): `mediaType` lowercase like
+    // MAL's; `airingStatus` = finished_airing|currently_airing|not_yet_aired;
+    // `startSeason.season` lowercase; `startDate` = "YYYY-MM-DD". ──
+    coverImage?: { medium: string; large: string };
+    synopsis?: string;
+    mediaType?: string;
+    airingStatus?: string;
+    numEpisodes?: number;
+    startDate?: string;
+    startSeason?: { year: number; season: string };
+    /** AniList `popularity` is a member count (not MAL's rank), so it maps onto `num_list_users`. */
+    numListUsers?: number;
   };
   fetched_at: string; // ISO timestamp of last successful fetch
 }

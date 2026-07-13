@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, upsertAnime } from '@/lib/store';
+import { getAllAnime, upsertAnime, resolveByMalId } from '@/lib/store';
 import { getValidMalToken, fetchAnimeById } from '@/lib/mal';
 import { refreshAnilistMetaForIds } from '@/lib/anilistSync';
 import { performSimklSync } from '@/lib/simklSync';
@@ -29,7 +29,10 @@ async function refreshMal(
   if (!fetched) return { ok: false, error: 'MAL returned no anime' };
 
   // Merge over the existing record so any field MAL didn't return survives.
-  const existing = getAllAnime()[String(animeId)];
+  // `animeId` is the outward MAL id; the slice is canonical-keyed. upsertAnime
+  // re-resolves `fetched.id` to the same canonical key on write.
+  const canonicalId = resolveByMalId(animeId);
+  const existing = canonicalId ? getAllAnime()[canonicalId] : undefined;
   upsertAnime([{ ...existing, ...fetched }]);
   return { ok: true };
 }

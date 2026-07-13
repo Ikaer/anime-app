@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, saveAnime } from '@/lib/store';
+import { getAllAnime, saveAnime, resolveByMalId } from '@/lib/store';
 import { updateMalListStatus, MalListStatusUpdate } from '@/lib/malWrite';
 
 type MALStatusUpdate = MalListStatusUpdate;
@@ -25,14 +25,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Episodes watched cannot be negative' });
       }
 
-      // Read current animes to update local state
+      // Read current animes to update local state. `animeId` is the outward MAL
+      // id; the slice is canonical-keyed, so resolve it to the canonical key.
       const animesData = getAllAnime();
-      console.log(`Looking for anime ID ${animeId} in file with ${Object.keys(animesData).length} animes`);
-      console.log('Available anime IDs:', Object.keys(animesData).slice(0, 10)); // Log first 10 IDs
-
-      // Find the anime to update
-      const animeKey = animeId.toString();
-      if (!(animeKey in animesData)) {
+      const animeKey = resolveByMalId(animeId);
+      if (!animeKey || !(animeKey in animesData)) {
         console.log(`Anime ${animeId} not found in JSON file`);
         return res.status(404).json({ error: 'Anime not found' });
       }

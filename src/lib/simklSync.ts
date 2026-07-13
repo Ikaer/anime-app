@@ -93,10 +93,10 @@ async function reconcileDeletions(token: string): Promise<number> {
   const liveSimklIds = new Set(
     (raw.anime ?? []).map(i => i.show?.ids?.simkl).filter((n): n is number => typeof n === 'number')
   );
-  const local = getAllSimklEntries();
-  const toRemove: number[] = [];
+  const local = getAllSimklEntries(); // canonical-keyed
+  const toRemove: string[] = [];
   for (const key of Object.keys(local)) {
-    if (!liveSimklIds.has(local[key].simkl_id)) toRemove.push(local[key].mal_id);
+    if (!liveSimklIds.has(local[key].simkl_id)) toRemove.push(key);
   }
   if (toRemove.length) removeSimklEntries(toRemove);
   return toRemove.length;

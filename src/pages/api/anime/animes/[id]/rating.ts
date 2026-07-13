@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, saveAnime, getAllSimklEntries, upsertSimklEntries } from '@/lib/store';
+import { getAllAnime, saveAnime, getAllSimklEntries, upsertSimklEntries, resolveByMalId } from '@/lib/store';
 import { updateMalListStatus } from '@/lib/malWrite';
 import { pushSimklRating } from '@/lib/simklWrite';
 
@@ -34,9 +34,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // --- Local writes (authority) ---
+    // `animeId` is the outward MAL id; slices are canonical-keyed.
+    const canonicalId = resolveByMalId(animeId);
     const malData = getAllAnime();
-    const anime = malData[String(animeId)];
-    if (!anime) return res.status(404).json({ error: 'Anime not found' });
+    const anime = canonicalId ? malData[canonicalId] : undefined;
+    if (!anime || !canonicalId) return res.status(404).json({ error: 'Anime not found' });
 
     if (!anime.my_list_status) {
       anime.my_list_status = { status: '', score: 0, num_episodes_watched: 0, is_rewatching: false, updated_at: '' };
@@ -49,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // SIMKL-first, so without this the drag wouldn't show through for a title
     // that already has a SIMKL entry.
     const simklEntries = getAllSimklEntries();
-    const simklEntry = simklEntries[String(animeId)];
+    const simklEntry = simklEntries[canonicalId];
     if (simklEntry) {
       simklEntry.score = score > 0 ? score : null;
       upsertSimklEntries([simklEntry]);

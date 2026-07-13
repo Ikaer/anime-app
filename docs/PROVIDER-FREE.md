@@ -10,6 +10,13 @@
 
 Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 
+> **Execution note (2026-07-13):** the remaining capstone — full retire of
+> `extends MALAnime`, canonical id as the *outward* id, and re-keying the store
+> off the MAL id — is now being landed as a coordinated cutover. The phased,
+> checkpointed plan lives in **[PROVIDER-FREE-CUTOVER.md](PROVIDER-FREE-CUTOVER.md)**.
+> The "deferred to a later sub-project" notes in Phases 2–3 below are what that
+> cutover is now executing, not a future maybe.
+
 ---
 
 ## North star

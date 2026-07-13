@@ -50,7 +50,8 @@ export function removeHiddenAnimeId(animeId: number): void {
 }
 
 // ============================================================================
-// The catalog itself (still shaped like a MAL response, still keyed by MAL id)
+// The catalog itself — a raw MAL slice, keyed by canonical id (resolved from
+// each record's MAL id at write time; see resolveCanonicalIds).
 // ============================================================================
 
 export function getAllAnime(): Record<string, MALAnime> {
@@ -63,17 +64,20 @@ export function saveAnime(animeData: Record<string, MALAnime>): void {
 }
 
 export function upsertAnime(newAnime: MALAnime[]): void {
+  if (newAnime.length === 0) return;
   const existingAnime = getAllAnime();
+  const ids = resolveCanonicalIds(newAnime.map(a => ({ mal: a.id }))).ids;
 
-  newAnime.forEach(anime => {
-    existingAnime[anime.id.toString()] = anime;
+  newAnime.forEach((anime, i) => {
+    existingAnime[ids[i]] = anime;
   });
 
   saveAnime(existingAnime);
 }
 
 // ============================================================================
-// SIMKL personal-entry slice (keyed by MAL id, as string)
+// SIMKL personal-entry slice, keyed by canonical id (resolved from each entry's
+// SIMKL `ids` crosswalk — mal / simkl — at write time).
 // ============================================================================
 
 export function getAllSimklEntries(): Record<string, SimklPersonalEntry> {
@@ -81,20 +85,25 @@ export function getAllSimklEntries(): Record<string, SimklPersonalEntry> {
 }
 
 export function upsertSimklEntries(entries: SimklPersonalEntry[]): void {
+  if (entries.length === 0) return;
   const existing = getAllSimklEntries();
-  entries.forEach(entry => {
-    existing[entry.mal_id.toString()] = entry;
+  const ids = resolveCanonicalIds(
+    entries.map(e => ({ ...(e.ids || {}), mal: e.mal_id, simkl: e.simkl_id }))
+  ).ids;
+  entries.forEach((entry, i) => {
+    existing[ids[i]] = entry;
   });
   writeJsonFile(ANIME_SIMKL_FILE, existing);
   cachedAnime = null;
 }
 
-export function removeSimklEntries(malIds: number[]): void {
+/** Delete SIMKL entries by canonical id (the file's key). */
+export function removeSimklEntries(canonicalIds: string[]): void {
   const existing = getAllSimklEntries();
   let changed = false;
-  malIds.forEach(id => {
-    if (existing[id.toString()]) {
-      delete existing[id.toString()];
+  canonicalIds.forEach(id => {
+    if (existing[id]) {
+      delete existing[id];
       changed = true;
     }
   });
@@ -105,7 +114,8 @@ export function removeSimklEntries(malIds: number[]): void {
 }
 
 // ============================================================================
-// AniList catalog-metadata slice (keyed by MAL id, as string)
+// AniList catalog-metadata slice, keyed by canonical id (resolved from each
+// entry's { mal, anilist } crosswalk at write time).
 // ============================================================================
 
 export function getAllAnilistMeta(): Record<string, AniListMetaEntry> {
@@ -117,13 +127,17 @@ export function getAnilistMetaCount(): number {
 }
 
 export function upsertAnilistMeta(entries: AniListMetaEntry[]): void {
+  if (entries.length === 0) return;
   const existing = getAllAnilistMeta();
-  entries.forEach(entry => {
+  const ids = resolveCanonicalIds(
+    entries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id }))
+  ).ids;
+  entries.forEach((entry, i) => {
     // Merge onto any existing entry rather than overwrite: `entry` here never
     // carries `catalog` (only the tags/staff/banner sync writes through this
     // function), so a plain overwrite would silently erase a `catalog` block
     // the AniList catalog crawler (Phase 3) already wrote for this title.
-    existing[entry.mal_id.toString()] = { ...existing[entry.mal_id.toString()], ...entry };
+    existing[ids[i]] = { ...existing[ids[i]], ...entry };
   });
   writeJsonFile(ANIME_ANILIST_META_FILE, existing);
   cachedAnime = null;
@@ -140,10 +154,14 @@ export function upsertAnilistMeta(entries: AniListMetaEntry[]): void {
 export function upsertAnilistCatalogFields(
   entries: Array<{ mal_id: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }>
 ): void {
+  if (entries.length === 0) return;
   const existing = getAllAnilistMeta();
   const now = new Date().toISOString();
-  entries.forEach(({ mal_id, anilist_id, catalog }) => {
-    const key = mal_id.toString();
+  const ids = resolveCanonicalIds(
+    entries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id }))
+  ).ids;
+  entries.forEach(({ mal_id, anilist_id, catalog }, i) => {
+    const key = ids[i];
     const current = existing[key];
     existing[key] = current
       ? { ...current, catalog }
@@ -170,24 +188,35 @@ export function getAnilistPersonalCount(): number {
 }
 
 /**
- * Replace the entire AniList personal-list store with a fresh MAL-id-keyed map.
- * The caller (anilistPersonalSync) builds the map so the stored entry stays the
- * locked 4-field `AniListPersonalEntry` shape (no `mal_id` bolted on). Invalidates
- * the merged-record cache like every other write here.
+ * Replace the entire AniList personal-list store. The caller (anilistPersonalSync)
+ * hands a MAL-id-keyed map (the entry stays the locked 4-field
+ * `AniListPersonalEntry` shape, no `mal_id` bolted on); this re-keys it to
+ * canonical id at write time via the resolver (using each entry's `{ mal, anilist }`
+ * crosswalk), so the file on disk is canonical-keyed like every other slice.
+ * Invalidates the merged-record cache like every other write here.
  */
 export function replaceAnilistPersonalEntries(entriesByMalId: Record<string, AniListPersonalEntry>): void {
-  writeJsonFile(ANIME_ANILIST_PERSONAL_FILE, entriesByMalId);
+  const pairs = Object.entries(entriesByMalId);
+  const ids = resolveCanonicalIds(
+    pairs.map(([malId, entry]) => ({ mal: Number(malId), anilist: entry.anilist_id }))
+  ).ids;
+  const byCanonical: Record<string, AniListPersonalEntry> = {};
+  pairs.forEach(([, entry], i) => {
+    byCanonical[ids[i]] = entry;
+  });
+  writeJsonFile(ANIME_ANILIST_PERSONAL_FILE, byCanonical);
   cachedAnime = null;
 }
 
 // ============================================================================
 // Anchor registry: canonicalId -> SourceIds crosswalk (docs/PROVIDER-FREE.md
-// Phase 1). Additive and self-healing: every call to getAnimeForDisplay() /
-// getAnimeByIdForDisplay() mints a canonical id for any MAL id not yet
-// anchored and refreshes its crosswalk, so the migration script (which does
-// the same thing in bulk, up front, with a collision report) is a convenience,
-// not a prerequisite. `anime.id` stays the MAL id everywhere outward (URLs,
-// API routes) — the registry is not yet load-bearing.
+// Phase 1, docs/PROVIDER-FREE-CUTOVER.md Phase B). The identity spine: every
+// slice file is keyed by the canonical id resolved here. Every write path
+// resolves-before-mint (resolveCanonicalIds), so a sync can never recreate a
+// mal-id-keyed entry, and durable user data keyed by canonical id can't
+// reattach to the wrong title on a rebuild. `anime.id` stays the MAL id
+// everywhere OUTWARD (URLs, API route params, hidden/feedback keys) until the
+// Phase D outward-id flip; only the at-rest slice keys are canonical.
 // ============================================================================
 
 const ANIME_REGISTRY_FILE = dataFile('animes_registry.json');
@@ -228,100 +257,108 @@ function buildAnilistIndex(registry: Record<string, SourceIds>): Map<number, str
   return index;
 }
 
-/**
- * Mint-or-confirm canonical ids for AniList ids the registry doesn't already
- * anchor by ANY provider — i.e. genuinely AniList-only titles with no MAL id
- * (docs/PROVIDER-FREE.md Phase 3: "AniList can seed the registry independently
- * of MAL"). Titles the AniList catalog crawler finds that DO have a MAL id are
- * NOT this function's job — they flow through the existing MAL-keyed
- * `reconcileRegistry` path via `upsertAnilistCatalogFields` below, same as the
- * tags/staff sync.
- *
- * Collision-safe by construction: an id already anchored (by `anilist` or any
- * other provider key) is left alone, never re-minted. Returns which ids were
- * newly minted vs already present, for the caller to log/report — this module
- * doesn't log (see file header: local-record data layer, no I/O side effects
- * beyond the JSON files).
- */
-export function seedAnilistOnlyCanonicalIds(anilistIds: number[]): { minted: number; alreadyAnchored: number } {
-  const registry = getRegistry();
-  const anilistIndex = buildAnilistIndex(registry);
+/** Same as `buildMalIndex`, keyed by the `simkl` crosswalk field instead. */
+function buildSimklIndex(registry: Record<string, SourceIds>): Map<number, string> {
+  const index = new Map<number, string>();
+  for (const [canonicalId, ids] of Object.entries(registry)) {
+    const simkl = typeof ids.simkl === 'string' ? parseInt(ids.simkl, 10) : ids.simkl;
+    if (typeof simkl === 'number' && !Number.isNaN(simkl) && !index.has(simkl)) {
+      index.set(simkl, canonicalId);
+    }
+  }
+  return index;
+}
+
+/** Highest `a_<n>` counter currently minted, so a fresh mint never collides. */
+function maxCounter(registry: Record<string, SourceIds>): number {
   let counter = 0;
   for (const id of Object.keys(registry)) {
     const m = /^a_(\d+)$/.exec(id);
     if (m) counter = Math.max(counter, parseInt(m[1], 10));
   }
+  return counter;
+}
 
-  let minted = 0;
-  let alreadyAnchored = 0;
-  let changed = false;
-  for (const anilistId of anilistIds) {
-    if (anilistIndex.has(anilistId)) {
-      alreadyAnchored++;
-      continue;
-    }
-    counter += 1;
-    const canonicalId = `a_${counter}`;
-    registry[canonicalId] = { anilist: anilistId };
-    anilistIndex.set(anilistId, canonicalId);
-    minted++;
-    changed = true;
+/** Coerce a crosswalk id value (which may be a string from SIMKL) to a number, or undefined. */
+function toNum(v: number | string | undefined): number | undefined {
+  if (typeof v === 'number') return Number.isNaN(v) ? undefined : v;
+  if (typeof v === 'string') {
+    const n = parseInt(v, 10);
+    return Number.isNaN(n) ? undefined : n;
   }
-
-  if (changed) saveRegistry(registry);
-  return { minted, alreadyAnchored };
+  return undefined;
 }
 
 /**
- * Mints-or-updates canonical ids for a batch of MAL ids in a single read/write
- * pass, so `getAnimeForDisplay()` doesn't pay an O(n) registry scan per anime.
- * Returns the resulting MAL id -> canonical id map.
+ * The identity resolver (docs/PROVIDER-FREE-CUTOVER.md — the Phase A invariant).
+ * Mint-or-resolve a canonical id for a batch of provider-id crosswalks:
  *
- * Deliberately does NOT scan for provider-id collisions (two canonical ids
- * claiming the same `anilist`/`simkl` id): the doc treats duplicates as a
- * normal, permanent condition (MAL splits that AniList merges), so re-scanning
- * and re-warning on every ~10-min cache miss / detail-page load would just be
- * forever log noise for something that isn't new. Collision detect-and-report
- * runs once, explicitly, in `scripts/migrate-registry.js`.
+ *   1. look up the registry by mal → anilist → simkl (first hit wins)
+ *   2. found   → merge any new provider ids into that entry's crosswalk
+ *   3. missing → MINT a new canonical id, seed its crosswalk
+ *
+ * Resolve-before-mint is mandatory: a title the registry already anchors under
+ * ANY provider id is never re-minted, so durable user data keyed by canonical id
+ * (feedback/hidden) can't silently reattach to the wrong title on a rebuild.
+ * Returns the resolved canonical ids parallel to the input, plus mint/resolve
+ * counts for the caller to log. One registry read + at most one write.
  */
-function reconcileRegistry(entries: Array<{ malId: number; crosswalk: SourceIds }>): Map<number, string> {
+export function resolveCanonicalIds(
+  crosswalks: SourceIds[]
+): { ids: string[]; minted: number; resolved: number } {
   const registry = getRegistry();
   const malIndex = buildMalIndex(registry);
+  const anilistIndex = buildAnilistIndex(registry);
+  const simklIndex = buildSimklIndex(registry);
+  let counter = maxCounter(registry);
   let changed = false;
-  let counter = 0;
-  for (const id of Object.keys(registry)) {
-    const m = /^a_(\d+)$/.exec(id);
-    if (m) counter = Math.max(counter, parseInt(m[1], 10));
-  }
+  let minted = 0;
+  let resolved = 0;
+  const ids: string[] = [];
 
-  for (const { malId, crosswalk } of entries) {
-    let canonicalId = malIndex.get(malId);
+  for (const crosswalk of crosswalks) {
+    const malId = toNum(crosswalk.mal);
+    const anilistId = toNum(crosswalk.anilist);
+    const simklId = toNum(crosswalk.simkl);
+
+    let canonicalId =
+      (malId !== undefined ? malIndex.get(malId) : undefined) ??
+      (anilistId !== undefined ? anilistIndex.get(anilistId) : undefined) ??
+      (simklId !== undefined ? simklIndex.get(simklId) : undefined);
+
     if (!canonicalId) {
       counter += 1;
       canonicalId = `a_${counter}`;
       registry[canonicalId] = {};
-      malIndex.set(malId, canonicalId);
+      minted++;
       changed = true;
+    } else {
+      resolved++;
     }
+
     const entry = registry[canonicalId];
-    const merged: SourceIds = { ...crosswalk, mal: malId };
-    for (const [key, value] of Object.entries(merged)) {
+    for (const [key, value] of Object.entries(crosswalk)) {
       if (value === undefined || entry[key] === value) continue;
       entry[key] = value;
       changed = true;
     }
+    // Keep the in-memory indices consistent so a later crosswalk in the same
+    // batch resolves against ids just minted/merged in this pass.
+    if (malId !== undefined && !malIndex.has(malId)) malIndex.set(malId, canonicalId);
+    if (anilistId !== undefined && !anilistIndex.has(anilistId)) anilistIndex.set(anilistId, canonicalId);
+    if (simklId !== undefined && !simklIndex.has(simklId)) simklIndex.set(simklId, canonicalId);
+    ids.push(canonicalId);
   }
 
   if (changed) saveRegistry(registry);
-  return malIndex;
+  return { ids, minted, resolved };
 }
 
-/** Mints-or-updates a single canonical id's crosswalk. Thin wrapper over the batch path. */
-export function upsertCrosswalk(malId: number, crosswalk: SourceIds): SourceIds {
-  const malIndex = reconcileRegistry([{ malId, crosswalk }]);
-  const registry = getRegistry();
-  return registry[malIndex.get(malId)!];
+/** Single-crosswalk convenience over `resolveCanonicalIds`. */
+export function resolveCanonicalId(crosswalk: SourceIds): string {
+  return resolveCanonicalIds([crosswalk]).ids[0];
 }
+
 
 // ============================================================================
 // The merged record
@@ -355,34 +392,29 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
     return cachedAnime;
   }
+  // Every slice is now keyed by canonical id (the migration + resolve-at-write
+  // invariant guarantee it), so the join is a direct canonical-key lookup — no
+  // per-anime registry scan. The MAL slice still drives the row set (Phase B);
+  // AniList-only rows join in once the hydration engine lands (Phase C).
   const malAnime = getAllAnime();
-  const hiddenIds = getHiddenAnimeIds();
-  const simklByMalId = getAllSimklEntries();
-  const anilistMetaByMalId = getAllAnilistMeta();
-  const anilistPersonalByMalId = getAllAnilistPersonalEntries();
-  const animeList = Object.values(malAnime);
-
-  const malIndex = reconcileRegistry(
-    animeList.map(anime => ({
-      malId: anime.id,
-      crosswalk: assembleCrosswalk(anime.id, simklByMalId[anime.id.toString()], anilistMetaByMalId[anime.id.toString()]) || {},
-    }))
-  );
+  const hiddenIds = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
+  const simklByCanonical = getAllSimklEntries();
+  const anilistMetaByCanonical = getAllAnilistMeta();
+  const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
   const registry = getRegistry();
 
-  cachedAnime = animeList.map(anime => {
-    const simkl = simklByMalId[anime.id.toString()];
-    const anilistMeta = anilistMetaByMalId[anime.id.toString()];
-    const anilistPersonal = anilistPersonalByMalId[anime.id.toString()];
-    const canonicalId = malIndex.get(anime.id);
+  cachedAnime = Object.entries(malAnime).map(([canonicalId, anime]) => {
+    const simkl = simklByCanonical[canonicalId];
+    const anilistMeta = anilistMetaByCanonical[canonicalId];
+    const anilistPersonal = anilistPersonalByCanonical[canonicalId];
     const merged: MergedAnime = {
       ...anime,
-      hidden: hiddenIds.includes(anime.id),
+      hidden: hiddenIds.has(anime.id),
       simkl,
       discrepancy: computeDiscrepancy(anime, simkl),
       anilistMeta,
       anilistPersonal,
-      crosswalk: canonicalId ? registry[canonicalId] : assembleCrosswalk(anime.id, simkl, anilistMeta),
+      crosswalk: registry[canonicalId] ?? assembleCrosswalk(anime.id, simkl, anilistMeta),
       canonicalId,
     };
     // Attach the Phase 2 provider-neutral projection (docs/PROVIDER-FREE.md) so
@@ -404,26 +436,28 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
  * do NOT share module-level state, so an API-route write invalidating
  * `cachedAnime` never reaches the page's copy — it would stay stale until the
  * 10-min TTL expired. Reading fresh here makes the detail page immune to that.
+ *
+ * `id` is the outward id — still the MAL id in Phase B — so it's resolved to
+ * the canonical slice key via the registry before the by-key lookups.
  */
 export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined {
-  const mal = getAllAnime()[id.toString()];
+  const canonicalId = resolveByMalId(id);
+  if (!canonicalId) return undefined;
+  const mal = getAllAnime()[canonicalId];
   if (!mal) return undefined;
-  const hidden = getHiddenAnimeIds();
-  const simkl = getAllSimklEntries()[id.toString()];
-  const anilistMeta = getAllAnilistMeta()[id.toString()];
-  const anilistPersonal = getAllAnilistPersonalEntries()[id.toString()];
-  const crosswalk = assembleCrosswalk(mal.id, simkl, anilistMeta) || {};
-  const malIndex = reconcileRegistry([{ malId: mal.id, crosswalk }]);
-  const canonicalId = malIndex.get(mal.id);
-  const registry = canonicalId ? getRegistry() : undefined;
+  const hidden = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
+  const simkl = getAllSimklEntries()[canonicalId];
+  const anilistMeta = getAllAnilistMeta()[canonicalId];
+  const anilistPersonal = getAllAnilistPersonalEntries()[canonicalId];
+  const registry = getRegistry();
   const merged: MergedAnime = {
     ...mal,
-    hidden: hidden.includes(mal.id),
+    hidden: hidden.has(mal.id),
     simkl,
     discrepancy: computeDiscrepancy(mal, simkl),
     anilistMeta,
     anilistPersonal,
-    crosswalk: canonicalId && registry ? registry[canonicalId] : crosswalk,
+    crosswalk: registry[canonicalId] ?? assembleCrosswalk(mal.id, simkl, anilistMeta),
     canonicalId,
   };
   const { catalog, personal, sources } = toAnimeRecord(merged, canonicalId);
@@ -523,10 +557,13 @@ function updatePersonalStatus(
   newListStatus: MALListStatus
 ): PersonalStatusUpdateResult {
   const existingAnime = getAllAnime();
-  const animeKey = animeId.toString();
+  // `animeId` is a MAL id; the slice is canonical-keyed. Resolve read-only —
+  // an un-anchored MAL id means the title isn't in the local record, which is
+  // exactly the "don't insert" case below.
+  const animeKey = resolveByMalId(animeId);
 
   // Anime doesn't exist locally - don't insert it
-  if (!existingAnime[animeKey]) {
+  if (!animeKey || !existingAnime[animeKey]) {
     return { updated: false, changes: [] };
   }
 
