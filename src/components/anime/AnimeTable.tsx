@@ -165,17 +165,17 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
 
   const getDisplayStatus = (anime: AnimeForDisplay) => {
     const updates = pendingUpdates.get(anime.id);
-    return updates?.status ?? anime.my_list_status?.status ?? '';
+    return updates?.status ?? anime.sources.mal?.my_list_status?.status ?? '';
   };
 
   const getDisplayScore = (anime: AnimeForDisplay) => {
     const updates = pendingUpdates.get(anime.id);
-    return updates?.score ?? anime.my_list_status?.score ?? 0;
+    return updates?.score ?? anime.sources.mal?.my_list_status?.score ?? 0;
   };
 
   const getDisplayEpisodes = (anime: AnimeForDisplay) => {
     const updates = pendingUpdates.get(anime.id);
-    return updates?.num_episodes_watched ?? anime.my_list_status?.num_episodes_watched ?? 0;
+    return updates?.num_episodes_watched ?? anime.sources.mal?.my_list_status?.num_episodes_watched ?? 0;
   };
 
   const getStatusClass = (status: string) => {

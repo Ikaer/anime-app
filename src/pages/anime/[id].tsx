@@ -72,7 +72,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const primaryTitle = getPrimaryTitle(anime);
   const secondaryTitle = getSecondaryTitle(anime);
 
-  const mal = anime.my_list_status;
+  const mal = anime.sources.mal?.my_list_status;
   const simkl = anime.simkl;
   const disc = anime.discrepancy;
   const tags = anime.anilistMeta?.tags || [];
@@ -305,8 +305,8 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
             <Field label={t('detail.rating')} value={anime.catalog.rating || '—'} />
             <Field label={t('detail.start')} value={fmtDate(anime.catalog.startDate)} />
             <Field label={t('detail.end')} value={fmtDate(anime.catalog.endDate)} />
-            <Field label={t('detail.addedMal')} value={fmtDate(anime.created_at)} />
-            <Field label={t('detail.updatedMal')} value={fmtDate(anime.updated_at)} />
+            <Field label={t('detail.addedMal')} value={fmtDate(anime.sources.mal?.created_at)} />
+            <Field label={t('detail.updatedMal')} value={fmtDate(anime.sources.mal?.updated_at)} />
           </div>
         </section>
 

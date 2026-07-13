@@ -370,12 +370,13 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 // INDEPENDENTLY of MAL, verified unauthenticated in Phase 0 (see
 // docs/PROVIDER-FREE.md). Titles it finds WITH a MAL id enrich the existing
 // per-MAL-id AniList meta entry (`catalog` block, merged not overwritten —
-// see `upsertAnilistCatalogFields`); titles it finds WITHOUT one (AniList-only)
-// only get a bare canonical id minted in the registry — there is nowhere yet
-// to put their catalog data, since `AnimeForDisplay`/`getAnimeForDisplay()`
-// are still exclusively keyed by MAL id. Surfacing AniList-only titles is the
-// outward-id join switch (Phase 3's own later sub-project), not this crawler's
-// job — see docs/PROVIDER-FREE.md's "Standalone worth" note on the join switch.
+// see `upsertAnilistCatalogFields`); titles it finds WITHOUT one (AniList-only,
+// no `idMal`) still get their `catalog` block persisted, keyed off the
+// `anilist` crosswalk alone. `getAnimeForDisplay` (docs/PROVIDER-FREE-CUTOVER.md
+// Phase C) unions in every canonical id anchored this way, so an AniList-only
+// title with an `idMal` renders a full row via `catalog`/provenance hydration;
+// a title with genuinely no `idMal` anywhere stays out of scope (see that
+// doc's "Deferred" note) and is skipped at the row-set level, not here.
 
 const CATALOG_QUERY = `
 query ($season: MediaSeason, $seasonYear: Int, $page: Int) {

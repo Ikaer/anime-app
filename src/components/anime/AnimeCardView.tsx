@@ -99,7 +99,7 @@ export default function AnimeCardView({
         window.open(justWatchUrl, '_blank');
     };
 
-    const getDisplayStatus = (anime: AnimeForDisplay) => anime.my_list_status?.status ?? '';
+    const getDisplayStatus = (anime: AnimeForDisplay) => anime.sources.mal?.my_list_status?.status ?? '';
 
     const getScoreClass = (score?: number) => {
         if (score === undefined || score === 0) return styles.scoreNa;

@@ -170,8 +170,8 @@ export default function AnimePage() {
       });
       if (response.ok) {
         setAnimes(prev => prev.map(a =>
-          a.id === animeId
-            ? { ...a, my_list_status: { ...a.my_list_status, ...updates } }
+          a.id === animeId && a.sources.mal
+            ? { ...a, sources: { ...a.sources, mal: { ...a.sources.mal, my_list_status: { ...a.sources.mal.my_list_status, ...updates } } } }
             : a
         ));
       } else {

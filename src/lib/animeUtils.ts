@@ -1,6 +1,7 @@
 import type {
-  AnimeForDisplay, AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource, MergedAnime,
+  AnimeForDisplay, AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
   ProvenanceSource, SeasonName, SeasonInfo, MALAnime, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
+  SourceIds, Discrepancy,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
@@ -8,18 +9,18 @@ import type { TFunction, TranslationKey } from '@/lib/i18n';
 // Display titles (English-first)
 // ============================================================================
 
-type TitleFields = Pick<AnimeForDisplay, 'title' | 'alternative_titles'>;
+type TitleFields = Pick<AnimeForDisplay, 'catalog'>;
 type CatalogTitleFields = { title: string; alternativeTitles?: { en: string } };
 
-/** Primary display title: MAL's English title when present, else the original (romaji) title. */
+/** Primary display title: the English title when present, else the original (romaji) title. */
 export function getPrimaryTitle(a: TitleFields): string {
-  return a.alternative_titles?.en || a.title;
+  return getCatalogPrimaryTitle(a.catalog);
 }
 
 /** Secondary title: the original (romaji) title, returned only when it differs from the primary. */
 export function getSecondaryTitle(a: TitleFields): string | undefined {
   const primary = getPrimaryTitle(a);
-  return a.title && a.title !== primary ? a.title : undefined;
+  return a.catalog.title && a.catalog.title !== primary ? a.catalog.title : undefined;
 }
 
 /** `getPrimaryTitle` for `AnimeRecord.catalog` (camelCase field names). */
@@ -44,9 +45,9 @@ export interface NarrowingFilters {
 
 /** Release year, preferring the season year, falling back to the start date. */
 function animeYear(a: AnimeForDisplay): number | undefined {
-  if (a.start_season?.year) return a.start_season.year;
-  if (a.start_date && a.start_date.length >= 4) {
-    const y = parseInt(a.start_date.slice(0, 4), 10);
+  if (a.catalog.startSeason?.year) return a.catalog.startSeason.year;
+  if (a.catalog.startDate && a.catalog.startDate.length >= 4) {
+    const y = parseInt(a.catalog.startDate.slice(0, 4), 10);
     return Number.isFinite(y) ? y : undefined;
   }
   return undefined;
@@ -67,23 +68,23 @@ export function applyNarrowingFilters<T extends AnimeForDisplay>(
 
   if (f.mediaTypes && f.mediaTypes.length > 0) {
     const wanted = f.mediaTypes.map(t => t.toLowerCase());
-    out = out.filter(a => wanted.includes((a.media_type || '').toLowerCase()));
+    out = out.filter(a => wanted.includes((a.catalog.mediaType || '').toLowerCase()));
   }
 
   if (f.search && f.search.trim()) {
     const term = f.search.toLowerCase();
     out = out.filter(a =>
-      (a.title || '').toLowerCase().includes(term) ||
-      (a.alternative_titles?.en || '').toLowerCase().includes(term)
+      (a.catalog.title || '').toLowerCase().includes(term) ||
+      (a.catalog.alternativeTitles?.en || '').toLowerCase().includes(term)
     );
   }
 
   if (f.minScore != null && Number.isFinite(f.minScore)) {
-    out = out.filter(a => !!a.mean && a.mean >= f.minScore!);
+    out = out.filter(a => !!a.catalog.mean && a.catalog.mean >= f.minScore!);
   }
 
   if (f.maxScore != null && Number.isFinite(f.maxScore)) {
-    out = out.filter(a => !!a.mean && a.mean <= f.maxScore!);
+    out = out.filter(a => !!a.catalog.mean && a.catalog.mean <= f.maxScore!);
   }
 
   if (f.minYear != null && Number.isFinite(f.minYear)) {
@@ -97,7 +98,7 @@ export function applyNarrowingFilters<T extends AnimeForDisplay>(
   if (f.genres && f.genres.length > 0) {
     const wanted = f.genres;
     out = out.filter(a => {
-      const names = new Set((a.genres || []).map(g => g.name));
+      const names = new Set((a.catalog.genres || []).map(g => g.name));
       return wanted.every(g => names.has(g));
     });
   }
@@ -182,35 +183,23 @@ export function getSeasonInfos(): SeasonInfos {
 // (mean, genres, studios…) stay MAL — these helpers are personal-only.
 
 /**
- * Effective personal watch status (SIMKL-first, then MAL, then AniList). All
- * three are normalized to MAL vocabulary at write/import time, so callers get
- * one vocabulary regardless of source.
+ * Effective personal watch status (SIMKL-first, then MAL, then AniList). Thin
+ * read of the hydration engine's `personal` projection (docs/PROVIDER-FREE-CUTOVER.md
+ * Phase C) — `toAnimeRecord` already applies this exact precedence via
+ * `DEFAULT_PERSONAL_PRECEDENCE`, so there is one implementation, not two.
  */
-export function getEffectiveStatus(anime: MergedAnime): string | undefined {
-  return anime.simkl?.status ?? anime.my_list_status?.status ?? anime.anilistPersonal?.status;
+export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
+  return anime.personal.status;
 }
 
-/**
- * Effective personal score on the shared 1–10 scale (SIMKL-first, then MAL,
- * then AniList). Both `0` and `null` mean "unrated" and collapse to `undefined`,
- * preserving the threshold / `unrated` semantics that keyed off a falsy score.
- */
-export function getEffectiveScore(anime: MergedAnime): number | undefined {
-  const simkl = anime.simkl?.score;
-  if (simkl != null && simkl > 0) return simkl;
-  const mal = anime.my_list_status?.score;
-  if (mal != null && mal > 0) return mal;
-  const anilist = anime.anilistPersonal?.score;
-  return anilist != null && anilist > 0 ? anilist : undefined;
+/** Effective personal score on the shared 1–10 scale. See `getEffectiveStatus`. */
+export function getEffectiveScore(anime: AnimeForDisplay): number | undefined {
+  return anime.personal.score;
 }
 
-/** Effective watched-episode progress (SIMKL-first, then MAL, then AniList). */
-export function getEffectiveProgress(anime: MergedAnime): number | undefined {
-  const simkl = anime.simkl?.num_episodes_watched;
-  if (simkl != null) return simkl;
-  const mal = anime.my_list_status?.num_episodes_watched;
-  if (mal != null) return mal;
-  return anime.anilistPersonal?.progress ?? undefined;
+/** Effective watched-episode progress. See `getEffectiveStatus`. */
+export function getEffectiveProgress(anime: AnimeForDisplay): number | undefined {
+  return anime.personal.progress;
 }
 
 export function formatUserStatus(status?: string) {
@@ -374,41 +363,48 @@ function personalFromAnilist(entry?: AniListPersonalEntry): Partial<AnimePersona
 }
 
 /**
- * Project the merged `AnimeForDisplay` (still MAL-shaped) into the
- * provider-neutral `AnimeRecord` via the generic hydration engine above.
- * `personal` reproduces the exact `getEffective*` precedence (SIMKL > MAL >
- * AniList) so there remains one implementation of "which source wins" for
- * personal state; `sources` keeps every raw slice so nothing is lost in the
- * merge. `id` is the synthetic canonical id from the Phase 1 registry, falling
- * back to a MAL-anchored placeholder for any (should-be-rare) record the
- * registry hasn't reconciled yet — never used outward, see `AnimeRecord.id`'s
- * doc comment.
+ * The raw per-provider slices `toAnimeRecord` hydrates from — exactly what
+ * `getAnimeForDisplay` gathers per canonical id before any merging happens.
+ * `mal` is optional: a canonical id anchored only by AniList (no MAL slice)
+ * still produces a full record, per the Phase C checkpoint.
+ */
+export interface RawAnimeSlices {
+  mal?: MALAnime;
+  simkl?: SimklPersonalEntry;
+  anilistMeta?: AniListMetaEntry;
+  anilistPersonal?: AniListPersonalEntry;
+  hidden?: boolean;
+  discrepancy?: Discrepancy | null;
+  crosswalk?: SourceIds;
+}
+
+/**
+ * Build the provider-neutral `AnimeRecord` from a canonical id's raw slices
+ * via the generic hydration engine above. `personal` reproduces the exact
+ * `getEffective*` precedence (SIMKL > MAL > AniList) so there remains one
+ * implementation of "which source wins" for personal state; `sources` keeps
+ * every raw slice verbatim so nothing is lost in the merge.
  */
 export function toAnimeRecord(
-  anime: MergedAnime,
-  canonicalId?: string,
+  slices: RawAnimeSlices,
+  canonicalId: string,
   catalogPrecedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
   personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE
 ): AnimeRecord {
-  // `anime.id`/`title`/`genres`/`pictures`/`related_anime`/`studios` are only
-  // present when a MAL slice actually exists for this record (Phase C widens
-  // the row set beyond MAL-anchored titles — see `getAnimeForDisplay`), so
-  // treat MAL fields as optional here rather than relying on `MergedAnime`'s
-  // `extends MALAnime` non-optionality.
-  const mal = anime.id !== undefined ? (anime as MALAnime) : undefined;
+  const { mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk } = slices;
 
   const { merged: catalogMerged, provenance: catalogProvenance } = mergeWithProvenance<AnimeCatalog>(
     catalogPrecedence,
-    { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anime.anilistMeta), simkl: catalogFromSimkl() }
+    { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anilistMeta), simkl: catalogFromSimkl() }
   );
   const { merged: personalMerged, provenance: personalProvenance } = mergeWithProvenance<AnimePersonal>(
     personalPrecedence,
-    { mal: personalFromMal(mal), simkl: personalFromSimkl(anime.simkl), anilist: personalFromAnilist(anime.anilistPersonal) }
+    { mal: personalFromMal(mal), simkl: personalFromSimkl(simkl), anilist: personalFromAnilist(anilistPersonal) }
   );
 
   return {
-    id: canonicalId ?? `a_mal_${anime.id}`,
-    crosswalk: anime.crosswalk ?? { mal: anime.id },
+    id: canonicalId,
+    crosswalk: crosswalk ?? (mal ? { mal: mal.id } : {}),
     catalog: {
       // `title`/`genres`/`pictures`/`relatedAnime`/`studios` are non-optional on
       // `AnimeCatalog` — fall back to empty rather than `undefined` when no
@@ -422,22 +418,8 @@ export function toAnimeRecord(
     },
     personal: personalMerged,
     provenance: { catalog: catalogProvenance, personal: personalProvenance },
-    sources: {
-      // Strip the local-record bolt-ons so `sources.mal` is the RAW MAL slice —
-      // needed by reads that deliberately want one source's raw value (see the
-      // type's doc comment), not the merged/hydrated view. `undefined` when no
-      // MAL slice exists for this record (AniList-only title).
-      mal: mal ? (() => {
-        const {
-          hidden, simkl, discrepancy, anilistMeta, anilistPersonal, crosswalk, canonicalId: _canonicalId, ...malOnly
-        } = anime;
-        return malOnly as MALAnime;
-      })() : undefined,
-      simkl: anime.simkl,
-      anilist: anime.anilistMeta,
-      anilistPersonal: anime.anilistPersonal,
-    },
-    hidden: anime.hidden,
-    discrepancy: anime.discrepancy,
+    sources: { mal, simkl, anilist: anilistMeta, anilistPersonal },
+    hidden,
+    discrepancy,
   };
 }

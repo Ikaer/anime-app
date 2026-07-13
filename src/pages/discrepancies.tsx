@@ -95,7 +95,7 @@ export default function DiscrepanciesPage() {
               <tbody>
                 {animes.map(anime => {
                   const d = anime.discrepancy;
-                  const mal = anime.my_list_status;
+                  const mal = anime.sources.mal?.my_list_status;
                   const simkl = anime.simkl;
                   const img = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
                   const sUrl = simklUrl(anime);

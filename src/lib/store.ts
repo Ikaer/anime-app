@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeForDisplay, AnimeRecord, MergedAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeForDisplay, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
@@ -394,10 +394,11 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
     return cachedAnime;
   }
-  // Every slice is now keyed by canonical id (the migration + resolve-at-write
-  // invariant guarantee it), so the join is a direct canonical-key lookup — no
-  // per-anime registry scan. The MAL slice still drives the row set (Phase B);
-  // AniList-only rows join in once the hydration engine lands (Phase C).
+  // Every slice is keyed by canonical id (the migration + resolve-at-write
+  // invariant guarantee it). The row set is the UNION of every slice's keys —
+  // not just the MAL slice — so an AniList-only canonical id (no MAL slice,
+  // seeded by the AniList catalog crawler) still produces a row, with
+  // `sources.mal` left undefined (docs/PROVIDER-FREE-CUTOVER.md Phase C).
   const malAnime = getAllAnime();
   const hiddenIds = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
   const simklByCanonical = getAllSimklEntries();
@@ -405,26 +406,48 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
   const registry = getRegistry();
 
-  cachedAnime = Object.entries(malAnime).map(([canonicalId, anime]) => {
+  const canonicalIds = new Set<string>([
+    ...Object.keys(registry),
+    ...Object.keys(malAnime),
+    ...Object.keys(simklByCanonical),
+    ...Object.keys(anilistMetaByCanonical),
+    ...Object.keys(anilistPersonalByCanonical),
+  ]);
+
+  const rows: AnimeForDisplay[] = [];
+  for (const canonicalId of canonicalIds) {
+    const mal = malAnime[canonicalId];
     const simkl = simklByCanonical[canonicalId];
     const anilistMeta = anilistMetaByCanonical[canonicalId];
     const anilistPersonal = anilistPersonalByCanonical[canonicalId];
-    const merged: MergedAnime = {
-      ...anime,
-      hidden: hiddenIds.has(anime.id),
+    const crosswalk = registry[canonicalId] ?? (mal ? assembleCrosswalk(mal.id, simkl, anilistMeta) : undefined);
+    // Outward id: the raw MAL slice's id, falling back to the registry
+    // crosswalk's `mal` (populated from AniList's `idMal` for a crawled title
+    // with no local MAL slice yet). A canonical id with NO resolvable MAL id
+    // anywhere (true AniList-only, no `idMal`) is out of scope
+    // (docs/PROVIDER-FREE-CUTOVER.md "Deferred") — skip it rather than surface
+    // an id-less row.
+    const malId = mal?.id ?? toNum(crosswalk?.mal);
+    if (malId === undefined) continue;
+    const hidden = hiddenIds.has(malId);
+    const discrepancy = mal ? computeDiscrepancy(mal, simkl) : null;
+    const record = toAnimeRecord({ mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk }, canonicalId);
+    rows.push({
+      id: malId,
+      hidden,
       simkl,
-      discrepancy: computeDiscrepancy(anime, simkl),
+      discrepancy,
       anilistMeta,
       anilistPersonal,
-      crosswalk: registry[canonicalId] ?? assembleCrosswalk(anime.id, simkl, anilistMeta),
+      crosswalk: record.crosswalk,
       canonicalId,
-    };
-    // Attach the Phase 2 provider-neutral projection (docs/PROVIDER-FREE.md) so
-    // consumers can read `.catalog.*` / `.personal.*` / `.sources.*` off the
-    // compat record while the raw MAL fields still exist for un-migrated reads.
-    const { catalog, personal, sources, provenance } = toAnimeRecord(merged, canonicalId);
-    return { ...merged, catalog, personal, sources, provenance };
-  });
+      catalog: record.catalog,
+      personal: record.personal,
+      sources: record.sources,
+      provenance: record.provenance,
+    });
+  }
+  cachedAnime = rows;
   lastCacheTime = now;
   return cachedAnime;
 }
@@ -447,23 +470,29 @@ export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined 
   if (!canonicalId) return undefined;
   const mal = getAllAnime()[canonicalId];
   if (!mal) return undefined;
-  const hidden = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
+  const hiddenIds = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
   const simkl = getAllSimklEntries()[canonicalId];
   const anilistMeta = getAllAnilistMeta()[canonicalId];
   const anilistPersonal = getAllAnilistPersonalEntries()[canonicalId];
   const registry = getRegistry();
-  const merged: MergedAnime = {
-    ...mal,
-    hidden: hidden.has(mal.id),
+  const hidden = hiddenIds.has(mal.id);
+  const discrepancy = computeDiscrepancy(mal, simkl);
+  const crosswalk = registry[canonicalId] ?? assembleCrosswalk(mal.id, simkl, anilistMeta);
+  const record = toAnimeRecord({ mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk }, canonicalId);
+  return {
+    id: mal.id,
+    hidden,
     simkl,
-    discrepancy: computeDiscrepancy(mal, simkl),
+    discrepancy,
     anilistMeta,
     anilistPersonal,
-    crosswalk: registry[canonicalId] ?? assembleCrosswalk(mal.id, simkl, anilistMeta),
+    crosswalk: record.crosswalk,
     canonicalId,
+    catalog: record.catalog,
+    personal: record.personal,
+    sources: record.sources,
+    provenance: record.provenance,
   };
-  const { catalog, personal, sources, provenance } = toAnimeRecord(merged, canonicalId);
-  return { ...merged, catalog, personal, sources, provenance };
 }
 
 // ============================================================================

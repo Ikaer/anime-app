@@ -224,47 +224,39 @@ export interface AniListMetaEntry {
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 
-/**
- * The merged local record BEFORE the Phase 2 provider-neutral projection is
- * attached: raw MAL fields (`extends MALAnime`) plus the side-objects joined at
- * display time. This is exactly what `getAnimeForDisplay` assembles and what
- * `toAnimeRecord` consumes to PRODUCE the `catalog`/`personal`/`sources`
- * projection — so it must NOT itself require those fields (that would be
- * circular). `AnimeForDisplay` below is this plus the attached projection.
- */
-export interface MergedAnime extends MALAnime {
-  hidden?: boolean;
-  simkl?: SimklPersonalEntry;       // joined at display time by MAL id
-  discrepancy?: Discrepancy | null; // computed at display / filter time
-  anilistMeta?: AniListMetaEntry;   // joined at display time by MAL id
-  anilistPersonal?: AniListPersonalEntry; // joined at display time by MAL id (P3b)
-  /**
-   * Unified cross-source id crosswalk, assembled at display time from every
-   * pipe (MAL self-id + SIMKL's ids block + AniList's id). Materially
-   * source-independent identity: the join KEY is still the MAL id today, but
-   * the crosswalk carried here is what a future canonical/internal key would be
-   * promoted from — no re-derivation needed. Non-load-bearing for now.
-   */
-  crosswalk?: SourceIds;
-  /**
-   * The synthetic canonical id (Phase 1 registry) for this record, when one is
-   * anchored. Reachable but NOT the outward id — `.id` stays the MAL id. Lets a
-   * consumer thread the canonical id through without a second registry lookup.
-   */
-  canonicalId?: string;
-}
-
-// Combined data for display.
+// Combined data for display — the provider-neutral compat record
+// (docs/PROVIDER-FREE-CUTOVER.md Phase C). NO `extends MALAnime`: every
+// catalog/personal field is read via `.catalog.*` / `.personal.*` (hydrated
+// across providers by `toAnimeRecord`), never as a raw top-level MAL field.
+// `.sources.mal` is the one place a reader that genuinely wants MAL's raw
+// value (not the merged/effective one) can still reach it — see
+// `AnimeSources`'s doc comment.
 //
-// The Phase 2 provider-neutral projection (`catalog`/`personal`/`sources`) is
-// attached onto every merged record by `getAnimeForDisplay`/
-// `getAnimeByIdForDisplay` (see docs/PROVIDER-FREE.md). These are the SAME
-// blocks `toAnimeRecord` produces, carried on the compat `AnimeForDisplay` so
-// consumers can migrate off the raw MAL fields (`mean`, `genres`,
-// `my_list_status`, …) area by area — reading `.catalog.*` / `.personal.*` /
-// `.sources.*` — while the build stays green. The P2b capstone drops
-// `extends MALAnime` (and these become the only shape) once every reader moved.
-export interface AnimeForDisplay extends MergedAnime {
+// `id` stays the OUTWARD MAL id until the Phase D outward-id flip promotes
+// the canonical id; `canonicalId` carries that canonical id today without
+// disturbing `.id`. Resolved from either the raw MAL slice OR the registry
+// crosswalk, so an AniList-crawled title with a real `idMal` still gets a row
+// even with no local MAL slice (`sources.mal` undefined) — see
+// `getAnimeForDisplay`. A canonical id with NO resolvable MAL id anywhere
+// (true AniList-only, no `idMal`) is explicitly out of scope
+// (docs/PROVIDER-FREE-CUTOVER.md "Deferred") and is not surfaced as a row at
+// all, so `id` stays required here rather than optional.
+// `simkl`/`anilistMeta`/`anilistPersonal`/`crosswalk` are kept as top-level
+// convenience fields (mirrors of `sources.*`/`crosswalk`) since they were
+// never raw MAL fields and dozens of call sites already read them directly.
+//
+// This is the transitional shape docs/PROVIDER-FREE-CUTOVER.md calls out —
+// retired as a distinct interface in favor of a pure `AnimeRecord` alias in
+// Phase E, once the outward id flip (Phase D) makes `id` unambiguous.
+export interface AnimeForDisplay {
+  id: number;
+  hidden?: boolean;
+  simkl?: SimklPersonalEntry;
+  discrepancy?: Discrepancy | null;
+  anilistMeta?: AniListMetaEntry;
+  anilistPersonal?: AniListPersonalEntry;
+  crosswalk?: SourceIds;
+  canonicalId?: string;
   catalog: AnimeCatalog;
   personal: AnimePersonal;
   sources: AnimeSources;

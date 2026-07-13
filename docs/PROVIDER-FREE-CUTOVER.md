@@ -8,7 +8,7 @@
 > MAL id and no MAL shape anywhere outward or at rest**.
 >
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Blocked`
-> Overall: `WIP` (Phase C)
+> Overall: `WIP` (Phase D)
 >
 > **Doc hygiene:** this file stays pristine — the only edits are ticking the
 > phase checkboxes and bumping the status line to track progress. No changelog,
@@ -167,14 +167,14 @@ Make ingest resolve-before-mint; make AniList ingest actually touch the registry
 - **Checkpoint:** app boots on migrated data; main list renders existing MAL
   titles addressed by canonical id.
 
-### Phase C — Hydration engine + one record shape + provenance `Todo`
+### Phase C — Hydration engine + one record shape + provenance `Done`
 
-- [ ] Build the engine (per-source partial extractors + generic precedence merge
+- [x] Build the engine (per-source partial extractors + generic precedence merge
       + provenance) in `animeUtils.ts`.
-- [ ] `getAnimeForDisplay` / by-id build records via the engine from the gathered
+- [x] `getAnimeForDisplay` / by-id build records via the engine from the gathered
       slices — an AniList-only-but-idMal title with no MAL slice produces a full
       catalog, `sources.mal` undefined.
-- [ ] Drop `extends MALAnime`; collapse to one `AnimeRecord`. Migrate all raw
+- [x] Drop `extends MALAnime`; collapse to one `AnimeRecord`. Migrate all raw
       readers (`applyNarrowingFilters`, sort, `getPrimaryTitle`/`animeYear`,
       `computeDiscrepancy` → `sources.mal`, the "MAL status" label → `sources.mal`,
       table/card/detail/tier/discrepancies/calculator) onto
