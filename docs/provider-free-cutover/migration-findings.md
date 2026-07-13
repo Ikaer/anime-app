@@ -79,6 +79,15 @@ files — it treats MAL-id keys as canonical and mis-joins. So the cutover is
 4. Any future `npm run data:copy` from the NAS requires a re-migrate before the
    app reads it (and re-removing the stale `39473` SIMKL entry, per above).
 
+**Applied to production 2026-07-13.** Ran against `\\Syno\root4\AppData\AnimeTracker\data`
+(data backed up, app stopped). Dry-run first halted on the `39473`/`63802`
+collision as expected; removed the stale `39473` SIMKL entry (NAS backup at
+`animes_simkl.json.bak-premigrate`), re-ran clean, then migrated: 25370 mal /
+641 simkl / 15019 anilist_meta re-keyed, **0 minted**, registry 25370 canonical
+ids. Post-migration verify: catalog slices 0 numeric keys (`a_1`, `a_2`…),
+`hidden` (247) + `feedback` (2) still MAL-keyed as intended. New app pushed and
+started — running green on the migrated store.
+
 ## Bugs the copy-run surfaced (all fixed in the script)
 
 1. **Franchise-slug false positives.** Scanning *all* crosswalk keys flagged 64
