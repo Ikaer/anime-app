@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getValidMalToken } from '@/lib/mal';
+import { getMalIdForCanonical, isCanonicalId } from '@/lib/store';
 import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AniListEdgeInput, type RecoEdge } from '@/lib/recommendations';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
 
@@ -48,16 +49,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  const animeId = parseInt(String(req.query.id), 10);
-  if (!Number.isInteger(animeId)) {
+  const canonicalId = typeof req.query.id === 'string' ? req.query.id : '';
+  if (!isCanonicalId(canonicalId)) {
     return res.status(400).json({ error: 'Invalid anime id' });
   }
   const limitRaw = parseInt(String(req.query.limit), 10);
   const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? limitRaw : SIMILAR_LIMIT;
   const lang = req.query.lang === 'en' ? 'en' : 'fr';
 
+  // The crowd math (MAL + AniList) is anchored on the real MAL id.
+  const malId = getMalIdForCanonical(canonicalId);
+  if (malId === undefined) {
+    return res.status(404).json({ error: 'No MAL id known for this title' });
+  }
+
   try {
-    const [mal, anilist] = await Promise.all([loadMalEdges(animeId), loadAnilistEdges(animeId)]);
+    const [mal, anilist] = await Promise.all([loadMalEdges(malId), loadAnilistEdges(malId)]);
 
     // Both pipes dry AND both failed — that's an error, not an empty result.
     if (!mal.outcome.ok && !anilist.outcome.ok) {
@@ -67,10 +74,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const items = computeSimilarTo(animeId, mal.edges, anilist.edges, limit, lang);
+    const items = computeSimilarTo(malId, mal.edges, anilist.edges, limit, lang);
     res.json({ items, sources: { mal: mal.outcome, anilist: anilist.outcome } });
   } catch (error) {
-    console.error(`Similar-to ${animeId} error:`, error);
+    console.error(`Similar-to ${canonicalId} error:`, error);
     res.status(500).json({
       error: 'Failed to compute similar anime',
       details: error instanceof Error ? error.message : 'Unknown error',

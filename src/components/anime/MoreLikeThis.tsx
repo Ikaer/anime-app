@@ -16,7 +16,7 @@ interface SimilarResponse {
 }
 
 export interface MoreLikeThisProps {
-  animeId: number;
+  animeId: string;
 }
 
 /**
@@ -36,9 +36,9 @@ export default function MoreLikeThis({ animeId }: MoreLikeThisProps) {
   const [sources, setSources] = useState<SimilarResponse['sources'] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [explainOpen, setExplainOpen] = useState<Set<number>>(new Set());
+  const [explainOpen, setExplainOpen] = useState<Set<string>>(new Set());
 
-  const toggleExplain = useCallback((id: number) => {
+  const toggleExplain = useCallback((id: string) => {
     setExplainOpen(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);

@@ -102,7 +102,7 @@ export default function DiscrepanciesPage() {
                   const simklOnly = d?.presence === 'simkl_only';
 
                   return (
-                    <tr key={anime.id}>
+                    <tr key={anime.canonicalId}>
                       <td>
                         {img ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -167,7 +167,7 @@ export default function DiscrepanciesPage() {
                         </div>
                       </td>
                       <td>
-                        <RefreshButton animeId={anime.id} compact onRefreshed={load} />
+                        <RefreshButton animeId={anime.canonicalId} compact onRefreshed={load} />
                       </td>
                     </tr>
                   );

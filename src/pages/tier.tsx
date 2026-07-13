@@ -25,7 +25,7 @@ const THUMB_W: Record<ImageSize, number> = { 0: 46, 1: 62, 2: 84, 3: 112 };
 const POSTER_RATIO = 0.7; // width / height
 
 interface Preview { anime: AnimeForDisplay; x: number; y: number; }
-interface QueueItem { id: number; score: number; prevScore: number; }
+interface QueueItem { id: string; score: number; prevScore: number; }
 
 export default function TierPage() {
   const t = useT();
@@ -36,11 +36,11 @@ export default function TierPage() {
   const [error, setError] = useState('');
 
   // Optimistic score overrides layered on the fetched data (0 = unrated / tray).
-  const [overrides, setOverrides] = useState<Map<number, number>>(new Map());
-  const [saving, setSaving] = useState<Set<number>>(new Set());
-  const [failed, setFailed] = useState<Map<number, string>>(new Map());
+  const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
+  const [saving, setSaving] = useState<Set<string>>(new Set());
+  const [failed, setFailed] = useState<Map<string, string>>(new Map());
 
-  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
 
   // ---- Manual auto-scroll while dragging. Native HTML5 drag auto-scroll ----
@@ -125,13 +125,13 @@ export default function TierPage() {
 
   // Base (server-known) effective score per anime; 0 = unrated.
   const baseScore = useMemo(() => {
-    const m = new Map<number, number>();
-    for (const a of animes) m.set(a.id, getEffectiveScore(a) ?? 0);
+    const m = new Map<string, number>();
+    for (const a of animes) m.set(a.canonicalId, getEffectiveScore(a) ?? 0);
     return m;
   }, [animes]);
 
   const effScoreOf = useCallback(
-    (id: number): number => (overrides.has(id) ? overrides.get(id)! : (baseScore.get(id) ?? 0)),
+    (id: string): number => (overrides.has(id) ? overrides.get(id)! : (baseScore.get(id) ?? 0)),
     [overrides, baseScore],
   );
 
@@ -173,7 +173,7 @@ export default function TierPage() {
     const b = new Map<number, AnimeForDisplay[]>();
     for (let s = 0; s <= 10; s++) b.set(s, []);
     for (const a of filtered) {
-      const score = effScoreOf(a.id);
+      const score = effScoreOf(a.canonicalId);
       if (score === 0 && getEffectiveStatus(a) === 'watching') continue;
       b.get(score)!.push(a);
     }
@@ -224,7 +224,7 @@ export default function TierPage() {
     processingRef.current = false;
   }, []);
 
-  const assignScore = useCallback((id: number, score: number) => {
+  const assignScore = useCallback((id: string, score: number) => {
     const prevScore = effScoreOf(id);
     if (prevScore === score) return;
     setOverrides(prev => new Map(prev).set(id, score));
@@ -234,8 +234,8 @@ export default function TierPage() {
   }, [effScoreOf, processQueue]);
 
   // ---- Drag & drop (native HTML5 — zero-dep; score is the only persisted state). ----
-  const onDragStart = (e: React.DragEvent, id: number) => {
-    e.dataTransfer.setData('text/plain', String(id));
+  const onDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
     e.dataTransfer.effectAllowed = 'move';
     setDraggingId(id);
     setPreview(null);
@@ -243,8 +243,8 @@ export default function TierPage() {
   const onDragEnd = () => setDraggingId(null);
   const onDropTo = (e: React.DragEvent, score: number) => {
     e.preventDefault();
-    const id = Number(e.dataTransfer.getData('text/plain'));
-    if (Number.isInteger(id)) assignScore(id, score);
+    const id = e.dataTransfer.getData('text/plain');
+    if (id) assignScore(id, score);
     setDraggingId(null);
   };
   const allowDrop = (e: React.DragEvent) => e.preventDefault();
@@ -275,14 +275,14 @@ export default function TierPage() {
 
   const renderCard = (a: AnimeForDisplay) => {
     const thumb = a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large || '';
-    const isSaving = saving.has(a.id);
-    const fail = failed.get(a.id);
+    const isSaving = saving.has(a.canonicalId);
+    const fail = failed.get(a.canonicalId);
     return (
       <div
-        key={a.id}
-        className={`card ${draggingId === a.id ? 'dragging' : ''} ${fail ? 'failed' : ''}`}
+        key={a.canonicalId}
+        className={`card ${draggingId === a.canonicalId ? 'dragging' : ''} ${fail ? 'failed' : ''}`}
         draggable
-        onDragStart={(e) => onDragStart(e, a.id)}
+        onDragStart={(e) => onDragStart(e, a.canonicalId)}
         onDragEnd={onDragEnd}
         onMouseEnter={(e) => onCardEnter(e, a)}
         onMouseLeave={onCardLeave}
@@ -294,7 +294,7 @@ export default function TierPage() {
           : <div className="noimg">{getPrimaryTitle(a).slice(0, 2)}</div>}
         <a
           className="detail-link"
-          href={`/anime/${a.id}`}
+          href={`/anime/${a.canonicalId}`}
           target="_blank"
           rel="noopener noreferrer"
           draggable={false}

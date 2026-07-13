@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { setFeedbackVerdict, removeFeedback } from '@/lib/recommendations';
+import { isCanonicalId } from '@/lib/store';
 import type { RecoVerdict } from '@/models/anime';
 
 /**
@@ -8,8 +9,9 @@ import type { RecoVerdict } from '@/models/anime';
  *  DELETE                            — clear the verdict (↩ Remettre)
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const animeId = parseInt(req.query.id as string, 10);
-  if (isNaN(animeId)) {
+  const { id } = req.query;
+  const animeId = typeof id === 'string' ? id : '';
+  if (!isCanonicalId(animeId)) {
     return res.status(400).json({ error: 'Invalid anime ID' });
   }
 

@@ -2,7 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { getAnimeByIdForDisplay, getAnimeRecordById, getAnimeRecords } from '@/lib/store';
+import { getAnimeByCanonicalId, getAnimeRecordByCanonicalId, getAnimeRecords, resolveByMalId, isCanonicalId } from '@/lib/store';
 import type { AnimeForDisplay } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
@@ -127,7 +127,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
           <div className="ext-links">
             <Link href={`/rate?id=${anime.id}`} className="ext-link">{t('detail.rate')}</Link>
             <RefreshButton
-              animeId={anime.id}
+              animeId={anime.canonicalId}
               onRefreshed={() => {
                 router.replace(router.asPath, undefined, { scroll: false })
               }}
@@ -190,7 +190,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <div className="columns">
         <aside className="col-side">
           {/* ---------- Crowd drill-down (MAL + AniList recos anchored on this title) ---------- */}
-          <MoreLikeThis animeId={anime.id} />
+          <MoreLikeThis animeId={anime.canonicalId} />
 
           {/* ---------- Similar by staff & studio (production-credit recos) ---------- */}
           {similar.length > 0 && (
@@ -591,17 +591,26 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const id = parseInt(String(ctx.params?.id), 10);
-  if (!Number.isInteger(id)) {
+  const raw = String(ctx.params?.id);
+
+  // Legacy MAL-id URLs (bookmarks predating the canonical-id flip) resolve and
+  // redirect — docs/PROVIDER-FREE-CUTOVER.md Phase D.
+  if (/^\d+$/.test(raw)) {
+    const canonicalId = resolveByMalId(parseInt(raw, 10));
+    if (!canonicalId) return { notFound: true };
+    return { redirect: { destination: `/anime/${canonicalId}`, permanent: false } };
+  }
+
+  if (!isCanonicalId(raw)) {
     return { notFound: true };
   }
-  const anime = getAnimeByIdForDisplay(id);
+  const anime = getAnimeByCanonicalId(raw);
   if (!anime) {
     return { notFound: true };
   }
   // Similar-by-credits reads catalog fields (studios/staff) only, so the
   // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
-  const targetRecord = getAnimeRecordById(id)!;
+  const targetRecord = getAnimeRecordByCanonicalId(raw)!;
   const similar = computeSimilarByCredits(targetRecord, getAnimeRecords(), 3);
   // AnimeForDisplay carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.

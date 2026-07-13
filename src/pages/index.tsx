@@ -146,13 +146,13 @@ export default function AnimePage() {
   };
 
   // Anime action handlers
-  const handleHideToggle = async (animeId: number, hide: boolean) => {
+  const handleHideToggle = async (animeId: string, hide: boolean) => {
     try {
       const response = await fetch(`/api/anime/animes/${animeId}/hide`, {
         method: hide ? 'POST' : 'DELETE'
       });
       if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.id !== animeId));
+        setAnimes(prev => prev.filter(a => a.canonicalId !== animeId));
       } else {
         setError(hide ? t('index.hideFailed') : t('index.unhideFailed'));
       }
@@ -161,7 +161,7 @@ export default function AnimePage() {
     }
   };
 
-  const handleUpdateMALStatus = async (animeId: number, updates: any) => {
+  const handleUpdateMALStatus = async (animeId: string, updates: any) => {
     try {
       const response = await fetch(`/api/anime/animes/${animeId}/mal-status`, {
         method: 'PUT',
@@ -170,7 +170,7 @@ export default function AnimePage() {
       });
       if (response.ok) {
         setAnimes(prev => prev.map(a =>
-          a.id === animeId && a.sources.mal
+          a.canonicalId === animeId && a.sources.mal
             ? { ...a, sources: { ...a.sources, mal: { ...a.sources.mal, my_list_status: { ...a.sources.mal.my_list_status, ...updates } } } }
             : a
         ));

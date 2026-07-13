@@ -1,14 +1,17 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, saveAnime, resolveByMalId } from '@/lib/store';
+import { getAllAnime, saveAnime, isCanonicalId } from '@/lib/store';
 import { updateMalListStatus, MalListStatusUpdate } from '@/lib/malWrite';
 
 type MALStatusUpdate = MalListStatusUpdate;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
-  const animeId = parseInt(id as string, 10);
+  const canonicalId = typeof id === 'string' ? id : '';
 
   if (req.method === 'PUT') {
+    if (!isCanonicalId(canonicalId)) {
+      return res.status(400).json({ error: 'Invalid anime id' });
+    }
     try {
       const updates: MALStatusUpdate = req.body;
 
@@ -25,16 +28,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Episodes watched cannot be negative' });
       }
 
-      // Read current animes to update local state. `animeId` is the outward MAL
-      // id; the slice is canonical-keyed, so resolve it to the canonical key.
+      // `canonicalId` is the outward id and the slice's key — a direct lookup.
       const animesData = getAllAnime();
-      const animeKey = resolveByMalId(animeId);
-      if (!animeKey || !(animeKey in animesData)) {
-        console.log(`Anime ${animeId} not found in JSON file`);
+      if (!(canonicalId in animesData)) {
+        console.log(`Anime ${canonicalId} not found in JSON file`);
         return res.status(404).json({ error: 'Anime not found' });
       }
 
-      const anime = animesData[animeKey];
+      const anime = animesData[canonicalId];
 
       // Update local state immediately
       if (!anime.my_list_status) {
@@ -58,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Try to update MAL API
       try {
-        await updateMalListStatus(animeId, updates);
+        await updateMalListStatus(anime.id, updates);
       } catch (malError) {
         console.error('MAL API update failed, but local state updated:', malError);
         // Don't fail the request if MAL API fails - local state is already updated

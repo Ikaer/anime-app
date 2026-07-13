@@ -232,13 +232,13 @@ export interface AniListMetaEntry {
 // value (not the merged/effective one) can still reach it — see
 // `AnimeSources`'s doc comment.
 //
-// `id` stays the OUTWARD MAL id until the Phase D outward-id flip promotes
-// the canonical id; `canonicalId` carries that canonical id today without
-// disturbing `.id`. Resolved from either the raw MAL slice OR the registry
-// crosswalk, so an AniList-crawled title with a real `idMal` still gets a row
-// even with no local MAL slice (`sources.mal` undefined) — see
-// `getAnimeForDisplay`. A canonical id with NO resolvable MAL id anywhere
-// (true AniList-only, no `idMal`) is explicitly out of scope
+// `id` is the raw MAL id — kept for MAL API calls and the external MAL link,
+// NEVER for URLs/route params/React keys/hidden/feedback (docs/PROVIDER-FREE-
+// CUTOVER.md Phase D: those all use `canonicalId`). Resolved from either the
+// raw MAL slice OR the registry crosswalk, so an AniList-crawled title with a
+// real `idMal` still gets a row even with no local MAL slice (`sources.mal`
+// undefined) — see `getAnimeForDisplay`. A canonical id with NO resolvable
+// MAL id anywhere (true AniList-only, no `idMal`) is explicitly out of scope
 // (docs/PROVIDER-FREE-CUTOVER.md "Deferred") and is not surfaced as a row at
 // all, so `id` stays required here rather than optional.
 // `simkl`/`anilistMeta`/`anilistPersonal`/`crosswalk` are kept as top-level
@@ -247,7 +247,7 @@ export interface AniListMetaEntry {
 //
 // This is the transitional shape docs/PROVIDER-FREE-CUTOVER.md calls out —
 // retired as a distinct interface in favor of a pure `AnimeRecord` alias in
-// Phase E, once the outward id flip (Phase D) makes `id` unambiguous.
+// Phase E.
 export interface AnimeForDisplay {
   id: number;
   hidden?: boolean;
@@ -256,7 +256,8 @@ export interface AnimeForDisplay {
   anilistMeta?: AniListMetaEntry;
   anilistPersonal?: AniListPersonalEntry;
   crosswalk?: SourceIds;
-  canonicalId?: string;
+  /** The outward id everywhere else (URLs, route params, React keys, hidden/feedback keys) — see docs/PROVIDER-FREE-CUTOVER.md Phase D. `.id` above stays the MAL id, kept for MAL API calls and the external MAL link. */
+  canonicalId: string;
   catalog: AnimeCatalog;
   personal: AnimePersonal;
   sources: AnimeSources;
@@ -381,10 +382,10 @@ export interface RecordProvenance {
 /**
  * The provider-neutral local record (docs/PROVIDER-FREE.md target model).
  * `id` is the SYNTHETIC canonical id minted by the Phase 1 registry — tied to
- * no provider. It is an INTERNAL identifier only: outward consumers (URLs,
- * API route params, React keys) keep using the MAL id, reachable here via
- * `crosswalk.mal` (or `sources.mal.id`). Promoting the canonical id to the
- * OUTWARD id is Phase 3's job, not this type's.
+ * no provider. It is also the OUTWARD id (URLs, API route params, React keys,
+ * hidden/feedback keys — docs/PROVIDER-FREE-CUTOVER.md Phase D). A provider's
+ * own id, when genuinely needed (a MAL/AniList/SIMKL API call, an external
+ * link), is reachable via `crosswalk.mal` / `sources.mal.id` etc.
  */
 export interface AnimeRecord {
   id: string;

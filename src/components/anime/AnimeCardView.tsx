@@ -16,9 +16,9 @@ interface AnimeCardViewProps {
     visibleColumns: VisibleColumns;
     /** Forced number of cards per row; null/undefined = adaptive (auto-fill). */
     cardsPerRow?: number | null;
-    onHideToggle?: (animeId: number, hide: boolean) => void;
-    onFeedback?: (animeId: number, verdict: RecoVerdict) => void;
-    onRemoveFeedback?: (animeId: number) => void;
+    onHideToggle?: (animeId: string, hide: boolean) => void;
+    onFeedback?: (animeId: string, verdict: RecoVerdict) => void;
+    onRemoveFeedback?: (animeId: string) => void;
     /** 'feed' = show 👍/👎; 'up'/'down' = review list (show ↩ Remettre); null = hide toggle. */
     feedbackMode?: 'feed' | RecoVerdict | null;
     /** When true, every card's "Pourquoi ?" breakdown is expanded (global override). */
@@ -49,9 +49,9 @@ export default function AnimeCardView({
 }: AnimeCardViewProps) {
     const t = useT();
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
-    const [explainOpen, setExplainOpen] = useState<Set<number>>(new Set());
+    const [explainOpen, setExplainOpen] = useState<Set<string>>(new Set());
 
-    const toggleExplain = useCallback((animeId: number) => {
+    const toggleExplain = useCallback((animeId: string) => {
         setExplainOpen(prev => {
             const next = new Set(prev);
             if (next.has(animeId)) next.delete(animeId); else next.add(animeId);
@@ -181,7 +181,7 @@ export default function AnimeCardView({
         <div className={styles.cardGrid} style={gridStyle}>
             {animes.map((anime) => {
                 return (
-                <div key={anime.id} className={styles.card}>
+                <div key={anime.canonicalId} className={styles.card}>
                     <div className={styles.imageContainer}>
                         {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
                             <Image
@@ -202,7 +202,7 @@ export default function AnimeCardView({
                         {onHideToggle && (
                             <button
                                 className={styles.closeBtn}
-                                onClick={() => onHideToggle(anime.id, !anime.hidden)}
+                                onClick={() => onHideToggle(anime.canonicalId, !anime.hidden)}
                                 title={anime.hidden ? t('table.unhide') : t('table.hide')}
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -214,7 +214,7 @@ export default function AnimeCardView({
                         <div className={styles.overlay}>
                             <div className={styles.imageActions}>
                                 <Button
-                                    href={`/anime/${anime.id}`}
+                                    href={`/anime/${anime.canonicalId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={styles.imageActionBtn}
@@ -336,13 +336,13 @@ export default function AnimeCardView({
                                 {!allExplainsOpen && (
                                     <button
                                         className={styles.explainToggle}
-                                        onClick={() => toggleExplain(anime.id)}
-                                        aria-expanded={explainOpen.has(anime.id)}
+                                        onClick={() => toggleExplain(anime.canonicalId)}
+                                        aria-expanded={explainOpen.has(anime.canonicalId)}
                                     >
-                                        {(explainOpen.has(anime.id) ? '▾ ' : '▸ ') + t('card.why')}
+                                        {(explainOpen.has(anime.canonicalId) ? '▾ ' : '▸ ') + t('card.why')}
                                     </button>
                                 )}
-                                {(allExplainsOpen || explainOpen.has(anime.id)) && renderExplain(anime.recoMeta)}
+                                {(allExplainsOpen || explainOpen.has(anime.canonicalId)) && renderExplain(anime.recoMeta)}
                             </div>
                         )}
                         {(feedbackMode || anime.discrepancy || anime.simkl) && (
@@ -350,7 +350,7 @@ export default function AnimeCardView({
                             <SimklDiscrepancyBadge anime={anime} />
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (
                                 <Button
-                                    onClick={() => onRemoveFeedback?.(anime.id)}
+                                    onClick={() => onRemoveFeedback?.(anime.canonicalId)}
                                     variant="secondary"
                                     size="xs"
                                     className={styles.actionButton}
@@ -360,7 +360,7 @@ export default function AnimeCardView({
                             ) : feedbackMode === 'feed' ? (
                                 <>
                                     <Button
-                                        onClick={() => onFeedback?.(anime.id, 'up')}
+                                        onClick={() => onFeedback?.(anime.canonicalId, 'up')}
                                         variant="primary-positive"
                                         size="xs"
                                         className={styles.actionButton}
@@ -369,7 +369,7 @@ export default function AnimeCardView({
                                         {t('card.goodPick')}
                                     </Button>
                                     <Button
-                                        onClick={() => onFeedback?.(anime.id, 'down')}
+                                        onClick={() => onFeedback?.(anime.canonicalId, 'down')}
                                         variant="primary-negative"
                                         size="xs"
                                         className={styles.actionButton}

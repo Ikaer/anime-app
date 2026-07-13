@@ -128,7 +128,7 @@ function fieldMatch(candidate: AnimeForDisplay, profile: FieldProfile): { score:
  */
 function buildRejectionProfiles(
   all: AnimeForDisplay[],
-  downIds: Set<number>,
+  downIds: Set<string>,
   idfGenre: Map<FieldValue, number>,
   idfStudio: Map<FieldValue, number>
 ): { negGenre: FieldProfile; negStudio: FieldProfile } {
@@ -138,7 +138,7 @@ function buildRejectionProfiles(
     return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
   });
   const dislikedSeen = new Set(dislikedBase.map(a => a.id));
-  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
+  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.canonicalId) && !dislikedSeen.has(a.id))];
   return {
     negGenre: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idfGenre),
     negStudio: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idfStudio),
@@ -252,37 +252,38 @@ function saveRecommendationsData(data: RecommendationsData): void {
 // both re-ranks the feed (the `feedback` source) and, at the next refresh,
 // joins the crowd seeds so new candidates enter.
 
+/** Keyed by canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D — re-keyed from MAL id). */
 export type FeedbackMap = Record<string, RecoVerdict>;
 
 function getFeedback(): FeedbackMap {
   return readJsonFile<FeedbackMap>(FEEDBACK_FILE, {});
 }
 
-export function setFeedbackVerdict(animeId: number, verdict: RecoVerdict): void {
+export function setFeedbackVerdict(canonicalId: string, verdict: RecoVerdict): void {
   const fb = getFeedback();
-  fb[String(animeId)] = verdict;
+  fb[canonicalId] = verdict;
   writeJsonFile(FEEDBACK_FILE, fb);
 }
 
-export function removeFeedback(animeId: number): void {
+export function removeFeedback(canonicalId: string): void {
   const fb = getFeedback();
-  if (String(animeId) in fb) {
-    delete fb[String(animeId)];
+  if (canonicalId in fb) {
+    delete fb[canonicalId];
     writeJsonFile(FEEDBACK_FILE, fb);
   }
 }
 
-/** Ids carrying the given verdict. */
-function feedbackIds(fb: FeedbackMap, verdict: RecoVerdict): Set<number> {
+/** Canonical ids carrying the given verdict. */
+function feedbackIds(fb: FeedbackMap, verdict: RecoVerdict): Set<string> {
   return new Set(
-    Object.entries(fb).filter(([, v]) => v === verdict).map(([k]) => Number(k))
+    Object.entries(fb).filter(([, v]) => v === verdict).map(([k]) => k)
   );
 }
 
 /** Anime carrying the given verdict, for the review lists. */
 export function getFeedbackAnime(verdict: RecoVerdict): AnimeForDisplay[] {
   const ids = feedbackIds(getFeedback(), verdict);
-  return getAnimeForDisplay().filter(a => ids.has(a.id));
+  return getAnimeForDisplay().filter(a => ids.has(a.canonicalId));
 }
 
 // Legacy pure-hide dismiss list — superseded by 👎 feedback. Kept read-only so
@@ -468,7 +469,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     let weight: number;
     if (typeof seedScore === 'number' && seedScore >= threshold) {
       weight = seedWeight(seedScore, threshold);
-    } else if (upIds.has(seedId)) {
+    } else if (seed && upIds.has(seed.canonicalId)) {
       weight = TUNING.FEEDBACK_SEED_WEIGHT; // 👍 "bonne pioche" acting as a seed
     } else {
       continue; // seed below threshold and not thumbed-up — dropped
@@ -504,7 +505,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     let weight: number;
     if (typeof seedScore === 'number' && seedScore >= threshold) {
       weight = seedWeight(seedScore, threshold);
-    } else if (upIds.has(seedId)) {
+    } else if (seed && upIds.has(seed.canonicalId)) {
       weight = TUNING.FEEDBACK_SEED_WEIGHT;
     } else {
       continue;
@@ -541,7 +542,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
   // numeric score). Its own weighted source, separate from the MAL-seed genre /
   // studio profiles, so the user can dial their explicit likes independently.
-  const upAnime = all.filter(a => upIds.has(a.id));
+  const upAnime = all.filter(a => upIds.has(a.canonicalId));
   const fb = {
     genre: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.genre, idf.genre),
     studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
@@ -562,9 +563,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     // Hard filters (spec §5.3)
     const st = getEffectiveStatus(anime);
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
-    if (dismissed.has(candId)) continue;
-    if (hidden.has(candId)) continue;
-    if (upIds.has(candId) || downIds.has(candId)) continue; // already thumbed
+    if (dismissed.has(candId)) continue; // legacy pure-hide list — still MAL-keyed, read-only
+    if (hidden.has(anime.canonicalId)) continue;
+    if (upIds.has(anime.canonicalId) || downIds.has(anime.canonicalId)) continue; // already thumbed
     if (isPrematureSequel(anime, byId)) continue; // later season of an unwatched show
 
     eligible.push({ anime, a });
@@ -957,7 +958,8 @@ export interface AniListEdgeInput {
  * anchor, and the detail page only needs enough to render a poster card.
  */
 export interface SimilarItem {
-  id: number;
+  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  id: string;
   title: string;
   poster?: string;
   mean?: number;
@@ -990,13 +992,15 @@ export function computeSimilarTo(
   if (!target) return [];
 
   // The target itself and its franchise entries trivially "resemble" it, and the
-  // page already lists relations in its own section.
-  const excluded = new Set<number>([
+  // page already lists relations in its own section. These are raw MAL ids
+  // (the target's own relation payload), kept separate from hidden/feedback
+  // below (canonical-keyed) since a crowd-edge candidate id is MAL too.
+  const excludedMalIds = new Set<number>([
     targetId,
     ...(target.catalog.relatedAnime || []).map(r => r.node.id),
-    ...getHiddenAnimeIds(),
-    ...feedbackIds(getFeedback(), 'down'),
   ]);
+  const hiddenCanonical = new Set(getHiddenAnimeIds());
+  const downCanonical = feedbackIds(getFeedback(), 'down');
 
   const crowd = new Map<number, number>();
   for (const e of malEdges) {
@@ -1013,9 +1017,10 @@ export function computeSimilarTo(
   let maxAnilist = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   for (const candId of new Set([...crowd.keys(), ...anilistCrowd.keys()])) {
-    if (excluded.has(candId)) continue;
+    if (excludedMalIds.has(candId)) continue;
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
+    if (hiddenCanonical.has(anime.canonicalId) || downCanonical.has(anime.canonicalId)) continue;
     if (isPrematureSequel(anime, byId)) continue;
 
     eligible.push(anime);
@@ -1049,8 +1054,7 @@ export function computeSimilarTo(
     anilistTags: buildFieldProfile([target], one, FIELD_EXTRACTORS.anilistTags, idf.anilistTags),
     anilistStaff: buildFieldProfile([target], one, FIELD_EXTRACTORS.anilistStaff, idf.anilistStaff),
   };
-  const downIds = feedbackIds(getFeedback(), 'down');
-  const { negGenre, negStudio } = buildRejectionProfiles(all, downIds, idf.genre, idf.studio);
+  const { negGenre, negStudio } = buildRejectionProfiles(all, downCanonical, idf.genre, idf.studio);
 
   // Names/roles as the TARGET credits them — the explain says what the candidate
   // shares with the anime you're looking at.
@@ -1134,7 +1138,7 @@ export function computeSimilarTo(
 
     const status = getEffectiveStatus(anime);
     items.push({
-      id: candId,
+      id: anime.canonicalId,
       title: getPrimaryTitle(anime),
       poster: anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large,
       mean: anime.catalog.mean,
@@ -1147,6 +1151,6 @@ export function computeSimilarTo(
     });
   }
 
-  items.sort((x, y) => y.score - x.score || (y.mean || 0) - (x.mean || 0) || x.id - y.id);
+  items.sort((x, y) => y.score - x.score || (y.mean || 0) - (x.mean || 0) || x.id.localeCompare(y.id));
   return items.slice(0, limit);
 }

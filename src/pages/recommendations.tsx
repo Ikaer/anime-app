@@ -146,7 +146,7 @@ export default function RecommendationsPage() {
   };
 
   // 👍/👎 on a feed card: persist the verdict and drop it from the live list.
-  const handleFeedback = async (animeId: number, verdict: 'up' | 'down') => {
+  const handleFeedback = async (animeId: string, verdict: 'up' | 'down') => {
     try {
       const response = await fetch(`/api/anime/recommendations/feedback/${animeId}`, {
         method: 'POST',
@@ -154,7 +154,7 @@ export default function RecommendationsPage() {
         body: JSON.stringify({ verdict }),
       });
       if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.id !== animeId));
+        setAnimes(prev => prev.filter(a => a.canonicalId !== animeId));
       } else {
         setError(t('reco.feedbackSaveFailed'));
       }
@@ -164,13 +164,13 @@ export default function RecommendationsPage() {
   };
 
   // ↩ Remettre from a review list: clear the verdict and drop it from the list.
-  const handleRemoveFeedback = async (animeId: number) => {
+  const handleRemoveFeedback = async (animeId: string) => {
     try {
       const response = await fetch(`/api/anime/recommendations/feedback/${animeId}`, {
         method: 'DELETE',
       });
       if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.id !== animeId));
+        setAnimes(prev => prev.filter(a => a.canonicalId !== animeId));
       } else {
         setError(t('reco.feedbackRemoveFailed'));
       }

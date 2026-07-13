@@ -1,26 +1,29 @@
 /**
- * Phase B migration (docs/PROVIDER-FREE-CUTOVER.md): re-key every
+ * Phase B + Phase D migration (docs/PROVIDER-FREE-CUTOVER.md): re-key every
  * identity-bearing store file from its provider id (MAL id) to the synthetic
- * canonical id, so the canonical id becomes the only key at rest. The registry
- * (animes_registry.json) is the durable identity spine and is preserved /
- * extended, never rebuilt.
+ * canonical id, so the canonical id becomes the only key at rest AND the only
+ * outward id. The registry (animes_registry.json) is the durable identity
+ * spine and is preserved / extended, never rebuilt.
  *
- * Re-keyed files (the catalog slices — Phase B):
+ * Re-keyed files (catalog slices — Phase B):
  *   animes_mal.json               { malId → MALAnime }            → { canonicalId → MALAnime }
  *   animes_simkl.json             { malId → SimklPersonalEntry }  → { canonicalId → ... }
  *   animes_anilist_meta.json      { malId → AniListMetaEntry }    → { canonicalId → ... }
  *   animes_anilist_personal.json  { malId → AniListPersonalEntry} → { canonicalId → ... }
  *
- * Left untouched (deferred to Phase D, when the reco engine + outward id flip):
- *   animes_hidden.json            [ malId ]   — still MAL-keyed
- *   recommendations_feedback.json { malId … } — still MAL-keyed
- * These stay MAL-keyed on purpose: the reco engine that reads them is MAL-id-
- * keyed internally until Phase D, and the Phase B runtime reads hidden/feedback
- * by MAL id. Re-keying them now would silently mis-attach hides/thumbs.
+ * Re-keyed files (outward-id slices — Phase D):
+ *   animes_hidden.json            [ malId ]      → [ canonicalId ]
+ *   recommendations_feedback.json { malId → verdict } → { canonicalId → verdict }
+ * These were deliberately left MAL-keyed through Phase B/C (the reco engine's
+ * exclusion checks and the hide/feedback API routes were still MAL-id-keyed) —
+ * re-keying them only becomes correct once the outward id flip (Phase D) lands
+ * in the app code alongside this migration run.
  *
- * Also left untouched: the registry itself, recommendations.json +
- * recommendations_dismissed.json (reco cache — Phase D), auth/checkpoint/
- * preferences files, and animes_extensions.json (orphan — read by nothing).
+ * Also left untouched: the registry itself, recommendations.json (crowd-edge
+ * cache — stays MAL-keyed internally by design, see Phase D notes),
+ * recommendations_dismissed.json (legacy read-only dismiss list, superseded by
+ * 👎 feedback — never re-keyed), auth/checkpoint/preferences files, and
+ * animes_extensions.json (orphan — read by nothing).
  *
  * Resolve-before-mint: every provider id is resolved against the registry
  * first; a new canonical id is minted only for a title the registry doesn't
@@ -29,12 +32,19 @@
  * Idempotent / re-runnable: slice records are re-keyed from the provider id
  * carried INSIDE each record (`anime.id`, `entry.mal_id`, `entry.anilist_id`),
  * not from the current top-level key, so a second run over already-canonical
- * keys yields the identical mapping.
+ * keys yields the identical mapping. `animes_hidden.json` / `recommendations_
+ * feedback.json` carry NO provider id inside the entry (a hidden id is just a
+ * bare array element; a feedback entry is `{verdict}`), only in the key — so
+ * they use a narrower idempotency rule: a key already shaped like `a_<n>` is
+ * passed through untouched rather than re-resolved (which would parse it as
+ * NaN and silently drop the entry on a second run).
  *
  * Collision policy: a provider id claimed by two+ canonical ids corrupts the
  * spine. The script REPORTS every such collision and REFUSES to write (exit 1)
  * unless `--allow-collisions` is passed. Nothing is written until resolution is
- * proven clean.
+ * proven clean. The hidden/feedback rekey participates in the SAME collision
+ * scan as the record maps (two MAL ids collapsing onto one canonical id when
+ * both were hidden, say) rather than silently last-writer-wins.
  *
  * Usage:
  *   node scripts/migrate-canonical.js <dataPath> [--dry-run] [--allow-collisions]
@@ -226,9 +236,66 @@ const anilistPersonalResult = rekeyRecordMap('animes_anilist_personal.json', (en
   return crosswalk;
 });
 
-// animes_hidden.json + recommendations_feedback.json are deliberately NOT
-// re-keyed here — they stay MAL-keyed until Phase D (see the header). The
-// Phase B runtime reads them by MAL id.
+// animes_hidden.json — array of MAL ids -> array of canonical ids, deduped.
+// An entry already shaped like `a_<n>` (a prior run already re-keyed it) is
+// kept as-is rather than re-resolved: `resolve()` expects a numeric provider
+// id, and `toNum('a_123')` is NaN, which would silently drop the entry.
+const CANONICAL_ID_RE = /^a_\d+$/;
+const hiddenResult = (() => {
+  const name = 'animes_hidden.json';
+  const src = readJson(name, null);
+  if (src === null) return { name, present: false };
+  const out = [];
+  const seen = new Set();
+  let orphaned = 0;
+  for (const rawId of src) {
+    let canonicalId;
+    if (typeof rawId === 'string' && CANONICAL_ID_RE.test(rawId)) {
+      canonicalId = rawId;
+    } else {
+      const mal = toNum(rawId);
+      if (mal === undefined) { orphaned += 1; continue; }
+      canonicalId = resolve({ mal });
+    }
+    if (!seen.has(canonicalId)) { seen.add(canonicalId); out.push(canonicalId); }
+  }
+  pendingWrites.push({ name, data: out });
+  return { name, present: true, count: out.length, orphaned };
+})();
+
+// recommendations_feedback.json — { malId → verdict } -> { canonicalId → verdict }.
+// Same already-canonical passthrough as animes_hidden.json above. Two source
+// keys resolving to the same canonical id (a MAL id collapse) is reported via
+// outputCollisions exactly like the record maps, not silently overwritten.
+const feedbackResult = (() => {
+  const name = 'recommendations_feedback.json';
+  const src = readJson(name, null);
+  if (src === null) return { name, present: false };
+  const out = {};
+  const claimants = new Map();
+  let orphaned = 0;
+  for (const [key, verdict] of Object.entries(src)) {
+    let canonicalId;
+    if (CANONICAL_ID_RE.test(key)) {
+      canonicalId = key;
+    } else {
+      const mal = toNum(key);
+      if (mal === undefined) { orphaned += 1; continue; }
+      canonicalId = resolve({ mal });
+    }
+    if (out[canonicalId] !== undefined) {
+      claimants.get(canonicalId).push(key);
+    } else {
+      claimants.set(canonicalId, [key]);
+    }
+    out[canonicalId] = verdict;
+  }
+  for (const [canonicalId, keys] of claimants) {
+    if (keys.length > 1) outputCollisions.push({ name, canonicalId, keys });
+  }
+  pendingWrites.push({ name, data: out });
+  return { name, present: true, count: Object.keys(out).length, orphaned };
+})();
 
 // ── collision scan on the FINAL registry ──
 // ONLY the per-title resolution keys can corrupt the spine: `resolve()` keys on
@@ -253,7 +320,7 @@ const registryCollisions = [...claims.entries()].filter(([, ids]) => ids.length 
 
 // ── report ──
 console.log('\nRe-keyed:');
-for (const r of [malResult, simklResult, anilistMetaResult, anilistPersonalResult]) {
+for (const r of [malResult, simklResult, anilistMetaResult, anilistPersonalResult, hiddenResult, feedbackResult]) {
   if (!r.present) {
     console.log(`  ${r.name.padEnd(32)} (absent, skipped)`);
   } else {

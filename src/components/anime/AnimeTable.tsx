@@ -45,13 +45,13 @@ interface AnimeTableProps {
   visibleColumns: VisibleColumns;
   sortColumn: SortColumn;
   sortDirection: SortDirection;
-  onUpdateMALStatus?: (animeId: number, updates: MALStatusUpdate) => void;
-  onHideToggle?: (animeId: number, hide: boolean) => void;
+  onUpdateMALStatus?: (animeId: string, updates: MALStatusUpdate) => void;
+  onHideToggle?: (animeId: string, hide: boolean) => void;
 }
 
 export default function AnimeTable({ animes, imageSize, visibleColumns, sortColumn, sortDirection, onUpdateMALStatus, onHideToggle }: AnimeTableProps) {
   const t = useT();
-  const [pendingUpdates, setPendingUpdates] = useState<Map<number, MALStatusUpdate>>(new Map());
+  const [pendingUpdates, setPendingUpdates] = useState<Map<string, MALStatusUpdate>>(new Map());
   const imageDimensions = getImageDimensions(imageSize);
 
   const sortedAnimes = useMemo(() => {
@@ -127,7 +127,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     window.open(justWatchUrl, '_blank');
   };
 
-  const updateMALStatus = (animeId: number, field: keyof MALStatusUpdate, value: any) => {
+  const updateMALStatus = (animeId: string, field: keyof MALStatusUpdate, value: any) => {
     const currentUpdates = pendingUpdates.get(animeId) || {};
     const newUpdates = { ...currentUpdates, [field]: value };
 
@@ -136,19 +136,19 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     setPendingUpdates(newPendingUpdates);
   };
 
-  const handleStatusChange = (animeId: number, status: string) => {
+  const handleStatusChange = (animeId: string, status: string) => {
     updateMALStatus(animeId, 'status', status);
   };
 
-  const handleScoreChange = (animeId: number, score: number) => {
+  const handleScoreChange = (animeId: string, score: number) => {
     updateMALStatus(animeId, 'score', score);
   };
 
-  const handleEpisodeChange = (animeId: number, episodes: number) => {
+  const handleEpisodeChange = (animeId: string, episodes: number) => {
     updateMALStatus(animeId, 'num_episodes_watched', Math.max(0, episodes));
   };
 
-  const handleUpdateMAL = async (animeId: number) => {
+  const handleUpdateMAL = async (animeId: string) => {
     const updates = pendingUpdates.get(animeId);
     if (!updates || !onUpdateMALStatus) return;
 
@@ -164,17 +164,17 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   };
 
   const getDisplayStatus = (anime: AnimeForDisplay) => {
-    const updates = pendingUpdates.get(anime.id);
+    const updates = pendingUpdates.get(anime.canonicalId);
     return updates?.status ?? anime.sources.mal?.my_list_status?.status ?? '';
   };
 
   const getDisplayScore = (anime: AnimeForDisplay) => {
-    const updates = pendingUpdates.get(anime.id);
+    const updates = pendingUpdates.get(anime.canonicalId);
     return updates?.score ?? anime.sources.mal?.my_list_status?.score ?? 0;
   };
 
   const getDisplayEpisodes = (anime: AnimeForDisplay) => {
-    const updates = pendingUpdates.get(anime.id);
+    const updates = pendingUpdates.get(anime.canonicalId);
     return updates?.num_episodes_watched ?? anime.sources.mal?.my_list_status?.num_episodes_watched ?? 0;
   };
 
@@ -195,7 +195,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     }
   };
 
-  const hasPendingUpdates = (animeId: number) => {
+  const hasPendingUpdates = (animeId: string) => {
     return pendingUpdates.has(animeId);
   };
 
@@ -318,7 +318,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
           </thead>
           <tbody>
             {sortedAnimes.map((anime) => (
-              <tr key={anime.id}>
+              <tr key={anime.canonicalId}>
                 <td className={`${styles.imageCell} ${imageSize === 0 ? styles.imageCellOriginal : ''}`}>
                   {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
                     <Image
@@ -369,7 +369,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                   <div>
                     <select
                       value={getDisplayStatus(anime)}
-                      onChange={(e) => handleStatusChange(anime.id, e.target.value)}
+                      onChange={(e) => handleStatusChange(anime.canonicalId, e.target.value)}
                       className={`${styles.malStatus} ${getStatusClass(getDisplayStatus(anime))}`}
                     >
                       <option value="">{t('table.selectStatus')}</option>
@@ -384,7 +384,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                   <div>
                     <select
                       value={getDisplayScore(anime)}
-                      onChange={(e) => handleScoreChange(anime.id, parseInt(e.target.value))}
+                      onChange={(e) => handleScoreChange(anime.canonicalId, parseInt(e.target.value))}
                       className={`${styles.malScore} ${styles.editable}`}
                     >
                       <option value={0}>{t('table.noScore')}</option>
@@ -399,7 +399,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       variant="secondary"
                       size="xs"
                       square
-                      onClick={() => handleEpisodeChange(anime.id, getDisplayEpisodes(anime) - 1)}
+                      onClick={() => handleEpisodeChange(anime.canonicalId, getDisplayEpisodes(anime) - 1)}
                       title={t('table.decreaseEp')}
                     >
                       -
@@ -412,7 +412,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       variant="secondary"
                       size="xs"
                       square
-                      onClick={() => handleEpisodeChange(anime.id, getDisplayEpisodes(anime) + 1)}
+                      onClick={() => handleEpisodeChange(anime.canonicalId, getDisplayEpisodes(anime) + 1)}
                       title={t('table.watchNext')}
                     >
                       +
@@ -422,7 +422,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                 <td className={styles.linksCell}>
                   <div className={styles.actionsButtonGroup}>
                     <Button
-                      href={`/anime/${anime.id}`}
+                      href={`/anime/${anime.canonicalId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       variant="secondary"
@@ -466,16 +466,16 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       />
                     </Button>
                     <Button
-                      onClick={() => onHideToggle?.(anime.id, !anime.hidden)}
+                      onClick={() => onHideToggle?.(anime.canonicalId, !anime.hidden)}
                       variant={anime.hidden ? 'primary-positive' : 'primary-negative'}
                       size="sm"
                       title={anime.hidden ? t('table.showAnime') : t('table.hideAnime')}
                     >
                       {anime.hidden ? t('table.unhide') : t('table.hide')}
                     </Button>
-                    {hasPendingUpdates(anime.id) && (
+                    {hasPendingUpdates(anime.canonicalId) && (
                       <Button
-                        onClick={() => handleUpdateMAL(anime.id)}
+                        onClick={() => handleUpdateMAL(anime.canonicalId)}
                         variant="primary"
                         size="sm"
                         title={t('table.updateMalStatus')}

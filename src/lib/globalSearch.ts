@@ -11,8 +11,8 @@ import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
 
 export interface AnimeSearchHit {
-  /** Outward MAL id — the detail-page route key. */
-  id: number;
+  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  id: string;
   title: string;            // primary (English-first)
   secondary?: string;       // original title, only when it differs from the primary
   poster?: string;
@@ -84,16 +84,13 @@ export function searchCatalog(query: string, catalog: AnimeRecord[]): GlobalSear
   const staffMap = new Map<number, CreditSearchHit & { rank: number }>();
 
   for (const a of catalog) {
-    const malId = typeof a.crosswalk.mal === 'string' ? parseInt(a.crosswalk.mal, 10) : a.crosswalk.mal;
-    if (!malId) continue;
-
     const titleRank = bestTitleRank(a, needle);
     if (titleRank !== Infinity) {
       const primary = getCatalogPrimaryTitle(a.catalog);
       const original = a.catalog.title;
       animeScored.push({
         hit: {
-          id: malId,
+          id: a.id,
           title: primary,
           secondary: original && original !== primary ? original : undefined,
           poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,

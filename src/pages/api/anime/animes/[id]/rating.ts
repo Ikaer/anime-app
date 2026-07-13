@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, saveAnime, getAllSimklEntries, upsertSimklEntries, resolveByMalId } from '@/lib/store';
+import { getAllAnime, saveAnime, getAllSimklEntries, upsertSimklEntries, isCanonicalId } from '@/lib/store';
 import { updateMalListStatus } from '@/lib/malWrite';
 import { pushSimklRating } from '@/lib/simklWrite';
 
@@ -22,8 +22,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: `Method ${req.method} not allowed` });
   }
 
-  const animeId = parseInt(req.query.id as string, 10);
-  if (!Number.isInteger(animeId)) {
+  const canonicalId = typeof req.query.id === 'string' ? req.query.id : '';
+  if (!isCanonicalId(canonicalId)) {
     return res.status(400).json({ error: 'Invalid anime id' });
   }
 
@@ -34,11 +34,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // --- Local writes (authority) ---
-    // `animeId` is the outward MAL id; slices are canonical-keyed.
-    const canonicalId = resolveByMalId(animeId);
+    // `canonicalId` is the outward id and the slice's key — a direct lookup.
     const malData = getAllAnime();
-    const anime = canonicalId ? malData[canonicalId] : undefined;
-    if (!anime || !canonicalId) return res.status(404).json({ error: 'Anime not found' });
+    const anime = malData[canonicalId];
+    if (!anime) return res.status(404).json({ error: 'Anime not found' });
 
     if (!anime.my_list_status) {
       anime.my_list_status = { status: '', score: 0, num_episodes_watched: 0, is_rewatching: false, updated_at: '' };
@@ -58,15 +57,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // --- Remote writes (non-fatal, per-source outcome returned) ---
+    // Both remote calls need the REAL MAL id — the local MAL slice carries its
+    // own (`anime.id`), which the write path never has to resolve/translate.
     let mal = { ok: true as boolean, error: undefined as string | undefined };
     try {
-      await updateMalListStatus(animeId, { score });
+      await updateMalListStatus(anime.id, { score });
     } catch (e) {
       mal = { ok: false, error: e instanceof Error ? e.message : 'MAL write failed' };
-      console.error(`[rating] MAL write failed for ${animeId}:`, e);
+      console.error(`[rating] MAL write failed for ${anime.id}:`, e);
     }
 
-    const simkl = await pushSimklRating(animeId, score, {
+    const simkl = await pushSimklRating(anime.id, score, {
       simklId: simklEntry?.simkl_id,
       mediaType: anime.media_type,
     });

@@ -8,7 +8,7 @@
 > MAL id and no MAL shape anywhere outward or at rest**.
 >
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Blocked`
-> Overall: `WIP` (Phase D)
+> Overall: `WIP` (Phase E)
 >
 > **Doc hygiene:** this file stays pristine — the only edits are ticking the
 > phase checkboxes and bumping the status line to track progress. No changelog,
@@ -182,19 +182,21 @@ Make ingest resolve-before-mint; make AniList ingest actually touch the registry
 - **Checkpoint (the big one):** empty store → AniList crawl → main list renders
   rows **with posters**; provenance map populated per field.
 
-### Phase D — Outward canonical id (URLs, routes, keys, reco) `Todo`
+### Phase D — Outward canonical id (URLs, routes, keys, reco) `Done`
 
-- [ ] `/anime/[id]` + all `/api/anime/animes/[id]/*` + reco `similar/[id]` +
+- [x] `/anime/[id]` + all `/api/anime/animes/[id]/*` + reco `similar/[id]` +
       `feedback/[id]`: param **is** the canonical id (store is canonical-keyed →
       direct lookup). MAL/SIMKL writes read `crosswalk.mal` / `sources`.
-- [ ] Numeric (legacy MAL-id) URLs resolve → **redirect** to the canonical URL
+- [x] Numeric (legacy MAL-id) URLs resolve → **redirect** to the canonical URL
       (bookmark preservation).
-- [ ] React keys + internal links use `record.id`; MAL external links use
+- [x] React keys + internal links use `record.id`; MAL external links use
       `crosswalk.mal`.
-- [ ] Reco engine: feed candidate ids, seeds, and `feedback` keyed by canonical;
+- [x] Reco engine: feed candidate ids, seeds, and `feedback` keyed by canonical;
       provider-id crowd edges (`idMal`, anilist id) resolve → canonical when
-      hydrated. *(Hairiest step — `recommendations.ts` is mal-id-keyed internally
-      today; resolve at the hydrate/exclude boundaries.)*
+      hydrated. *(`AnimeForDisplay.id` stays the MAL id and the reco engine's
+      internal crowd-edge math stays MAL-keyed by design — see Risks; only the
+      hidden/feedback exclusion checks and each item's outward `.id` translate
+      to canonical, via the already-present `.canonicalId` field.)*
 - **Checkpoint:** detail page, hide, rate (MAL+SIMKL), and the full reco feed all
   work addressed by canonical id.
 

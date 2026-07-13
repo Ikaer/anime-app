@@ -18,18 +18,14 @@
 import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
 
-function malIdOf(a: AnimeRecord): number {
-  const mal = a.crosswalk.mal;
-  return typeof mal === 'string' ? parseInt(mal, 10) : (mal as number);
-}
-
 export interface SharedStaffCredit {
   name: string;
   role: string;
 }
 
 export interface SimilarByCredits {
-  id: number;
+  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  id: string;
   title: string;
   poster?: string;
   score: number;
@@ -52,6 +48,12 @@ function isTechnicalStaff(role: string): boolean {
 /** Technical (non-source-author) staff credits for one anime. */
 function technicalStaff(a: AnimeRecord) {
   return (a.sources.anilist?.staff || []).filter(s => isTechnicalStaff(s.role));
+}
+
+/** The anime's own raw MAL id, when resolvable — for comparing against another title's raw MAL relation ids. */
+function malIdOf(a: AnimeRecord): number {
+  const mal = a.crosswalk.mal;
+  return typeof mal === 'string' ? parseInt(mal, 10) : (mal as number);
 }
 
 /**
@@ -94,13 +96,15 @@ export function computeSimilarByCredits(
   const studioName = new Map(targetStudios.map(s => [s.id, s.name]));
   const staffById = new Map(targetStaff.map(s => [s.id, s]));
 
-  const targetMalId = malIdOf(target);
-  const excluded = new Set<number>([targetMalId, ...(target.catalog.relatedAnime || []).map(r => r.node.id)]);
+  // Franchise exclusion is keyed by MAL id: `relatedAnime` ids come straight
+  // off the raw MAL relation payload, so a candidate's own MAL id (not its
+  // canonical id) is the only thing they're comparable against.
+  const excludedMalIds = new Set<number>((target.catalog.relatedAnime || []).map(r => r.node.id));
 
   const scored: Array<SimilarByCredits & { mean: number }> = [];
   for (const cand of catalog) {
-    const candMalId = malIdOf(cand);
-    if (excluded.has(candMalId)) continue;
+    if (cand.id === target.id) continue;
+    if (excludedMalIds.has(malIdOf(cand))) continue;
 
     const candStudioIds = new Set((cand.catalog.studios || []).map(s => s.id));
     const candStaffIds = new Set(technicalStaff(cand).map(s => s.id));
@@ -125,7 +129,7 @@ export function computeSimilarByCredits(
     if (sharedStudios.length === 0 && sharedStaff.length === 0) continue;
 
     scored.push({
-      id: candMalId,
+      id: cand.id,
       title: getCatalogPrimaryTitle(cand.catalog),
       poster: cand.catalog.mainPicture?.medium || cand.catalog.mainPicture?.large,
       score,
@@ -136,6 +140,6 @@ export function computeSimilarByCredits(
   }
 
   // Deterministic ordering: score desc, then MAL mean desc, then id asc.
-  scored.sort((a, b) => b.score - a.score || b.mean - a.mean || a.id - b.id);
+  scored.sort((a, b) => b.score - a.score || b.mean - a.mean || a.id.localeCompare(b.id));
   return scored.slice(0, limit).map(({ mean, ...rest }) => rest);
 }

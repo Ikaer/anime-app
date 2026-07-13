@@ -9,7 +9,7 @@ type RefreshOutcome = {
 };
 
 export interface RefreshButtonProps {
-  animeId: number;
+  animeId: string;
   /**
    * Called after a successful refresh so the host can re-read the now-fresh data
    * (e.g. re-run getServerSideProps via router.replace, or re-fetch a list).

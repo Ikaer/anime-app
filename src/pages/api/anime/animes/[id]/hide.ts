@@ -1,14 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { addHiddenAnimeId, removeHiddenAnimeId } from '@/lib/store';
+import { addHiddenAnimeId, removeHiddenAnimeId, isCanonicalId } from '@/lib/store';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const { id } = req.query;
-  const animeId = parseInt(id as string, 10);
+  const animeId = typeof id === 'string' ? id : '';
 
-  if (isNaN(animeId)) {
+  if (!isCanonicalId(animeId)) {
     return res.status(400).json({ error: 'Invalid anime ID' });
   }
 

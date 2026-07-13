@@ -9,7 +9,8 @@ import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
 
 export interface CreditedAnime {
-  id: number;
+  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  id: string;
   title: string;
   poster?: string;
   mean: number | null;
@@ -26,12 +27,11 @@ export interface CreditsResult {
 
 // Studio/staff credits and MAL score are catalog-only fields, so this reads
 // exclusively from `AnimeRecord.catalog`/`sources.anilist` — no personal
-// state involved. `id` is the outward MAL id (from `crosswalk`), never the
-// internal synthetic `AnimeRecord.id` (see that type's doc comment).
+// state involved. `id` is the outward canonical id (docs/PROVIDER-FREE-
+// CUTOVER.md Phase D) — the detail-page route key.
 function toCredited(a: AnimeRecord, role?: string): CreditedAnime {
-  const malId = typeof a.crosswalk.mal === 'string' ? parseInt(a.crosswalk.mal, 10) : a.crosswalk.mal;
   return {
-    id: malId!,
+    id: a.id,
     title: getCatalogPrimaryTitle(a.catalog),
     poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
     mean: a.catalog.mean ?? null,
@@ -43,7 +43,7 @@ function toCredited(a: AnimeRecord, role?: string): CreditedAnime {
 
 /** Deterministic ordering: MAL mean desc (unscored last), then id asc. */
 function sortCredited(items: CreditedAnime[]): CreditedAnime[] {
-  return items.sort((a, b) => (b.mean ?? -1) - (a.mean ?? -1) || a.id - b.id);
+  return items.sort((a, b) => (b.mean ?? -1) - (a.mean ?? -1) || a.id.localeCompare(b.id));
 }
 
 export function listAnimeByStudio(studioId: number, catalog: AnimeRecord[]): CreditsResult | null {

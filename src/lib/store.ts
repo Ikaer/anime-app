@@ -29,22 +29,23 @@ const ANIME_ANILIST_PERSONAL_FILE = dataFile('animes_anilist_personal.json');
 // Hidden anime ids
 // ============================================================================
 
-export function getHiddenAnimeIds(): number[] {
-  return readJsonFile<number[]>(ANIME_HIDDEN_FILE, []);
+/** Canonical ids (docs/PROVIDER-FREE-CUTOVER.md Phase D — re-keyed from MAL id). */
+export function getHiddenAnimeIds(): string[] {
+  return readJsonFile<string[]>(ANIME_HIDDEN_FILE, []);
 }
 
-export function addHiddenAnimeId(animeId: number): void {
+export function addHiddenAnimeId(canonicalId: string): void {
   const hiddenIds = getHiddenAnimeIds();
-  if (!hiddenIds.includes(animeId)) {
-    hiddenIds.push(animeId);
+  if (!hiddenIds.includes(canonicalId)) {
+    hiddenIds.push(canonicalId);
     writeJsonFile(ANIME_HIDDEN_FILE, hiddenIds);
     cachedAnime = null;
   }
 }
 
-export function removeHiddenAnimeId(animeId: number): void {
+export function removeHiddenAnimeId(canonicalId: string): void {
   let hiddenIds = getHiddenAnimeIds();
-  hiddenIds = hiddenIds.filter(id => id !== animeId);
+  hiddenIds = hiddenIds.filter(id => id !== canonicalId);
   writeJsonFile(ANIME_HIDDEN_FILE, hiddenIds);
   cachedAnime = null;
 }
@@ -216,12 +217,18 @@ export function replaceAnilistPersonalEntries(entriesByMalId: Record<string, Ani
 // slice file is keyed by the canonical id resolved here. Every write path
 // resolves-before-mint (resolveCanonicalIds), so a sync can never recreate a
 // mal-id-keyed entry, and durable user data keyed by canonical id can't
-// reattach to the wrong title on a rebuild. `anime.id` stays the MAL id
-// everywhere OUTWARD (URLs, API route params, hidden/feedback keys) until the
-// Phase D outward-id flip; only the at-rest slice keys are canonical.
+// reattach to the wrong title on a rebuild. The canonical id is now also the
+// OUTWARD id (URLs, API route params, hidden/feedback keys —
+// docs/PROVIDER-FREE-CUTOVER.md Phase D); `anime.id` (the raw MAL id) is kept
+// only for MAL API calls and the external MAL link.
 // ============================================================================
 
 const ANIME_REGISTRY_FILE = dataFile('animes_registry.json');
+
+/** Shape check for the outward canonical id (`a_<n>`) — cheap validation for route params. */
+export function isCanonicalId(id: string): boolean {
+  return /^a_\d+$/.test(id);
+}
 
 export function getRegistry(): Record<string, SourceIds> {
   return readJsonFile<Record<string, SourceIds>>(ANIME_REGISTRY_FILE, {});
@@ -289,6 +296,21 @@ function toNum(v: number | string | undefined): number | undefined {
     return Number.isNaN(n) ? undefined : n;
   }
   return undefined;
+}
+
+/**
+ * The MAL id for a canonical id, when one is resolvable — the mirror of
+ * `resolveByMalId` (mal → canonical) for the outward-id routes (mal-status,
+ * rating, refresh, similar) that need the real MAL id for a remote API call.
+ * Checks the MAL slice's own id first (authoritative when it exists), falling
+ * back to the registry crosswalk — same precedence `assembleDisplayRow` uses,
+ * so a refresh/similar call never disagrees with what the detail page shows
+ * for the same title. Undefined for a true AniList-only title (no `idMal`).
+ */
+export function getMalIdForCanonical(canonicalId: string): number | undefined {
+  const mal = getAllAnime()[canonicalId];
+  if (mal) return mal.id;
+  return toNum(getRegistry()[canonicalId]?.mal);
 }
 
 /**
@@ -389,6 +411,51 @@ function assembleCrosswalk(
   return crosswalk;
 }
 
+/**
+ * Assemble one `AnimeForDisplay` row for a canonical id from the already-read
+ * slices. Shared by `getAnimeForDisplay` (loops every canonical id) and
+ * `getAnimeByCanonicalId` (looks up one, bypassing the cache). Returns
+ * undefined when no MAL id is resolvable anywhere (true AniList-only, no
+ * `idMal` — out of scope per docs/PROVIDER-FREE-CUTOVER.md "Deferred").
+ */
+function assembleDisplayRow(
+  canonicalId: string,
+  malAnime: Record<string, MALAnime>,
+  simklByCanonical: Record<string, SimklPersonalEntry>,
+  anilistMetaByCanonical: Record<string, AniListMetaEntry>,
+  anilistPersonalByCanonical: Record<string, AniListPersonalEntry>,
+  registry: Record<string, SourceIds>,
+  hiddenIds: Set<string>
+): AnimeForDisplay | undefined {
+  const mal = malAnime[canonicalId];
+  const simkl = simklByCanonical[canonicalId];
+  const anilistMeta = anilistMetaByCanonical[canonicalId];
+  const anilistPersonal = anilistPersonalByCanonical[canonicalId];
+  const crosswalk = registry[canonicalId] ?? (mal ? assembleCrosswalk(mal.id, simkl, anilistMeta) : undefined);
+  // Outward MAL id (for MAL API calls / the external MAL link): the raw MAL
+  // slice's id, falling back to the registry crosswalk's `mal` (populated from
+  // AniList's `idMal` for a crawled title with no local MAL slice yet).
+  const malId = mal?.id ?? toNum(crosswalk?.mal);
+  if (malId === undefined) return undefined;
+  const hidden = hiddenIds.has(canonicalId);
+  const discrepancy = mal ? computeDiscrepancy(mal, simkl) : null;
+  const record = toAnimeRecord({ mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk }, canonicalId);
+  return {
+    id: malId,
+    hidden,
+    simkl,
+    discrepancy,
+    anilistMeta,
+    anilistPersonal,
+    crosswalk: record.crosswalk,
+    canonicalId,
+    catalog: record.catalog,
+    personal: record.personal,
+    sources: record.sources,
+    provenance: record.provenance,
+  };
+}
+
 export function getAnimeForDisplay(): AnimeForDisplay[] {
   const now = Date.now();
   if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
@@ -400,7 +467,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
   // seeded by the AniList catalog crawler) still produces a row, with
   // `sources.mal` left undefined (docs/PROVIDER-FREE-CUTOVER.md Phase C).
   const malAnime = getAllAnime();
-  const hiddenIds = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
+  const hiddenIds = new Set(getHiddenAnimeIds());
   const simklByCanonical = getAllSimklEntries();
   const anilistMetaByCanonical = getAllAnilistMeta();
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
@@ -416,36 +483,10 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
 
   const rows: AnimeForDisplay[] = [];
   for (const canonicalId of canonicalIds) {
-    const mal = malAnime[canonicalId];
-    const simkl = simklByCanonical[canonicalId];
-    const anilistMeta = anilistMetaByCanonical[canonicalId];
-    const anilistPersonal = anilistPersonalByCanonical[canonicalId];
-    const crosswalk = registry[canonicalId] ?? (mal ? assembleCrosswalk(mal.id, simkl, anilistMeta) : undefined);
-    // Outward id: the raw MAL slice's id, falling back to the registry
-    // crosswalk's `mal` (populated from AniList's `idMal` for a crawled title
-    // with no local MAL slice yet). A canonical id with NO resolvable MAL id
-    // anywhere (true AniList-only, no `idMal`) is out of scope
-    // (docs/PROVIDER-FREE-CUTOVER.md "Deferred") — skip it rather than surface
-    // an id-less row.
-    const malId = mal?.id ?? toNum(crosswalk?.mal);
-    if (malId === undefined) continue;
-    const hidden = hiddenIds.has(malId);
-    const discrepancy = mal ? computeDiscrepancy(mal, simkl) : null;
-    const record = toAnimeRecord({ mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk }, canonicalId);
-    rows.push({
-      id: malId,
-      hidden,
-      simkl,
-      discrepancy,
-      anilistMeta,
-      anilistPersonal,
-      crosswalk: record.crosswalk,
-      canonicalId,
-      catalog: record.catalog,
-      personal: record.personal,
-      sources: record.sources,
-      provenance: record.provenance,
-    });
+    const row = assembleDisplayRow(
+      canonicalId, malAnime, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, registry, hiddenIds
+    );
+    if (row) rows.push(row);
   }
   cachedAnime = rows;
   lastCacheTime = now;
@@ -462,37 +503,29 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
  * `cachedAnime` never reaches the page's copy — it would stay stale until the
  * 10-min TTL expired. Reading fresh here makes the detail page immune to that.
  *
- * `id` is the outward id — still the MAL id in Phase B — so it's resolved to
- * the canonical slice key via the registry before the by-key lookups.
+ * `canonicalId` is the outward id (docs/PROVIDER-FREE-CUTOVER.md Phase D) —
+ * the route param IS the slice key, so no resolve step is needed.
  */
-export function getAnimeByIdForDisplay(id: number): AnimeForDisplay | undefined {
-  const canonicalId = resolveByMalId(id);
-  if (!canonicalId) return undefined;
-  const mal = getAllAnime()[canonicalId];
-  if (!mal) return undefined;
-  const hiddenIds = new Set(getHiddenAnimeIds()); // still MAL-keyed until Phase D
-  const simkl = getAllSimklEntries()[canonicalId];
-  const anilistMeta = getAllAnilistMeta()[canonicalId];
-  const anilistPersonal = getAllAnilistPersonalEntries()[canonicalId];
-  const registry = getRegistry();
-  const hidden = hiddenIds.has(mal.id);
-  const discrepancy = computeDiscrepancy(mal, simkl);
-  const crosswalk = registry[canonicalId] ?? assembleCrosswalk(mal.id, simkl, anilistMeta);
-  const record = toAnimeRecord({ mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk }, canonicalId);
-  return {
-    id: mal.id,
-    hidden,
-    simkl,
-    discrepancy,
-    anilistMeta,
-    anilistPersonal,
-    crosswalk: record.crosswalk,
+export function getAnimeByCanonicalId(canonicalId: string): AnimeForDisplay | undefined {
+  return assembleDisplayRow(
     canonicalId,
-    catalog: record.catalog,
-    personal: record.personal,
-    sources: record.sources,
-    provenance: record.provenance,
-  };
+    getAllAnime(),
+    getAllSimklEntries(),
+    getAllAnilistMeta(),
+    getAllAnilistPersonalEntries(),
+    getRegistry(),
+    new Set(getHiddenAnimeIds())
+  );
+}
+
+/**
+ * MAL-id-keyed lookup, cache-bypassing like `getAnimeByCanonicalId` above.
+ * Kept for the few remaining genuinely-MAL-id-keyed flows (`/rate?id=`) — new
+ * call sites should prefer `getAnimeByCanonicalId`.
+ */
+export function getAnimeByIdForDisplay(malId: number): AnimeForDisplay | undefined {
+  const canonicalId = resolveByMalId(malId);
+  return canonicalId ? getAnimeByCanonicalId(canonicalId) : undefined;
 }
 
 // ============================================================================
@@ -515,15 +548,15 @@ export function getAnimeRecords(): AnimeRecord[] {
   return getAnimeForDisplay().map(toRecordView);
 }
 
-export function getAnimeRecordById(id: number): AnimeRecord | undefined {
-  const anime = getAnimeByIdForDisplay(id);
+export function getAnimeRecordByCanonicalId(canonicalId: string): AnimeRecord | undefined {
+  const anime = getAnimeByCanonicalId(canonicalId);
   return anime ? toRecordView(anime) : undefined;
 }
 
 /** Lift an already-projected `AnimeForDisplay` into the standalone `AnimeRecord`. */
 function toRecordView(a: AnimeForDisplay): AnimeRecord {
   return {
-    id: a.canonicalId ?? `a_mal_${a.id}`,
+    id: a.canonicalId,
     crosswalk: a.crosswalk ?? { mal: a.id },
     catalog: a.catalog,
     personal: a.personal,
