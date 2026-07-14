@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeForDisplay, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoVerdict } from '@/models/anime';
+import { AnimeRecord, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoVerdict } from '@/models/anime';
 import { getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
@@ -8,7 +8,7 @@ import { Button } from '@/components/shared';
 import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
 import styles from './AnimeCardView.module.css';
 
-type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
+type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
 
 interface AnimeCardViewProps {
     animes: RecoCard[];
@@ -87,19 +87,19 @@ export default function AnimeCardView({
         );
     }
 
-    const handleManualSearch = (anime: AnimeForDisplay) => {
+    const handleManualSearch = (anime: AnimeRecord) => {
         const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
         const googleUrl = generateGoogleORQuery(searchTitle);
         window.open(googleUrl, '_blank');
     };
 
-    const handleJustWatchSearch = (anime: AnimeForDisplay) => {
+    const handleJustWatchSearch = (anime: AnimeRecord) => {
         const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
         const justWatchUrl = generateJustWatchQuery(searchTitle);
         window.open(justWatchUrl, '_blank');
     };
 
-    const getDisplayStatus = (anime: AnimeForDisplay) => anime.sources.mal?.my_list_status?.status ?? '';
+    const getDisplayStatus = (anime: AnimeRecord) => anime.sources.mal?.my_list_status?.status ?? '';
 
     const getScoreClass = (score?: number) => {
         if (score === undefined || score === 0) return styles.scoreNa;
@@ -181,7 +181,7 @@ export default function AnimeCardView({
         <div className={styles.cardGrid} style={gridStyle}>
             {animes.map((anime) => {
                 return (
-                <div key={anime.canonicalId} className={styles.card}>
+                <div key={anime.id} className={styles.card}>
                     <div className={styles.imageContainer}>
                         {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
                             <Image
@@ -202,7 +202,7 @@ export default function AnimeCardView({
                         {onHideToggle && (
                             <button
                                 className={styles.closeBtn}
-                                onClick={() => onHideToggle(anime.canonicalId, !anime.hidden)}
+                                onClick={() => onHideToggle(anime.id, !anime.hidden)}
                                 title={anime.hidden ? t('table.unhide') : t('table.hide')}
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -214,7 +214,7 @@ export default function AnimeCardView({
                         <div className={styles.overlay}>
                             <div className={styles.imageActions}>
                                 <Button
-                                    href={`/anime/${anime.canonicalId}`}
+                                    href={`/anime/${anime.id}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={styles.imageActionBtn}
@@ -246,7 +246,7 @@ export default function AnimeCardView({
                                     <Image src="/justwatch.png" alt="JustWatch" width={20} height={20} className={styles.imageActionIcon} />
                                 </Button>
                                 <Button
-                                    href={`https://myanimelist.net/anime/${anime.id}`}
+                                    href={`https://myanimelist.net/anime/${anime.crosswalk.mal}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={styles.imageActionBtn}
@@ -257,9 +257,9 @@ export default function AnimeCardView({
                                 >
                                     <Image src="/mal.png" alt="MAL" width={20} height={20} className={styles.imageActionIcon} />
                                 </Button>
-                                {anime.simkl?.simkl_id && (
+                                {anime.sources.simkl?.simkl_id && (
                                     <Button
-                                        href={`https://simkl.com/anime/${anime.simkl.simkl_id}`}
+                                        href={`https://simkl.com/anime/${anime.sources.simkl.simkl_id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className={styles.imageActionBtn}
@@ -336,21 +336,21 @@ export default function AnimeCardView({
                                 {!allExplainsOpen && (
                                     <button
                                         className={styles.explainToggle}
-                                        onClick={() => toggleExplain(anime.canonicalId)}
-                                        aria-expanded={explainOpen.has(anime.canonicalId)}
+                                        onClick={() => toggleExplain(anime.id)}
+                                        aria-expanded={explainOpen.has(anime.id)}
                                     >
-                                        {(explainOpen.has(anime.canonicalId) ? '▾ ' : '▸ ') + t('card.why')}
+                                        {(explainOpen.has(anime.id) ? '▾ ' : '▸ ') + t('card.why')}
                                     </button>
                                 )}
-                                {(allExplainsOpen || explainOpen.has(anime.canonicalId)) && renderExplain(anime.recoMeta)}
+                                {(allExplainsOpen || explainOpen.has(anime.id)) && renderExplain(anime.recoMeta)}
                             </div>
                         )}
-                        {(feedbackMode || anime.discrepancy || anime.simkl) && (
+                        {(feedbackMode || anime.discrepancy || anime.sources.simkl) && (
                         <div className={styles.actions}>
                             <SimklDiscrepancyBadge anime={anime} />
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (
                                 <Button
-                                    onClick={() => onRemoveFeedback?.(anime.canonicalId)}
+                                    onClick={() => onRemoveFeedback?.(anime.id)}
                                     variant="secondary"
                                     size="xs"
                                     className={styles.actionButton}
@@ -360,7 +360,7 @@ export default function AnimeCardView({
                             ) : feedbackMode === 'feed' ? (
                                 <>
                                     <Button
-                                        onClick={() => onFeedback?.(anime.canonicalId, 'up')}
+                                        onClick={() => onFeedback?.(anime.id, 'up')}
                                         variant="primary-positive"
                                         size="xs"
                                         className={styles.actionButton}
@@ -369,7 +369,7 @@ export default function AnimeCardView({
                                         {t('card.goodPick')}
                                     </Button>
                                     <Button
-                                        onClick={() => onFeedback?.(anime.canonicalId, 'down')}
+                                        onClick={() => onFeedback?.(anime.id, 'down')}
                                         variant="primary-negative"
                                         size="xs"
                                         className={styles.actionButton}

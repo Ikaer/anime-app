@@ -2,16 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
-import type { AnimeForDisplay } from '@/models/anime';
+import type { AnimeRecord } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/animeUtils';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 const fmtStatus = (s: string | null | undefined, t: TFunction): string =>
   s ? t(`statusShort.${s}` as TranslationKey) : '—';
 
-const malUrl = (id: number) => `https://myanimelist.net/anime/${id}`;
-const simklUrl = (anime: AnimeForDisplay): string | null => {
-  const simklId = anime.simkl?.simkl_id ?? anime.crosswalk?.simkl;
+const malUrl = (id: number | string | undefined) => `https://myanimelist.net/anime/${id}`;
+const simklUrl = (anime: AnimeRecord): string | null => {
+  const simklId = anime.sources.simkl?.simkl_id ?? anime.crosswalk?.simkl;
   return simklId ? `https://simkl.com/anime/${simklId}` : null;
 };
 
@@ -24,7 +24,7 @@ function Cell({ value, mismatch }: { value: React.ReactNode; mismatch?: boolean 
 
 export default function DiscrepanciesPage() {
   const t = useT();
-  const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
+  const [animes, setAnimes] = useState<AnimeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -96,13 +96,13 @@ export default function DiscrepanciesPage() {
                 {animes.map(anime => {
                   const d = anime.discrepancy;
                   const mal = anime.sources.mal?.my_list_status;
-                  const simkl = anime.simkl;
+                  const simkl = anime.sources.simkl;
                   const img = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
                   const sUrl = simklUrl(anime);
                   const simklOnly = d?.presence === 'simkl_only';
 
                   return (
-                    <tr key={anime.canonicalId}>
+                    <tr key={anime.id}>
                       <td>
                         {img ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -148,7 +148,7 @@ export default function DiscrepanciesPage() {
                         <div className={styles.links}>
                           <a
                             className={styles.linkBtn}
-                            href={malUrl(anime.id)}
+                            href={malUrl(anime.crosswalk.mal)}
                             target="_blank"
                             rel="noopener noreferrer"
                           >
@@ -167,7 +167,7 @@ export default function DiscrepanciesPage() {
                         </div>
                       </td>
                       <td>
-                        <RefreshButton animeId={anime.canonicalId} compact onRefreshed={load} />
+                        <RefreshButton animeId={anime.id} compact onRefreshed={load} />
                       </td>
                     </tr>
                   );

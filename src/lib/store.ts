@@ -4,7 +4,7 @@
  * MAL, SIMKL and AniList are interchangeable, absent-tolerant refill pipes;
  * what they refill is the merged local record assembled here. Nothing in this
  * module talks to a remote API: it reads and writes the JSON files under
- * `DATA_PATH` and joins them into `AnimeForDisplay`.
+ * `DATA_PATH` and joins them into `AnimeRecord`.
  *
  * Naming: functions here are about the *local record*, so they carry no source
  * prefix. A `MAL`/`Simkl`/`Anilist` prefix means the function is genuinely
@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeForDisplay, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, SourceIds } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
@@ -289,7 +289,7 @@ function maxCounter(registry: Record<string, SourceIds>): number {
 }
 
 /** Coerce a crosswalk id value (which may be a string from SIMKL) to a number, or undefined. */
-function toNum(v: number | string | undefined): number | undefined {
+export function toNum(v: number | string | undefined): number | undefined {
   if (typeof v === 'number') return Number.isNaN(v) ? undefined : v;
   if (typeof v === 'string') {
     const n = parseInt(v, 10);
@@ -388,7 +388,7 @@ export function resolveCanonicalId(crosswalk: SourceIds): string {
 // The merged record
 // ============================================================================
 
-let cachedAnime: AnimeForDisplay[] | null = null;
+let cachedAnime: AnimeRecord[] | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 10 * 60_000; // 10 min
 
@@ -412,7 +412,7 @@ function assembleCrosswalk(
 }
 
 /**
- * Assemble one `AnimeForDisplay` row for a canonical id from the already-read
+ * Assemble one `AnimeRecord` row for a canonical id from the already-read
  * slices. Shared by `getAnimeForDisplay` (loops every canonical id) and
  * `getAnimeByCanonicalId` (looks up one, bypassing the cache). Returns
  * undefined when no MAL id is resolvable anywhere (true AniList-only, no
@@ -426,7 +426,7 @@ function assembleDisplayRow(
   anilistPersonalByCanonical: Record<string, AniListPersonalEntry>,
   registry: Record<string, SourceIds>,
   hiddenIds: Set<string>
-): AnimeForDisplay | undefined {
+): AnimeRecord | undefined {
   const mal = malAnime[canonicalId];
   const simkl = simklByCanonical[canonicalId];
   const anilistMeta = anilistMetaByCanonical[canonicalId];
@@ -439,24 +439,13 @@ function assembleDisplayRow(
   if (malId === undefined) return undefined;
   const hidden = hiddenIds.has(canonicalId);
   const discrepancy = mal ? computeDiscrepancy(mal, simkl) : null;
-  const record = toAnimeRecord({ mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk }, canonicalId);
-  return {
-    id: malId,
-    hidden,
-    simkl,
-    discrepancy,
-    anilistMeta,
-    anilistPersonal,
-    crosswalk: record.crosswalk,
-    canonicalId,
-    catalog: record.catalog,
-    personal: record.personal,
-    sources: record.sources,
-    provenance: record.provenance,
-  };
+  return toAnimeRecord(
+    { mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
+    canonicalId
+  );
 }
 
-export function getAnimeForDisplay(): AnimeForDisplay[] {
+export function getAnimeForDisplay(): AnimeRecord[] {
   const now = Date.now();
   if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
     return cachedAnime;
@@ -481,7 +470,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
     ...Object.keys(anilistPersonalByCanonical),
   ]);
 
-  const rows: AnimeForDisplay[] = [];
+  const rows: AnimeRecord[] = [];
   for (const canonicalId of canonicalIds) {
     const row = assembleDisplayRow(
       canonicalId, malAnime, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, registry, hiddenIds
@@ -506,7 +495,7 @@ export function getAnimeForDisplay(): AnimeForDisplay[] {
  * `canonicalId` is the outward id (docs/PROVIDER-FREE-CUTOVER.md Phase D) —
  * the route param IS the slice key, so no resolve step is needed.
  */
-export function getAnimeByCanonicalId(canonicalId: string): AnimeForDisplay | undefined {
+export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefined {
   return assembleDisplayRow(
     canonicalId,
     getAllAnime(),
@@ -523,48 +512,9 @@ export function getAnimeByCanonicalId(canonicalId: string): AnimeForDisplay | un
  * Kept for the few remaining genuinely-MAL-id-keyed flows (`/rate?id=`) — new
  * call sites should prefer `getAnimeByCanonicalId`.
  */
-export function getAnimeByIdForDisplay(malId: number): AnimeForDisplay | undefined {
+export function getAnimeByIdForDisplay(malId: number): AnimeRecord | undefined {
   const canonicalId = resolveByMalId(malId);
   return canonicalId ? getAnimeByCanonicalId(canonicalId) : undefined;
-}
-
-// ============================================================================
-// AnimeRecord projections (docs/PROVIDER-FREE.md Phase 2)
-// ============================================================================
-//
-// Thin wrappers over the existing merged reads: project `AnimeForDisplay` ->
-// `AnimeRecord` via `toAnimeRecord`, attaching the Phase 1 registry's
-// canonical id. New/rewritten call sites should prefer these over
-// `getAnimeForDisplay()`/`getAnimeByIdForDisplay()`.
-
-/**
- * The `AnimeRecord` view of the catalog. The `catalog`/`personal`/`sources`
- * projection is already attached onto each `AnimeForDisplay` by
- * `getAnimeForDisplay` (and the canonical id carried on `.canonicalId`), so
- * this just lifts those into the standalone record shape — no re-projection,
- * no extra registry read.
- */
-export function getAnimeRecords(): AnimeRecord[] {
-  return getAnimeForDisplay().map(toRecordView);
-}
-
-export function getAnimeRecordByCanonicalId(canonicalId: string): AnimeRecord | undefined {
-  const anime = getAnimeByCanonicalId(canonicalId);
-  return anime ? toRecordView(anime) : undefined;
-}
-
-/** Lift an already-projected `AnimeForDisplay` into the standalone `AnimeRecord`. */
-function toRecordView(a: AnimeForDisplay): AnimeRecord {
-  return {
-    id: a.canonicalId,
-    crosswalk: a.crosswalk ?? { mal: a.id },
-    catalog: a.catalog,
-    personal: a.personal,
-    sources: a.sources,
-    provenance: a.provenance,
-    hidden: a.hidden,
-    discrepancy: a.discrepancy,
-  };
 }
 
 // ============================================================================

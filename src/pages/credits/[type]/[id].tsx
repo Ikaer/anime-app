@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import type { GetServerSideProps } from 'next';
-import { getAnimeRecords } from '@/lib/store';
+import { getAnimeForDisplay } from '@/lib/store';
 import { listAnimeByStudio, listAnimeByStaff, type CreditedAnime } from '@/lib/creditsCatalog';
 import { useT } from '@/lib/i18n';
 
@@ -87,7 +87,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
   // Catalog fields (studios/staff) only, so the personal-state cache caveat
   // doesn't apply — the shared cached catalog is fine (see similarByCredits.ts).
-  const catalog = getAnimeRecords();
+  const catalog = getAnimeForDisplay();
   const result = type === 'studio' ? listAnimeByStudio(id, catalog) : listAnimeByStaff(id, catalog);
   if (!result) {
     return { notFound: true };

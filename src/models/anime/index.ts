@@ -224,62 +224,16 @@ export interface AniListMetaEntry {
   fetched_at: string; // ISO timestamp of last successful fetch
 }
 
-// Combined data for display — the provider-neutral compat record
-// (docs/PROVIDER-FREE-CUTOVER.md Phase C). NO `extends MALAnime`: every
-// catalog/personal field is read via `.catalog.*` / `.personal.*` (hydrated
-// across providers by `toAnimeRecord`), never as a raw top-level MAL field.
-// `.sources.mal` is the one place a reader that genuinely wants MAL's raw
-// value (not the merged/effective one) can still reach it — see
-// `AnimeSources`'s doc comment.
-//
-// `id` is the raw MAL id — kept for MAL API calls and the external MAL link,
-// NEVER for URLs/route params/React keys/hidden/feedback (docs/PROVIDER-FREE-
-// CUTOVER.md Phase D: those all use `canonicalId`). Resolved from either the
-// raw MAL slice OR the registry crosswalk, so an AniList-crawled title with a
-// real `idMal` still gets a row even with no local MAL slice (`sources.mal`
-// undefined) — see `getAnimeForDisplay`. A canonical id with NO resolvable
-// MAL id anywhere (true AniList-only, no `idMal`) is explicitly out of scope
-// (docs/PROVIDER-FREE-CUTOVER.md "Deferred") and is not surfaced as a row at
-// all, so `id` stays required here rather than optional.
-// `simkl`/`anilistMeta`/`anilistPersonal`/`crosswalk` are kept as top-level
-// convenience fields (mirrors of `sources.*`/`crosswalk`) since they were
-// never raw MAL fields and dozens of call sites already read them directly.
-//
-// This is the transitional shape docs/PROVIDER-FREE-CUTOVER.md calls out —
-// retired as a distinct interface in favor of a pure `AnimeRecord` alias in
-// Phase E.
-export interface AnimeForDisplay {
-  id: number;
-  hidden?: boolean;
-  simkl?: SimklPersonalEntry;
-  discrepancy?: Discrepancy | null;
-  anilistMeta?: AniListMetaEntry;
-  anilistPersonal?: AniListPersonalEntry;
-  crosswalk?: SourceIds;
-  /** The outward id everywhere else (URLs, route params, React keys, hidden/feedback keys) — see docs/PROVIDER-FREE-CUTOVER.md Phase D. `.id` above stays the MAL id, kept for MAL API calls and the external MAL link. */
-  canonicalId: string;
-  catalog: AnimeCatalog;
-  personal: AnimePersonal;
-  sources: AnimeSources;
-  provenance: RecordProvenance;
-}
-
 // ============================================================================
-// AnimeRecord — the provider-neutral local record (docs/PROVIDER-FREE.md Phase 2)
+// AnimeRecord — the provider-neutral local record (docs/PROVIDER-FREE.md Phase 2,
+// collapsed to the sole record shape in docs/PROVIDER-FREE-CUTOVER.md Phase E)
 // ============================================================================
 //
-// `AnimeForDisplay` above is CLEANUP.md §1.2's "extends MALAnime" coupling: a
-// MAL response with side-objects bolted on. `AnimeRecord` is the target shape
-// — catalog/personal/sources are merge PROJECTIONS instead of raw MAL fields,
-// so no single provider's shape is baked into the record. It's built from
-// `AnimeForDisplay` by `toAnimeRecord()` in animeUtils.ts (catalog ← MAL-first,
-// personal ← the existing `getEffective*` precedence helpers, sources → the
-// verbatim per-provider slices), so nothing is re-derived or lost.
-//
-// `AnimeForDisplay` stays the compatibility shape most of the ~150 existing
-// reads go through — migrating them off raw MAL fields happens incrementally,
-// area by area (see docs/PROVIDER-FREE.md Phase 2). New/rewritten call sites
-// should prefer `AnimeRecord`.
+// NO `extends MALAnime`: every catalog/personal field is read via
+// `.catalog.*` / `.personal.*` (hydrated across providers by `toAnimeRecord`
+// in animeUtils.ts), never as a raw top-level MAL field. `.sources.mal` is the
+// one place a reader that genuinely wants MAL's raw value (not the
+// merged/effective one) can still reach it — see `AnimeSources`'s doc comment.
 
 /**
  * Per-field catalog authority order (docs/PROVIDER-FREE-CUTOVER.md Phase C).
@@ -526,7 +480,7 @@ export interface AnimeDisplayState {
 
 // API response model for anime list endpoint
 export interface AnimeListResponse {
-  animes: AnimeForDisplay[];
+  animes: AnimeRecord[];
   total: number;
   // Filters echoed back as strings as they appear in query for traceability
   filters: {

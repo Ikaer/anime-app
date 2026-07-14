@@ -2,8 +2,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { getAnimeByCanonicalId, getAnimeRecordByCanonicalId, getAnimeRecords, resolveByMalId, isCanonicalId } from '@/lib/store';
-import type { AnimeForDisplay } from '@/models/anime';
+import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId } from '@/lib/store';
+import type { AnimeRecord } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
@@ -12,7 +12,7 @@ import { MoreLikeThis } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 interface Props {
-  anime: AnimeForDisplay;
+  anime: AnimeRecord;
   similar: SimilarByCredits[];
 }
 
@@ -73,10 +73,10 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const secondaryTitle = getSecondaryTitle(anime);
 
   const mal = anime.sources.mal?.my_list_status;
-  const simkl = anime.simkl;
+  const simkl = anime.sources.simkl;
   const disc = anime.discrepancy;
-  const tags = anime.anilistMeta?.tags || [];
-  const staff = anime.anilistMeta?.staff || [];
+  const tags = anime.sources.anilist?.tags || [];
+  const staff = anime.sources.anilist?.staff || [];
   const crosswalk = anime.crosswalk || {};
 
   const effStatus = getEffectiveStatus(anime);
@@ -84,17 +84,17 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
   const effProgress = getEffectiveProgress(anime);
 
   const searchTitle = en || anime.catalog.title;
-  const anilistId = anime.anilistMeta?.anilist_id ?? crosswalk.anilist;
+  const anilistId = anime.sources.anilist?.anilist_id ?? crosswalk.anilist;
 
   // Page backdrop. AniList's landscape banner is the real thing (it's what Plex
   // shows); the portrait poster is the fallback and needs a heavier blur, since
   // cover-cropping it to a wide viewport leaves only a thin, meaningless band.
-  const banner = anime.anilistMeta?.banner_image || '';
+  const banner = anime.sources.anilist?.banner_image || '';
   const backdrop = banner || poster;
 
   // Cross-source id rows worth surfacing, in a stable order.
   const idRows: Array<[string, string | number | undefined, string | undefined]> = [
-    ['MAL', anime.id, `https://myanimelist.net/anime/${anime.id}`],
+    ['MAL', crosswalk.mal, `https://myanimelist.net/anime/${crosswalk.mal}`],
     ['SIMKL', crosswalk.simkl ?? simkl?.simkl_id, (crosswalk.simkl ?? simkl?.simkl_id) ? `https://simkl.com/anime/${crosswalk.simkl ?? simkl?.simkl_id}` : undefined],
     ['AniList', anilistId, anilistId ? `https://anilist.co/anime/${anilistId}` : undefined],
     ['AniDB', crosswalk.anidb, undefined],
@@ -125,14 +125,14 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <div className="topbar">
           <Link href="/" className="back">{t('detail.back')}</Link>
           <div className="ext-links">
-            <Link href={`/rate?id=${anime.id}`} className="ext-link">{t('detail.rate')}</Link>
+            <Link href={`/rate?id=${crosswalk.mal}`} className="ext-link">{t('detail.rate')}</Link>
             <RefreshButton
-              animeId={anime.canonicalId}
+              animeId={anime.id}
               onRefreshed={() => {
                 router.replace(router.asPath, undefined, { scroll: false })
               }}
             />
-            <a href={`https://myanimelist.net/anime/${anime.id}`} target="_blank" rel="noopener noreferrer">MAL</a>
+            <a href={`https://myanimelist.net/anime/${crosswalk.mal}`} target="_blank" rel="noopener noreferrer">MAL</a>
             {(simkl?.simkl_id || crosswalk.simkl) && (
               <a href={`https://simkl.com/anime/${simkl?.simkl_id ?? crosswalk.simkl}`} target="_blank" rel="noopener noreferrer">SIMKL</a>
             )}
@@ -190,7 +190,7 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         <div className="columns">
         <aside className="col-side">
           {/* ---------- Crowd drill-down (MAL + AniList recos anchored on this title) ---------- */}
-          <MoreLikeThis animeId={anime.canonicalId} />
+          <MoreLikeThis animeId={anime.id} />
 
           {/* ---------- Similar by staff & studio (production-credit recos) ---------- */}
           {similar.length > 0 && (
@@ -610,9 +610,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
   // Similar-by-credits reads catalog fields (studios/staff) only, so the
   // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
-  const targetRecord = getAnimeRecordByCanonicalId(raw)!;
-  const similar = computeSimilarByCredits(targetRecord, getAnimeRecords(), 3);
-  // AnimeForDisplay carries many optional/undefined fields; Next can't serialize
+  const similar = computeSimilarByCredits(anime, getAnimeForDisplay(), 3);
+  // AnimeRecord carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.
   return {
     props: {

@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
 import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
-import { AnimeForDisplay, SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
+import { SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -182,15 +182,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       animeList = animeList.slice(pageOffset);
     }
 
-    // Compact mode: remove heavy fields unless full=true
+    // Compact mode: `full=true` vs the default were meant to trim heavy fields,
+    // but the pre-Phase-C strip targeted raw top-level MAL fields
+    // (synopsis/studios/etc); those moved under `.catalog` in Phase C and this
+    // branch was never updated to match, so compact mode has been a no-op ever
+    // since (docs/PROVIDER-FREE.md Phase 2 "de-bloat API payloads", still open).
     const useFull = typeof full === 'string' && full.toLowerCase() === 'true';
-    if (!useFull) {
-      animeList = animeList.map(anime => {
-        // Keep genres and alternative_titles (english alt title needed for listing)
-        const { synopsis, studios, source, rating, background, related_anime, related_manga, recommendations, ...rest } = anime as any;
-        return rest as AnimeForDisplay;
-      });
-    }
 
     // Return the filtered and sorted (and limited) list
     const response: AnimeListResponse = {

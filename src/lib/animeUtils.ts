@@ -1,5 +1,5 @@
 import type {
-  AnimeForDisplay, AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
+  AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
   ProvenanceSource, SeasonName, SeasonInfo, MALAnime, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
   SourceIds, Discrepancy,
 } from '@/models/anime';
@@ -9,7 +9,7 @@ import type { TFunction, TranslationKey } from '@/lib/i18n';
 // Display titles (English-first)
 // ============================================================================
 
-type TitleFields = Pick<AnimeForDisplay, 'catalog'>;
+type TitleFields = Pick<AnimeRecord, 'catalog'>;
 type CatalogTitleFields = { title: string; alternativeTitles?: { en: string } };
 
 /** Primary display title: the English title when present, else the original (romaji) title. */
@@ -44,7 +44,7 @@ export interface NarrowingFilters {
 }
 
 /** Release year, preferring the season year, falling back to the start date. */
-function animeYear(a: AnimeForDisplay): number | undefined {
+function animeYear(a: AnimeRecord): number | undefined {
   if (a.catalog.startSeason?.year) return a.catalog.startSeason.year;
   if (a.catalog.startDate && a.catalog.startDate.length >= 4) {
     const y = parseInt(a.catalog.startDate.slice(0, 4), 10);
@@ -60,7 +60,7 @@ function animeYear(a: AnimeForDisplay): number | undefined {
  * filter MAL's `mean` (not the personal score), matching CLAUDE.md.
  * Generic over the item type so extra fields (e.g. `recoMeta`) survive.
  */
-export function applyNarrowingFilters<T extends AnimeForDisplay>(
+export function applyNarrowingFilters<T extends AnimeRecord>(
   items: T[],
   f: NarrowingFilters
 ): T[] {
@@ -188,17 +188,17 @@ export function getSeasonInfos(): SeasonInfos {
  * Phase C) — `toAnimeRecord` already applies this exact precedence via
  * `DEFAULT_PERSONAL_PRECEDENCE`, so there is one implementation, not two.
  */
-export function getEffectiveStatus(anime: AnimeForDisplay): string | undefined {
+export function getEffectiveStatus(anime: AnimeRecord): string | undefined {
   return anime.personal.status;
 }
 
 /** Effective personal score on the shared 1–10 scale. See `getEffectiveStatus`. */
-export function getEffectiveScore(anime: AnimeForDisplay): number | undefined {
+export function getEffectiveScore(anime: AnimeRecord): number | undefined {
   return anime.personal.score;
 }
 
 /** Effective watched-episode progress. See `getEffectiveStatus`. */
-export function getEffectiveProgress(anime: AnimeForDisplay): number | undefined {
+export function getEffectiveProgress(anime: AnimeRecord): number | undefined {
   return anime.personal.progress;
 }
 
@@ -364,7 +364,7 @@ function personalFromAnilist(entry?: AniListPersonalEntry): Partial<AnimePersona
 
 /**
  * The raw per-provider slices `toAnimeRecord` hydrates from — exactly what
- * `getAnimeForDisplay` gathers per canonical id before any merging happens.
+ * `getAnimeRecord` gathers per canonical id before any merging happens.
  * `mal` is optional: a canonical id anchored only by AniList (no MAL slice)
  * still produces a full record, per the Phase C checkpoint.
  */

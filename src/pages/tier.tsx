@@ -4,7 +4,7 @@ import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
-import { AnimeForDisplay, ImageSize } from '@/models/anime';
+import { AnimeRecord, ImageSize } from '@/models/anime';
 import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/animeUtils';
 import { useTierUrlState } from '@/hooks';
 import { useT, TranslationKey } from '@/lib/i18n';
@@ -24,14 +24,14 @@ function scoreColor(n: number): string {
 const THUMB_W: Record<ImageSize, number> = { 0: 46, 1: 62, 2: 84, 3: 112 };
 const POSTER_RATIO = 0.7; // width / height
 
-interface Preview { anime: AnimeForDisplay; x: number; y: number; }
+interface Preview { anime: AnimeRecord; x: number; y: number; }
 interface QueueItem { id: string; score: number; prevScore: number; }
 
 export default function TierPage() {
   const t = useT();
   const { state, update, isReady } = useTierUrlState();
 
-  const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
+  const [animes, setAnimes] = useState<AnimeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -126,7 +126,7 @@ export default function TierPage() {
   // Base (server-known) effective score per anime; 0 = unrated.
   const baseScore = useMemo(() => {
     const m = new Map<string, number>();
-    for (const a of animes) m.set(a.canonicalId, getEffectiveScore(a) ?? 0);
+    for (const a of animes) m.set(a.id, getEffectiveScore(a) ?? 0);
     return m;
   }, [animes]);
 
@@ -170,10 +170,10 @@ export default function TierPage() {
   // Still-watching anime aren't done yet, so they're excluded from the tray
   // (unrated watching titles just don't appear on the board at all).
   const buckets = useMemo(() => {
-    const b = new Map<number, AnimeForDisplay[]>();
+    const b = new Map<number, AnimeRecord[]>();
     for (let s = 0; s <= 10; s++) b.set(s, []);
     for (const a of filtered) {
-      const score = effScoreOf(a.canonicalId);
+      const score = effScoreOf(a.id);
       if (score === 0 && getEffectiveStatus(a) === 'watching') continue;
       b.get(score)!.push(a);
     }
@@ -250,7 +250,7 @@ export default function TierPage() {
   const allowDrop = (e: React.DragEvent) => e.preventDefault();
 
   // ---- Hover zoom: a single shared preview element (not 500 large imgs). ----
-  const onCardEnter = (e: React.MouseEvent, anime: AnimeForDisplay) => {
+  const onCardEnter = (e: React.MouseEvent, anime: AnimeRecord) => {
     if (draggingId !== null) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const PREVIEW_W = 240;
@@ -273,16 +273,16 @@ export default function TierPage() {
     return n;
   }, [buckets]);
 
-  const renderCard = (a: AnimeForDisplay) => {
+  const renderCard = (a: AnimeRecord) => {
     const thumb = a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large || '';
-    const isSaving = saving.has(a.canonicalId);
-    const fail = failed.get(a.canonicalId);
+    const isSaving = saving.has(a.id);
+    const fail = failed.get(a.id);
     return (
       <div
-        key={a.canonicalId}
-        className={`card ${draggingId === a.canonicalId ? 'dragging' : ''} ${fail ? 'failed' : ''}`}
+        key={a.id}
+        className={`card ${draggingId === a.id ? 'dragging' : ''} ${fail ? 'failed' : ''}`}
         draggable
-        onDragStart={(e) => onDragStart(e, a.canonicalId)}
+        onDragStart={(e) => onDragStart(e, a.id)}
         onDragEnd={onDragEnd}
         onMouseEnter={(e) => onCardEnter(e, a)}
         onMouseLeave={onCardLeave}
@@ -294,7 +294,7 @@ export default function TierPage() {
           : <div className="noimg">{getPrimaryTitle(a).slice(0, 2)}</div>}
         <a
           className="detail-link"
-          href={`/anime/${a.canonicalId}`}
+          href={`/anime/${a.id}`}
           target="_blank"
           rel="noopener noreferrer"
           draggable={false}

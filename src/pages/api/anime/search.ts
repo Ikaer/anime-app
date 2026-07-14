@@ -1,10 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAnimeRecords } from '@/lib/store';
+import { getAnimeForDisplay } from '@/lib/store';
 import { searchCatalog, MIN_QUERY_LENGTH, type GlobalSearchResults } from '@/lib/globalSearch';
 
 /**
  * Header global search. Catalog-only (title/studio/staff), so the shared cached
- * `getAnimeRecords()` is fine — no personal-state cache caveat (see credits page).
+ * `getAnimeForDisplay()` is fine — no personal-state cache caveat (see credits page).
  */
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -21,7 +21,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.json(empty);
     }
 
-    const results = searchCatalog(query, getAnimeRecords());
+    const results = searchCatalog(query, getAnimeForDisplay());
     res.json(results);
   } catch (error) {
     console.error('Global search error:', error);

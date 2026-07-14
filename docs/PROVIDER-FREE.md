@@ -281,12 +281,16 @@ CLEANUP.md §1.2 proper. The wide, mechanical one.
 > calculator/discrepancies). Personal reads **audited**: every `my_list_status`
 > read is legitimately raw (the `getEffective*` seam source, MAL write paths,
 > discrepancy comparison, the intentional "MAL status" display) — no flips
-> needed. **Remaining (the coordinated capstone):** drop `extends MALAnime`
-> (move the deliberately-raw readers onto `record.sources.mal.*`), flip
-> `applyNarrowingFilters`/`animeYear`/`getPrimaryTitle` onto catalog, switch the
-> **internal** join key to the canonical id, and de-bloat API payloads (the
-> compact-mode field-strip in `api/anime/animes` no longer shrinks output since
-> data also lives in the serialized `catalog` block).
+> needed. **Landed (docs/PROVIDER-FREE-CUTOVER.md Phases B/C/E):** `extends
+> MALAnime` dropped (deliberately-raw readers moved onto `record.sources.mal.*`);
+> `applyNarrowingFilters`/`animeYear`/`getPrimaryTitle` flipped onto catalog; the
+> internal join key switched to the canonical id; `AnimeForDisplay` itself
+> retired as a distinct interface (Phase E), so every reader is `AnimeRecord`
+> now, not a transitional alias. **Remaining:** de-bloat API payloads — the
+> compact-mode field-strip in `api/anime/animes` still doesn't shrink output
+> (it targets raw top-level MAL field names that moved under `.catalog` in
+> Phase C and was never updated to match; confirmed still a no-op as of Phase E,
+> not yet fixed).
 
 - Define `AnimeRecord`; build the merge in `getAnimeForDisplay()` (catalog ←
   MAL-first; personal ← reuse the existing `getEffective*` helpers; raw slices →
@@ -324,10 +328,11 @@ entry tier (the anonymous-username bullet below drops, everything else holds).
 > only wins for AniList-only titles / a future flip; live-verified); the
 > **anonymous AniList personal-list import by username** (P3b — the no-key
 > path, lowest personal tier SIMKL > MAL > AniList, private/not-found UX from
-> Phase 0). **Remaining:** promote the **outward** id to synthetic (the deferred
-> half of Phase 2's join switch — every route/deep-link/reco-`w=` param, with
-> MAL-id redirects; required before any AniList-only title is reachable);
-> and flip the default catalog precedence to `['anilist','mal']`.
+> Phase 0). **Landed (docs/PROVIDER-FREE-CUTOVER.md Phase D):** the **outward**
+> id promoted to synthetic — every route/deep-link/reco-`w=` param is the
+> canonical id, with MAL-id URLs resolving and redirecting for bookmark
+> preservation. **Remaining:** flip the default catalog precedence to
+> `['anilist','mal']`.
 
 - Make catalog authority a per-field precedence list (`['mal','anilist']` →
   default `['anilist','mal']` once the crawler lands). No behavior change until
@@ -355,7 +360,9 @@ entry tier (the anonymous-username bullet below drops, everything else holds).
 
 ## Open questions
 
-- **Synthetic id format** — ULID / uuid / monotonic counter? (Phase 1 kickoff.)
+- ~~**Synthetic id format**~~ — **Resolved in Phase A/B:** monotonic counter,
+  `a_<n>`. Safe specifically because the registry is durable and resolve-before-
+  mint is enforced on every write path (docs/PROVIDER-FREE-CUTOVER.md).
 - ~~**AniList anonymous user-list**~~ — **Resolved in Phase 0 (2026-07-12):**
   `MediaListCollection(userName:)` works without auth for public profiles
   (30/min degraded rate limit, no extra complexity cost); private/nonexistent

@@ -8,7 +8,7 @@
 > MAL id and no MAL shape anywhere outward or at rest**.
 >
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Blocked`
-> Overall: `WIP` (Phase E)
+> Overall: `Done`
 >
 > **Doc hygiene:** this file stays pristine — the only edits are ticking the
 > phase checkboxes and bumping the status line to track progress. No changelog,
@@ -200,12 +200,12 @@ Make ingest resolve-before-mint; make AniList ingest actually touch the registry
 - **Checkpoint:** detail page, hide, rate (MAL+SIMKL), and the full reco feed all
   work addressed by canonical id.
 
-### Phase E — Cleanup + docs `Todo`
+### Phase E — Cleanup + docs `Done`
 
-- [ ] Remove the transitional `AnimeForDisplay` alias and any dead MAL-shaped code.
-- [ ] Update `CLAUDE.md` (storage keys, record shape) and PROVIDER-FREE.md
+- [x] Remove the transitional `AnimeForDisplay` alias and any dead MAL-shaped code.
+- [x] Update `CLAUDE.md` (storage keys, record shape) and PROVIDER-FREE.md
       (mark the pulled-forward Phase 2/3 deferrals done).
-- [ ] Final verification-anchor pass.
+- [x] Final verification-anchor pass.
 
 ---
 

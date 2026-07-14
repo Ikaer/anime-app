@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
-import type { AnimeForDisplay } from '@/models/anime';
+import type { AnimeRecord } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/animeUtils';
 import { useT } from '@/lib/i18n';
 import styles from './AnimeRatePicker.module.css';
@@ -9,7 +9,7 @@ export default function AnimeRatePicker() {
   const t = useT();
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<AnimeForDisplay[]>([]);
+  const [results, setResults] = useState<AnimeRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const requestId = useRef(0);
 
@@ -39,8 +39,11 @@ export default function AnimeRatePicker() {
     return () => clearTimeout(handle);
   }, [query]);
 
-  const pick = (anime: AnimeForDisplay) => {
-    router.push({ pathname: '/rate', query: { id: anime.id } });
+  const pick = (anime: AnimeRecord) => {
+    // `/rate?id=` is deliberately MAL-id-keyed (see store.ts's getAnimeByIdForDisplay
+    // doc comment) — `anime.id` is now the canonical id, so the MAL id must come
+    // from the crosswalk.
+    router.push({ pathname: '/rate', query: { id: anime.crosswalk.mal } });
   };
 
   return (

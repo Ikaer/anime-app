@@ -10,8 +10,8 @@
  * ranking knob never requires a re-fetch.
  */
 
-import { MALAnime, AnimeForDisplay, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
-import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds } from '@/lib/store';
+import { MALAnime, AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
+import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds, toNum } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { fetchAnilistRecommendations } from '@/lib/anilistSync';
@@ -56,13 +56,13 @@ const TUNING = {
 type MetaField = 'genre' | 'studio' | 'nsfw' | 'rating' | 'anilistTags' | 'anilistStaff';
 type FieldValue = string | number;
 
-const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> = {
+const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[]> = {
   genre: a => (a.catalog.genres || []).map(g => g.name),
   studio: a => (a.catalog.studios || []).map(s => s.id),
   nsfw: a => (a.catalog.nsfw ? [a.catalog.nsfw] : []),
   rating: a => (a.catalog.rating ? [a.catalog.rating] : []),
-  anilistTags: a => (a.anilistMeta?.tags || []).map(t => t.name),
-  anilistStaff: a => (a.anilistMeta?.staff || []).map(s => s.id),
+  anilistTags: a => (a.sources.anilist?.tags || []).map(t => t.name),
+  anilistStaff: a => (a.sources.anilist?.staff || []).map(s => s.id),
 };
 
 /**
@@ -72,7 +72,7 @@ const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeForDisplay) => FieldValue[]> 
  * `pg_13`. This is the lever that makes low- and high-cardinality fields
  * (rating ~6 values vs studios ~1000) comparable.
  */
-function computeIdf(all: AnimeForDisplay[], extract: (a: AnimeForDisplay) => FieldValue[]): Map<FieldValue, number> {
+function computeIdf(all: AnimeRecord[], extract: (a: AnimeRecord) => FieldValue[]): Map<FieldValue, number> {
   const df = new Map<FieldValue, number>();
   for (const a of all) {
     for (const v of new Set(extract(a))) df.set(v, (df.get(v) || 0) + 1);
@@ -86,14 +86,14 @@ function computeIdf(all: AnimeForDisplay[], extract: (a: AnimeForDisplay) => Fie
 interface FieldProfile {
   /** value -> taste weight in [0,1] (seed-weighted × IDF, normalized to max 1). */
   weights: Map<FieldValue, number>;
-  extract: (a: AnimeForDisplay) => FieldValue[];
+  extract: (a: AnimeRecord) => FieldValue[];
 }
 
 /** Build an IDF-scaled taste profile for one field from weighted seed animes. */
 function buildFieldProfile(
-  animes: AnimeForDisplay[],
-  weightFn: (a: AnimeForDisplay) => number,
-  extract: (a: AnimeForDisplay) => FieldValue[],
+  animes: AnimeRecord[],
+  weightFn: (a: AnimeRecord) => number,
+  extract: (a: AnimeRecord) => FieldValue[],
   idf: Map<FieldValue, number>
 ): FieldProfile {
   const acc = new Map<FieldValue, number>();
@@ -108,7 +108,7 @@ function buildFieldProfile(
 }
 
 /** Candidate's overlap with a field profile in [0,1], plus the matched values. */
-function fieldMatch(candidate: AnimeForDisplay, profile: FieldProfile): { score: number; matched: FieldValue[] } {
+function fieldMatch(candidate: AnimeRecord, profile: FieldProfile): { score: number; matched: FieldValue[] } {
   const vals = profile.extract(candidate);
   if (vals.length === 0) return { score: 0, matched: [] };
   let sum = 0;
@@ -127,7 +127,7 @@ function fieldMatch(candidate: AnimeForDisplay, profile: FieldProfile): { score:
  * candidate down when it resembles what the user has rejected.
  */
 function buildRejectionProfiles(
-  all: AnimeForDisplay[],
+  all: AnimeRecord[],
   downIds: Set<string>,
   idfGenre: Map<FieldValue, number>,
   idfStudio: Map<FieldValue, number>
@@ -138,7 +138,7 @@ function buildRejectionProfiles(
     return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
   });
   const dislikedSeen = new Set(dislikedBase.map(a => a.id));
-  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.canonicalId) && !dislikedSeen.has(a.id))];
+  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
   return {
     negGenre: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idfGenre),
     negStudio: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idfStudio),
@@ -185,7 +185,7 @@ export interface RecommendationsData {
   suggestions: { id: number; rank: number }[];
 }
 
-export interface RecommendationItem extends AnimeForDisplay {
+export interface RecommendationItem extends AnimeRecord {
   recoMeta: RecoMeta;
 }
 
@@ -281,9 +281,9 @@ function feedbackIds(fb: FeedbackMap, verdict: RecoVerdict): Set<string> {
 }
 
 /** Anime carrying the given verdict, for the review lists. */
-export function getFeedbackAnime(verdict: RecoVerdict): AnimeForDisplay[] {
+export function getFeedbackAnime(verdict: RecoVerdict): AnimeRecord[] {
   const ids = feedbackIds(getFeedback(), verdict);
-  return getAnimeForDisplay().filter(a => ids.has(a.canonicalId));
+  return getAnimeForDisplay().filter(a => ids.has(a.id));
 }
 
 // Legacy pure-hide dismiss list — superseded by 👎 feedback. Kept read-only so
@@ -308,7 +308,7 @@ function seedWeight(score: number, threshold: number): number {
  * personal record, downstream reads of a seed's score MUST go through
  * `getEffectiveScore`, never `my_list_status!.score`.
  */
-function getSeeds(threshold: number): AnimeForDisplay[] {
+function getSeeds(threshold: number): AnimeRecord[] {
   return getAnimeForDisplay()
     .filter(a => {
       if (getEffectiveStatus(a) !== 'completed') return false;
@@ -346,7 +346,7 @@ const SEQUEL_TITLE_REGEX =
  * If relations exist and every prequel is seen, the candidate is kept even if
  * its title matches the pattern (the user is caught up).
  */
-function isPrematureSequel(anime: AnimeForDisplay, byId: Map<number, AnimeForDisplay>): boolean {
+function isPrematureSequel(anime: AnimeRecord, byId: Map<number, AnimeRecord>): boolean {
   const prequels = (anime.catalog.relatedAnime || []).filter(r => r.relation_type === 'prequel');
   if (prequels.length > 0) {
     return prequels.some(rel => {
@@ -375,7 +375,7 @@ interface Accumulator {
  * already extracts). Namespacing (`g:` / `s:`) keeps a genre and a studio that
  * happen to share a string from colliding.
  */
-function diversitySignature(anime: AnimeForDisplay): Set<string> {
+function diversitySignature(anime: AnimeRecord): Set<string> {
   const s = new Set<string>();
   for (const g of anime.catalog.genres || []) s.add(`g:${g.name}`);
   for (const st of anime.catalog.studios || []) s.add(`s:${st.id}`);
@@ -405,13 +405,13 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 function mmrRerank(items: RecommendationItem[], lambda: number): RecommendationItem[] {
   if (lambda <= 0 || items.length <= 2) return items;
 
-  const sig = new Map<number, Set<string>>();
+  const sig = new Map<string, Set<string>>();
   for (const it of items) sig.set(it.id, diversitySignature(it));
 
   const remaining = [...items]; // already sorted by (affinity desc, mean desc)
   const first = remaining.shift()!;
   const selected: RecommendationItem[] = [first];
-  const maxSim = new Map<number, number>();
+  const maxSim = new Map<string, number>();
   const firstSig = sig.get(first.id)!;
   for (const it of remaining) maxSim.set(it.id, jaccard(sig.get(it.id)!, firstSig));
 
@@ -444,7 +444,15 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const threshold = options.threshold ?? data.seedThreshold ?? TUNING.DEFAULT_SEED_THRESHOLD;
 
   const all = getAnimeForDisplay();
-  const byId = new Map<number, AnimeForDisplay>(all.map(a => [a.id, a]));
+  // The reco engine's internal crowd-edge math stays MAL-keyed by design
+  // (docs/PROVIDER-FREE-CUTOVER.md Phase D/Risks) — edges/candidates/suggestions
+  // all arrive as MAL ids from MAL/AniList, so `byId` is keyed off `crosswalk.mal`,
+  // not the record's own (now-canonical) `.id`.
+  const byId = new Map<number, AnimeRecord>();
+  for (const a of all) {
+    const malId = toNum(a.crosswalk.mal);
+    if (malId !== undefined) byId.set(malId, a);
+  }
   const dismissed = new Set(getDismissedIds());
   const hidden = new Set(getHiddenAnimeIds());
   const suggestionIds = new Set(data.suggestions.map(s => s.id));
@@ -469,7 +477,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     let weight: number;
     if (typeof seedScore === 'number' && seedScore >= threshold) {
       weight = seedWeight(seedScore, threshold);
-    } else if (seed && upIds.has(seed.canonicalId)) {
+    } else if (seed && upIds.has(seed.id)) {
       weight = TUNING.FEEDBACK_SEED_WEIGHT; // 👍 "bonne pioche" acting as a seed
     } else {
       continue; // seed below threshold and not thumbed-up — dropped
@@ -505,7 +513,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     let weight: number;
     if (typeof seedScore === 'number' && seedScore >= threshold) {
       weight = seedWeight(seedScore, threshold);
-    } else if (seed && upIds.has(seed.canonicalId)) {
+    } else if (seed && upIds.has(seed.id)) {
       weight = TUNING.FEEDBACK_SEED_WEIGHT;
     } else {
       continue;
@@ -522,7 +530,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // IDF-scaled taste profiles for the metadata sources (positive = liked seeds,
   // negative = dropped / low-scored). IDF is computed once over the full corpus.
   const seeds = getSeeds(threshold);
-  const seedW = (a: AnimeForDisplay) => seedWeight(getEffectiveScore(a) ?? threshold, threshold);
+  const seedW = (a: AnimeRecord) => seedWeight(getEffectiveScore(a) ?? threshold, threshold);
   const idf = {
     genre: computeIdf(all, FIELD_EXTRACTORS.genre),
     studio: computeIdf(all, FIELD_EXTRACTORS.studio),
@@ -542,7 +550,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
   // numeric score). Its own weighted source, separate from the MAL-seed genre /
   // studio profiles, so the user can dial their explicit likes independently.
-  const upAnime = all.filter(a => upIds.has(a.canonicalId));
+  const upAnime = all.filter(a => upIds.has(a.id));
   const fb = {
     genre: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.genre, idf.genre),
     studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
@@ -552,7 +560,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
 
   // Pass 1: apply hard filters and gather the maxima used to normalize the
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
-  const eligible: { anime: AnimeForDisplay; a: Accumulator }[] = [];
+  const eligible: { anime: AnimeRecord; a: Accumulator; candId: number }[] = [];
   let maxRaw = 0;
   let maxAnilistRaw = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
@@ -564,11 +572,11 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const st = getEffectiveStatus(anime);
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
     if (dismissed.has(candId)) continue; // legacy pure-hide list — still MAL-keyed, read-only
-    if (hidden.has(anime.canonicalId)) continue;
-    if (upIds.has(anime.canonicalId) || downIds.has(anime.canonicalId)) continue; // already thumbed
+    if (hidden.has(anime.id)) continue;
+    if (upIds.has(anime.id) || downIds.has(anime.id)) continue; // already thumbed
     if (isPrematureSequel(anime, byId)) continue; // later season of an unwatched show
 
-    eligible.push({ anime, a });
+    eligible.push({ anime, a, candId });
     if (a.affinity > maxRaw) maxRaw = a.affinity;
     const anilistAffinity = anilistAcc.get(candId)?.affinity ?? 0;
     if (anilistAffinity > maxAnilistRaw) maxAnilistRaw = anilistAffinity;
@@ -582,9 +590,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // Pass 2: score each candidate as `Σ weight · normalizedSourceValue`, and
   // retain the per-source breakdown for the on-demand "Pourquoi ?" explain.
   const items: RecommendationItem[] = [];
-  for (const { anime, a } of eligible) {
-    const candId = anime.id;
-
+  for (const { anime, a, candId } of eligible) {
     const genreM = fieldMatch(anime, pos.genre);
     const studioM = fieldMatch(anime, pos.studio);
     const nsfwM = fieldMatch(anime, pos.nsfw);
@@ -627,7 +633,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       .map(([sid]) => seedTitle(sid));
 
     const studioNames = new Map((anime.catalog.studios || []).map(s => [s.id, s.name]));
-    const staffById = new Map((anime.anilistMeta?.staff || []).map(s => [s.id, s]));
+    const staffById = new Map((anime.sources.anilist?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: allSeedTitles.length ? t('recoDetail.crowd', { titles: allSeedTitles.join(', ') }) : undefined,
       anilistCrowd: anilistAllTitles.length ? t('recoDetail.anilistCrowd', { titles: anilistAllTitles.join(', ') }) : undefined,
@@ -788,7 +794,15 @@ export async function performRecommendationsRefresh(
     const malSeeds = getSeeds(threshold);
     const seenSeed = new Set(malSeeds.map(s => s.id));
     const upSeeds = getFeedbackAnime('up').filter(a => !seenSeed.has(a.id));
-    const seeds = [...malSeeds, ...upSeeds];
+    const seedRecords = [...malSeeds, ...upSeeds];
+    // `data.seeds`/`data.anilistSeeds` stay MAL-id-keyed by design (the reco
+    // engine's internal math is MAL-keyed — docs/PROVIDER-FREE-CUTOVER.md
+    // Phase D/Risks), so seeds are reduced to their MAL id here. Every stored
+    // record has a resolvable MAL id (assembleDisplayRow's invariant), but the
+    // filter guards rather than assumes.
+    const seeds = seedRecords
+      .map(record => toNum(record.crosswalk.mal))
+      .filter((id): id is number => id !== undefined);
 
     const data: RecommendationsData = {
       lastRefresh: null,
@@ -804,14 +818,14 @@ export async function performRecommendationsRefresh(
     // 1-hop crowd-seed.
     let edgeCount = 0;
     for (let i = 0; i < seeds.length; i++) {
-      const seed = seeds[i];
+      const seedMalId = seeds[i];
       try {
-        const edges = await fetchRecoEdges(seed.id, accessToken);
-        data.seeds[seed.id.toString()] = edges;
+        const edges = await fetchRecoEdges(seedMalId, accessToken);
+        data.seeds[seedMalId.toString()] = edges;
         edgeCount += edges.length;
       } catch (error) {
-        console.error(`Failed to fetch recos for seed ${seed.id}:`, error);
-        data.seeds[seed.id.toString()] = [];
+        console.error(`Failed to fetch recos for seed ${seedMalId}:`, error);
+        data.seeds[seedMalId.toString()] = [];
       }
       // Persist incrementally (resumability).
       saveRecommendationsData(data);
@@ -835,7 +849,7 @@ export async function performRecommendationsRefresh(
     try {
       report({ type: 'anilist', message: 'Fetching AniList recommendations...' });
       const anilistRecs = await fetchAnilistRecommendations(
-        seeds.map(s => s.id),
+        seeds,
         (done, total) => report({ type: 'anilist', currentSeed: done, totalSeeds: total, message: `AniList ${done}/${total}` })
       );
       const anilistSeeds: Record<string, RecoEdge[]> = {};
@@ -851,7 +865,7 @@ export async function performRecommendationsRefresh(
     // Optional niche 2-hop: recos of each 1-hop candidate, stored under its seed.
     if (options.nicheMode) {
       for (let i = 0; i < seeds.length; i++) {
-        const seedKey = seeds[i].id.toString();
+        const seedKey = seeds[i].toString();
         const oneHop = (data.seeds[seedKey] || []).filter(e => e.hop === 1);
         const hop2: RecoEdge[] = [];
         for (const cand of oneHop) {
@@ -872,7 +886,8 @@ export async function performRecommendationsRefresh(
 
     // Hydrate missing titles so the feed can render them. The store is
     // canonical-keyed now, but candidate/edge ids are MAL ids — test coverage
-    // against the records' own `.id` (still the MAL id), not the slice key.
+    // against the raw MAL slice's own `.id` (getAllAnime(), unaffected by the
+    // AnimeRecord collapse), not the slice's canonical key.
     const existingMalIds = new Set(Object.values(getAllAnime()).map(a => a.id));
     const candidateIds = new Set<number>();
     for (const edges of Object.values(data.seeds)) {
@@ -953,7 +968,7 @@ export interface AniListEdgeInput {
 }
 
 /**
- * Lean card shape for the drill-down — deliberately NOT `AnimeForDisplay` +
+ * Lean card shape for the drill-down — deliberately NOT `AnimeRecord` +
  * `RecoMeta`: `topSeeds` / `fromSuggestions` are meaningless with a single
  * anchor, and the detail page only needs enough to render a poster card.
  */
@@ -987,7 +1002,13 @@ export function computeSimilarTo(
 ): SimilarItem[] {
   const t = makeT(lang);
   const all = getAnimeForDisplay();
-  const byId = new Map<number, AnimeForDisplay>(all.map(a => [a.id, a]));
+  // MAL-keyed, same reasoning as `computeFeed`'s `byId` — `targetId`/edge ids
+  // arrive as MAL ids (docs/PROVIDER-FREE-CUTOVER.md Phase D/Risks).
+  const byId = new Map<number, AnimeRecord>();
+  for (const a of all) {
+    const malId = toNum(a.crosswalk.mal);
+    if (malId !== undefined) byId.set(malId, a);
+  }
   const target = byId.get(targetId);
   if (!target) return [];
 
@@ -1012,7 +1033,7 @@ export function computeSimilarTo(
   }
 
   // Pass 1: hard filters + the maxima that normalize the unbounded sources.
-  const eligible: AnimeForDisplay[] = [];
+  const eligible: { anime: AnimeRecord; candId: number }[] = [];
   let maxCrowd = 0;
   let maxAnilist = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
@@ -1020,10 +1041,10 @@ export function computeSimilarTo(
     if (excludedMalIds.has(candId)) continue;
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
-    if (hiddenCanonical.has(anime.canonicalId) || downCanonical.has(anime.canonicalId)) continue;
+    if (hiddenCanonical.has(anime.id) || downCanonical.has(anime.id)) continue;
     if (isPrematureSequel(anime, byId)) continue;
 
-    eligible.push(anime);
+    eligible.push({ anime, candId });
     maxCrowd = Math.max(maxCrowd, crowd.get(candId) || 0);
     maxAnilist = Math.max(maxAnilist, anilistCrowd.get(candId) || 0);
     maxUsers = Math.max(maxUsers, anime.catalog.numListUsers || 0);
@@ -1059,12 +1080,11 @@ export function computeSimilarTo(
   // Names/roles as the TARGET credits them — the explain says what the candidate
   // shares with the anime you're looking at.
   const targetStudioNames = new Map((target.catalog.studios || []).map(s => [s.id, s.name]));
-  const targetStaffById = new Map((target.anilistMeta?.staff || []).map(s => [s.id, s]));
+  const targetStaffById = new Map((target.sources.anilist?.staff || []).map(s => [s.id, s]));
 
   // Pass 2: score with the same additive weighted sum as the feed.
   const items: SimilarItem[] = [];
-  for (const anime of eligible) {
-    const candId = anime.id;
+  for (const { anime, candId } of eligible) {
     const crowdNum = crowd.get(candId) || 0;
     const anilistNum = anilistCrowd.get(candId) || 0;
 
@@ -1138,7 +1158,7 @@ export function computeSimilarTo(
 
     const status = getEffectiveStatus(anime);
     items.push({
-      id: anime.canonicalId,
+      id: anime.id,
       title: getPrimaryTitle(anime),
       poster: anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large,
       mean: anime.catalog.mean,

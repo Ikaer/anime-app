@@ -9,13 +9,13 @@ import {
   DisplaySection,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
-import { AnimeForDisplay, MALAuthState, ImageSize } from '@/models/anime';
+import { AnimeRecord, MALAuthState, ImageSize } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
 import { encodeSourceWeights } from '@/lib/recoWeights';
 import { useI18n } from '@/lib/i18n';
 
-type RecoCard = AnimeForDisplay & { recoMeta?: RecoMeta };
+type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
 
 export default function RecommendationsPage() {
   const { t, lang } = useI18n();
@@ -154,7 +154,7 @@ export default function RecommendationsPage() {
         body: JSON.stringify({ verdict }),
       });
       if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.canonicalId !== animeId));
+        setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
         setError(t('reco.feedbackSaveFailed'));
       }
@@ -170,7 +170,7 @@ export default function RecommendationsPage() {
         method: 'DELETE',
       });
       if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.canonicalId !== animeId));
+        setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
         setError(t('reco.feedbackRemoveFailed'));
       }

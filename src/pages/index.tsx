@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
-import { AnimeForDisplay, UserAnimeStatus, StatsColumn } from '@/models/anime';
+import { AnimeRecord, UserAnimeStatus, StatsColumn } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
 import { useT } from '@/lib/i18n';
 
@@ -10,7 +10,7 @@ export default function AnimePage() {
   const { filters, display, updateFilters, updateDisplay, isReady } = useAnimeUrlState();
 
   // Data state
-  const [animes, setAnimes] = useState<AnimeForDisplay[]>([]);
+  const [animes, setAnimes] = useState<AnimeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -152,7 +152,7 @@ export default function AnimePage() {
         method: hide ? 'POST' : 'DELETE'
       });
       if (response.ok) {
-        setAnimes(prev => prev.filter(a => a.canonicalId !== animeId));
+        setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
         setError(hide ? t('index.hideFailed') : t('index.unhideFailed'));
       }
@@ -170,7 +170,7 @@ export default function AnimePage() {
       });
       if (response.ok) {
         setAnimes(prev => prev.map(a =>
-          a.canonicalId === animeId && a.sources.mal
+          a.id === animeId && a.sources.mal
             ? { ...a, sources: { ...a.sources, mal: { ...a.sources.mal, my_list_status: { ...a.sources.mal.my_list_status, ...updates } } } }
             : a
         ));

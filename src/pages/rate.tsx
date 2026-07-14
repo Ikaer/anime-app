@@ -44,7 +44,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     return { props: { anime: null } };
   }
   const target: RatingTarget = {
-    id: anime.id,
+    id, // the MAL id already parsed from the query param — `anime.id` is now the canonical id
     title: getPrimaryTitle(anime),
     genres: (anime.catalog.genres || []).map(g => ({ id: g.id, name: g.name })),
     poster: anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || null,

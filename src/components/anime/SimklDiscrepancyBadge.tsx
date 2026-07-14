@@ -1,13 +1,13 @@
 import React from 'react';
 import styles from './SimklDiscrepancyBadge.module.css';
-import type { AnimeForDisplay, UserAnimeStatus } from '@/models/anime';
+import type { AnimeRecord, UserAnimeStatus } from '@/models/anime';
 import { useT, type TranslationKey, type TFunction } from '@/lib/i18n';
 
 const fmtStatus = (t: TFunction, s: UserAnimeStatus | null): string =>
   s ? t(`statusShort.${s}` as TranslationKey) : '—';
 
 interface Props {
-  anime: AnimeForDisplay;
+  anime: AnimeRecord;
 }
 
 const SimklDiscrepancyBadge: React.FC<Props> = ({ anime }) => {
@@ -17,9 +17,9 @@ const SimklDiscrepancyBadge: React.FC<Props> = ({ anime }) => {
   // No mismatch, but the title IS synced from SIMKL -> subtle "merge is visible"
   // chip so the user can see SIMKL's own status/score even when it agrees.
   if (!d) {
-    if (!anime.simkl) return null;
-    const parts = [fmtStatus(t, anime.simkl.status)];
-    if (anime.simkl.score != null) parts.push(`★${anime.simkl.score}`);
+    if (!anime.sources.simkl) return null;
+    const parts = [fmtStatus(t, anime.sources.simkl.status)];
+    if (anime.sources.simkl.score != null) parts.push(`★${anime.sources.simkl.score}`);
     return (
       <span className={styles.badge} title={t('disc.syncedFromSimkl')}>
         <span className={`${styles.chip} ${styles.info}`}>SIMKL: {parts.join(' ')}</span>
