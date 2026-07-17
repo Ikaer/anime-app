@@ -525,6 +525,85 @@ export interface AniListCatalogCrawlResult {
 
 let isAnilistCatalogCrawlRunning = false;
 
+type AniListCatalogEntry = { mal_id?: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> };
+
+interface SeasonCrawlOutcome {
+  entries: AniListCatalogEntry[];
+  pagesFetched: number;
+  withMal: number;
+  anilistOnly: number;
+}
+
+/**
+ * Fetch + map one season's pages (popularity-descending, ≤`maxPages` × 50
+ * titles). No persistence and no lock — callers own both. `logPages` is off in
+ * the bulk crawl so 30+ seasons don't flood the 500-entry connection log.
+ */
+async function crawlCatalogSeason(season: string, seasonYear: number, maxPages: number, logPages: boolean): Promise<SeasonCrawlOutcome> {
+  const entries: AniListCatalogEntry[] = [];
+  let withMal = 0;
+  let anilistOnly = 0;
+  let pagesFetched = 0;
+
+  for (let page = 1; page <= maxPages; page++) {
+    const result = await fetchCatalogPage(season, seasonYear, page);
+    pagesFetched++;
+
+    for (const m of result.media ?? []) {
+      const title = m.title?.english || m.title?.romaji;
+      if (!title) continue;
+      const mean = typeof m.averageScore === 'number' ? m.averageScore / 10 : undefined;
+      // AniList genres are names only → synthetic id 0 (consumers key on name).
+      const genres = (m.genres ?? [])
+        .filter((g): g is string => !!g)
+        .map(name => ({ id: 0, name }));
+      // AniList studios carry AniList-namespace ids (see AniListMetaEntry.catalog caveat).
+      const studios = (m.studios?.nodes ?? [])
+        .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
+        .map(s => ({ id: s.id ?? 0, name: s.name as string }));
+      const cover = m.coverImage?.medium || m.coverImage?.large
+        ? { medium: m.coverImage?.medium ?? m.coverImage?.large ?? '', large: m.coverImage?.large ?? m.coverImage?.medium ?? '' }
+        : undefined;
+      const catalog: NonNullable<AniListMetaEntry['catalog']> = {
+        title,
+        titleRomaji: m.title?.romaji ?? undefined,
+        titleEnglish: m.title?.english ?? undefined,
+        mean,
+        genres,
+        studios,
+        coverImage: cover,
+        synopsis: stripHtml(m.description),
+        mediaType: mapFormat(m.format),
+        airingStatus: mapAiringStatus(m.status),
+        numEpisodes: typeof m.episodes === 'number' ? m.episodes : undefined,
+        startDate: mapStartDate(m.startDate),
+        startSeason: m.season && typeof m.seasonYear === 'number'
+          ? { year: m.seasonYear, season: m.season.toLowerCase() }
+          : undefined,
+        numListUsers: typeof m.popularity === 'number' ? m.popularity : undefined,
+      };
+      if (m.idMal) {
+        entries.push({ mal_id: m.idMal, anilist_id: m.id, catalog });
+        withMal++;
+      } else {
+        // No MAL id: still persist the catalog block, keyed off the `anilist`
+        // crosswalk alone — this is what lets an AniList-only title render a
+        // full row (docs/PROVIDER-FREE-CUTOVER.md Phase C). Previously this
+        // data was computed then discarded, only minting a bare canonical id.
+        entries.push({ anilist_id: m.id, catalog });
+        anilistOnly++;
+      }
+    }
+
+    if (logPages) appendLog('anilist-catalog-crawl', 'info', `AniList catalog: page ${page}/${maxPages} fetched`, { page, maxPages });
+
+    if (!result.pageInfo?.hasNextPage) break;
+    if (page < maxPages) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
+  }
+
+  return { entries, pagesFetched, withMal, anilistOnly };
+}
+
 /**
  * Crawl one AniList season (default: the current season, from `getSeasonInfos`)
  * by popularity, capped at `maxPages` pages (default 3, i.e. ≤150 titles) — a
@@ -549,66 +628,8 @@ export async function performAnilistCatalogCrawl(
   try {
     appendLog('anilist-catalog-crawl', 'info', `AniList catalog crawl started: ${resolvedSeason} ${resolvedYear}, up to ${maxPages} pages`);
 
-    const catalogEntries: Array<{ mal_id?: number; anilist_id: number; catalog: NonNullable<AniListMetaEntry['catalog']> }> = [];
-    let withMalCount = 0;
-    let anilistOnlyCount = 0;
-    let pagesFetched = 0;
-
-    for (let page = 1; page <= maxPages; page++) {
-      const result = await fetchCatalogPage(resolvedSeason, resolvedYear, page);
-      pagesFetched++;
-
-      for (const m of result.media ?? []) {
-        const title = m.title?.english || m.title?.romaji;
-        if (!title) continue;
-        const mean = typeof m.averageScore === 'number' ? m.averageScore / 10 : undefined;
-        // AniList genres are names only → synthetic id 0 (consumers key on name).
-        const genres = (m.genres ?? [])
-          .filter((g): g is string => !!g)
-          .map(name => ({ id: 0, name }));
-        // AniList studios carry AniList-namespace ids (see AniListMetaEntry.catalog caveat).
-        const studios = (m.studios?.nodes ?? [])
-          .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
-          .map(s => ({ id: s.id ?? 0, name: s.name as string }));
-        const cover = m.coverImage?.medium || m.coverImage?.large
-          ? { medium: m.coverImage?.medium ?? m.coverImage?.large ?? '', large: m.coverImage?.large ?? m.coverImage?.medium ?? '' }
-          : undefined;
-        const catalog: NonNullable<AniListMetaEntry['catalog']> = {
-          title,
-          titleRomaji: m.title?.romaji ?? undefined,
-          titleEnglish: m.title?.english ?? undefined,
-          mean,
-          genres,
-          studios,
-          coverImage: cover,
-          synopsis: stripHtml(m.description),
-          mediaType: mapFormat(m.format),
-          airingStatus: mapAiringStatus(m.status),
-          numEpisodes: typeof m.episodes === 'number' ? m.episodes : undefined,
-          startDate: mapStartDate(m.startDate),
-          startSeason: m.season && typeof m.seasonYear === 'number'
-            ? { year: m.seasonYear, season: m.season.toLowerCase() }
-            : undefined,
-          numListUsers: typeof m.popularity === 'number' ? m.popularity : undefined,
-        };
-        if (m.idMal) {
-          catalogEntries.push({ mal_id: m.idMal, anilist_id: m.id, catalog });
-          withMalCount++;
-        } else {
-          // No MAL id: still persist the catalog block, keyed off the `anilist`
-          // crosswalk alone — this is what lets an AniList-only title render a
-          // full row (docs/PROVIDER-FREE-CUTOVER.md Phase C). Previously this
-          // data was computed then discarded, only minting a bare canonical id.
-          catalogEntries.push({ anilist_id: m.id, catalog });
-          anilistOnlyCount++;
-        }
-      }
-
-      appendLog('anilist-catalog-crawl', 'info', `AniList catalog: page ${page}/${maxPages} fetched`, { page, maxPages });
-
-      if (!result.pageInfo?.hasNextPage) break;
-      if (page < maxPages) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
-    }
+    const { entries: catalogEntries, pagesFetched, withMal: withMalCount, anilistOnly: anilistOnlyCount } =
+      await crawlCatalogSeason(resolvedSeason, resolvedYear, maxPages, true);
 
     // Resolve first (ourselves) purely to capture mint/resolve counts for
     // logging — upsertAnilistCatalogFields resolves-before-mint internally too,
@@ -648,10 +669,138 @@ export async function performAnilistCatalogCrawl(
   }
 }
 
-/** Registry-wide stats for the connections-page crawl button (canonical id counts by anchoring). */
-export function getAnilistCatalogCrawlStats(): { totalCanonicalIds: number; anilistOnlyIds: number } {
+export interface AniListBulkCatalogCrawlResult {
+  ok: boolean;
+  alreadyRunning: boolean;
+  totalSeasons: number;
+  seasonsCrawled: number;
+  seasonsFailed: number;
+  withMal: number;
+  anilistOnly: number;
+  minted: number;
+  error?: string;
+}
+
+const SEASON_SEQUENCE = ['winter', 'spring', 'summer', 'fall'] as const;
+// Mirrors MAL big-sync's backward window (8 years); forward stops at the NEXT
+// season — AniList seasons further out are too sparse to be worth a request.
+const BULK_CRAWL_YEARS_BACK = 8;
+
+/** Seasons from NEXT season back through winter of `yearsBack` years ago, newest first. */
+function listBulkCrawlSeasons(yearsBack: number): Array<{ season: string; year: number }> {
+  const { current, next } = getSeasonInfos();
+  const stopYear = current.year - yearsBack;
+  const seasons: Array<{ season: string; year: number }> = [];
+  let year = next.year;
+  let idx = SEASON_SEQUENCE.indexOf(next.season as (typeof SEASON_SEQUENCE)[number]);
+  for (;;) {
+    seasons.push({ season: SEASON_SEQUENCE[idx], year });
+    if (year === stopYear && idx === 0) break;
+    idx -= 1;
+    if (idx < 0) { idx = SEASON_SEQUENCE.length - 1; year -= 1; }
+  }
+  return seasons;
+}
+
+/**
+ * First-run bulk crawl: the last `yearsBack` years of seasons, newest first (so
+ * the default current-season view fills as early as possible), each capped at
+ * `maxPagesPerSeason` pages — the popularity head of every season, not
+ * AniList's full tail. Persists after EVERY season, so a mid-crawl failure
+ * keeps everything already fetched, and a per-season failure is non-fatal.
+ * Progress surfaces via appendLog `{seasonIndex, totalSeasons}` detail, polled
+ * by the first-run onboarding panel through /api/anime/connection-log.
+ */
+export async function performAnilistBulkCatalogCrawl(
+  yearsBack = BULK_CRAWL_YEARS_BACK,
+  maxPagesPerSeason = 3
+): Promise<AniListBulkCatalogCrawlResult> {
+  const seasons = listBulkCrawlSeasons(yearsBack);
+
+  if (isAnilistCatalogCrawlRunning) {
+    appendLog('anilist-catalog-crawl', 'info', 'AniList bulk catalog crawl skipped: already running');
+    return { ok: false, alreadyRunning: true, totalSeasons: seasons.length, seasonsCrawled: 0, seasonsFailed: 0, withMal: 0, anilistOnly: 0, minted: 0 };
+  }
+
+  isAnilistCatalogCrawlRunning = true;
+  let seasonsCrawled = 0;
+  let seasonsFailed = 0;
+  let withMal = 0;
+  let anilistOnly = 0;
+  let minted = 0;
+  try {
+    const oldest = seasons[seasons.length - 1];
+    const newest = seasons[0];
+    appendLog(
+      'anilist-catalog-crawl',
+      'info',
+      `AniList bulk catalog crawl started: ${seasons.length} seasons (${oldest.season} ${oldest.year} → ${newest.season} ${newest.year})`,
+      { totalSeasons: seasons.length }
+    );
+
+    for (let i = 0; i < seasons.length; i++) {
+      const { season, year } = seasons[i];
+      try {
+        const result = await crawlCatalogSeason(season.toUpperCase(), year, maxPagesPerSeason, false);
+        const counts = result.entries.length > 0
+          ? resolveCanonicalIds(result.entries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id })))
+          : { minted: 0, resolved: 0 };
+        if (result.entries.length > 0) upsertAnilistCatalogFields(result.entries);
+        seasonsCrawled++;
+        withMal += result.withMal;
+        anilistOnly += result.anilistOnly;
+        minted += counts.minted;
+        appendLog(
+          'anilist-catalog-crawl',
+          'info',
+          `AniList catalog: season ${i + 1}/${seasons.length} (${season} ${year}) — ${result.entries.length} titles`,
+          { seasonIndex: i + 1, totalSeasons: seasons.length, season, year, titles: result.entries.length }
+        );
+      } catch (error) {
+        // Non-fatal: one bad season (transient AniList hiccup) must not abort a
+        // 30+ season first-run crawl. Logged at info level — an error-level
+        // entry is the onboarding panel's fatal signal.
+        seasonsFailed++;
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        appendLog(
+          'anilist-catalog-crawl',
+          'info',
+          `AniList catalog: season ${season} ${year} failed, continuing`,
+          { seasonIndex: i + 1, totalSeasons: seasons.length, season, year, error: message }
+        );
+      }
+      if (i < seasons.length - 1) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
+    }
+
+    if (seasonsCrawled === 0) {
+      appendLog('anilist-catalog-crawl', 'error', `AniList bulk catalog crawl failed: all ${seasons.length} seasons errored`);
+      return { ok: false, alreadyRunning: false, totalSeasons: seasons.length, seasonsCrawled, seasonsFailed, withMal, anilistOnly, minted, error: 'All seasons failed' };
+    }
+
+    appendLog(
+      'anilist-catalog-crawl',
+      'success',
+      `AniList bulk catalog crawl complete: ${seasonsCrawled}/${seasons.length} seasons, ${withMal + anilistOnly} titles (${minted} canonical ids minted)${seasonsFailed > 0 ? `, ${seasonsFailed} seasons failed` : ''}`,
+      { totalSeasons: seasons.length, seasonsCrawled, seasonsFailed, withMal, anilistOnly, minted }
+    );
+    return { ok: true, alreadyRunning: false, totalSeasons: seasons.length, seasonsCrawled, seasonsFailed, withMal, anilistOnly, minted };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('AniList bulk catalog crawl error:', error);
+    appendLog('anilist-catalog-crawl', 'error', 'AniList bulk catalog crawl failed', { error: message });
+    return { ok: false, alreadyRunning: false, totalSeasons: seasons.length, seasonsCrawled, seasonsFailed, withMal, anilistOnly, minted, error: message };
+  } finally {
+    isAnilistCatalogCrawlRunning = false;
+  }
+}
+
+/**
+ * Registry-wide stats for the connections-page crawl button and the first-run
+ * onboarding gate (`totalCanonicalIds === 0` = genuinely empty store).
+ */
+export function getAnilistCatalogCrawlStats(): { totalCanonicalIds: number; anilistOnlyIds: number; crawlRunning: boolean } {
   const registry = getRegistry();
   const entries = Object.values(registry);
   const anilistOnlyIds = entries.filter(ids => ids.mal === undefined && ids.anilist !== undefined).length;
-  return { totalCanonicalIds: entries.length, anilistOnlyIds };
+  return { totalCanonicalIds: entries.length, anilistOnlyIds, crawlRunning: isAnilistCatalogCrawlRunning };
 }

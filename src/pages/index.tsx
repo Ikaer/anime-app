@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView } from '@/components/anime';
+import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
 import { AnimeRecord, UserAnimeStatus, StatsColumn } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
 import { useT } from '@/lib/i18n';
@@ -13,6 +13,17 @@ export default function AnimePage() {
   const [animes, setAnimes] = useState<AnimeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  // First-run gate: null = checking, true = registry is empty → onboarding.
+  // Keyed on the registry count (not the filtered list length), so a filter
+  // combination that hides everything never false-positives into onboarding.
+  const [storeEmpty, setStoreEmpty] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch('/api/anime/anilist/catalog-crawl')
+      .then(r => (r.ok ? r.json() : null))
+      .then(stats => setStoreEmpty(stats ? stats.totalCanonicalIds === 0 : false))
+      .catch(() => setStoreEmpty(false));
+  }, []);
 
   const loadAnimes = useCallback(async () => {
     try {
@@ -219,6 +230,26 @@ export default function AnimePage() {
     />
   );
 
+  // First-run experience: an empty store gets the onboarding hero (data path,
+  // settings link, AniList bulk-crawl launcher) instead of a bare empty list.
+  if (storeEmpty === true) {
+    return (
+      <>
+        <Head>
+          <title>{t('index.pageTitle')}</title>
+          <meta name="description" content={t('index.metaDescription')} />
+          <link rel="icon" href="/anime-favicon.svg" />
+        </Head>
+        <FirstRunOnboarding
+          onCatalogLoaded={() => {
+            setStoreEmpty(false);
+            loadAnimes();
+          }}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <Head>
@@ -234,7 +265,7 @@ export default function AnimePage() {
             </div>
           )}
           <div className="table-container">
-            {!isReady || isLoading ? (
+            {!isReady || isLoading || storeEmpty === null ? (
               <div className="loading-state">{t('common.loading')}</div>
             ) : display.layout === 'card' ? (
               <AnimeCardView

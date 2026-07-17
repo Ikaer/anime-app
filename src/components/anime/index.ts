@@ -9,6 +9,7 @@ export { default as AnimeSidebar } from './AnimeSidebar';
 export { default as ConnectionLogPanel } from './ConnectionLogPanel';
 export { default as MoreLikeThis } from './MoreLikeThis';
 export { default as MalConnectionBadge } from './MalConnectionBadge';
+export { default as FirstRunOnboarding } from './FirstRunOnboarding';
 export { default as SimklConnectionBadge } from './SimklConnectionBadge';
 
 export { default as AccountSection } from './sidebar/AccountSection';

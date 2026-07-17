@@ -1,0 +1,123 @@
+.wrap {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 8vh 2rem 4rem;
+  min-height: 60vh;
+}
+
+.panel {
+  max-width: 640px;
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 2.5rem 2.75rem;
+}
+
+.title {
+  font-size: 1.8rem;
+  margin: 0 0 0.75rem;
+  color: var(--text-primary);
+}
+
+.intro {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  margin: 0 0 1.5rem;
+}
+
+.pathLine {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 0.35rem;
+}
+
+.path {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.settingsLine {
+  color: var(--text-secondary);
+  margin: 0 0 2rem;
+}
+
+.settingsLink {
+  color: var(--accent-color, #4a9eff);
+  text-decoration: underline;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.loadButton {
+  align-self: flex-start;
+  background: var(--accent-color, #4a9eff);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.6rem;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.loadButton:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.loadButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hint {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.error {
+  color: #ff7a7a;
+  margin: 0.25rem 0 0;
+}
+
+.progressBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.progressBar {
+  height: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-color, #4a9eff);
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+.progressLabel {
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.titlesCount {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
