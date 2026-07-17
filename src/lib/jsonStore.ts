@@ -27,11 +27,53 @@ export function ensureDataDirectory(): void {
   }
 }
 
+// ── Parse cache ──────────────────────────────────────────────────────────────
+//
+// Parsing the big slice files (animes_mal.json ≈ 40MB, animes_anilist_meta.json
+// ≈ 26MB) dominates every cold read path, so parsed values are cached per file,
+// keyed on `mtimeMs + size`. A stat call per read keeps the cache honest across
+// bundles: in a production Next build the api and page bundles each hold their
+// own module instance, but a write from either one bumps the file's mtime, so
+// the other bundle's next read re-parses. (Same-bundle writes also delete the
+// entry directly in `writeJsonFile`, which covers the theoretical case of two
+// same-size writes landing within one mtime tick — from the writing bundle's
+// own perspective.)
+//
+// SHARED-REFERENCE CONTRACT: every caller of `readJsonFile` may now receive the
+// same parsed object as other callers. Mutate-then-write is safe (the write
+// evicts the entry); mutating a read result WITHOUT writing it back would leak
+// the mutation into every later read, so don't.
+//
+// `mtimeMs: -1` marks a missing file; the entry then pins the first caller's
+// `defaultValue` so repeat reads of an absent file return a stable reference
+// (callers compare slice identities to decide cache validity — see store.ts).
+interface ParseCacheEntry {
+  mtimeMs: number;
+  size: number;
+  value: unknown;
+}
+const parseCache = new Map<string, ParseCacheEntry>();
+
 /** Reads a JSON file, falling back to `defaultValue` when missing or unparseable. */
 export function readJsonFile<T>(filePath: string, defaultValue: T): T {
   try {
-    if (!fs.existsSync(filePath)) return defaultValue;
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      // Missing file — pin (and reuse) a stable default reference.
+      const cached = parseCache.get(filePath);
+      if (cached && cached.mtimeMs === -1) return cached.value as T;
+      parseCache.set(filePath, { mtimeMs: -1, size: -1, value: defaultValue });
+      return defaultValue;
+    }
+    const cached = parseCache.get(filePath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.value as T;
+    }
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
+    parseCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, value });
+    return value;
   } catch (error) {
     console.error(`Error reading ${filePath}:`, error);
     return defaultValue;
@@ -43,6 +85,9 @@ export function writeJsonFile<T>(filePath: string, data: T): void {
   try {
     ensureDataDirectory();
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    // Evict rather than store `data`: callers may keep mutating the object they
+    // just wrote; the next read re-parses what's actually on disk.
+    parseCache.delete(filePath);
   } catch (error) {
     console.error(`Error writing ${filePath}:`, error);
     throw error;

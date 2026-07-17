@@ -45,9 +45,22 @@ function isTechnicalStaff(role: string): boolean {
   return !SOURCE_ROLE_RE.test(role.trim());
 }
 
+type StaffEntry = NonNullable<NonNullable<AnimeRecord['sources']['anilist']>['staff']>[number];
+
+// Records coming out of the store's row cache are stable references between
+// data changes, so the per-record role filtering (a regex over ~15 credits ×
+// the whole catalog, on every detail-page hit) memoizes cleanly on the record
+// object itself. Self-evicting: a rebuilt row is a new key, the old one is GC'd.
+const technicalStaffCache = new WeakMap<AnimeRecord, StaffEntry[]>();
+
 /** Technical (non-source-author) staff credits for one anime. */
-function technicalStaff(a: AnimeRecord) {
-  return (a.sources.anilist?.staff || []).filter(s => isTechnicalStaff(s.role));
+function technicalStaff(a: AnimeRecord): StaffEntry[] {
+  let staff = technicalStaffCache.get(a);
+  if (!staff) {
+    staff = (a.sources.anilist?.staff || []).filter(s => isTechnicalStaff(s.role));
+    technicalStaffCache.set(a, staff);
+  }
+  return staff;
 }
 
 /** The anime's own raw MAL id, when resolvable — for comparing against another title's raw MAL relation ids. */
@@ -71,6 +84,29 @@ function computeIdf<T>(catalog: AnimeRecord[], extract: (a: AnimeRecord) => T[])
   return idf;
 }
 
+// The two IDF maps depend only on the catalog array, never on the target — and
+// the store hands out the same array reference until the underlying data
+// changes, so they memoize on it (WeakMap: a rebuilt catalog is a new key, the
+// old entry is GC'd). Without this, every detail-page hit re-walked the whole
+// ~25k-row catalog twice.
+interface IdfMaps {
+  studioIdf: Map<number, number>;
+  staffIdf: Map<number, number>;
+}
+const idfCache = new WeakMap<AnimeRecord[], IdfMaps>();
+
+function catalogIdf(catalog: AnimeRecord[]): IdfMaps {
+  let maps = idfCache.get(catalog);
+  if (!maps) {
+    maps = {
+      studioIdf: computeIdf(catalog, a => (a.catalog.studios || []).map(s => s.id)),
+      staffIdf: computeIdf(catalog, a => technicalStaff(a).map(s => s.id)),
+    };
+    idfCache.set(catalog, maps);
+  }
+  return maps;
+}
+
 /**
  * Top-`limit` catalog anime most similar to `target` by shared studios +
  * technical staff. IDF is computed over the FULL catalog (target included — its
@@ -89,8 +125,7 @@ export function computeSimilarByCredits(
   const targetStaffIds = new Set(targetStaff.map(s => s.id));
   if (targetStudioIds.size === 0 && targetStaffIds.size === 0) return [];
 
-  const studioIdf = computeIdf(catalog, a => (a.catalog.studios || []).map(s => s.id));
-  const staffIdf = computeIdf(catalog, a => technicalStaff(a).map(s => s.id));
+  const { studioIdf, staffIdf } = catalogIdf(catalog);
 
   // Display lookups from the target (names/roles as the target credits them).
   const studioName = new Map(targetStudios.map(s => [s.id, s.name]));

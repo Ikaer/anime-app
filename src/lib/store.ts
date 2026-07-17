@@ -388,9 +388,14 @@ export function resolveCanonicalId(crosswalk: SourceIds): string {
 // The merged record
 // ============================================================================
 
+// The assembled rows are cached against the IDENTITY of the six parsed slices
+// (jsonStore's parse cache returns the same object until the file on disk
+// changes), so a rebuild happens exactly when some slice actually changed —
+// no TTL. This also closes the old cross-bundle staleness hole: an API-route
+// write bumps the file's mtime, the page bundle's next read re-parses, the
+// slice reference changes, and the page bundle's row cache rebuilds.
 let cachedAnime: AnimeRecord[] | null = null;
-let lastCacheTime = 0;
-const CACHE_TTL_MS = 10 * 60_000; // 10 min
+let cachedAnimeInputs: readonly unknown[] | null = null;
 
 /**
  * Assemble the unified cross-source crosswalk from every pipe. The MAL id is
@@ -446,21 +451,25 @@ function assembleDisplayRow(
 }
 
 export function getAnimeForDisplay(): AnimeRecord[] {
-  const now = Date.now();
-  if (cachedAnime && (now - lastCacheTime) < CACHE_TTL_MS) {
-    return cachedAnime;
-  }
   // Every slice is keyed by canonical id (the migration + resolve-at-write
   // invariant guarantee it). The row set is the UNION of every slice's keys —
   // not just the MAL slice — so an AniList-only canonical id (no MAL slice,
   // seeded by the AniList catalog crawler) still produces a row, with
   // `sources.mal` left undefined (docs/PROVIDER-FREE-CUTOVER.md Phase C).
   const malAnime = getAllAnime();
-  const hiddenIds = new Set(getHiddenAnimeIds());
+  const hiddenIdList = getHiddenAnimeIds();
   const simklByCanonical = getAllSimklEntries();
   const anilistMetaByCanonical = getAllAnilistMeta();
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
   const registry = getRegistry();
+
+  // Same parsed slices as last time (reference equality — see the parse cache
+  // in jsonStore.ts) → the assembled rows are still valid.
+  const inputs = [malAnime, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, registry];
+  if (cachedAnime && cachedAnimeInputs && inputs.every((v, i) => v === cachedAnimeInputs![i])) {
+    return cachedAnime;
+  }
+  const hiddenIds = new Set(hiddenIdList);
 
   const canonicalIds = new Set<string>([
     ...Object.keys(registry),
@@ -478,19 +487,19 @@ export function getAnimeForDisplay(): AnimeRecord[] {
     if (row) rows.push(row);
   }
   cachedAnime = rows;
-  lastCacheTime = now;
+  cachedAnimeInputs = inputs;
   return cachedAnime;
 }
 
 /**
- * Assemble ONE anime record straight from the source files, bypassing the
- * `getAnimeForDisplay` cache entirely.
+ * Assemble ONE anime record from the source files, bypassing the
+ * `getAnimeForDisplay` row cache.
  *
- * The detail page renders in `getServerSideProps` (page bundle) while refresh
- * writes run in an API route (api bundle). In a production Next build those two
- * do NOT share module-level state, so an API-route write invalidating
- * `cachedAnime` never reaches the page's copy — it would stay stale until the
- * 10-min TTL expired. Reading fresh here makes the detail page immune to that.
+ * Historically this existed because the detail page (page bundle) couldn't see
+ * an API-route write invalidating the other bundle's `cachedAnime`. That hole
+ * is closed now — both the parse cache and the row cache invalidate off file
+ * mtime — but the direct read is kept: it's cheap (six stat calls + one row
+ * assembly against cached parses) and stays trivially immune by construction.
  *
  * `canonicalId` is the outward id (docs/PROVIDER-FREE-CUTOVER.md Phase D) —
  * the route param IS the slice key, so no resolve step is needed.
@@ -619,8 +628,13 @@ function updatePersonalStatus(
       anime.my_list_status.is_rewatching = newListStatus.is_rewatching;
     }
 
-    // Always update updated_at timestamp
-    anime.my_list_status.updated_at = newListStatus.updated_at;
+    // Refresh updated_at only when something else changed: with jsonStore's
+    // shared parse cache, mutating the read object without writing it back
+    // would leak into every later read (and an unchanged record was never
+    // persisted with the new timestamp anyway).
+    if (changes.length > 0) {
+      anime.my_list_status.updated_at = newListStatus.updated_at;
+    }
   }
 
   // If changes were made, save
