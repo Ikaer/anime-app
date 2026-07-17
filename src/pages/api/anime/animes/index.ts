@@ -130,10 +130,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // Apply sorting
+    // Apply sorting. Copy first: when no filter ran above, `animeList` is still
+    // the shared long-lived cache array from getAnimeForDisplay(), and sorting
+    // it in place would mutate every other reader's view of the store.
     const sortColumn = sortBy as SortColumn;
     const sortDirection = sortDir as SortDirection;
-    
+
+    animeList = [...animeList];
     animeList.sort((a, b) => {
       let aValue: any;
       let bValue: any;
