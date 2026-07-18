@@ -52,7 +52,7 @@ export default function QuickRatePage() {
 
   const [groups, setGroups] = useState<QuickRateGroup[]>([]);
   const [total, setTotal] = useState(0);
-  const [capped, setCapped] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -80,7 +80,10 @@ export default function QuickRatePage() {
         if (cancelled) return;
         setGroups(data.groups || []);
         setTotal(data.total || 0);
-        setCapped(!!data.capped);
+        setTotalPages(data.totalPages || 1);
+        // The server clamps a stale page number; mirror it back so the URL and
+        // the pager agree on where we actually landed.
+        if (typeof data.page === 'number' && data.page !== state.page) update({ page: data.page });
       } catch {
         if (!cancelled) setError(t('quickRate.loadFailed'));
       } finally {
@@ -184,6 +187,12 @@ export default function QuickRatePage() {
   const rateGroup = useCallback((group: QuickRateGroup, score: number) => {
     for (const member of group.members) rate(member, score);
   }, [rate]);
+
+  const goToPage = useCallback((p: number) => {
+    update({ page: p });
+    // A page is up to 20 franchises tall; without this you land mid-list.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [update]);
 
   const renderScoreRow = (onPick: (n: number) => void, current: number, compact?: boolean) => (
     <div className={compact ? 'scores compact' : 'scores'}>
@@ -306,7 +315,9 @@ export default function QuickRatePage() {
             <h1 className="qr-title">{t('nav.quickRate')}</h1>
             <span className="qr-count">
               {t('quickRate.groupCount', { count: total })}
-              {capped ? ` — ${t('quickRate.capped', { shown: groups.length })}` : ''}
+              {totalPages > 1
+                ? ` — ${t('quickRate.pageOf', { page: state.page + 1, total: totalPages })}`
+                : ''}
             </span>
           </div>
 
@@ -315,6 +326,7 @@ export default function QuickRatePage() {
           ) : groups.length === 0 ? (
             <div className="loading-state">{t('quickRate.empty')}</div>
           ) : (
+            <>
             <div className="groups">
               {groups.map(g => (
                 <section key={g.id} className="group">
@@ -332,6 +344,24 @@ export default function QuickRatePage() {
                 </section>
               ))}
             </div>
+            {totalPages > 1 && (
+              <nav className="pager">
+                <button type="button" onClick={() => goToPage(state.page - 1)} disabled={state.page === 0}>
+                  ← {t('quickRate.prevPage')}
+                </button>
+                <span className="pager-label">
+                  {t('quickRate.pageOf', { page: state.page + 1, total: totalPages })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => goToPage(state.page + 1)}
+                  disabled={state.page >= totalPages - 1}
+                >
+                  {t('quickRate.nextPage')} →
+                </button>
+              </nav>
+            )}
+            </>
           )}
         </div>
       </AnimePageLayout>
@@ -355,6 +385,15 @@ export default function QuickRatePage() {
         .group-label { color: var(--text-secondary); font-size: 0.8rem; }
 
         .members { display: flex; flex-direction: column; }
+
+        .pager { display: flex; align-items: center; justify-content: center; gap: 1rem;
+          padding: 1rem 0 2rem; }
+        .pager button { padding: 0.4rem 0.9rem; border-radius: 6px; cursor: pointer;
+          background: var(--bg-secondary); border: 1px solid var(--border-color);
+          color: var(--text-secondary); font-size: 0.9rem; }
+        .pager button:hover:not(:disabled) { border-color: var(--border-hover); color: var(--text-primary); }
+        .pager button:disabled { opacity: 0.4; cursor: default; }
+        .pager-label { color: var(--text-secondary); font-size: 0.85rem; }
       `}</style>
       <style jsx global>{`
         /* Member/score rules are global-but-scoped under .qr-main: renderMember

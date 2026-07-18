@@ -60,13 +60,21 @@ export interface QuickRateGroup {
 
 export interface QuickRateResponse {
   groups: QuickRateGroup[];
-  /** Groups matched before the cap — the page shows "narrow to see more". */
+  /** Groups matched across every page. */
   total: number;
-  capped: boolean;
+  /** 0-based. */
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
-/** Hard cap: the page renders every member of every group returned. */
-const GROUP_LIMIT = 60;
+/**
+ * Groups per page. The page renders EVERY member of every group it receives, so
+ * this is a render-cost budget, not a match limit — the filters could never
+ * narrow ~25k titles down to one screenful, which is why this paginates rather
+ * than capping (a cap just hid the rest with no way to reach them).
+ */
+const PAGE_SIZE = 20;
 
 const toMember = (a: AnimeRecord): QuickRateMember => ({
   id: a.id,
@@ -104,16 +112,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, status } = req.query;
+    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, status, page } = req.query;
     // Indexed on the row-cache array itself (see getFranchiseIndex), so hidden
     // titles are dropped at seed/member level rather than by copying the array.
     const catalog = getAnimeForDisplay();
     const index = getFranchiseIndex(catalog);
 
+    const wantedTypes = csv(mediaType).map(s => s.toLowerCase());
+
     // ---- Seeds: the narrowing filters select which titles you're rating. ----
     let seeds = applyNarrowingFilters(catalog.filter(a => !a.hidden), {
       search: typeof search === 'string' ? search : undefined,
-      mediaTypes: csv(mediaType).length > 0 ? csv(mediaType) : undefined,
+      mediaTypes: wantedTypes.length > 0 ? wantedTypes : undefined,
       minScore: num(minScore),
       maxScore: num(maxScore),
       minYear: num(minYear),
@@ -134,31 +144,56 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // ---- Expand each seed to its whole franchise. -------------------------
     // Grouping runs over the UNFILTERED catalog on purpose: the unseen seasons
     // are exactly what a filter would have dropped, and they're the point.
+    //
+    // MEDIA TYPE IS THE ONE EXCEPTION and re-applies to members. It answers a
+    // different question from the rest: year/score/genre/search ask "which
+    // franchise am I rating?", media type asks "what kind of entry do I rate at
+    // all". Someone who only watches TV wants the movies and OVAs gone from
+    // inside the franchise too — otherwise "set all" would score them. The
+    // unseen-seasons intent survives because the unseen TV seasons still come
+    // through; only the wrong FORMAT is dropped.
     const groups: AnimeRecord[][] = [];
     const emitted = new Set<AnimeRecord[]>();
     for (const seed of seeds) {
       const group = index.get(seed.id);
       if (!group || emitted.has(group)) continue;
       emitted.add(group);
-      const visible = group.filter(m => !m.hidden);
+      const visible = group.filter(
+        m =>
+          !m.hidden &&
+          (wantedTypes.length === 0 ||
+            wantedTypes.includes((m.catalog.mediaType || '').toLowerCase()))
+      );
       if (visible.length > 0) groups.push(visible);
     }
 
-    // Best-known franchises first, so an unfiltered visit is still usable.
+    // Best-known franchises first, so an unfiltered visit is still usable. The
+    // id tiebreaker keeps the order total: pagination slices this array, so ties
+    // resolved differently between two requests would shuffle titles across page
+    // boundaries (dropped or duplicated rows).
     const groupMean = (g: AnimeRecord[]) => Math.max(...g.map(m => m.catalog.mean ?? 0));
-    groups.sort((a, b) => groupMean(b) - groupMean(a));
+    groups.sort((a, b) => groupMean(b) - groupMean(a) || a[0].id.localeCompare(b[0].id));
 
-    const capped = groups.length > GROUP_LIMIT;
-    const page = groups.slice(0, GROUP_LIMIT).map<QuickRateGroup>(members => {
-      const ordered = [...members].sort(byAirDate);
-      return {
-        id: ordered[0].id,
-        title: getPrimaryTitle(ordered[0]),
-        members: ordered.map(toMember),
-      };
-    });
+    const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
+    // Clamp rather than 404: a filter change that shrinks the result set can
+    // leave a stale page number in the URL.
+    const pageNum = Math.min(Math.max(Math.floor(num(page) ?? 0), 0), totalPages - 1);
+    const slice = groups.slice(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE);
 
-    const response: QuickRateResponse = { groups: page, total: groups.length, capped };
+    const response: QuickRateResponse = {
+      groups: slice.map<QuickRateGroup>(members => {
+        const ordered = [...members].sort(byAirDate);
+        return {
+          id: ordered[0].id,
+          title: getPrimaryTitle(ordered[0]),
+          members: ordered.map(toMember),
+        };
+      }),
+      total: groups.length,
+      page: pageNum,
+      pageSize: PAGE_SIZE,
+      totalPages,
+    };
     res.json(response);
   } catch (error) {
     console.error('Quick-rate list error:', error);
