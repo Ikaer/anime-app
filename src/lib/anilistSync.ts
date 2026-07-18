@@ -1,13 +1,14 @@
 /**
  * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
- * taxonomy, the top staff credits and the banner art for anime already known
+ * taxonomy, the top staff credits, the banner art and the franchise relation
+ * edges (docs/quickRate/) for anime already known
  * locally (via animes_mal.json) and persists them via store.ts. Read-only
  * against AniList; no writes.
  */
 import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
 import { getSeasonInfos } from '@/lib/animeUtils';
-import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry } from '@/models/anime';
+import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry, AniListRelationEntry } from '@/models/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const BATCH_SIZE = 50;
@@ -18,9 +19,13 @@ const STAFF_PER_ANIME = 15;
 // documented degraded limit of 30 req/min (normally 90/min).
 const ANILIST_MIN_DELAY_MS = 2100;
 
-// Tags AND staff in one query per batch (verified live: perPage:50 with a nested
-// staff(perPage:15) stays under AniList's query-complexity ceiling). Staff is
-// nested inside Page.media — NOT an aliased Media (which null-bombs on any miss).
+// Tags, staff AND relations in one query per batch (verified live 2026-07-18:
+// perPage:50 with nested staff(perPage:15) + the relations connection still
+// stays under AniList's query-complexity ceiling — 48 media, 269 relation edges,
+// no error). Staff is nested inside Page.media — NOT an aliased Media (which
+// null-bombs on any miss). `relations.node.type` is fetched because an
+// ADAPTATION edge's `idMal` is the MANGA's id and would otherwise be read as an
+// unrelated anime.
 const TAGS_QUERY = `
 query ($ids: [Int]) {
   Page(page: 1, perPage: ${BATCH_SIZE}) {
@@ -42,6 +47,12 @@ query ($ids: [Int]) {
           }
         }
       }
+      relations {
+        edges {
+          relationType
+          node { idMal type }
+        }
+      }
     }
   }
 }`;
@@ -50,12 +61,17 @@ interface RawStaffEdge {
   role?: string;
   node?: { id?: number; name?: { full?: string } };
 }
+interface RawRelationEdge {
+  relationType?: string;
+  node?: { idMal?: number | null; type?: string };
+}
 interface RawMedia {
   idMal: number;
   id: number;
   bannerImage?: string | null;
   tags: AniListTagEntry[];
   staff?: { edges?: RawStaffEdge[] };
+  relations?: { edges?: RawRelationEdge[] };
 }
 
 /**
@@ -70,8 +86,21 @@ function toEntry(m: RawMedia, fetchedAt: string): AniListMetaEntry {
     tags: m.tags ?? [],
     staff: parseStaff(m),
     banner_image: m.bannerImage ?? null,
+    relations: parseRelations(m),
     fetched_at: fetchedAt,
   };
+}
+
+/**
+ * Flatten AniList relation edges onto the MAL join key. Non-ANIME targets are
+ * dropped: an ADAPTATION edge points at the source manga, whose `idMal` lives in
+ * a different id space and would otherwise be matched against an anime.
+ */
+function parseRelations(media: RawMedia): AniListRelationEntry[] {
+  return (media.relations?.edges ?? [])
+    .filter((e): e is RawRelationEdge & { relationType: string; node: { idMal: number } } =>
+      !!e.relationType && e.node?.type === 'ANIME' && typeof e.node?.idMal === 'number')
+    .map(e => ({ idMal: e.node.idMal, relationType: e.relationType }));
 }
 
 /** Flatten AniList staff edges to our lean {id,name,role} records. */
@@ -273,14 +302,15 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
     // Both slices are canonical-keyed now, so index the meta by its own `mal_id`
     // to test coverage against the MAL slice's `a.id` (still the MAL id).
     const metaByMal = new Map(Object.values(getAllAnilistMeta()).map(e => [e.mal_id, e]));
-    // Fetch anime with no AniList entry yet, OR an entry predating staff / banner
-    // support (field === undefined) so those backfill onto already-tagged titles.
-    // A banner AniList doesn't have is stored as null, so it never re-queues.
+    // Fetch anime with no AniList entry yet, OR an entry predating staff /
+    // banner / relations support (field === undefined) so those backfill onto
+    // already-tagged titles. Absent values are stored as null/[] rather than
+    // left undefined, so a title AniList genuinely lacks never re-queues.
     const missingIds = Object.values(malAnime)
       .map(a => a.id)
       .filter(id => {
         const e = metaByMal.get(id);
-        return !e || e.staff === undefined || e.banner_image === undefined;
+        return !e || e.staff === undefined || e.banner_image === undefined || e.relations === undefined;
       });
 
     if (missingIds.length === 0) {

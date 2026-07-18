@@ -189,6 +189,24 @@ export interface AniListStaffEntry {
   name: string;
   role: string;
 }
+/**
+ * One AniList relation edge, flattened to the MAL join key. `relationType` is
+ * AniList's vocabulary (`SEQUEL`, `PREQUEL`, `SIDE_STORY`, `PARENT`,
+ * `ALTERNATIVE`, `ADAPTATION`…) — stored verbatim so the franchise rules can
+ * change without a re-sync. Only ANIME targets are kept: an `ADAPTATION` edge's
+ * `idMal` is the *manga's* id and would collide with an unrelated anime.
+ *
+ * This exists because MAL's `related_anime` is a **detail-only** field — its
+ * list/seasonal endpoints omit it, so the crawled catalog has relations for
+ * almost nothing (46 of 25,370 titles when this was added). AniList returns
+ * them 50 titles per query, which is what makes a catalog-wide relation graph
+ * affordable at all (see `docs/quickRate/`).
+ */
+export interface AniListRelationEntry {
+  idMal: number;
+  relationType: string;
+}
+
 export interface AniListMetaEntry {
   /**
    * Absent for an AniList-only title (no MAL id) — the crawler mints a bare
@@ -209,6 +227,12 @@ export interface AniListMetaEntry {
    * means never fetched, and is the backfill signal (same pattern as `staff`).
    */
   banner_image?: string | null;
+  /**
+   * Franchise relation edges. Written as `[]` when AniList has none, so
+   * `undefined` keeps meaning "never fetched" and stays the backfill signal
+   * (same pattern as `staff` / `banner_image`).
+   */
+  relations?: AniListRelationEntry[];
   /**
    * AniList's OWN catalog view of this title (docs/PROVIDER-FREE.md Phase 3),
    * populated by the season/popularity crawler in anilistSync.ts — distinct

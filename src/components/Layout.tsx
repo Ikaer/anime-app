@@ -124,6 +124,12 @@ export default function Layout({ children }: LayoutProps) {
                 >
                   {t('nav.tierList')}
                 </Link>
+                <Link
+                  href="/quick-rate"
+                  className={`nav-link ${router.pathname === '/quick-rate' ? 'active' : ''}`}
+                >
+                  {t('nav.quickRate')}
+                </Link>
                 <OthersDropdown />
                 <Link
                   href="/connections"
