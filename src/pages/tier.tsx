@@ -204,9 +204,10 @@ export default function TierPage() {
           setFailed(prev => new Map(prev).set(id, data.error || t('tier.saveFailed')));
         } else {
           // Persisted locally; warn if a remote source (MAL/SIMKL) didn't take it.
+          const outcomes = data.outcomes || {};
           const bad: string[] = [];
-          if (data.mal && data.mal.ok === false) bad.push('MAL');
-          if (data.simkl && data.simkl.ok === false) bad.push('SIMKL');
+          if (outcomes.mal && outcomes.mal.ok === false) bad.push('MAL');
+          if (outcomes.simkl && outcomes.simkl.ok === false) bad.push('SIMKL');
           setFailed(prev => {
             const n = new Map(prev);
             if (bad.length) n.set(id, t('tier.notSynced', { sources: bad.join(' + ') }));

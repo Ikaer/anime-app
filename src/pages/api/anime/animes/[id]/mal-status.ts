@@ -1,80 +1,56 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, saveAnime, isCanonicalId } from '@/lib/store';
-import { updateMalListStatus, MalListStatusUpdate } from '@/lib/malWrite';
+import { isCanonicalId } from '@/lib/store';
+import { writePersonal, PersonalPatch } from '@/lib/personalWriters';
+import { UserAnimeStatus } from '@/models/anime';
 
-type MALStatusUpdate = MalListStatusUpdate;
-
+/**
+ * Update the user's status / score / progress for one anime. Thin wrapper over
+ * the personal writer registry ([personalWriters.ts](../../../../../lib/personalWriters.ts)):
+ * the local-cache authority slices are bumped first, then the enabled remote
+ * writers fire. Historically MAL-only; now it also lands in the local slice when
+ * the local provider is enabled, and is a no-op for the score-only SIMKL writer.
+ *
+ * Wire body stays `{ status?, score?, num_episodes_watched? }` (MAL's field
+ * name); it's translated to the neutral `progress` patch field at this boundary.
+ */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
   const canonicalId = typeof id === 'string' ? id : '';
 
-  if (req.method === 'PUT') {
-    if (!isCanonicalId(canonicalId)) {
-      return res.status(400).json({ error: 'Invalid anime id' });
-    }
-    try {
-      const updates: MALStatusUpdate = req.body;
-
-      // Validate the updates
-      if (updates.status && !['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch'].includes(updates.status)) {
-        return res.status(400).json({ error: 'Invalid status value' });
-      }
-
-      if (updates.score !== undefined && (updates.score < 0 || updates.score > 10)) {
-        return res.status(400).json({ error: 'Score must be between 0 and 10' });
-      }
-
-      if (updates.num_episodes_watched !== undefined && updates.num_episodes_watched < 0) {
-        return res.status(400).json({ error: 'Episodes watched cannot be negative' });
-      }
-
-      // `canonicalId` is the outward id and the slice's key — a direct lookup.
-      const animesData = getAllAnime();
-      if (!(canonicalId in animesData)) {
-        console.log(`Anime ${canonicalId} not found in JSON file`);
-        return res.status(404).json({ error: 'Anime not found' });
-      }
-
-      const anime = animesData[canonicalId];
-
-      // Update local state immediately
-      if (!anime.my_list_status) {
-        anime.my_list_status = {
-          status: '',
-          score: 0,
-          num_episodes_watched: 0,
-          is_rewatching: false,
-          updated_at: new Date().toISOString()
-        };
-      }
-
-      // Apply updates
-      if (updates.status !== undefined) anime.my_list_status.status = updates.status;
-      if (updates.score !== undefined) anime.my_list_status.score = updates.score;
-      if (updates.num_episodes_watched !== undefined) anime.my_list_status.num_episodes_watched = updates.num_episodes_watched;
-      anime.my_list_status.updated_at = new Date().toISOString();
-
-      // Save updated animes
-      saveAnime(animesData);
-
-      // Try to update MAL API
-      try {
-        await updateMalListStatus(anime.id, updates);
-      } catch (malError) {
-        console.error('MAL API update failed, but local state updated:', malError);
-        // Don't fail the request if MAL API fails - local state is already updated
-      }
-
-      res.status(200).json({ 
-        message: 'Status updated successfully',
-        anime: anime
-      });
-    } catch (error) {
-      console.error('Error updating MAL status:', error);
-      res.status(500).json({ error: 'Failed to update MAL status' });
-    }
-  } else {
+  if (req.method !== 'PUT') {
     res.setHeader('Allow', ['PUT']);
-    res.status(405).json({ error: `Method ${req.method} not allowed` });
+    return res.status(405).json({ error: `Method ${req.method} not allowed` });
+  }
+
+  if (!isCanonicalId(canonicalId)) {
+    return res.status(400).json({ error: 'Invalid anime id' });
+  }
+
+  try {
+    const body = (req.body ?? {}) as { status?: string; score?: number; num_episodes_watched?: number };
+
+    if (body.status && !['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch'].includes(body.status)) {
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
+    if (body.score !== undefined && (body.score < 0 || body.score > 10)) {
+      return res.status(400).json({ error: 'Score must be between 0 and 10' });
+    }
+    if (body.num_episodes_watched !== undefined && body.num_episodes_watched < 0) {
+      return res.status(400).json({ error: 'Episodes watched cannot be negative' });
+    }
+
+    const patch: PersonalPatch = {
+      status: body.status as UserAnimeStatus | undefined,
+      score: body.score,
+      progress: body.num_episodes_watched,
+    };
+
+    const { found, outcomes } = await writePersonal(canonicalId, patch);
+    if (!found) return res.status(404).json({ error: 'Anime not found' });
+
+    return res.status(200).json({ message: 'Status updated successfully', outcomes });
+  } catch (error) {
+    console.error('Error updating MAL status:', error);
+    return res.status(500).json({ error: 'Failed to update MAL status' });
   }
 }

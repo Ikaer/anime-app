@@ -1,18 +1,15 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, saveAnime, getAllSimklEntries, upsertSimklEntries, isCanonicalId } from '@/lib/store';
-import { updateMalListStatus } from '@/lib/malWrite';
-import { pushSimklRating } from '@/lib/simklWrite';
+import { isCanonicalId } from '@/lib/store';
+import { writePersonal } from '@/lib/personalWriters';
 
 /**
- * Set the user's personal score for one anime on BOTH MAL and SIMKL (the user
- * chose to keep the two in sync). The local cache is authority: local MAL +
- * local SIMKL are updated first (so getEffectiveScore reflects the new value
- * immediately — it's SIMKL-first), then the two remote writes fire.
- *
- * Remote writes are non-fatal but NOT silent: their per-source outcome is
- * returned so the client can surface a failed SIMKL write. Without that, a
- * failed SIMKL push would be invisible (local MAL + local SIMKL both already
- * show the new score, so no discrepancy badge appears and no sync corrects it).
+ * Set the user's personal score for one anime. Thin wrapper over the personal
+ * writer registry ([personalWriters.ts](../../../../../lib/personalWriters.ts)):
+ * the local-cache authority slices (MAL / SIMKL / local) are bumped first — so
+ * the SIMKL-first `getEffectiveScore` reflects the new value immediately — then
+ * the enabled remote writers fire. A per-provider `outcomes` map is returned so
+ * the client can surface a remote write that didn't take (a failed SIMKL push
+ * would otherwise be invisible: local slices already show the new score).
  *
  * `score` 0 clears the rating (drag back to the "à noter" tray).
  */
@@ -33,46 +30,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // --- Local writes (authority) ---
-    // `canonicalId` is the outward id and the slice's key — a direct lookup.
-    const malData = getAllAnime();
-    const anime = malData[canonicalId];
-    if (!anime) return res.status(404).json({ error: 'Anime not found' });
-
-    if (!anime.my_list_status) {
-      anime.my_list_status = { status: '', score: 0, num_episodes_watched: 0, is_rewatching: false, updated_at: '' };
-    }
-    anime.my_list_status.score = score;
-    anime.my_list_status.updated_at = new Date().toISOString();
-    saveAnime(malData);
-
-    // Update the local SIMKL entry too, when one exists — getEffectiveScore is
-    // SIMKL-first, so without this the drag wouldn't show through for a title
-    // that already has a SIMKL entry.
-    const simklEntries = getAllSimklEntries();
-    const simklEntry = simklEntries[canonicalId];
-    if (simklEntry) {
-      simklEntry.score = score > 0 ? score : null;
-      upsertSimklEntries([simklEntry]);
-    }
-
-    // --- Remote writes (non-fatal, per-source outcome returned) ---
-    // Both remote calls need the REAL MAL id — the local MAL slice carries its
-    // own (`anime.id`), which the write path never has to resolve/translate.
-    let mal = { ok: true as boolean, error: undefined as string | undefined };
-    try {
-      await updateMalListStatus(anime.id, { score });
-    } catch (e) {
-      mal = { ok: false, error: e instanceof Error ? e.message : 'MAL write failed' };
-      console.error(`[rating] MAL write failed for ${anime.id}:`, e);
-    }
-
-    const simkl = await pushSimklRating(anime.id, score, {
-      simklId: simklEntry?.simkl_id,
-      mediaType: anime.media_type,
-    });
-
-    return res.status(200).json({ ok: true, score, mal, simkl });
+    const { found, outcomes } = await writePersonal(canonicalId, { score });
+    if (!found) return res.status(404).json({ error: 'Anime not found' });
+    return res.status(200).json({ ok: true, score, outcomes });
   } catch (error) {
     console.error('Error updating rating:', error);
     return res.status(500).json({ error: 'Failed to update rating' });
