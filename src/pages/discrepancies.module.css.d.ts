@@ -1,6 +1,11 @@
 declare const styles: {
+  readonly "check": string;
+  readonly "checkOn": string;
   readonly "count": string;
   readonly "error": string;
+  readonly "filterHint": string;
+  readonly "filterLabel": string;
+  readonly "filters": string;
   readonly "groupMal": string;
   readonly "groupStart": string;
   readonly "header": string;

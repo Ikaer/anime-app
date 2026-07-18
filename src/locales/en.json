@@ -217,6 +217,10 @@
   "discPage.score": "Score",
   "discPage.episodes": "Episodes",
   "discPage.absent": "absent",
+  "discPage.comparedSources": "Compared sources",
+  "discPage.filterHint": "Unchecking a source removes its discrepancies from the table",
+  "discPage.ofTotal": "of {total}",
+  "discPage.emptyFiltered": "No discrepancies between the selected sources.",
 
   "conn.pageTitle": "Connections - MyHomeApp",
   "conn.metaDescription": "Manage MyAnimeList/SIMKL connections and sync activity",
