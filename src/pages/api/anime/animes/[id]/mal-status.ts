@@ -12,6 +12,8 @@ import { UserAnimeStatus } from '@/models/anime';
  *
  * Wire body stays `{ status?, score?, num_episodes_watched? }` (MAL's field
  * name); it's translated to the neutral `progress` patch field at this boundary.
+ * An explicit `status: null` (or `''`) CLEARS the status — only meaningful for a
+ * local-only user, since no remote writer can express it (see `PersonalPatch`).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -27,8 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const body = (req.body ?? {}) as { status?: string; score?: number; num_episodes_watched?: number };
+    const body = (req.body ?? {}) as { status?: string | null; score?: number; num_episodes_watched?: number };
 
+    // `status` absent = leave it alone; `null`/`''` = CLEAR it (see PersonalPatch).
+    const clearStatus = 'status' in body && (body.status === null || body.status === '');
     if (body.status && !['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch'].includes(body.status)) {
       return res.status(400).json({ error: 'Invalid status value' });
     }
@@ -40,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const patch: PersonalPatch = {
-      status: body.status as UserAnimeStatus | undefined,
+      status: clearStatus ? null : (body.status as UserAnimeStatus | undefined),
       score: body.score,
       progress: body.num_episodes_watched,
     };

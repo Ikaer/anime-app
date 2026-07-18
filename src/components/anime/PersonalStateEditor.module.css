@@ -1,0 +1,91 @@
+/* Editor for the detail page's personal-state section (docs/localRating/ phase 3).
+   Sits above the read-only MAL/SIMKL/effective comparison table. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex: 0 0 90px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Score buttons are single digits — fix the width so 10 doesn't widen its cell. */
+.num {
+  min-width: 34px;
+  text-align: center;
+}
+
+.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.clear {
+  color: var(--text-muted);
+}
+
+.epInput {
+  width: 70px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.total {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Only a REMOTE push can fail — the local authority write already landed. */
+.error {
+  color: #f87171;
+  font-size: 0.8rem;
+}

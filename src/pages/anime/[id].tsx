@@ -7,13 +7,17 @@ import type { AnimeRecord } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
+import { hasWritableExternal } from '@/lib/providers';
 import { RefreshButton } from '@/components/shared';
-import { MoreLikeThis } from '@/components/anime';
+import { MoreLikeThis, PersonalStateEditor } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 interface Props {
   anime: AnimeRecord;
   similar: SimilarByCredits[];
+  /** No writable external provider connected — gates the status "clear"
+   *  affordance (docs/localRating/ phase 3; see `PersonalPatch`). */
+  canClearStatus: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +66,7 @@ function statusLabel(status: string | null | undefined, t: TFunction): string {
   return status ? t(`statusShort.${status}` as TranslationKey) : '—';
 }
 
-export default function AnimeDetailPage({ anime, similar }: Props) {
+export default function AnimeDetailPage({ anime, similar, canClearStatus }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -246,6 +250,17 @@ export default function AnimeDetailPage({ anime, similar }: Props) {
         {/* ---------- Personal state reconciliation (the point of this page) ---------- */}
         <section className="section">
           <h2>{t('detail.personalState')}</h2>
+          {/* The bootstrap surface — the only place an unstatused catalog title can
+              become statused + scored (docs/localRating/ phase 3). */}
+          <PersonalStateEditor
+            animeId={anime.id}
+            status={effStatus}
+            score={effScore}
+            progress={effProgress}
+            numEpisodes={anime.catalog.numEpisodes}
+            canClearStatus={canClearStatus}
+            onWritten={() => router.replace(router.asPath, undefined, { scroll: false })}
+          />
           <table className="reco-table">
             <thead>
               <tr><th></th><th>MAL</th><th>SIMKL</th><th>{t('detail.effective')}</th></tr>
@@ -617,6 +632,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     props: {
       anime: JSON.parse(JSON.stringify(anime)),
       similar: JSON.parse(JSON.stringify(similar)),
+      // Clearing a status has no remote equivalent (MAL models it as a list
+      // DELETE, SIMKL is score-only), so only offer it when there's no remote
+      // to diverge from — see `PersonalPatch` in personalWriters.ts.
+      canClearStatus: !hasWritableExternal(),
     },
   };
 };

@@ -39,9 +39,16 @@ import { getMALAuthData } from '@/lib/mal';
 import { getSimklAuthData } from '@/lib/simkl';
 import { isLocalProviderEnabled } from '@/lib/providers';
 
-/** The provider-neutral edit. `score` 0 clears the rating. */
+/**
+ * The provider-neutral edit. `score` 0 clears the rating; `status: null` clears
+ * the status. Clearing a status has **no remote equivalent** — MAL models it as
+ * a list DELETE (which would also drop the score) and SIMKL is score-only — so
+ * the remote writers report it as unsupported rather than half-applying it. The
+ * detail-page control therefore only offers "clear" to a local-only user (see
+ * `hasWritableExternal`), where there is no remote to diverge from.
+ */
 export interface PersonalPatch {
-  status?: UserAnimeStatus;
+  status?: UserAnimeStatus | null;
   score?: number;
   progress?: number;
 }
@@ -92,13 +99,14 @@ const malWriter: PersonalWriter = {
     if (!anime.my_list_status) {
       anime.my_list_status = { status: '', score: 0, num_episodes_watched: 0, is_rewatching: false, updated_at: '' };
     }
-    if (patch.status !== undefined) anime.my_list_status.status = patch.status;
+    if (patch.status !== undefined) anime.my_list_status.status = patch.status ?? '';
     if (patch.score !== undefined) anime.my_list_status.score = patch.score;
     if (patch.progress !== undefined) anime.my_list_status.num_episodes_watched = patch.progress;
     anime.my_list_status.updated_at = new Date().toISOString();
     saveAnime(animes);
   },
   async writeRemote({ record }, patch) {
+    if (patch.status === null) return { ok: false, error: 'MAL cannot clear a status (list removal only)' };
     const malId = malIdOf(record);
     if (malId === undefined) return { ok: false, error: 'No MAL id for this title' };
     try {
@@ -157,7 +165,7 @@ const localWriter: PersonalWriter = {
       ...existing,
       updated_at: new Date().toISOString(),
     };
-    if (patch.status !== undefined) next.status = patch.status;
+    if (patch.status !== undefined) next.status = patch.status ?? undefined;
     if (patch.score !== undefined) next.score = patch.score > 0 ? patch.score : undefined;
     if (patch.progress !== undefined) next.progress = patch.progress;
     upsertLocalEntries({ [canonicalId]: next });
