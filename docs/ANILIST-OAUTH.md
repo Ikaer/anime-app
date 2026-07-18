@@ -114,6 +114,17 @@ bespoke call), on `a_31` = *Sekai Saikyou no Kouei* (AniList 198409):
   the import doesn't carry. Harmless in practice (the push landed on AniList, so
   the next import reads it back), but it means the slice isn't a durable
   local-only store the way `animes_local_personal.json` is.
+- **AniList is absent from discrepancy detection.** `buildProviderStates` in
+  `store.ts` still excludes `anilistPersonal`. Its original reason ("until it
+  becomes a writable provider") expired with this change; the live reason is that
+  the slice is *also* filled by the anonymous username import for users with no
+  token, who can't act on a mismatch. Including it needs a token gate, mirroring
+  how `local` is gated on `personalPrecedence`.
+- **Write surfaces**: because the writer lives in the shared registry, ALL of the
+  tier board, `/quick-rate`, and the detail-page editor push to AniList once
+  connected — broader than this doc's original "keep it to one surface first".
+  Deliberate: it matches how MAL sits in the registry, and a provider that only
+  wrote from one surface would drift out of sync with the others.
 - **Precedence unchanged.** AniList still sits last in
   `DEFAULT_PERSONAL_PRECEDENCE` (`simkl > mal > anilist`) even when OAuth'd — see
   the open question below, deliberately not resolved here.

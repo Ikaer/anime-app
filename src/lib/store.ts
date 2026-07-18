@@ -483,8 +483,14 @@ function assembleCrosswalk(
  * `local` only participates when the local provider is enabled, which is exactly
  * what `personalPrecedence` already encodes (it carries `local` only then), so a
  * stray entry left behind by a disabled provider never surfaces as a mismatch.
- * `anilistPersonal` is deliberately left out until it becomes a writable provider
- * — including it now would add mismatches nobody can act on.
+ * `anilistPersonal` is STILL left out, but the original reason ("until it becomes
+ * a writable provider") expired when AniList OAuth shipped. The reason now is
+ * that the slice is filled by TWO paths with different actionability: the
+ * anonymous username import (docs/PROVIDER-FREE.md P3b) fills it for users with
+ * no AniList token, who cannot act on a mismatch it would surface. Including it
+ * would have to be gated on `getAnilistAuthData().token != null` — the way
+ * `local` is gated on `personalPrecedence` below — which is a deliberate
+ * follow-up, not an oversight. See docs/ANILIST-OAUTH.md "Not yet done".
  */
 function buildProviderStates(
   mal: MALAnime | undefined,
