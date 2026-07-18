@@ -4,7 +4,7 @@ import { AnimeRecord, SortColumn, SortDirection, ImageSize, VisibleColumns } fro
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
-import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
+import DiscrepancyBadge from './DiscrepancyBadge';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './AnimeTable.module.css';
 
@@ -379,7 +379,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       <option value="dropped">{t('statusShort.dropped')}</option>
                       <option value="plan_to_watch">{t('statusShort.plan_to_watch')}</option>
                     </select>
-                    <SimklDiscrepancyBadge anime={anime} />
+                    <DiscrepancyBadge anime={anime} />
                   </div>
                   <div>
                     <select

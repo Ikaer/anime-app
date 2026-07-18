@@ -1,0 +1,85 @@
+/**
+ * Pure N-provider personal-state comparison. Client-safe: no fs/path imports, so
+ * this module is importable from both API handlers and React components.
+ *
+ * Generalized from the original pairwise `simklCompare.ts` (docs/localRating/
+ * phase 4): the comparison now takes a per-provider map, so `local` — and later
+ * Betaseries / AniList — participate without touching this logic again.
+ */
+import { Discrepancy, ProviderPersonalState, ProvenanceSource, UserAnimeStatus } from '@/models/anime';
+
+// SIMKL status vocabulary -> MAL vocabulary. Returns null for unknown values.
+const SIMKL_STATUS_MAP: Record<string, UserAnimeStatus> = {
+  watching: 'watching',
+  completed: 'completed',
+  hold: 'on_hold',
+  plantowatch: 'plan_to_watch',
+  dropped: 'dropped',
+  // tolerate already-normalized / alternate spellings
+  on_hold: 'on_hold',
+  plan_to_watch: 'plan_to_watch',
+  notinteresting: 'dropped',
+};
+
+export function mapSimklStatus(raw: string | undefined | null): UserAnimeStatus | null {
+  if (!raw) return null;
+  return SIMKL_STATUS_MAP[raw.toLowerCase().trim()] ?? null;
+}
+
+/**
+ * The provider a title is expected to reach. Presence is deliberately
+ * **asymmetric**: MAL is the comprehensive list, while SIMKL / local are subset
+ * feeds, so "on SIMKL but not on MAL" is news and the inverse is not. A
+ * symmetric rule would flag every MAL-only title — i.e. the entire list.
+ * Extend this set when a second full-list writable provider lands (Betaseries).
+ */
+const PRESENCE_ANCHORS: ProvenanceSource[] = ['mal'];
+
+/** Distinct defined values across the present providers, in provider order. */
+function distinct<T>(values: T[]): T[] {
+  return values.filter((v, i) => values.indexOf(v) === i);
+}
+
+/**
+ * Compute the cross-provider discrepancy for a single title.
+ *
+ * Returns null when fewer than two providers hold an entry, or when every
+ * comparable dimension agrees. Missing values stay lenient, exactly as the
+ * pairwise version was: a dimension only counts as a disagreement when at least
+ * two providers define it and the defined values differ.
+ */
+export function computeDiscrepancy(
+  states: Partial<Record<ProvenanceSource, ProviderPersonalState>>
+): Discrepancy | null {
+  const entries = (Object.entries(states) as [ProvenanceSource, ProviderPersonalState][])
+    .filter(([, s]) => s.present);
+  if (entries.length === 0) return null;
+
+  const statuses = entries.map(([, s]) => s.status).filter((v): v is UserAnimeStatus => !!v);
+  const scores = entries.map(([, s]) => s.score).filter((v): v is number => v != null && v > 0);
+  const progresses = entries.map(([, s]) => s.progress).filter((v): v is number => v != null);
+
+  // Progress exception: when providers disagree on the *total* episode count but
+  // each has watched all of its own episodes, the title is fully watched
+  // everywhere — that's not a real discrepancy (e.g. 12 eps on MAL vs 13 on
+  // SIMKL, both completed) and it would be impossible to reconcile.
+  const allFullyWatched = entries
+    .filter(([, s]) => s.progress != null)
+    .every(([, s]) => s.total != null && s.total > 0 && s.progress === s.total);
+
+  const disagree = {
+    status: distinct(statuses).length > 1,
+    score: distinct(scores).length > 1,
+    progress: distinct(progresses).length > 1 && !allFullyWatched,
+  };
+
+  // Presence split (soft): the title reached some providers but not the anchor.
+  const absentAnchors = PRESENCE_ANCHORS.filter(p => states[p] && !states[p]!.present);
+  const presence =
+    absentAnchors.length > 0
+      ? { present: entries.map(([p]) => p), absent: absentAnchors }
+      : undefined;
+
+  if (!disagree.status && !disagree.score && !disagree.progress && !presence) return null;
+  return { providers: states, disagree, presence };
+}

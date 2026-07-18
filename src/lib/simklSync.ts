@@ -5,7 +5,7 @@
  */
 import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/simkl';
 import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/store';
-import { mapSimklStatus } from '@/lib/simklCompare';
+import { mapSimklStatus } from '@/lib/discrepancy';
 import { SimklPersonalEntry, SourceIds } from '@/models/anime';
 
 export interface SimklSyncResult {

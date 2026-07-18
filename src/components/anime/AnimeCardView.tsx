@@ -5,7 +5,7 @@ import { getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
-import SimklDiscrepancyBadge from './SimklDiscrepancyBadge';
+import DiscrepancyBadge from './DiscrepancyBadge';
 import styles from './AnimeCardView.module.css';
 
 type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
@@ -347,7 +347,7 @@ export default function AnimeCardView({
                         )}
                         {(feedbackMode || anime.discrepancy || anime.sources.simkl) && (
                         <div className={styles.actions}>
-                            <SimklDiscrepancyBadge anime={anime} />
+                            <DiscrepancyBadge anime={anime} />
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (
                                 <Button
                                     onClick={() => onRemoveFeedback?.(anime.id)}

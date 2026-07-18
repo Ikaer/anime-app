@@ -145,12 +145,33 @@ export interface SourceIds {
   [key: string]: number | string | undefined;
 }
 
-// A detected MAL vs SIMKL mismatch for one title. `null` fields = that dimension agrees.
+/**
+ * One provider's RAW personal state, as fed to the discrepancy comparison
+ * (docs/localRating/ phase 4). Built from `sources.<provider>`, never from the
+ * merged/effective value — the whole point is to detect mismatches *between*
+ * sources. `total` is that provider's own episode count: MAL and SIMKL disagree
+ * on totals often enough that the reconciliation below needs each side's own.
+ */
+export interface ProviderPersonalState {
+  status?: UserAnimeStatus;
+  score?: number | null;
+  progress?: number | null;
+  total?: number | null;
+  present: boolean; // does this provider have an entry for the title at all?
+}
+
+/**
+ * A detected mismatch between two or more personal providers for one title.
+ * Generalized from the original pairwise MAL-vs-SIMKL shape to a per-provider
+ * map so `local` (and later Betaseries/AniList) participate for free.
+ */
 export interface Discrepancy {
-  status?: { mal: UserAnimeStatus | null; simkl: UserAnimeStatus };
-  score?: { mal: number | null; simkl: number | null };
-  progress?: { mal: number | null; simkl: number | null };
-  presence?: 'simkl_only'; // soft: synced from SIMKL but absent from your MAL list
+  /** Every provider that has an entry, plus any anchor provider that lacks one. */
+  providers: Partial<Record<ProvenanceSource, ProviderPersonalState>>;
+  /** Which dimensions actually disagree — drives cell highlighting. */
+  disagree: { status: boolean; score: boolean; progress: boolean };
+  /** Soft split: the title lives on some providers but not on the anchor one. */
+  presence?: { present: ProvenanceSource[]; absent: ProvenanceSource[] };
 }
 
 // AniList catalog metadata (read-only, public API). Keyed by MAL id in

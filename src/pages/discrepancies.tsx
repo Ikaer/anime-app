@@ -2,12 +2,24 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
-import type { AnimeRecord } from '@/models/anime';
+import type { AnimeRecord, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/animeUtils';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 const fmtStatus = (s: string | null | undefined, t: TFunction): string =>
   s ? t(`statusShort.${s}` as TranslationKey) : '—';
+
+/**
+ * Grouped LONG format (docs/localRating/ phase 4): one sub-row per provider under
+ * each anime, rather than a MAL/SIMKL column pair. This is what lets a fourth
+ * provider land without blowing the table out sideways on the 4K screen.
+ */
+const PROVIDER_ORDER: ProvenanceSource[] = ['mal', 'simkl', 'local', 'anilist'];
+
+const providerRows = (anime: AnimeRecord): [ProvenanceSource, ProviderPersonalState][] => {
+  const providers = anime.discrepancy?.providers ?? {};
+  return PROVIDER_ORDER.filter(p => providers[p]).map(p => [p, providers[p]!]);
+};
 
 const malUrl = (id: number | string | undefined) => `https://myanimelist.net/anime/${id}`;
 const simklUrl = (anime: AnimeRecord): string | null => {
@@ -82,12 +94,10 @@ export default function DiscrepanciesPage() {
                 <tr>
                   <th>{t('table.image')}</th>
                   <th>{t('field.title')}</th>
-                  <th className={styles.groupMal}>{t('discPage.malStatus')}</th>
-                  <th>{t('discPage.simklStatus')}</th>
-                  <th className={styles.groupMal}>{t('discPage.malScore')}</th>
-                  <th>{t('discPage.simklScore')}</th>
-                  <th className={styles.groupMal}>{t('discPage.malEp')}</th>
-                  <th>{t('discPage.simklEp')}</th>
+                  <th className={styles.groupMal}>{t('discPage.provider')}</th>
+                  <th>{t('discPage.score')}</th>
+                  <th>{t('discPage.status')}</th>
+                  <th>{t('discPage.episodes')}</th>
                   <th>{t('table.links')}</th>
                   <th></th>
                 </tr>
@@ -95,82 +105,95 @@ export default function DiscrepanciesPage() {
               <tbody>
                 {animes.map(anime => {
                   const d = anime.discrepancy;
-                  const mal = anime.sources.mal?.my_list_status;
-                  const simkl = anime.sources.simkl;
                   const img = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
                   const sUrl = simklUrl(anime);
-                  const simklOnly = d?.presence === 'simkl_only';
+                  const rows = providerRows(anime);
+                  const absent = d?.presence?.absent ?? [];
 
-                  return (
-                    <tr key={anime.id}>
-                      <td>
-                        {img ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img className={styles.thumb} src={img} alt="" loading="lazy" />
-                        ) : (
-                          <div className={styles.thumbPlaceholder} />
-                        )}
-                      </td>
-                      <td className={styles.titleCell}>
-                        {getPrimaryTitle(anime)}
-                        {simklOnly && (
-                          <>
-                            {' '}
-                            <span className={styles.presenceTag}>{t('disc.simklOnly')}</span>
-                          </>
-                        )}
-                      </td>
+                  // The anime's own cells span its provider sub-rows; only the
+                  // first sub-row carries them.
+                  return rows.map(([provider, s], i) => (
+                    <tr key={`${anime.id}:${provider}`} className={i === 0 ? styles.groupStart : undefined}>
+                      {i === 0 && (
+                        <>
+                          <td rowSpan={rows.length}>
+                            {img ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img className={styles.thumb} src={img} alt="" loading="lazy" />
+                            ) : (
+                              <div className={styles.thumbPlaceholder} />
+                            )}
+                          </td>
+                          <td className={styles.titleCell} rowSpan={rows.length}>
+                            {getPrimaryTitle(anime)}
+                            {absent.length > 0 && (
+                              <>
+                                {' '}
+                                <span className={styles.presenceTag}>
+                                  {t('disc.absentFrom', {
+                                    providers: absent
+                                      .map(p => t(`disc.provider.${p}` as TranslationKey))
+                                      .join(', '),
+                                  })}
+                                </span>
+                              </>
+                            )}
+                          </td>
+                        </>
+                      )}
                       <td className={styles.groupMal}>
-                        <Cell value={fmtStatus(mal?.status, t)} mismatch={!!d?.status || simklOnly} />
+                        <span className={s.present ? undefined : styles.muted}>
+                          {t(`disc.provider.${provider}` as TranslationKey)}
+                          {!s.present && ` (${t('discPage.absent')})`}
+                        </span>
                       </td>
                       <td>
-                        <Cell value={fmtStatus(simkl?.status, t)} mismatch={!!d?.status || simklOnly} />
-                      </td>
-                      <td className={styles.groupMal}>
-                        <Cell value={mal?.score ? mal.score : '—'} mismatch={!!d?.score} />
+                        <Cell value={s.score ? s.score : '—'} mismatch={!!d?.disagree.score} />
                       </td>
                       <td>
-                        <Cell value={simkl?.score != null ? simkl.score : '—'} mismatch={!!d?.score} />
+                        <Cell value={fmtStatus(s.status, t)} mismatch={!!d?.disagree.status} />
                       </td>
-                      <td className={styles.groupMal}>
+                      <td>
                         <Cell
-                          value={mal?.num_episodes_watched != null ? mal.num_episodes_watched : '—'}
-                          mismatch={!!d?.progress}
+                          value={
+                            s.progress != null
+                              ? `${s.progress}${s.total ? ` / ${s.total}` : ''}`
+                              : '—'
+                          }
+                          mismatch={!!d?.disagree.progress}
                         />
                       </td>
-                      <td>
-                        <Cell
-                          value={simkl?.num_episodes_watched != null ? simkl.num_episodes_watched : '—'}
-                          mismatch={!!d?.progress}
-                        />
-                      </td>
-                      <td>
-                        <div className={styles.links}>
-                          <a
-                            className={styles.linkBtn}
-                            href={malUrl(anime.crosswalk.mal)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            MAL
-                          </a>
-                          {sUrl && (
-                            <a
-                              className={styles.linkBtn}
-                              href={sUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              SIMKL
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <RefreshButton animeId={anime.id} compact onRefreshed={load} />
-                      </td>
+                      {i === 0 && (
+                        <>
+                          <td rowSpan={rows.length}>
+                            <div className={styles.links}>
+                              <a
+                                className={styles.linkBtn}
+                                href={malUrl(anime.crosswalk.mal)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                MAL
+                              </a>
+                              {sUrl && (
+                                <a
+                                  className={styles.linkBtn}
+                                  href={sUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  SIMKL
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                          <td rowSpan={rows.length}>
+                            <RefreshButton animeId={anime.id} compact onRefreshed={load} />
+                          </td>
+                        </>
+                      )}
                     </tr>
-                  );
+                  ));
                 })}
               </tbody>
             </table>

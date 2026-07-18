@@ -2,7 +2,7 @@ declare const styles: {
   readonly "count": string;
   readonly "error": string;
   readonly "groupMal": string;
-  readonly "groupSimkl": string;
+  readonly "groupStart": string;
   readonly "header": string;
   readonly "linkBtn": string;
   readonly "links": string;

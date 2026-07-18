@@ -68,8 +68,10 @@
   border-left: 2px solid var(--border-color);
 }
 
-.groupSimkl {
-  border-left: 2px solid var(--border-color);
+/* The long format stacks one sub-row per provider, so the anime boundary needs
+   to read stronger than the row boundary. */
+.groupStart td {
+  border-top: 2px solid var(--border-color);
 }
 
 .thumb {

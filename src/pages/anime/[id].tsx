@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId } from '@/lib/store';
-import type { AnimeRecord } from '@/models/anime';
+import type { AnimeRecord, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
@@ -66,6 +66,21 @@ function statusLabel(status: string | null | undefined, t: TFunction): string {
   return status ? t(`statusShort.${status}` as TranslationKey) : '—';
 }
 
+/**
+ * "MAL 7 · SIMKL 8 · Local 8" — one dimension of a discrepancy, rendered across
+ * however many providers hold the title (docs/localRating/ phase 4).
+ */
+function discLine(
+  disc: Discrepancy,
+  t: TFunction,
+  render: (s: ProviderPersonalState) => string
+): string {
+  return (Object.entries(disc.providers) as [ProvenanceSource, ProviderPersonalState][])
+    .filter(([, s]) => s.present)
+    .map(([p, s]) => `${t(`disc.provider.${p}` as TranslationKey)} ${render(s)}`)
+    .join(' · ');
+}
+
 export default function AnimeDetailPage({ anime, similar, canClearStatus }: Props) {
   const t = useT();
   const router = useRouter();
@@ -82,6 +97,24 @@ export default function AnimeDetailPage({ anime, similar, canClearStatus }: Prop
   const tags = anime.sources.anilist?.tags || [];
   const staff = anime.sources.anilist?.staff || [];
   const crosswalk = anime.crosswalk || {};
+
+  // Raw per-provider personal state, in precedence-ish reading order. Raw on
+  // purpose: this table exists to show where the effective value came from and
+  // where the providers disagree, so it must never show merged values.
+  const local = anime.sources.local;
+  const providerLines: {
+    provider: ProvenanceSource;
+    status?: string;
+    score?: number | null;
+    progress?: number | null;
+    total?: number | null;
+  }[] = [
+    { provider: 'mal', status: mal?.status, score: mal?.score, progress: mal?.num_episodes_watched, total: anime.catalog.numEpisodes },
+    { provider: 'simkl', status: simkl?.status, score: simkl?.score, progress: simkl?.num_episodes_watched, total: simkl?.total_episodes },
+    // Local only shows up once it holds something — an empty row would just be
+    // noise for the MAL/SIMKL user, whose local provider is off entirely.
+    ...(local ? [{ provider: 'local' as ProvenanceSource, status: local.status, score: local.score, progress: local.progress, total: anime.catalog.numEpisodes }] : []),
+  ];
 
   const effStatus = getEffectiveStatus(anime);
   const effScore = getEffectiveScore(anime);
@@ -261,27 +294,31 @@ export default function AnimeDetailPage({ anime, similar, canClearStatus }: Prop
             canClearStatus={canClearStatus}
             onWritten={() => router.replace(router.asPath, undefined, { scroll: false })}
           />
+          {/* One row per provider, not a MAL/SIMKL column pair — the same long
+              format the /discrepancies page uses, so a fourth provider costs a
+              row rather than a column (docs/localRating/ phase 4). */}
           <table className="reco-table">
             <thead>
-              <tr><th></th><th>MAL</th><th>SIMKL</th><th>{t('detail.effective')}</th></tr>
+              <tr>
+                <th>{t('discPage.provider')}</th>
+                <th>{t('detail.status')}</th>
+                <th>{t('detail.score')}</th>
+                <th>{t('detail.progress')}</th>
+              </tr>
             </thead>
             <tbody>
+              {providerLines.map(line => (
+                <tr key={line.provider}>
+                  <td className="rowlabel">{t(`disc.provider.${line.provider}` as TranslationKey)}</td>
+                  <td>{statusLabel(line.status, t)}</td>
+                  <td>{fmtScore(line.score)}</td>
+                  <td>{line.progress ?? '—'}{line.total ? ` / ${line.total}` : ''}</td>
+                </tr>
+              ))}
               <tr>
-                <td className="rowlabel">{t('detail.status')}</td>
-                <td>{statusLabel(mal?.status, t)}</td>
-                <td>{statusLabel(simkl?.status, t)}</td>
+                <td className="rowlabel eff">{t('detail.effective')}</td>
                 <td className="eff">{statusLabel(effStatus, t)}</td>
-              </tr>
-              <tr>
-                <td className="rowlabel">{t('detail.score')}</td>
-                <td>{fmtScore(mal?.score)}</td>
-                <td>{fmtScore(simkl?.score)}</td>
                 <td className="eff">{effScore ?? '—'}</td>
-              </tr>
-              <tr>
-                <td className="rowlabel">{t('detail.progress')}</td>
-                <td>{mal?.num_episodes_watched ?? '—'}{anime.catalog.numEpisodes ? ` / ${anime.catalog.numEpisodes}` : ''}</td>
-                <td>{simkl?.num_episodes_watched ?? '—'}{simkl?.total_episodes ? ` / ${simkl.total_episodes}` : ''}</td>
                 <td className="eff">{effProgress ?? '—'}</td>
               </tr>
             </tbody>
@@ -296,10 +333,17 @@ export default function AnimeDetailPage({ anime, similar, canClearStatus }: Prop
             <div className="discrepancy">
               <strong>{t('detail.discTitle')}</strong>
               <ul>
-                {disc.presence === 'simkl_only' && <li>{t('detail.discSimklOnly')}</li>}
-                {disc.status && <li>{t('detail.status')} : MAL <b>{statusLabel(disc.status.mal, t)}</b> vs SIMKL <b>{statusLabel(disc.status.simkl, t)}</b></li>}
-                {disc.score && <li>{t('detail.score')} : MAL <b>{disc.score.mal ?? '—'}</b> vs SIMKL <b>{disc.score.simkl ?? '—'}</b></li>}
-                {disc.progress && <li>{t('detail.progress')} : MAL <b>{disc.progress.mal ?? '—'}</b> vs SIMKL <b>{disc.progress.simkl ?? '—'}</b></li>}
+                {disc.presence && (
+                  <li>
+                    {t('detail.discAbsent', {
+                      present: disc.presence.present.map(p => t(`disc.provider.${p}` as TranslationKey)).join(', '),
+                      absent: disc.presence.absent.map(p => t(`disc.provider.${p}` as TranslationKey)).join(', '),
+                    })}
+                  </li>
+                )}
+                {disc.disagree.status && <li>{t('detail.status')} : {discLine(disc, t, s => statusLabel(s.status, t))}</li>}
+                {disc.disagree.score && <li>{t('detail.score')} : {discLine(disc, t, s => String(s.score || '—'))}</li>}
+                {disc.disagree.progress && <li>{t('detail.progress')} : {discLine(disc, t, s => String(s.progress ?? '—'))}</li>}
               </ul>
             </div>
           )}
