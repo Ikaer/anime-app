@@ -10,6 +10,7 @@
  *   LANG_OVERRIDE  UI language, 'en' or 'fr' (default 'en')
  *   DETAIL_ID    MAL id used for the detail-page shot (default 5114 = FMA: Brotherhood)
  *   STUDIO_ID    MAL studio id used for the credits shot (default 11 = Madhouse)
+ *   ONLY         comma-separated shot names to (re)capture, e.g. ONLY=07-quick-rate
  *
  * Requires playwright's chromium: `npx playwright install chromium` (one-time).
  */
@@ -22,6 +23,12 @@ const LANG = process.env.LANG_OVERRIDE || 'en';
 const DETAIL_ID = process.env.DETAIL_ID || '5114';
 const STUDIO_ID = process.env.STUDIO_ID || '11';
 
+const ONLY = (process.env.ONLY || '').split(',').map(s => s.trim()).filter(Boolean);
+
+// The quick-rate shot needs a franchise with real depth: AniList relations are what
+// group the entries, so a catalog that hasn't run a metadata sync shows singletons.
+const QUICK_RATE_QUERY = process.env.QUICK_RATE_QUERY || 'fate';
+
 const shots = [
   { name: '01-card-view',       url: '/' },
   { name: '02-recommendations', url: '/recommendations', settle: 2500 },
@@ -29,7 +36,8 @@ const shots = [
   { name: '04-discrepancies',   url: '/discrepancies',   settle: 2500 },
   { name: '05-detail',          url: `/anime/${DETAIL_ID}`, settle: 2500, full: true },
   { name: '06-credits',         url: `/credits/studio/${STUDIO_ID}`, settle: 1500 },
-];
+  { name: '07-quick-rate',      url: `/quick-rate?q=${encodeURIComponent(QUICK_RATE_QUERY)}`, settle: 2500 },
+].filter(s => ONLY.length === 0 || ONLY.includes(s.name));
 
 (async () => {
   const browser = await chromium.launch();
