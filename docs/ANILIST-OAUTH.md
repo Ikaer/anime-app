@@ -57,10 +57,12 @@ Built to the design sketch above, plus these findings from the live API docs:
 - **AniList's OAuth2 has no scopes and no refresh tokens.** Tokens are valid
   **one year**; on expiry the user simply re-authenticates. So there is no
   refresh path (unlike MAL's) — `isAnilistTokenValid` just checks the clock.
-- **`state` is not documented as round-tripped.** We send one anyway, but the
-  callback is *tolerant*: it rejects a state that comes back stale/forged and
-  accepts an absent one. Copying SIMKL's hard `consumeOAuthState` reject verbatim
-  would have failed every login. The callback keys on `code` alone.
+- **`state` is not documented as round-tripped — but it IS** (live-verified
+  2026-07-18: of two issued states, the one belonging to the completed login was
+  consumed and the unused one remained). The callback is still written
+  *tolerantly* — it rejects a state that comes back stale/forged, accepts an
+  absent one, and keys on `code` alone — because the behaviour is undocumented
+  and could change. In practice the CSRF check is live.
 - **The write keys off the ANILIST media id, not the MAL id** — the one place in
   the write path that doesn't use `crosswalk.mal`. `crosswalk.anilist` coverage
   isn't guaranteed, so `resolveAnilistMediaId` falls back to a live
@@ -75,6 +77,31 @@ Built to the design sketch above, plus these findings from the live API docs:
   `AnilistAuthSection` on the Connections page, an `anilist` entry in the
   `personalWriters.ts` registry, and `anilistClientId`/`anilistClientSecret` in
   the settings store. `hasWritableExternal()` now counts an AniList token.
+
+## Live verification (2026-07-18, account `Ikaer`, scoreFormat POINT_10)
+
+End-to-end against the real API, writing through the app's own
+`PUT /api/anime/animes/[id]/mal-status` (so the personal-writer registry, not a
+bespoke call), on `a_31` = *Sekai Saikyou no Kouei* (AniList 198409):
+
+| Step | Sent | AniList read-back | Verdict |
+|---|---|---|---|
+| Write | `status: completed, score: 5` | `COMPLETED`, `score 5`, `scoreRaw 50`, `progress 12` | ✅ |
+| Clear score | `score: 0` | `COMPLETED`, `score 0`, `scoreRaw 0` | ✅ |
+| Clear status | `status: null` | *(refused, entry untouched)* | ✅ by design |
+
+- **`scoreRaw` confirmed**: we wrote 50, it reads back as 5 on their POINT_10
+  scale — the format-independence holds.
+- **Clearing a status is correctly refused**, surfacing
+  `{ ok: false, error: "AniList cannot clear a status (list removal only)" }`
+  rather than silently dropping — same carve-out as MAL's writer.
+- **AniList auto-fills `progress` on COMPLETED.** No `progress` was sent, yet the
+  entry came back `progress: 12` (the full episode count). Provider-side
+  behaviour worth knowing before wiring quick-rate's auto-complete to it — the
+  app's own `progress` would be redundant here, not authoritative.
+- **Only `anilist` appeared in the outcomes map**, confirming the registry gating:
+  MAL/SIMKL were disconnected, and `local` correctly went auto-OFF the moment an
+  AniList token made `hasWritableExternal()` true.
 
 ## Not yet done
 

@@ -157,9 +157,11 @@ writes in [src/lib/anilistWrite.ts](src/lib/anilistWrite.ts), registered as the
 
 - **No scopes, no refresh tokens, 1-year tokens.** There is no refresh path to
   write; on expiry the user re-authenticates. `isAnilistTokenValid` is a clock check.
-- **The callback tolerates a missing `state`.** AniList isn't documented to
-  round-trip it, so the callback keys on `code` alone and rejects only a state
-  that came back *and* is stale/forged. Do NOT "fix" this into SIMKL's hard reject.
+- **The callback tolerates a missing `state`.** AniList isn't *documented* to
+  round-trip it (though live-verification 2026-07-18 showed it does), so the
+  callback keys on `code` alone and rejects only a state that came back *and* is
+  stale/forged. Do NOT "fix" this into SIMKL's hard reject — the behaviour is
+  undocumented and may change.
 - **`SaveMediaListEntry(mediaId:)` takes the ANILIST id, not the MAL id** — the
   one write path that doesn't key off `crosswalk.mal`. `resolveAnilistMediaId`
   falls back to a live `Media(idMal:)` lookup when the crosswalk has no AniList id.
@@ -168,7 +170,11 @@ writes in [src/lib/anilistWrite.ts](src/lib/anilistWrite.ts), registered as the
   user. `scoreRaw: score * 10` is correct for every profile.
 
 Unlike SIMKL's score-only carve-out, this writer handles status + score +
-progress (`SaveMediaListEntry` is an upsert). AniList still sits **last** in
+progress (`SaveMediaListEntry` is an upsert). Note **AniList auto-fills
+`progress` to the episode count when status becomes COMPLETED** (live-verified) —
+so the app's own progress value is redundant on that path, not authoritative.
+Clearing a status is refused (`ok: false` with a reason, never a silent drop),
+same carve-out as MAL's writer. AniList still sits **last** in
 personal precedence even when OAuth'd, and the authenticated *private-list read*
 is not implemented yet — both are open items in the doc.
 
