@@ -114,6 +114,23 @@ bespoke call), on `a_31` = *Sekai Saikyou no Kouei* (AniList 198409):
   the import doesn't carry. Harmless in practice (the push landed on AniList, so
   the next import reads it back), but it means the slice isn't a durable
   local-only store the way `animes_local_personal.json` is.
+- **Entry deletion (`status: null`) is unimplemented across ALL providers.**
+  Confirmed against AniList's own UI (2026-07-18): removing a title's status is a
+  distinct **Delete** action on the list entry, not a status value — and MAL
+  models it identically. So this isn't an AniList quirk, it's the shape of the
+  domain, and today every remote writer refuses `status: null` with a reason.
+
+  Implementing it is therefore a **registry-level** change, not a per-provider
+  patch: add an optional `deleteEntry(ctx)` to `PersonalWriter`, have
+  `writePersonal` route `status: null` to it when present, and implement it as
+  `DeleteMediaListEntry(id: $listEntryId)` for AniList (note: takes the **list
+  entry** id — the `id: 581424041` in the write response — not the media id) and
+  `DELETE /v2/anime/{id}/my_list_status` for MAL. SIMKL has no equivalent and
+  would stay unsupported. The local writer would delete its slice entry.
+
+  Deferred by the user 2026-07-18 ("for the moment it's ok"). Until it exists,
+  the UI correctly only offers "clear" to a local-only user.
+
 - **AniList is absent from discrepancy detection.** `buildProviderStates` in
   `store.ts` still excludes `anilistPersonal`. Its original reason ("until it
   becomes a writable provider") expired with this change; the live reason is that
