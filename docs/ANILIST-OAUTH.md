@@ -3,7 +3,8 @@
 > A **design + plan** document for an independent, self-contained feature.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Todo`.**
+> **Status: `WIP`** — auth flow + write path implemented (2026-07-18); the
+> private-list authenticated *read* is still `Todo` (see "Not yet done").
 
 ## What
 
@@ -48,6 +49,47 @@ Mirror the existing MAL and SIMKL OAuth integrations — they are the template:
   rating endpoint so a failed AniList push surfaces, not silently drops.
 - **Connections UI**: an AniList "Connect / Disconnect" control alongside the
   existing MAL/SIMKL connect buttons, driven through `useConnections`.
+
+## What shipped (2026-07-18)
+
+Built to the design sketch above, plus these findings from the live API docs:
+
+- **AniList's OAuth2 has no scopes and no refresh tokens.** Tokens are valid
+  **one year**; on expiry the user simply re-authenticates. So there is no
+  refresh path (unlike MAL's) — `isAnilistTokenValid` just checks the clock.
+- **`state` is not documented as round-tripped.** We send one anyway, but the
+  callback is *tolerant*: it rejects a state that comes back stale/forged and
+  accepts an absent one. Copying SIMKL's hard `consumeOAuthState` reject verbatim
+  would have failed every login. The callback keys on `code` alone.
+- **The write keys off the ANILIST media id, not the MAL id** — the one place in
+  the write path that doesn't use `crosswalk.mal`. `crosswalk.anilist` coverage
+  isn't guaranteed, so `resolveAnilistMediaId` falls back to a live
+  `Media(idMal:)` lookup rather than failing.
+- **We write `scoreRaw`, never `score`.** `score` is interpreted in the user's own
+  `scoreFormat` (POINT_100/POINT_10/POINT_5/stars), so the app's 1-10 value sent
+  as `score` would read as 8/100 for a POINT_100 user. `scoreRaw` is always the
+  0-100 base: app-8 → 80, correct for every profile, no format read needed.
+- **Files**: [anilistAuth.ts](../src/lib/anilistAuth.ts) (token store + GraphQL
+  transport), [anilistWrite.ts](../src/lib/anilistWrite.ts)
+  (`SaveMediaListEntry`), [api/anime/anilist/auth.ts](../src/pages/api/anime/anilist/auth.ts),
+  `AnilistAuthSection` on the Connections page, an `anilist` entry in the
+  `personalWriters.ts` registry, and `anilistClientId`/`anilistClientSecret` in
+  the settings store. `hasWritableExternal()` now counts an AniList token.
+
+## Not yet done
+
+- **Authenticated private-list read.** `anilistPersonalSync.ts` is still the
+  anonymous by-username path; it does not yet send the viewer token. This is the
+  remaining half of the spec.
+- **`animes_anilist_personal.json` clobber.** The AniList writer reflects a push
+  into that slice via `upsertAnilistPersonalEntries`, but a subsequent *username
+  import* calls `replaceAnilistPersonalEntries` (full replace) and drops entries
+  the import doesn't carry. Harmless in practice (the push landed on AniList, so
+  the next import reads it back), but it means the slice isn't a durable
+  local-only store the way `animes_local_personal.json` is.
+- **Precedence unchanged.** AniList still sits last in
+  `DEFAULT_PERSONAL_PRECEDENCE` (`simkl > mal > anilist`) even when OAuth'd — see
+  the open question below, deliberately not resolved here.
 
 ## Open questions
 

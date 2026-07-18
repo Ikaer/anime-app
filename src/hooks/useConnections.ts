@@ -42,6 +42,14 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [anilistCatalogCrawlMessage, setAnilistCatalogCrawlMessage] = useState('');
   const [anilistCatalogStats, setAnilistCatalogStats] = useState<{ totalCanonicalIds: number; anilistOnlyIds: number } | null>(null);
 
+  // AniList OAuth state (docs/ANILIST-OAUTH.md) — the login tier above the
+  // anonymous by-username import below; unlocks private reads + write-back.
+  const [anilistConnected, setAnilistConnected] = useState(false);
+  const [anilistUser, setAnilistUser] = useState<string | undefined>(undefined);
+  const [anilistConfigured, setAnilistConfigured] = useState(false);
+  const [isAnilistAuthLoading, setIsAnilistAuthLoading] = useState(true);
+  const [anilistAuthError, setAnilistAuthError] = useState('');
+
   // AniList personal-list import state (docs/PROVIDER-FREE.md P3b, anonymous by username)
   const [isAnilistImporting, setIsAnilistImporting] = useState(false);
   const [anilistImportResult, setAnilistImportResult] = useState<AniListPersonalImportResult | null>(null);
@@ -116,11 +124,27 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const checkAnilistStatus = async () => {
+    try {
+      setIsAnilistAuthLoading(true);
+      const response = await fetch('/api/anime/anilist/auth?action=status');
+      const data = await response.json();
+      setAnilistConnected(!!data.isAuthenticated);
+      setAnilistUser(data.user?.name);
+      setAnilistConfigured(!!data.isConfigured);
+    } catch (error) {
+      console.error('Error checking AniList status:', error);
+    } finally {
+      setIsAnilistAuthLoading(false);
+    }
+  };
+
   // Check auth status and historical stats on mount
   useEffect(() => {
     checkAuthStatus();
     fetchHistoricalStats();
     checkSimklStatus();
+    checkAnilistStatus();
     fetchAnilistMetaStats();
     fetchAnilistCatalogStats();
     fetchAnilistImportConfig();
@@ -146,6 +170,14 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       if (simklAuthParam === 'success') checkSimklStatus();
       else setSimklAuthError('SIMKL authentication failed. Please try again.');
       const { simkl_auth, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+
+    const anilistAuthParam = router.query.anilist_auth;
+    if (anilistAuthParam) {
+      if (anilistAuthParam === 'success') checkAnilistStatus();
+      else setAnilistAuthError('AniList authentication failed. Please try again.');
+      const { anilist_auth, ...rest } = router.query;
       router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
     }
   }, [router.isReady, router.query, router]);
@@ -211,6 +243,37 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       setSimklAuthError('Failed to disconnect from SIMKL');
     } finally {
       setIsSimklAuthLoading(false);
+    }
+  };
+
+  // AniList auth handlers
+  const handleAnilistConnect = async () => {
+    try {
+      setIsAnilistAuthLoading(true);
+      setAnilistAuthError('');
+      const response = await fetch('/api/anime/anilist/auth?action=login');
+      const data = await response.json();
+      if (data.authUrl) window.location.href = data.authUrl;
+      else { setAnilistAuthError(data.error || 'Failed to initiate AniList authentication'); setIsAnilistAuthLoading(false); }
+    } catch (error) {
+      console.error('Error connecting to AniList:', error);
+      setAnilistAuthError('Failed to connect to AniList');
+      setIsAnilistAuthLoading(false);
+    }
+  };
+
+  const handleAnilistDisconnect = async () => {
+    try {
+      setIsAnilistAuthLoading(true);
+      setAnilistAuthError('');
+      await fetch('/api/anime/anilist/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
+      setAnilistConnected(false);
+      setAnilistUser(undefined);
+    } catch (error) {
+      console.error('Error disconnecting from AniList:', error);
+      setAnilistAuthError('Failed to disconnect from AniList');
+    } finally {
+      setIsAnilistAuthLoading(false);
     }
   };
 
@@ -368,6 +431,13 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       onSync: handleSimklSync,
     },
     anilist: {
+      isConnected: anilistConnected,
+      userName: anilistUser,
+      isConfigured: anilistConfigured,
+      isAuthLoading: isAnilistAuthLoading,
+      authError: anilistAuthError,
+      onConnect: handleAnilistConnect,
+      onDisconnect: handleAnilistDisconnect,
       isSyncing: isAnilistMetaSyncing,
       syncMessage: anilistMetaSyncMessage,
       tagStats: anilistMetaStats,

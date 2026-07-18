@@ -14,6 +14,8 @@ type FieldName =
   | 'simklClientId'
   | 'simklClientSecret'
   | 'simklAppName'
+  | 'anilistClientId'
+  | 'anilistClientSecret'
   | 'cronSecret';
 
 type BootField = 'dataPath' | 'logsPath';
@@ -48,7 +50,7 @@ interface SettingsResponse {
   fields: Record<FieldName, FieldStatus>;
   bootstrap: Record<BootField, BootFieldStatus>;
   preferences: PreferencesStatus;
-  derivedRedirectUris: { mal: string; simkl: string };
+  derivedRedirectUris: { mal: string; simkl: string; anilist: string };
 }
 
 const LOCAL_ENABLED_OPTIONS: LocalEnabled[] = ['auto', 'on', 'off'];
@@ -62,10 +64,14 @@ const GROUPS: { titleKey: TranslationKey; fields: FieldName[] }[] = [
     titleKey: 'settings.group.simkl',
     fields: ['simklClientId', 'simklClientSecret', 'simklAppName'],
   },
+  {
+    titleKey: 'settings.group.anilist',
+    fields: ['anilistClientId', 'anilistClientSecret'],
+  },
   { titleKey: 'settings.group.cron', fields: ['cronSecret'] },
 ];
 
-const SECRET_FIELDS: FieldName[] = ['simklClientSecret', 'cronSecret'];
+const SECRET_FIELDS: FieldName[] = ['simklClientSecret', 'anilistClientSecret', 'cronSecret'];
 const ALL_FIELDS = GROUPS.flatMap(g => g.fields);
 
 export default function SettingsPage() {
@@ -156,8 +162,8 @@ export default function SettingsPage() {
 
   // The derived redirect URI (what to register with the provider) is shown next
   // to each client-id field — it's no longer a setting the user fills in.
-  const redirectKeyFor = (f: FieldName): 'mal' | 'simkl' | null =>
-    f === 'malClientId' ? 'mal' : f === 'simklClientId' ? 'simkl' : null;
+  const redirectKeyFor = (f: FieldName): 'mal' | 'simkl' | 'anilist' | null =>
+    f === 'malClientId' ? 'mal' : f === 'simklClientId' ? 'simkl' : f === 'anilistClientId' ? 'anilist' : null;
 
   return (
     <>

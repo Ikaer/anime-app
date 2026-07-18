@@ -15,4 +15,5 @@ export { default as SimklConnectionBadge } from './SimklConnectionBadge';
 
 export { default as AccountSection } from './sidebar/AccountSection';
 export { default as SimklSection } from './sidebar/SimklSection';
+export { default as AnilistAuthSection } from './sidebar/AnilistAuthSection';
 export { default as DataSyncSection } from './sidebar/DataSyncSection';

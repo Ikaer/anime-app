@@ -145,6 +145,33 @@ A third, read-only catalog-metadata source, added after confirming SIMKL's publi
 - Reco sources: `anilistTags` AND `anilistStaff` are `MetaField`s (these two keep the `Tags` name — they really are tag- and staff-specific, and `anilistTags` is persisted in the URL weights param) in [src/lib/recommendations.ts](src/lib/recommendations.ts), both following the exact `genre`/`studio` IDF-weighted-affinity pattern (tags = plain tag-name list; staff = stable AniList staff `id`, so a shared director/composer is a rare, strong signal; `role` feeds the "Pourquoi?" explain). Neither folds AniList's `rank` into scoring yet. Both ship at weight `0` by default in [src/lib/recoWeights.ts](src/lib/recoWeights.ts) until a sync has populated coverage.
 - **AniList crowd recos** (`anilistCrowd` source): a SECOND crowd source alongside MAL's `crowd`, NOT a taste-profile source. `fetchAnilistRecommendations()` in [anilistSync.ts](src/lib/anilistSync.ts) queries the `Media.recommendations` connection for the same seed set (`Page(perPage:50){ media(idMal_in:$ids){ idMal recommendations(sort:RATING_DESC, perPage:15){ edges{ node{ rating mediaRecommendation{ idMal } } } } } }` — kept as its OWN query, not stacked on the tags+staff one, to stay under the complexity ceiling; verified live). `mediaRecommendation.idMal` resolves recs straight onto the MAL join key — no crosswalk (unlike SIMKL, whose `users_recommendations` carry only a `simkl` id, which is why SIMKL crowd recos were NOT adopted). Fetched during `performRecommendationsRefresh` (after MAL suggestions), stored in `RecommendationsData.anilistSeeds` (parallel to `seeds`, keyed by seed MAL id; `num` = AniList net `rating`), and hydrated through the same MAL detail path. In `computeFeed` it has its OWN accumulator + normalization denom (AniList `rating` ≠ MAL `num_recommendations`) and INJECTS new candidates like `crowd` does. Ships at weight `0` until a refresh populates it.
 
+### AniList OAuth (login tier: write-back)
+
+Above the anonymous read-by-username import sits an **OAuth'd** AniList tier
+(`docs/ANILIST-OAUTH.md`) — a fourth writable personal provider. Auth lives in
+[src/lib/anilistAuth.ts](src/lib/anilistAuth.ts) (token store `anilist_auth.json`
++ the authenticated GraphQL transport), the flow in
+[src/pages/api/anime/anilist/auth.ts](src/pages/api/anime/anilist/auth.ts), and
+writes in [src/lib/anilistWrite.ts](src/lib/anilistWrite.ts), registered as the
+`anilist` entry in `personalWriters.ts`. Four things that differ from MAL/SIMKL:
+
+- **No scopes, no refresh tokens, 1-year tokens.** There is no refresh path to
+  write; on expiry the user re-authenticates. `isAnilistTokenValid` is a clock check.
+- **The callback tolerates a missing `state`.** AniList isn't documented to
+  round-trip it, so the callback keys on `code` alone and rejects only a state
+  that came back *and* is stale/forged. Do NOT "fix" this into SIMKL's hard reject.
+- **`SaveMediaListEntry(mediaId:)` takes the ANILIST id, not the MAL id** — the
+  one write path that doesn't key off `crosswalk.mal`. `resolveAnilistMediaId`
+  falls back to a live `Media(idMal:)` lookup when the crosswalk has no AniList id.
+- **Always write `scoreRaw` (0-100 base), never `score`** — `score` is read in the
+  user's own `scoreFormat`, so app-8 sent as `score` means 8/100 to a POINT_100
+  user. `scoreRaw: score * 10` is correct for every profile.
+
+Unlike SIMKL's score-only carve-out, this writer handles status + score +
+progress (`SaveMediaListEntry` is an upsert). AniList still sits **last** in
+personal precedence even when OAuth'd, and the authenticated *private-list read*
+is not implemented yet — both are open items in the doc.
+
 ### "Plus comme ça" — the single-target drill-down (detail page)
 
 The detail page's second reco block ([MoreLikeThis.tsx](src/components/anime/MoreLikeThis.tsx)), backed by `GET /api/anime/recommendations/similar/[id]` and `computeSimilarTo` in [recommendations.ts](src/lib/recommendations.ts). It flips the feed's question from "what fits my taste" to "what resembles THIS title", by running the **same weighted-source machinery** (`computeIdf` / `buildFieldProfile` / `fieldMatch` / `isPrematureSequel` / the additive `Σ weight · value` + `RecoContribution[]` breakdown) with **one anchor instead of the user's whole seed set**. Consequences, all deliberate:
@@ -195,6 +222,9 @@ A lightweight, dependency-free i18n built for GitHub visibility (the app is sing
 | `SIMKL_CLIENT_SECRET` | SIMKL OAuth token exchange (confidential client) |
 | `SIMKL_APP_NAME` | Sent as `app-name` query param + `User-Agent` on SIMKL requests |
 | `SIMKL_REDIRECT_URI` | SIMKL OAuth redirect URI |
+| `ANILIST_CLIENT_ID` | AniList OAuth app client ID (login tier only — the catalog/tags sync needs no key) |
+| `ANILIST_CLIENT_SECRET` | AniList OAuth token exchange |
+| `ANILIST_REDIRECT_URI` | AniList OAuth redirect URI |
 
 ### Pages importing from `@/lib/store`
 

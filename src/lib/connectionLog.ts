@@ -30,9 +30,11 @@ export type LogSource =
   | 'mal-historical-crawl'
   | 'simkl-auth'
   | 'simkl-sync'
+  | 'anilist-auth'
   | 'anilist-meta-sync'
   | 'anilist-catalog-crawl'
   | 'anilist-personal-import'
+  | 'anilist-rating'
   | 'cron-sync'
   | 'refresh';
 

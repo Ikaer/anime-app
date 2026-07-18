@@ -40,3 +40,7 @@ export function getMalRedirectUri(req: NextApiRequest): string {
 export function getSimklRedirectUri(req: NextApiRequest): string {
   return process.env.SIMKL_REDIRECT_URI?.trim() || `${getRequestBaseUrl(req)}/api/anime/simkl/auth`;
 }
+
+export function getAnilistRedirectUri(req: NextApiRequest): string {
+  return process.env.ANILIST_REDIRECT_URI?.trim() || `${getRequestBaseUrl(req)}/api/anime/anilist/auth`;
+}

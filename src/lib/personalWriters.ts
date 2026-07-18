@@ -20,6 +20,7 @@
  */
 import type {
   AnimeRecord,
+  AniListPersonalEntry,
   LocalPersonalEntry,
   ProvenanceSource,
   UserAnimeStatus,
@@ -31,12 +32,15 @@ import {
   upsertSimklEntries,
   getAllLocalEntries,
   upsertLocalEntries,
+  upsertAnilistPersonalEntries,
   getAnimeByCanonicalId,
 } from '@/lib/store';
 import { updateMalListStatus } from '@/lib/malWrite';
 import { pushSimklRating } from '@/lib/simklWrite';
+import { pushAnilistEntry } from '@/lib/anilistWrite';
 import { getMALAuthData } from '@/lib/mal';
 import { getSimklAuthData } from '@/lib/simkl';
+import { getAnilistAuthData } from '@/lib/anilistAuth';
 import { isLocalProviderEnabled } from '@/lib/providers';
 
 /**
@@ -151,6 +155,36 @@ const simklWriter: PersonalWriter = {
   },
 };
 
+// ── AniList ──────────────────────────────────────────────────────────────────
+// Full status/score/progress writer (docs/ANILIST-OAUTH.md) — unlike SIMKL's
+// score-only carve-out, `SaveMediaListEntry` is an upsert over all three. Keys
+// off the ANILIST media id, not the MAL id (see anilistWrite.ts), and falls back
+// to a live idMal lookup when the crosswalk has no AniList id yet.
+const anilistWriter: PersonalWriter = {
+  id: 'anilist',
+  isEnabled: () => getAnilistAuthData().token != null,
+  writeLocal({ canonicalId, record }, patch) {
+    const existing = record?.sources.anilistPersonal;
+    // The slice is keyed on the AniList media id; with no existing entry and no
+    // crosswalk id there's nothing well-formed to write, so skip the local
+    // reflection and let the remote push (which resolves the id live) carry it.
+    const anilistId = Number(existing?.anilist_id ?? record?.crosswalk.anilist);
+    if (!Number.isFinite(anilistId) || anilistId <= 0) return;
+
+    const next: AniListPersonalEntry = { ...existing, anilist_id: anilistId };
+    if (patch.status !== undefined) next.status = patch.status ?? undefined;
+    if (patch.score !== undefined) next.score = patch.score > 0 ? patch.score : undefined;
+    if (patch.progress !== undefined) next.progress = patch.progress;
+    upsertAnilistPersonalEntries({ [canonicalId]: next });
+  },
+  async writeRemote({ record }, patch) {
+    return pushAnilistEntry(patch, {
+      anilistId: record?.crosswalk.anilist ?? record?.sources.anilistPersonal?.anilist_id,
+      malId: malIdOf(record),
+    });
+  },
+};
+
 // ── Local ────────────────────────────────────────────────────────────────────
 // The write of last resort: an in-app slice, no external service. Merges the
 // patch onto any existing entry (a score-only edit must not wipe status/progress
@@ -175,7 +209,7 @@ const localWriter: PersonalWriter = {
   },
 };
 
-const REGISTRY: readonly PersonalWriter[] = [malWriter, simklWriter, localWriter];
+const REGISTRY: readonly PersonalWriter[] = [malWriter, simklWriter, anilistWriter, localWriter];
 
 export interface WritePersonalResult {
   /** Whether the title exists to be written (drives the endpoint's 404). */

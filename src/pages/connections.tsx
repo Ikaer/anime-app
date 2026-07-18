@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import { AccountSection, SimklSection, DataSyncSection, ConnectionLogPanel } from '@/components/anime';
+import { AccountSection, SimklSection, AnilistAuthSection, DataSyncSection, ConnectionLogPanel } from '@/components/anime';
 import { useConnections } from '@/hooks';
 import { useT } from '@/lib/i18n';
 
@@ -35,6 +35,18 @@ export default function ConnectionsPage() {
               authError={simkl.authError}
               onConnect={simkl.onConnect}
               onDisconnect={simkl.onDisconnect}
+            />
+          </section>
+          <section className="connections-section">
+            <h2>AniList</h2>
+            <AnilistAuthSection
+              isConnected={anilist.isConnected}
+              userName={anilist.userName}
+              isConfigured={anilist.isConfigured}
+              isAuthLoading={anilist.isAuthLoading}
+              authError={anilist.authError}
+              onConnect={anilist.onConnect}
+              onDisconnect={anilist.onDisconnect}
             />
           </section>
           <section className="connections-section">

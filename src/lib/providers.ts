@@ -14,6 +14,7 @@
 import type { ProvenanceSource } from '@/models/anime';
 import { getMALAuthData } from '@/lib/mal';
 import { getSimklAuthData } from '@/lib/simkl';
+import { getAnilistAuthData } from '@/lib/anilistAuth';
 import {
   DEFAULT_PERSONAL_PRECEDENCE,
   resolveLocalPrecedence,
@@ -25,10 +26,14 @@ import { getLocalPrecedenceMode, getLocalProviderEnabledMode } from '@/lib/setti
  * not validity (an expired-but-refreshable MAL token still means "this is a MAL
  * user"): the whole point is to classify the deployment so phase 2 knows whether
  * to route writes to local, and a token lapsing mid-refresh must not flip that.
- * Extended per registered writer in phase 2 (AniList/Betaseries).
+ * Extended per registered writer — AniList joined at OAuth (docs/ANILIST-OAUTH.md).
  */
 export function hasWritableExternal(): boolean {
-  return getMALAuthData().token != null || getSimklAuthData().token != null;
+  return (
+    getMALAuthData().token != null ||
+    getSimklAuthData().token != null ||
+    getAnilistAuthData().token != null
+  );
 }
 
 /**

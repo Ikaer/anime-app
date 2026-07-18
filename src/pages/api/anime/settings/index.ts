@@ -25,7 +25,7 @@ import {
 } from '@/lib/bootstrap';
 import { DATA_PATH } from '@/lib/jsonStore';
 import { LOGS_PATH } from '@/lib/connectionLog';
-import { getMalRedirectUri, getSimklRedirectUri } from '@/lib/redirectUri';
+import { getMalRedirectUri, getSimklRedirectUri, getAnilistRedirectUri } from '@/lib/redirectUri';
 
 /**
  * Redacted settings API. GET never returns a secret's value (only `{ set }`);
@@ -108,6 +108,7 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
     derivedRedirectUris: {
       mal: getMalRedirectUri(req),
       simkl: getSimklRedirectUri(req),
+      anilist: getAnilistRedirectUri(req),
     },
   });
 }

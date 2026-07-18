@@ -24,6 +24,8 @@ export interface AppSettings {
   simklClientId?: string;
   simklClientSecret?: string;
   simklAppName?: string;
+  anilistClientId?: string;
+  anilistClientSecret?: string;
   cronSecret?: string;
   // ── Non-secret preferences (docs/localRating/): enum toggles, NOT secrets and
   //    with NO env backing, so they're kept out of SETTINGS_ENV_MAP/SECRET_FIELDS
@@ -47,13 +49,22 @@ export interface AppSettings {
  * `AppSettings` members. The `localProvider*` preference enums are deliberately
  * NOT here: they have no env fallback and aren't redacted (see PREFERENCE_FIELDS).
  */
-export type EnvBackedField = 'malClientId' | 'simklClientId' | 'simklClientSecret' | 'simklAppName' | 'cronSecret';
+export type EnvBackedField =
+  | 'malClientId'
+  | 'simklClientId'
+  | 'simklClientSecret'
+  | 'simklAppName'
+  | 'anilistClientId'
+  | 'anilistClientSecret'
+  | 'cronSecret';
 
 export const SETTINGS_ENV_MAP: Record<EnvBackedField, string> = {
   malClientId: 'MAL_CLIENT_ID',
   simklClientId: 'SIMKL_CLIENT_ID',
   simklClientSecret: 'SIMKL_CLIENT_SECRET',
   simklAppName: 'SIMKL_APP_NAME',
+  anilistClientId: 'ANILIST_CLIENT_ID',
+  anilistClientSecret: 'ANILIST_CLIENT_SECRET',
   cronSecret: 'CRON_SECRET',
 };
 
@@ -62,7 +73,7 @@ export const SETTINGS_ENV_MAP: Record<EnvBackedField, string> = {
  * and never returns their value; client ids / redirect uris / app-name are
  * public-by-design (client ids ship in OAuth redirect URLs).
  */
-export const SECRET_FIELDS: ReadonlyArray<EnvBackedField> = ['simklClientSecret', 'cronSecret'];
+export const SECRET_FIELDS: ReadonlyArray<EnvBackedField> = ['simklClientSecret', 'anilistClientSecret', 'cronSecret'];
 
 export const SETTINGS_FIELDS = Object.keys(SETTINGS_ENV_MAP) as EnvBackedField[];
 
@@ -153,6 +164,14 @@ export function getSimklClientSecret(): string | undefined {
 
 export function getSimklAppName(): string {
   return resolveSetting('simklAppName') || 'my-app-name';
+}
+
+export function getAnilistClientId(): string | undefined {
+  return resolveSetting('anilistClientId');
+}
+
+export function getAnilistClientSecret(): string | undefined {
+  return resolveSetting('anilistClientSecret');
 }
 
 export function getCronSecret(): string | undefined {

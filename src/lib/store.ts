@@ -213,6 +213,26 @@ export function replaceAnilistPersonalEntries(entriesByMalId: Record<string, Ani
   cachedAnime = null;
 }
 
+/**
+ * Merge AniList personal entries by canonical id (the write-path counterpart of
+ * `replaceAnilistPersonalEntries`, which is the import path's full replace).
+ * Used by the AniList personal writer to reflect a push into the local slice.
+ *
+ * CAVEAT: a subsequent anonymous username import calls the *replace* above and
+ * will drop any entry the import doesn't also carry. Harmless in practice — a
+ * logged-in user's push lands on AniList, so the next import reads it back — but
+ * it does mean this slice is not a durable local-only store the way
+ * `animes_local_personal.json` is.
+ */
+export function upsertAnilistPersonalEntries(entriesByCanonicalId: Record<string, AniListPersonalEntry>): void {
+  const keys = Object.keys(entriesByCanonicalId);
+  if (keys.length === 0) return;
+  const existing = getAllAnilistPersonalEntries();
+  for (const key of keys) existing[key] = entriesByCanonicalId[key];
+  writeJsonFile(ANIME_ANILIST_PERSONAL_FILE, existing);
+  cachedAnime = null;
+}
+
 // ============================================================================
 // Local personal-state slice (docs/localRating/), keyed DIRECTLY by canonical id
 // — unlike the external slices, a local edit has no provider crosswalk to resolve
