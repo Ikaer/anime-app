@@ -4,10 +4,19 @@ import {
   AppSettings,
   SETTINGS_FIELDS,
   SECRET_FIELDS,
+  PREFERENCE_FIELDS,
+  PREFERENCE_VALUES,
   readSettings,
   saveSettings,
   resolveSetting,
+  getLocalProviderEnabledMode,
+  getLocalPrecedenceMode,
 } from '@/lib/settings';
+import {
+  hasWritableExternal,
+  isLocalProviderEnabled,
+  getResolvedPersonalPrecedence,
+} from '@/lib/providers';
 import {
   BootstrapConfig,
   readBootstrapConfig,
@@ -83,6 +92,17 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
   res.json({
     fields,
     bootstrap,
+    // Non-secret local-provider preferences (docs/localRating/) — stored modes
+    // plus the server-resolved facts so the UI can show "Auto — currently: …".
+    preferences: {
+      localProviderEnabled: getLocalProviderEnabledMode(),
+      localPrecedenceMode: getLocalPrecedenceMode(),
+      resolved: {
+        enabled: isLocalProviderEnabled(),
+        hasWritableExternal: hasWritableExternal(),
+        precedenceOrder: getResolvedPersonalPrecedence(),
+      },
+    },
     // The exact URI each OAuth flow will send — what the user must register with
     // the provider. Same derivation as the flow (env → request host).
     derivedRedirectUris: {
@@ -111,6 +131,15 @@ function handlePost(req: NextApiRequest, res: NextApiResponse) {
       if (value === '') delete next[field];
       else next[field] = value;
     }
+  }
+  // Non-secret preference enums (docs/localRating/): an unrecognized value clears
+  // the field → it falls back to the `auto` default. saveSettings only persists
+  // recognized non-default values, so the store stays sparse.
+  for (const field of PREFERENCE_FIELDS) {
+    if (!(field in body)) continue;
+    const raw = body[field];
+    if (typeof raw === 'string' && PREFERENCE_VALUES[field].includes(raw)) next[field] = raw as never;
+    else delete next[field];
   }
   saveSettings(next);
 

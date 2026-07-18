@@ -14,16 +14,18 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, SourceIds } from '@/models/anime';
+import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/simklCompare';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
+import { getResolvedPersonalPrecedence } from '@/lib/providers';
 
 const ANIME_MAL_FILE = dataFile('animes_mal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
 const ANIME_SIMKL_FILE = dataFile('animes_simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
 const ANIME_ANILIST_PERSONAL_FILE = dataFile('animes_anilist_personal.json');
+const ANIME_LOCAL_PERSONAL_FILE = dataFile('animes_local_personal.json');
 
 // ============================================================================
 // Hidden anime ids
@@ -209,6 +211,43 @@ export function replaceAnilistPersonalEntries(entriesByMalId: Record<string, Ani
   });
   writeJsonFile(ANIME_ANILIST_PERSONAL_FILE, byCanonical);
   cachedAnime = null;
+}
+
+// ============================================================================
+// Local personal-state slice (docs/localRating/), keyed DIRECTLY by canonical id
+// — unlike the external slices, a local edit has no provider crosswalk to resolve
+// from; the write path (phase 2) already holds the canonical id. This is the
+// write target that un-conflates local edits from `animes_mal.json`.
+// ============================================================================
+
+export function getAllLocalEntries(): Record<string, LocalPersonalEntry> {
+  return readJsonFile<Record<string, LocalPersonalEntry>>(ANIME_LOCAL_PERSONAL_FILE, {});
+}
+
+/** Merge canonical-id-keyed local entries onto the store (phase 2's writer). */
+export function upsertLocalEntries(entriesByCanonicalId: Record<string, LocalPersonalEntry>): void {
+  const keys = Object.keys(entriesByCanonicalId);
+  if (keys.length === 0) return;
+  const existing = getAllLocalEntries();
+  for (const key of keys) existing[key] = entriesByCanonicalId[key];
+  writeJsonFile(ANIME_LOCAL_PERSONAL_FILE, existing);
+  cachedAnime = null;
+}
+
+/** Delete local entries by canonical id. */
+export function removeLocalEntries(canonicalIds: string[]): void {
+  const existing = getAllLocalEntries();
+  let changed = false;
+  for (const id of canonicalIds) {
+    if (existing[id]) {
+      delete existing[id];
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeJsonFile(ANIME_LOCAL_PERSONAL_FILE, existing);
+    cachedAnime = null;
+  }
 }
 
 // ============================================================================
@@ -429,13 +468,16 @@ function assembleDisplayRow(
   simklByCanonical: Record<string, SimklPersonalEntry>,
   anilistMetaByCanonical: Record<string, AniListMetaEntry>,
   anilistPersonalByCanonical: Record<string, AniListPersonalEntry>,
+  localByCanonical: Record<string, LocalPersonalEntry>,
   registry: Record<string, SourceIds>,
-  hiddenIds: Set<string>
+  hiddenIds: Set<string>,
+  personalPrecedence: ProvenanceSource[]
 ): AnimeRecord | undefined {
   const mal = malAnime[canonicalId];
   const simkl = simklByCanonical[canonicalId];
   const anilistMeta = anilistMetaByCanonical[canonicalId];
   const anilistPersonal = anilistPersonalByCanonical[canonicalId];
+  const local = localByCanonical[canonicalId];
   const crosswalk = registry[canonicalId] ?? (mal ? assembleCrosswalk(mal.id, simkl, anilistMeta) : undefined);
   // Outward MAL id (for MAL API calls / the external MAL link): the raw MAL
   // slice's id, falling back to the registry crosswalk's `mal` (populated from
@@ -445,8 +487,10 @@ function assembleDisplayRow(
   const hidden = hiddenIds.has(canonicalId);
   const discrepancy = mal ? computeDiscrepancy(mal, simkl) : null;
   return toAnimeRecord(
-    { mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
-    canonicalId
+    { mal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
+    canonicalId,
+    undefined,
+    personalPrecedence
   );
 }
 
@@ -461,11 +505,17 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const simklByCanonical = getAllSimklEntries();
   const anilistMetaByCanonical = getAllAnilistMeta();
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
+  const localByCanonical = getAllLocalEntries();
   const registry = getRegistry();
+  // Resolved once per call (docs/localRating/ 1d): folded into the cache key as a
+  // stable string so flipping a settings toggle — or a MAL/SIMKL token appearing
+  // or lapsing — rebuilds the rows even though no *slice file* changed.
+  const personalPrecedence = getResolvedPersonalPrecedence();
 
   // Same parsed slices as last time (reference equality — see the parse cache
-  // in jsonStore.ts) → the assembled rows are still valid.
-  const inputs = [malAnime, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, registry];
+  // in jsonStore.ts) → the assembled rows are still valid. The precedence join
+  // is a value-compared string (see 1d.3), so a mode/token change invalidates.
+  const inputs = [malAnime, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|')];
   if (cachedAnime && cachedAnimeInputs && inputs.every((v, i) => v === cachedAnimeInputs![i])) {
     return cachedAnime;
   }
@@ -477,12 +527,13 @@ export function getAnimeForDisplay(): AnimeRecord[] {
     ...Object.keys(simklByCanonical),
     ...Object.keys(anilistMetaByCanonical),
     ...Object.keys(anilistPersonalByCanonical),
+    ...Object.keys(localByCanonical),
   ]);
 
   const rows: AnimeRecord[] = [];
   for (const canonicalId of canonicalIds) {
     const row = assembleDisplayRow(
-      canonicalId, malAnime, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, registry, hiddenIds
+      canonicalId, malAnime, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, personalPrecedence
     );
     if (row) rows.push(row);
   }
@@ -511,8 +562,10 @@ export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefi
     getAllSimklEntries(),
     getAllAnilistMeta(),
     getAllAnilistPersonalEntries(),
+    getAllLocalEntries(),
     getRegistry(),
-    new Set(getHiddenAnimeIds())
+    new Set(getHiddenAnimeIds()),
+    getResolvedPersonalPrecedence()
   );
 }
 

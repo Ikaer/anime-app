@@ -1,7 +1,7 @@
 import type {
   AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
   ProvenanceSource, SeasonName, SeasonInfo, MALAnime, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
-  SourceIds, Discrepancy,
+  LocalPersonalEntry, SourceIds, Discrepancy,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 
@@ -228,8 +228,35 @@ export function formatUserStatus(status?: string) {
  */
 export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 'simkl'];
 
-/** Personal-state precedence: SIMKL > MAL > AniList — exactly the pre-Phase-C `getEffective*` order. */
+/**
+ * Personal-state precedence: SIMKL > MAL > AniList — exactly the pre-Phase-C
+ * `getEffective*` order. `local`'s position is NOT baked here: it's inserted by
+ * `resolveLocalPrecedence` (top or bottom) only when the local provider is
+ * enabled, so the default array preserves today's behavior byte-for-byte.
+ */
 export const DEFAULT_PERSONAL_PRECEDENCE: ProvenanceSource[] = ['simkl', 'mal', 'anilist'];
+
+/** How the local tier sits relative to the external providers (docs/localRating/). */
+export type LocalPrecedenceMode = 'auto' | 'localTop' | 'localBottom';
+
+/**
+ * Insert `local` into a base personal-precedence array (docs/localRating/ Phase 1).
+ * Pure and client-safe so the settings page can preview the resolved order.
+ *
+ * - `localTop`    → local wins over every external source.
+ * - `localBottom` → local is the last resort (never shadows an external edit).
+ * - `auto`        → bottom when a writable external provider is connected (model B,
+ *                   "write-through, no shadowing"), top when local is the only source.
+ */
+export function resolveLocalPrecedence(
+  mode: LocalPrecedenceMode,
+  base: ProvenanceSource[],
+  opts: { hasWritableExternal: boolean }
+): ProvenanceSource[] {
+  if (mode === 'localTop') return ['local', ...base];
+  if (mode === 'localBottom') return [...base, 'local'];
+  return opts.hasWritableExternal ? [...base, 'local'] : ['local', ...base];
+}
 
 /**
  * Generic precedence merge: for every field any extractor produced, walk
@@ -331,6 +358,16 @@ function catalogFromSimkl(): Partial<AnimeCatalog> {
   return {};
 }
 
+/**
+ * The local provider is personal-only — it contributes no catalog fields.
+ * No-op, wired uniformly with the other catalog extractors (`CatalogSource =
+ * ProvenanceSource`, so `'local'` is nominally a catalog source); it never wins
+ * a catalog field, being absent from `DEFAULT_CATALOG_PRECEDENCE`.
+ */
+function catalogFromLocal(): Partial<AnimeCatalog> {
+  return {};
+}
+
 /** MAL's `my_list_status` → the provider-neutral `AnimePersonal` field names. */
 function personalFromMal(mal?: MALAnime): Partial<AnimePersonal> {
   const status = mal?.my_list_status;
@@ -362,6 +399,16 @@ function personalFromAnilist(entry?: AniListPersonalEntry): Partial<AnimePersona
   };
 }
 
+/** In-app local entry → `AnimePersonal` field names (docs/localRating/). */
+function personalFromLocal(entry?: LocalPersonalEntry): Partial<AnimePersonal> {
+  if (!entry) return {};
+  return {
+    status: entry.status,
+    score: entry.score != null && entry.score > 0 ? entry.score : undefined,
+    progress: entry.progress,
+  };
+}
+
 /**
  * The raw per-provider slices `toAnimeRecord` hydrates from — exactly what
  * `getAnimeRecord` gathers per canonical id before any merging happens.
@@ -373,6 +420,7 @@ export interface RawAnimeSlices {
   simkl?: SimklPersonalEntry;
   anilistMeta?: AniListMetaEntry;
   anilistPersonal?: AniListPersonalEntry;
+  local?: LocalPersonalEntry;
   hidden?: boolean;
   discrepancy?: Discrepancy | null;
   crosswalk?: SourceIds;
@@ -391,15 +439,15 @@ export function toAnimeRecord(
   catalogPrecedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
   personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE
 ): AnimeRecord {
-  const { mal, simkl, anilistMeta, anilistPersonal, hidden, discrepancy, crosswalk } = slices;
+  const { mal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk } = slices;
 
   const { merged: catalogMerged, provenance: catalogProvenance } = mergeWithProvenance<AnimeCatalog>(
     catalogPrecedence,
-    { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anilistMeta), simkl: catalogFromSimkl() }
+    { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anilistMeta), simkl: catalogFromSimkl(), local: catalogFromLocal() }
   );
   const { merged: personalMerged, provenance: personalProvenance } = mergeWithProvenance<AnimePersonal>(
     personalPrecedence,
-    { mal: personalFromMal(mal), simkl: personalFromSimkl(simkl), anilist: personalFromAnilist(anilistPersonal) }
+    { mal: personalFromMal(mal), simkl: personalFromSimkl(simkl), anilist: personalFromAnilist(anilistPersonal), local: personalFromLocal(local) }
   );
 
   return {
@@ -418,7 +466,7 @@ export function toAnimeRecord(
     },
     personal: personalMerged,
     provenance: { catalog: catalogProvenance, personal: personalProvenance },
-    sources: { mal, simkl, anilist: anilistMeta, anilistPersonal },
+    sources: { mal, simkl, anilist: anilistMeta, anilistPersonal, local },
     hidden,
     discrepancy,
   };

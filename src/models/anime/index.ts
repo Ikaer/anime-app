@@ -114,6 +114,22 @@ export interface AniListPersonalEntry {
 }
 
 /**
+ * In-app **local** personal state (docs/localRating/) — the write target when no
+ * external provider (MAL/SIMKL/…) is connected. Un-conflates local edits from
+ * `animes_mal.json`'s `my_list_status`: local edits get their own slice
+ * (`animes_local_personal.json`, keyed by canonical id) + `personalFromLocal`
+ * extractor + precedence tier, exactly like SIMKL and AniList already have.
+ * Deliberately the locked shape (no `mal_id` — the store keys by canonical id
+ * externally). Local edits ARE the authority, so `updated_at` is kept as a mtime.
+ */
+export interface LocalPersonalEntry {
+  status?: UserAnimeStatus;   // MAL vocabulary
+  score?: number;             // 1-10 scale; 0/undefined = unrated
+  progress?: number;          // episodes watched
+  updated_at: string;         // ISO — local edits are the authority, so keep a mtime
+}
+
+/**
  * Cross-source id crosswalk. SIMKL's all-items response carries a rich `ids`
  * block (mal, anilist, anidb, kitsu, tmdb, imdb, tvdb…); we store it verbatim.
  * `mal` may arrive as a string from SIMKL. Kept deliberately open-ended.
@@ -312,10 +328,17 @@ export interface AnimeSources {
   simkl?: SimklPersonalEntry;
   anilist?: AniListMetaEntry;
   anilistPersonal?: AniListPersonalEntry;
+  local?: LocalPersonalEntry;
 }
 
-/** The providers the hydration engine can pull a field from. */
-export type ProvenanceSource = 'mal' | 'anilist' | 'simkl';
+/**
+ * The providers the hydration engine can pull a field from. `local` is a
+ * personal-only source (docs/localRating/) — it contributes no catalog fields
+ * (`catalogFromLocal` is a no-op and it's absent from `DEFAULT_CATALOG_PRECEDENCE`),
+ * but it's part of the union so `CatalogSource = ProvenanceSource` and the
+ * per-provider provenance maps type it uniformly with the others.
+ */
+export type ProvenanceSource = 'mal' | 'anilist' | 'simkl' | 'local';
 
 /** Per-field origin of the hydrated `catalog` block: which provider's value won. */
 export type CatalogProvenance = Partial<Record<keyof AnimeCatalog, ProvenanceSource>>;

@@ -31,11 +31,28 @@ interface BootFieldStatus {
   fromEnv: boolean;
 }
 
+type LocalEnabled = 'auto' | 'on' | 'off';
+type LocalPrecedence = 'auto' | 'localTop' | 'localBottom';
+
+interface PreferencesStatus {
+  localProviderEnabled: LocalEnabled;
+  localPrecedenceMode: LocalPrecedence;
+  resolved: {
+    enabled: boolean;
+    hasWritableExternal: boolean;
+    precedenceOrder: string[];
+  };
+}
+
 interface SettingsResponse {
   fields: Record<FieldName, FieldStatus>;
   bootstrap: Record<BootField, BootFieldStatus>;
+  preferences: PreferencesStatus;
   derivedRedirectUris: { mal: string; simkl: string };
 }
+
+const LOCAL_ENABLED_OPTIONS: LocalEnabled[] = ['auto', 'on', 'off'];
+const LOCAL_PRECEDENCE_OPTIONS: LocalPrecedence[] = ['auto', 'localTop', 'localBottom'];
 
 const BOOT_FIELDS: BootField[] = ['dataPath', 'logsPath'];
 
@@ -60,6 +77,8 @@ export default function SettingsPage() {
   const [bootValues, setBootValues] = useState<Record<BootField, string>>(() =>
     Object.fromEntries(BOOT_FIELDS.map(f => [f, ''])) as Record<BootField, string>
   );
+  const [localEnabled, setLocalEnabled] = useState<LocalEnabled>('auto');
+  const [localPrecedence, setLocalPrecedence] = useState<LocalPrecedence>('auto');
   const [status, setStatus] = useState<'loading' | 'idle' | 'saving' | 'saved' | 'error'>('loading');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -78,6 +97,8 @@ export default function SettingsPage() {
         string
       >
     );
+    setLocalEnabled(resp.preferences?.localProviderEnabled ?? 'auto');
+    setLocalPrecedence(resp.preferences?.localPrecedenceMode ?? 'auto');
   }, []);
 
   useEffect(() => {
@@ -96,7 +117,12 @@ export default function SettingsPage() {
       const resp = await fetch('/api/anime/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, ...bootValues }),
+        body: JSON.stringify({
+          ...values,
+          ...bootValues,
+          localProviderEnabled: localEnabled,
+          localPrecedenceMode: localPrecedence,
+        }),
       });
       if (!resp.ok) throw new Error(String(resp.status));
       applyResponse(await resp.json());
@@ -105,7 +131,7 @@ export default function SettingsPage() {
     } catch {
       setStatus('error');
     }
-  }, [values, bootValues, applyResponse]);
+  }, [values, bootValues, localEnabled, localPrecedence, applyResponse]);
 
   const copy = useCallback((text: string, key: string) => {
     const done = () => {
@@ -235,6 +261,59 @@ export default function SettingsPage() {
               </section>
             ))}
 
+            <section className="group">
+              <h2>{t('settings.group.local')}</h2>
+              <p className="group-note">{t('settings.local.note')}</p>
+
+              <div className="field">
+                <label htmlFor="localProviderEnabled">{t('settings.field.localProviderEnabled')}</label>
+                <div className="input-row">
+                  <select
+                    id="localProviderEnabled"
+                    value={localEnabled}
+                    onChange={e => setLocalEnabled(e.target.value as LocalEnabled)}
+                  >
+                    {LOCAL_ENABLED_OPTIONS.map(o => (
+                      <option key={o} value={o}>{t(`settings.local.enabled.${o}` as TranslationKey)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="hints">
+                  <span className="resolved">
+                    {data.preferences.resolved.enabled
+                      ? t('settings.local.resolvedEnabledOn')
+                      : t('settings.local.resolvedEnabledOff')}
+                    {' — '}
+                    {data.preferences.resolved.hasWritableExternal
+                      ? t('settings.local.hasExternal')
+                      : t('settings.local.noExternal')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="field">
+                <label htmlFor="localPrecedenceMode">{t('settings.field.localPrecedenceMode')}</label>
+                <div className="input-row">
+                  <select
+                    id="localPrecedenceMode"
+                    value={localPrecedence}
+                    onChange={e => setLocalPrecedence(e.target.value as LocalPrecedence)}
+                  >
+                    {LOCAL_PRECEDENCE_OPTIONS.map(o => (
+                      <option key={o} value={o}>{t(`settings.local.precedence.${o}` as TranslationKey)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="hints">
+                  <span className="resolved">
+                    {t('settings.local.resolvedOrder', {
+                      order: data.preferences.resolved.precedenceOrder.join(' > '),
+                    })}
+                  </span>
+                </div>
+              </div>
+            </section>
+
             <div className="actions">
               <button type="submit" className="save" disabled={status === 'saving'}>
                 {status === 'saving' ? t('settings.saving') : t('settings.save')}
@@ -259,8 +338,9 @@ export default function SettingsPage() {
         .field:last-child { margin-bottom: 0; }
         label { display: block; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.35rem; }
         .input-row { display: flex; }
-        input { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0.55rem 0.7rem; font-size: 0.95rem; font-family: inherit; }
-        input:focus { outline: none; border-color: var(--accent-color, #4a9eff); }
+        input, select { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); padding: 0.55rem 0.7rem; font-size: 0.95rem; font-family: inherit; }
+        input:focus, select:focus { outline: none; border-color: var(--accent-color, #4a9eff); }
+        select { cursor: pointer; }
         .hints { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.4rem; font-size: 0.8rem; }
         .badge { padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.72rem; }
         .badge.env { background: rgba(74, 158, 255, 0.15); color: #7db9ff; }
