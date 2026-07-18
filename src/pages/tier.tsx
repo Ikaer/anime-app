@@ -203,11 +203,15 @@ export default function TierPage() {
           setOverrides(prev => new Map(prev).set(id, prevScore));
           setFailed(prev => new Map(prev).set(id, data.error || t('tier.saveFailed')));
         } else {
-          // Persisted locally; warn if a remote source (MAL/SIMKL) didn't take it.
-          const outcomes = data.outcomes || {};
-          const bad: string[] = [];
-          if (outcomes.mal && outcomes.mal.ok === false) bad.push('MAL');
-          if (outcomes.simkl && outcomes.simkl.ok === false) bad.push('SIMKL');
+          // Persisted locally; warn if a remote push didn't take. Iterate the map
+          // rather than naming providers — `writePersonal` fans out to every
+          // ENABLED writer, so hardcoding mal/simkl silently swallowed AniList
+          // once OAuth write-back shipped. `local` never lands here (its
+          // writeRemote is a no-op that always reports ok), so it needs no filter.
+          const outcomes: Record<string, { ok?: boolean }> = data.outcomes || {};
+          const bad = Object.entries(outcomes)
+            .filter(([, o]) => o && o.ok === false)
+            .map(([provider]) => provider.toUpperCase());
           setFailed(prev => {
             const n = new Map(prev);
             if (bad.length) n.set(id, t('tier.notSynced', { sources: bad.join(' + ') }));
