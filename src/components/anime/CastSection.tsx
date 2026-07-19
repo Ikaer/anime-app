@@ -92,7 +92,7 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
   const hiddenCount = cast ? cast.length - shown.length : 0;
 
   return (
-    <section className="section">
+    <section className={styles.section}>
       <h2>{cast ? t('cast.headingCount', { count: cast.length }) : t('cast.heading')}</h2>
 
       {busy && <p className={styles.note}>{t('cast.loading')}</p>}

@@ -10,6 +10,7 @@ declare const styles: {
   readonly "role": string;
   readonly "roleMain": string;
   readonly "row": string;
+  readonly "section": string;
   readonly "side": string;
   readonly "sideRight": string;
   readonly "vaStack": string;
