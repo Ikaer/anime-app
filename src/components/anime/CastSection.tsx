@@ -50,6 +50,16 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
+  // The detail page's RefreshButton force-refetches cast, then re-runs
+  // getServerSideProps via router.replace — which hands us a NEW `initialCast`
+  // without remounting. `useState(initialCast)` only reads its argument on
+  // mount, so without this the refreshed cast would stay invisible until a full
+  // page reload. Guarded on non-null so a re-render of a not-yet-cached title
+  // can't wipe out a cast we just fetched client-side.
+  useEffect(() => {
+    if (initialCast !== null) setCast(initialCast);
+  }, [initialCast]);
+
   useEffect(() => {
     // Already have it (possibly an empty cast — that's an answer, not a miss).
     if (cast !== null) return;
