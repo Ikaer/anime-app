@@ -207,6 +207,61 @@ export interface AniListRelationEntry {
   relationType: string;
 }
 
+/**
+ * A Japanese voice actor (seiyuu) credit from AniList. The `id` is a stable
+ * cross-anime AniList staff id — the SAME id space as `AniListStaffEntry.id`,
+ * so a seiyuu links to the existing /credits/staff/[id] page for free.
+ */
+export interface AniListVoiceActorEntry {
+  id: number;
+  name: string;
+  /** Japanese-script name, when AniList has one. */
+  nameNative?: string;
+  /** AniList-hosted portrait URL (s4.anilist.co), hot-linked like `banner_image`. */
+  image?: string;
+}
+
+/**
+ * One character in an anime's cast, with its Japanese voice actor(s). AniList
+ * models VAs as a list because a character can be shared across a dub/recast —
+ * in practice it's 0 or 1 for `language: JAPANESE`.
+ */
+export interface AniListCharacterEntry {
+  id: number;
+  name: string;
+  /** Japanese-script name, when AniList has one. */
+  nameNative?: string;
+  /** AniList-hosted portrait URL. AniList serves a grey placeholder rather than
+   *  omitting the field, so this is present far more often than it is useful. */
+  image?: string;
+  /** AniList's `MAIN` | `SUPPORTING` | `BACKGROUND`. Stored verbatim. */
+  role: string;
+  voiceActors: AniListVoiceActorEntry[];
+}
+
+/**
+ * An anime's cast, stored in its OWN slice (`animes_anilist_cast.json`, keyed by
+ * canonical id) rather than on `AniListMetaEntry` — deliberately.
+ *
+ * Cast is display-only (the detail page's Cast section); unlike `tags`/`staff`
+ * it feeds no reco source. `animes_anilist_meta.json` is one of the six slices
+ * `getAnimeForDisplay()` parses on every cold row build, and cast is by far the
+ * bulkiest AniList payload (~12 characters × 2 portraits × 2 names per title,
+ * i.e. tens of MB catalog-wide). Living here keeps that cost off the hot path:
+ * this slice is read ONLY by the detail page, one record at a time, and is
+ * filled lazily — a title is fetched the first time someone opens it.
+ */
+export interface AniListCastEntry {
+  /** Absent for an AniList-only title, same as on `AniListMetaEntry`. */
+  mal_id?: number;
+  anilist_id?: number;
+  /** Empty array = AniList was asked and genuinely has no cast. A MISSING entry
+   *  (not an empty one) is the "never fetched" signal — same discipline as
+   *  `banner_image: null` / `relations: []` on `AniListMetaEntry`. */
+  characters: AniListCharacterEntry[];
+  fetched_at: string;
+}
+
 export interface AniListMetaEntry {
   /**
    * Absent for an AniList-only title (no MAL id) — the crawler mints a bare

@@ -2,19 +2,24 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId } from '@/lib/store';
-import type { AnimeRecord, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
+import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId, getAnilistCast } from '@/lib/store';
+import type { AnimeRecord, AniListCharacterEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
 import { hasWritableExternal } from '@/lib/providers';
 import { RefreshButton } from '@/components/shared';
-import { MoreLikeThis, PersonalStateEditor } from '@/components/anime';
+import { MoreLikeThis, PersonalStateEditor, CastSection } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 interface Props {
   anime: AnimeRecord;
   similar: SimilarByCredits[];
+  /** Cached cast, or `null` when this title has never been fetched — the
+   *  CastSection then fills it once from AniList. Passed separately from
+   *  `anime` because cast lives in its own slice, off the hydration path
+   *  (see `AniListCastEntry`). */
+  cast: AniListCharacterEntry[] | null;
   /** No writable external provider connected — gates the status "clear"
    *  affordance (docs/localRating/ phase 3; see `PersonalPatch`). */
   canClearStatus: boolean;
@@ -81,7 +86,7 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, canClearStatus }: Props) {
+export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -401,6 +406,9 @@ export default function AnimeDetailPage({ anime, similar, canClearStatus }: Prop
           </section>
         )}
 
+        {/* ---------- Cast: characters & Japanese seiyuu (AniList) ---------- */}
+        <CastSection animeId={anime.id} initialCast={cast} />
+
         {/* ---------- Cross-source id crosswalk ---------- */}
         <section className="section">
           <h2>{t('detail.crosswalk')}</h2>
@@ -672,10 +680,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const similar = computeSimilarByCredits(anime, getAnimeForDisplay(), 3);
   // AnimeRecord carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.
+  // Cast is read straight from its own slice — never fetched here, so the page
+  // render stays free of external calls. A miss (`null`) is filled client-side
+  // by CastSection, once, and is cached for every later view.
+  const cast = getAnilistCast(raw)?.characters ?? null;
   return {
     props: {
       anime: JSON.parse(JSON.stringify(anime)),
       similar: JSON.parse(JSON.stringify(similar)),
+      cast: cast ? JSON.parse(JSON.stringify(cast)) : null,
       // Clearing a status has no remote equivalent (MAL models it as a list
       // DELETE, SIMKL is score-only), so only offer it when there's no remote
       // to diverge from — see `PersonalPatch` in personalWriters.ts.

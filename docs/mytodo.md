@@ -6,6 +6,10 @@
 [] Make a few things settable (main title language - main user language - etc)
 [] Promote the app on github (readme/screenshots/setup)
 [] Do a swipe system
+[~] Do stuff around character and seyuu — cast section SHIPPED 2026-07-19: characters + JP seiyuu
+    with photos on the detail page, from AniList, in an off-hot-path lazily-filled slice
+    (animes_anilist_cast.json). Still open: seiyuu as a reco source / a "more from this seiyuu"
+    browse page (both need catalog-wide cast, which this deliberately does not fetch).
 [X] AniList OAuth — login + SaveMediaListEntry write-back SHIPPED 2026-07-18, live-verified on
    a real account (spec: docs/ANILIST-OAUTH.md, now WIP). Landed as a 4th PersonalWriter in
    src/lib/personalWriters.ts and flips hasWritableExternal(), so tier/quick-rate/detail all

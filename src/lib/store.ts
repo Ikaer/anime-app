@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, ProviderPersonalState, UserAnimeStatus } from '@/models/anime';
+import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, ProviderPersonalState, UserAnimeStatus } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/discrepancy';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
@@ -24,6 +24,7 @@ const ANIME_MAL_FILE = dataFile('animes_mal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
 const ANIME_SIMKL_FILE = dataFile('animes_simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
+const ANIME_ANILIST_CAST_FILE = dataFile('animes_anilist_cast.json');
 const ANIME_ANILIST_PERSONAL_FILE = dataFile('animes_anilist_personal.json');
 const ANIME_LOCAL_PERSONAL_FILE = dataFile('animes_local_personal.json');
 
@@ -174,6 +175,42 @@ export function upsertAnilistCatalogFields(
   });
   writeJsonFile(ANIME_ANILIST_META_FILE, existing);
   cachedAnime = null;
+}
+
+// ============================================================================
+// AniList cast slice (characters + Japanese seiyuu), keyed by canonical id.
+//
+// Deliberately NOT part of the six-slice join in getAnimeForDisplay(): cast is
+// display-only detail-page data (it feeds no reco source), and it is the
+// bulkiest AniList payload there is. Reading it here would make every cold row
+// build parse tens of MB nothing else uses. So these functions do NOT clear
+// `cachedAnime` — writing cast cannot change any assembled row.
+//
+// Filled lazily, one title at a time, the first time a detail page is opened.
+// ============================================================================
+
+export function getAllAnilistCast(): Record<string, AniListCastEntry> {
+  return readJsonFile<Record<string, AniListCastEntry>>(ANIME_ANILIST_CAST_FILE, {});
+}
+
+export function getAnilistCastCount(): number {
+  return Object.keys(getAllAnilistCast()).length;
+}
+
+/**
+ * One title's cast, or `undefined` when it was never fetched. Note the
+ * distinction the caller depends on: `undefined` = never asked, whereas an
+ * entry with `characters: []` = asked, AniList has none (don't re-fetch).
+ */
+export function getAnilistCast(canonicalId: string): AniListCastEntry | undefined {
+  return getAllAnilistCast()[canonicalId];
+}
+
+export function upsertAnilistCast(canonicalId: string, entry: AniListCastEntry): void {
+  const existing = getAllAnilistCast();
+  existing[canonicalId] = entry;
+  writeJsonFile(ANIME_ANILIST_CAST_FILE, existing);
+  // No `cachedAnime = null` on purpose — see the block comment above.
 }
 
 // ============================================================================

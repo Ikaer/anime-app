@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, upsertAnime, getMalIdForCanonical, isCanonicalId } from '@/lib/store';
+import { getAllAnime, upsertAnime, getMalIdForCanonical, isCanonicalId, getAllAnilistMeta } from '@/lib/store';
 import { getValidMalToken, fetchAnimeById } from '@/lib/mal';
 import { refreshAnilistMetaForIds } from '@/lib/anilistSync';
+import { getOrFetchAnilistCast } from '@/lib/anilistCast';
 import { performSimklSync } from '@/lib/simklSync';
 import { appendLog } from '@/lib/connectionLog';
 
@@ -53,8 +54,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // yet (true AniList-only) can't be queried by either — report, don't crash.
   const malId = getMalIdForCanonical(canonicalId);
 
+  // The AniList id, for the cast refetch — it covers AniList-only titles that
+  // have no MAL id, which the other three refills can't touch.
+  const anilistId = getAllAnilistMeta()[canonicalId]?.anilist_id;
+
   // Each source is isolated: one failing must not sink the others.
-  const [malResult, anilistResult, simklResult] = await Promise.all([
+  const [malResult, anilistResult, simklResult, castResult] = await Promise.all([
     malId !== undefined
       ? refreshMal(canonicalId, malId).catch(e => ({ ok: false, error: e instanceof Error ? e.message : 'MAL refresh failed' }))
       : Promise.resolve(NO_MAL_ID),
@@ -62,6 +67,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? refreshAnilistMetaForIds([malId]).catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' }))
       : Promise.resolve({ ...NO_MAL_ID, tagged: 0 }),
     performSimklSync().catch(e => ({ ok: false, phase: 'noop' as const, added: 0, removed: 0, orphansSkipped: 0, error: e instanceof Error ? e.message : 'SIMKL sync failed' })),
+    // `force` — the point of a manual refresh is to re-pull, and an existing
+    // cast entry would otherwise short-circuit the fetch.
+    getOrFetchAnilistCast(canonicalId, { malId, anilistId }, true)
+      .catch(e => ({ ok: false, cached: false, error: e instanceof Error ? e.message : 'AniList cast refresh failed' })),
   ]);
 
   appendLog('refresh', 'info', `Per-anime refresh for ${canonicalId}`, {
@@ -70,6 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     mal: malResult.ok,
     anilist: anilistResult.ok,
     simkl: simklResult.ok,
+    cast: castResult.ok,
   });
 
   return res.status(200).json({
@@ -77,5 +87,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     mal: malResult,
     anilist: anilistResult,
     simkl: simklResult,
+    cast: castResult,
   });
 }

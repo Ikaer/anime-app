@@ -33,6 +33,7 @@ export type LogSource =
   | 'anilist-auth'
   | 'anilist-meta-sync'
   | 'anilist-catalog-crawl'
+  | 'anilist-cast'
   | 'anilist-personal-import'
   | 'anilist-rating'
   | 'cron-sync'

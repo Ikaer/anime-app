@@ -36,6 +36,7 @@ All data is stored as JSON files under `DATA_PATH` (env var, defaults to `/app/d
 - `animes_simkl.json` — SIMKL personal entries (`SimklPersonalEntry`), keyed by canonical id
 - `animes_anilist_meta.json` — AniList catalog metadata (tags + staff + banner + catalog fields) keyed by canonical id (see "AniList tags + staff integration"). The code calls it `anilistMeta`.
 - `animes_anilist_personal.json` — anonymously-imported AniList personal-list entries (`AniListPersonalEntry`), keyed by canonical id (see "AniList tags + staff integration" P3b).
+- `animes_anilist_cast.json` — characters + Japanese seiyuu (`AniListCastEntry`), keyed by canonical id. **The one AniList slice that is NOT joined in `getAnimeForDisplay()`** — read only by the detail page, filled lazily per title (see "Cast" below).
 - `animes_local_personal.json` — **in-app** personal state (`LocalPersonalEntry`: status/score/progress + `updated_at`), keyed by canonical id (see "Local personal-data provider").
 - `mal_auth.json` — OAuth token + user data
 - `mal_season_checkpoint.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`). Named for what it is — the seasonal-crawl checkpoint — to sit unambiguously next to `simkl_sync_checkpoint.json`.
@@ -144,6 +145,44 @@ A third, read-only catalog-metadata source, added after confirming SIMKL's publi
 - `banner_image` is AniList's landscape key art — the one catalog field MAL has no equivalent of. The anime **detail page uses it as a full-page fixed backdrop** (crisp, at natural width, anchored top, masked into a blurred ambient fill of the same image + a grain layer). When it's null the page falls back to the portrait poster, which plays the ambient role only — a portrait cover-cropped to a wide viewport is a meaningless band, so it's blurred hard. All the tuning knobs are CSS vars on `.backdrop` in [src/pages/anime/[id].tsx](src/pages/anime/[id].tsx). The `.section` panels are deliberately translucent (incl. [MoreLikeThis.module.css](src/components/anime/MoreLikeThis.module.css), which carries its own copy of that style) so the backdrop reads through them. Throttled to ~28 req/min (AniList degraded limit 30/min, normally 90/min); retries once on `429` honoring `Retry-After`. Triggered via "Sync AniList Metadata" on the Connections page (`POST /api/anime/anilist/meta-sync`, fire-and-forget like `big-sync`); progress via `appendLog('anilist-meta-sync', …)` polled by the connection log panel, not SSE.
 - Reco sources: `anilistTags` AND `anilistStaff` are `MetaField`s (these two keep the `Tags` name — they really are tag- and staff-specific, and `anilistTags` is persisted in the URL weights param) in [src/lib/recommendations.ts](src/lib/recommendations.ts), both following the exact `genre`/`studio` IDF-weighted-affinity pattern (tags = plain tag-name list; staff = stable AniList staff `id`, so a shared director/composer is a rare, strong signal; `role` feeds the "Pourquoi?" explain). Neither folds AniList's `rank` into scoring yet. Both ship at weight `0` by default in [src/lib/recoWeights.ts](src/lib/recoWeights.ts) until a sync has populated coverage.
 - **AniList crowd recos** (`anilistCrowd` source): a SECOND crowd source alongside MAL's `crowd`, NOT a taste-profile source. `fetchAnilistRecommendations()` in [anilistSync.ts](src/lib/anilistSync.ts) queries the `Media.recommendations` connection for the same seed set (`Page(perPage:50){ media(idMal_in:$ids){ idMal recommendations(sort:RATING_DESC, perPage:15){ edges{ node{ rating mediaRecommendation{ idMal } } } } } }` — kept as its OWN query, not stacked on the tags+staff one, to stay under the complexity ceiling; verified live). `mediaRecommendation.idMal` resolves recs straight onto the MAL join key — no crosswalk (unlike SIMKL, whose `users_recommendations` carry only a `simkl` id, which is why SIMKL crowd recos were NOT adopted). Fetched during `performRecommendationsRefresh` (after MAL suggestions), stored in `RecommendationsData.anilistSeeds` (parallel to `seeds`, keyed by seed MAL id; `num` = AniList net `rating`), and hydrated through the same MAL detail path. In `computeFeed` it has its OWN accumulator + normalization denom (AniList `rating` ≠ MAL `num_recommendations`) and INJECTS new candidates like `crowd` does. Ships at weight `0` until a refresh populates it.
+
+### Cast (characters + seiyuu) — a lazily-filled OFF-hot-path slice
+
+The detail page's Cast section: each character paired with its Japanese voice
+actor(s), from AniList. Storage is `animes_anilist_cast.json` (`AniListCastEntry`,
+keyed by canonical id) — **its own slice, deliberately NOT part of the six-slice
+join** in `getAnimeForDisplay()`, and the one AniList data set that works this way:
+
+- **Why not on `AniListMetaEntry`.** Cast is display-only (it feeds no reco
+  source, unlike `tags`/`staff`), and it's the bulkiest AniList payload there is
+  (~25 characters × 2 portraits + 2 names per title — tens of MB catalog-wide,
+  bigger than `animes_mal.json`). `animes_anilist_meta.json` is parsed on every
+  cold row build and the row cache keys on those six slices' identity, so putting
+  cast there would tax every row build for data one page reads. Hence
+  `upsertAnilistCast` **does not clear `cachedAnime`** — a cast write cannot
+  change any assembled row.
+- **Filled lazily, one title at a time**, by `getOrFetchAnilistCast` in
+  [src/lib/anilistCast.ts](src/lib/anilistCast.ts) (its own module — `anilistSync.ts`
+  is for catalog-wide sweeps that feed hydration/recos). `getServerSideProps`
+  reads the slice and passes `cast`; a `null` (never fetched) makes `CastSection`
+  fetch `GET /api/anime/animes/[id]/cast` **once on mount**. It auto-fetches
+  rather than click-to-load like `MoreLikeThis`, because it's one cheap request
+  that happens at most once per title ever, and cast is core detail content.
+- **An empty `characters: []` is persisted on purpose.** A MISSING entry means
+  "never asked"; `[]` means "asked, AniList has none". Without storing the empty,
+  a title AniList lacks would re-query on every page view. Relatedly, AniList
+  answers an unknown id with a GraphQL **`404 Not Found` + `data.Media: null`**,
+  which `fetchCast` treats as "no cast", NOT as an error.
+- **Single-title query, so `Media(...)` is used directly** — the aliased-`Media`
+  null-bomb caveat that forces `Page.media` in `anilistSync.ts` is a batching
+  concern and doesn't apply. Takes `idMal` OR `id`, so AniList-only titles work.
+- **Japanese VAs only** (`voiceActors(language: JAPANESE)`) — these are seiyuu, not
+  dub actors. **All** of a character's VAs render, not just the first: dual casting
+  (a child self + an adult inner monologue) and mid-series recasts are common.
+- **Seiyuu link OUT to AniList, not to `/credits/staff/[id]`.** That page's
+  `listAnimeByStaff` scans `sources.anilist.staff`, which is the top-15
+  *production* credits — voice actors are never in it, so an internal link would
+  resolve to nothing.
 
 ### AniList OAuth (login tier: write-back)
 
