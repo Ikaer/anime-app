@@ -216,7 +216,7 @@ export default function StatsPage() {
                   rank={index + 1}
                   max={max}
                   showPhoto={state.dimension === 'seiyuu'}
-                  linkToCredits={state.dimension === 'staff'}
+                  link={linkFor(state.dimension, entry)}
                 />
               ))}
             </ol>
@@ -240,7 +240,7 @@ export default function StatsPage() {
           padding: 0.25rem 0.7rem; font-size: 0.82rem; cursor: pointer;
         }
         .chip:hover { color: var(--text-primary); }
-        .chip.on { background: var(--accent-color); border-color: var(--accent-color); color: #fff; }
+        .chip.on { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
         .stats-tabs {
           display: flex; flex-wrap: wrap; gap: 0.35rem;
           border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;
@@ -251,7 +251,7 @@ export default function StatsPage() {
           font-size: 0.95rem; cursor: pointer;
         }
         .tab:hover { color: var(--text-primary); }
-        .tab.on { color: var(--accent-color); border-bottom-color: var(--accent-color); }
+        .tab.on { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
         .stats-notice {
           display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
           justify-content: space-between; background: var(--bg-secondary);
@@ -266,11 +266,43 @@ export default function StatsPage() {
         .stats-error, .stats-empty {
           padding: 1.5rem; text-align: center; color: var(--text-secondary);
         }
-        .stats-error { color: var(--error-color, #e06c75); }
+        .stats-error { color: #dc2626; }
         .stats-list { list-style: none; margin: 0; padding: 0; }
       `}</style>
     </>
   );
+}
+
+interface EntryLink {
+  href: string;
+  /** Leaves the app — rendered as a plain <a> with a ↗ affordance. */
+  external: boolean;
+}
+
+/**
+ * Where an entry's name points, per dimension. Two of the four linkable
+ * dimensions deliberately leave the app:
+ *
+ * - **seiyuu** → AniList. `/credits/staff/[id]` scans `sources.anilist.staff`,
+ *   which is the top-15 *production* credits; voice actors are never in it, so
+ *   an internal link would resolve to an empty page. (Same call `CastSection`
+ *   already makes for the detail page's seiyuu.)
+ * - **producers** → AniList. These carry ANILIST studio ids, while
+ *   `listAnimeByStudio` scans `catalog.studios`, which are MAL-namespace ids.
+ *   The two id spaces overlap numerically, so an internal link wouldn't merely
+ *   miss — it could silently resolve to an unrelated studio. External by necessity.
+ *
+ * `tags`/`genres` have no credits page and carry no id, so they stay unlinked.
+ */
+function linkFor(dimension: StatsDimension, entry: StatEntry): EntryLink | null {
+  if (entry.id === undefined) return null;
+  switch (dimension) {
+    case 'studios': return { href: `/credits/studio/${entry.id}`, external: false };
+    case 'staff': return { href: `/credits/staff/${entry.id}`, external: false };
+    case 'seiyuu': return { href: `https://anilist.co/staff/${entry.id}`, external: true };
+    case 'producers': return { href: `https://anilist.co/studio/${entry.id}`, external: true };
+    default: return null;
+  }
 }
 
 interface RowProps {
@@ -278,7 +310,7 @@ interface RowProps {
   rank: number;
   max: number;
   showPhoto: boolean;
-  linkToCredits: boolean;
+  link: EntryLink | null;
 }
 
 /**
@@ -286,13 +318,22 @@ interface RowProps {
  * the title total — at 50 rows the leader is often well under 50%, and scaling
  * to the total would render every bar as an unreadable sliver.
  */
-function Row({ entry, rank, max, showPhoto, linkToCredits }: RowProps) {
+function Row({ entry, rank, max, showPhoto, link }: RowProps) {
   const t = useT();
   const width = max > 0 ? Math.max(2, (entry.count / max) * 100) : 0;
 
-  const label = linkToCredits && entry.id !== undefined
-    ? <Link href={`/credits/staff/${entry.id}`} className="name-link">{entry.name}</Link>
-    : <span className="name-text">{entry.name}</span>;
+  let label;
+  if (!link) {
+    label = <span className="name-text">{entry.name}</span>;
+  } else if (link.external) {
+    label = (
+      <a className="name-link" href={link.href} target="_blank" rel="noopener noreferrer">
+        {entry.name}<span className="ext"> ↗</span>
+      </a>
+    );
+  } else {
+    label = <Link href={link.href} className="name-link">{entry.name}</Link>;
+  }
 
   return (
     <li className="row">
@@ -324,10 +365,11 @@ function Row({ entry, rank, max, showPhoto, linkToCredits }: RowProps) {
       </span>
 
       <style jsx>{`
+        /* No border-bottom: the progress bar is already a full-width horizontal
+           rule, and a border under it read as a second, broken bar. */
         .row {
           display: flex; align-items: center; gap: 0.75rem;
-          padding: 0.5rem 0.25rem;
-          border-bottom: 1px solid var(--border-color);
+          padding: 0.45rem 0.25rem 0.6rem;
         }
         .rank {
           width: 2rem; flex-shrink: 0; text-align: right;
@@ -350,19 +392,20 @@ function Row({ entry, rank, max, showPhoto, linkToCredits }: RowProps) {
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
         .line :global(.name-link) { text-decoration: none; }
-        .line :global(.name-link):hover { color: var(--accent-color); text-decoration: underline; }
+        .line :global(.name-link):hover { color: var(--accent-primary); text-decoration: underline; }
+        .line :global(.ext) { color: var(--text-muted); font-size: 0.75em; }
         .numbers {
           display: flex; align-items: baseline; gap: 0.5rem; flex-shrink: 0;
           font-variant-numeric: tabular-nums;
         }
-        .numbers strong { color: var(--accent-color); font-size: 0.95rem; }
+        .numbers strong { color: var(--accent-primary); font-size: 0.95rem; }
         .count { color: var(--text-secondary); font-size: 0.78rem; }
         .detail {
           color: var(--text-secondary); font-size: 0.78rem;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .bar { display: block; height: 4px; background: var(--bg-tertiary); border-radius: 2px; }
-        .fill { display: block; height: 100%; background: var(--accent-color); border-radius: 2px; }
+        .bar { display: block; height: 5px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
+        .fill { display: block; height: 100%; background: var(--accent-primary); border-radius: 3px; }
       `}</style>
     </li>
   );
