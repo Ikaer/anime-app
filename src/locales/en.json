@@ -373,6 +373,10 @@
   "account.connectAnilist": "Connect to AniList",
   "account.anilistUser": "AniList user",
   "account.anilistNotConfigured": "Set the AniList client ID in settings.",
+  "anilistPush.button": "Push my list to AniList",
+  "anilistPush.summary": "{differing} of {statused} titles differ from your AniList list.",
+  "anilistPush.running": "Pushing: {index}/{total} titles processed…",
+  "anilistPush.inSync": "Your AniList list is up to date.",
 
   "dataSync.syncing": "Syncing…",
   "dataSync.syncMal": "Sync MAL Data",

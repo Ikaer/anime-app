@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { importAnilistPersonalList, getAnilistPersonalConfig } from '@/lib/anilistPersonalSync';
 import { getAnilistPersonalCount } from '@/lib/store';
+import { getAnilistAccessToken } from '@/lib/anilistAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
@@ -12,6 +13,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       lastImportedCount: cfg.lastImportedCount,
       lastImportedAt: cfg.lastImportedAt,
       storedCount: getAnilistPersonalCount(),
+      // With a live token the client may POST with no username at all — the
+      // import then reads the viewer's own (possibly private) list.
+      authenticated: getAnilistAccessToken() != null,
     });
   }
 

@@ -3,8 +3,8 @@
 > A **design + plan** document for an independent, self-contained feature.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — auth flow + write path implemented (2026-07-18); the
-> private-list authenticated *read* is still `Todo` (see "Not yet done").
+> **Status: `WIP`** — auth flow + write path implemented (2026-07-18);
+> authenticated read + the one-shot list push added 2026-07-19 (see "The push").
 
 ## What
 
@@ -103,11 +103,70 @@ bespoke call), on `a_31` = *Sekai Saikyou no Kouei* (AniList 198409):
   MAL/SIMKL were disconnected, and `local` correctly went auto-OFF the moment an
   AniList token made `hasWritableExternal()` true.
 
+## The push: bringing an existing SIMKL/MAL list up to AniList (2026-07-19)
+
+The registry writer pushes every NEW edit to AniList once connected, from all
+three write surfaces. What it cannot do is close the gap that *predates* the
+connection — titles rated in SIMKL long before an AniList token existed. Nothing
+iterated the list. `performAnilistPersonalPush()` in
+[anilistPush.ts](../src/lib/anilistPush.ts) is that missing one-shot; after it
+runs it is a no-op, because the per-edit writer keeps the two in step.
+
+- **The local record wins, unconditionally — there is no conflict rule.** An
+  early design pass proposed "skip titles already on AniList" to avoid clobbering
+  AniList-side edits. That was wrong for this architecture and was dropped:
+  local-cache-authority makes the merged record the truth, AniList is an
+  absent-tolerant refill pipe, and it sits LAST in personal precedence — there is
+  no AniList-side state worth defending. An entry is skipped only when it already
+  agrees, to save a request.
+- **Skip-if-present would also have missed the majority of the drift.** Measured
+  against the live account 2026-07-19: 671 statused locally, 522 on AniList, of
+  which **435 already agree, 151 are absent, 11 differ on status and 79 on
+  score** → 236 writes. Skipping present entries would have written only the 151
+  and left ~90 titles permanently stale, since no later sync revisits them.
+- **Scope is the statused list incl. `plan_to_watch`** (everything with an
+  effective status — `/stats`' scope, not the tier board's rateable-only one).
+  Values are read through `getEffective*`, so what lands on AniList is exactly the
+  SIMKL > MAL > AniList precedence the rest of the app filters on.
+- **Progress is compared on nothing, and omitted for `completed`.** AniList
+  auto-fills it to the episode count on COMPLETED (verified 2026-07-18), so it is
+  provider-derived there; diffing it would re-push most of a completed list
+  forever.
+- **The stats GET answers from in-memory counters while a run is in flight.**
+  Rebuilding the queue costs a `MediaListCollection` request, and a 5s UI poll
+  would spend it against the same rate limit the sweep's writes are consuming.
+- Throttled to ~28 req/min like the other AniList sweeps; fire-and-forget behind
+  `POST /api/anime/anilist/personal-push`, logged to `anilist-personal-push`.
+  Resumable by construction — each write lands immediately and the queue is
+  rebuilt from a fresh remote read each run, so an interrupted sweep just finds
+  fewer disagreements next time.
+
+## Authenticated read (2026-07-19)
+
+`anilistPersonalSync.ts` now carries both tiers. `fetchList` takes an optional
+token and attaches `Authorization: Bearer` whenever one exists; a new
+`LIST_QUERY_BY_ID` (`MediaListCollection(userId:)`) addresses the viewer's own
+list, which is what gets through the private-profile gate.
+`importAnilistPersonalList('')` with a live token imports the viewer's own list.
+`fetchAuthenticatedAnilistList()` returns normalized entries without persisting —
+that is what the push diffs against.
+
+Live-verified 2026-07-19: by-name and by-id return identical results (5 lists,
+522 entries, 0 missing `idMal`), and `GET /api/anime/anilist/personal-push`
+against the real token returned `{statused: 671, remote: 522, differing: 236}`,
+matching an independent offline diff of the same data exactly.
+
+The Connections-page UI was verified the same day, rendering
+"236 titres sur 671 diffèrent de votre liste AniList" with its push button.
+**It had to be checked against a production build** (`next build` + `next start`):
+`next dev` on this machine serves correct SSR HTML but never hydrates — no React
+fiber attaches to any node, no mount effect runs, and a six-line probe page with a
+single `useEffect` reproduces it. Dev-only (react-refresh bootstrap); the
+standalone build is unaffected. Worth remembering before concluding that a
+"stuck on Chargement…" Connections page is an app bug.
+
 ## Not yet done
 
-- **Authenticated private-list read.** `anilistPersonalSync.ts` is still the
-  anonymous by-username path; it does not yet send the viewer token. This is the
-  remaining half of the spec.
 - **`animes_anilist_personal.json` clobber.** The AniList writer reflects a push
   into that slice via `upsertAnilistPersonalEntries`, but a subsequent *username
   import* calls `replaceAnilistPersonalEntries` (full replace) and drops entries

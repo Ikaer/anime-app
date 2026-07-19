@@ -47,6 +47,8 @@ export default function ConnectionsPage() {
               authError={anilist.authError}
               onConnect={anilist.onConnect}
               onDisconnect={anilist.onDisconnect}
+              pushStats={anilist.pushStats}
+              onPush={anilist.onPush}
             />
           </section>
           <section className="connections-section">

@@ -4,7 +4,10 @@ declare const styles: {
   readonly "error": string;
   readonly "hint": string;
   readonly "identity": string;
+  readonly "inSync": string;
   readonly "providerIcon": string;
+  readonly "pushBlock": string;
+  readonly "pushSummary": string;
 };
 export = styles;
 

@@ -36,6 +36,7 @@ export type LogSource =
   | 'anilist-cast'
   | 'anilist-cast-sweep'
   | 'anilist-personal-import'
+  | 'anilist-personal-push'
   | 'anilist-rating'
   | 'cron-sync'
   | 'refresh';

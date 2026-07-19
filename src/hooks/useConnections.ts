@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { MALAuthState } from '@/models/anime';
 import type { HistoricalCrawlStats } from '@/lib/malSync';
 import type { AniListPersonalImportResult } from '@/lib/anilistPersonalSync';
+import type { AniListPushStats } from '@/lib/anilistPush';
 
 interface UseConnectionsOptions {
   onDataChanged?: () => void;
@@ -55,6 +56,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [anilistImportResult, setAnilistImportResult] = useState<AniListPersonalImportResult | null>(null);
   const [anilistImportUsername, setAnilistImportUsername] = useState<string | undefined>(undefined);
   const [anilistImportStoredCount, setAnilistImportStoredCount] = useState<number | null>(null);
+  const [anilistPushStats, setAnilistPushStats] = useState<AniListPushStats | null>(null);
 
   const fetchHistoricalStats = async () => {
     try {
@@ -91,6 +93,18 @@ export function useConnections(options: UseConnectionsOptions = {}) {
         setAnilistImportUsername(data.username || undefined);
         setAnilistImportStoredCount(typeof data.storedCount === 'number' ? data.storedCount : null);
       }
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
+  // Deliberately NOT fetched on mount: the stats endpoint reads the whole
+  // AniList list to diff against, so it costs a GraphQL request. Gated on an
+  // actual connection by the effect below.
+  const fetchAnilistPushStats = async () => {
+    try {
+      const res = await fetch('/api/anime/anilist/personal-push');
+      if (res.ok) setAnilistPushStats(await res.json());
     } catch {
       // non-critical, silently ignore
     }
@@ -149,6 +163,25 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     fetchAnilistCatalogStats();
     fetchAnilistImportConfig();
   }, []);
+
+  // Push drift is only computable — and only meaningful — once AniList is
+  // connected, so this waits for the auth check rather than running on mount.
+  useEffect(() => {
+    if (!anilistConnected) {
+      setAnilistPushStats(null);
+      return;
+    }
+    fetchAnilistPushStats();
+  }, [anilistConnected]);
+
+  // While a push runs, poll for progress. The endpoint answers from in-memory
+  // counters in this state (no remote read), so a 5s poll is cheap; the final
+  // poll after it stops re-diffs and lands on the real "in sync" number.
+  useEffect(() => {
+    if (!anilistPushStats?.pushRunning) return;
+    const timer = setTimeout(() => { void fetchAnilistPushStats(); }, 5000);
+    return () => clearTimeout(timer);
+  }, [anilistPushStats]);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -401,6 +434,17 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const handleAnilistPush = async () => {
+    try {
+      await fetch('/api/anime/anilist/personal-push', { method: 'POST' });
+      // The POST is fire-and-forget; this first refetch flips `pushRunning`,
+      // which starts the poll below.
+      await fetchAnilistPushStats();
+    } catch {
+      // Non-fatal: the sweep may well have started. The poll will pick it up.
+    }
+  };
+
   // One group per source. The nesting is what carries the "which source?"
   // information — no field inside a group needs its source as a prefix.
   return {
@@ -451,6 +495,8 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       importUsername: anilistImportUsername,
       importStoredCount: anilistImportStoredCount,
       onPersonalImport: handleAnilistPersonalImport,
+      pushStats: anilistPushStats,
+      onPush: handleAnilistPush,
     },
   };
 }
