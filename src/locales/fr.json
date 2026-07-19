@@ -8,6 +8,7 @@
   "nav.ratingCalculator": "Calculateur de note",
   "nav.discrepancies": "Écarts entre sources",
   "nav.quickRate": "⚡ Notation rapide",
+  "nav.stats": "📊 Statistiques",
   "nav.settings": "Paramètres",
   "lang.switchTo": "Passer en {lang}",
 
@@ -498,5 +499,29 @@
   "views.plan_to_watch.label": "Prévus",
   "views.plan_to_watch.description": "Séries prévues",
   "views.hidden.label": "Masqués",
-  "views.hidden.description": "Séries masquées uniquement"
+  "views.hidden.description": "Séries masquées uniquement",
+
+  "stats.pageTitle": "Statistiques - Anime List",
+  "stats.heading": "Statistiques",
+  "stats.subtitle": "Répartition sur {count} séries avec un statut",
+  "stats.loadFailed": "Impossible de charger les statistiques.",
+  "stats.statuses": "Statut :",
+  "stats.allStatuses": "Tous",
+  "stats.empty": "Aucune donnée pour cette dimension.",
+  "stats.topOf": "Top {shown} sur {total}",
+  "stats.coverage": "{covered}/{total} séries renseignées",
+  "stats.countTitles": "{count} séries",
+  "stats.countTitle": "1 série",
+  "stats.rank": "#{rank}",
+  "stats.castMissing": "Les seiyuu et producteurs viennent d'AniList et sont récupérés série par série. {missing} séries ne sont pas encore renseignées.",
+  "stats.castFill": "Récupérer les données manquantes",
+  "stats.castFilling": "Récupération en cours…",
+  "stats.castFillStarted": "Récupération lancée — environ {minutes} min. Cette page se met à jour automatiquement.",
+  "stats.castComplete": "Toutes les séries sont renseignées.",
+  "stats.dim.studios": "Studios",
+  "stats.dim.seiyuu": "Seiyuu",
+  "stats.dim.staff": "Équipe technique",
+  "stats.dim.producers": "Producteurs",
+  "stats.dim.tags": "Tags",
+  "stats.dim.genres": "Genres"
 }

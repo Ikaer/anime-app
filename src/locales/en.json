@@ -8,6 +8,7 @@
   "nav.ratingCalculator": "Rating Calculator",
   "nav.discrepancies": "Source discrepancies",
   "nav.quickRate": "⚡ Quick rate",
+  "nav.stats": "📊 Statistics",
   "nav.settings": "Settings",
   "lang.switchTo": "Switch to {lang}",
 
@@ -498,5 +499,29 @@
   "views.plan_to_watch.label": "Plan to Watch",
   "views.plan_to_watch.description": "Planned shows",
   "views.hidden.label": "Hidden",
-  "views.hidden.description": "Hidden shows only"
+  "views.hidden.description": "Hidden shows only",
+
+  "stats.pageTitle": "Statistics - Anime List",
+  "stats.heading": "Statistics",
+  "stats.subtitle": "Breakdown across {count} statused shows",
+  "stats.loadFailed": "Could not load statistics.",
+  "stats.statuses": "Status:",
+  "stats.allStatuses": "All",
+  "stats.empty": "No data for this dimension.",
+  "stats.topOf": "Top {shown} of {total}",
+  "stats.coverage": "{covered}/{total} shows covered",
+  "stats.countTitles": "{count} shows",
+  "stats.countTitle": "1 show",
+  "stats.rank": "#{rank}",
+  "stats.castMissing": "Seiyuu and producers come from AniList and are fetched one show at a time. {missing} shows are not covered yet.",
+  "stats.castFill": "Fetch missing data",
+  "stats.castFilling": "Fetching…",
+  "stats.castFillStarted": "Fetch started — about {minutes} min. This page updates automatically.",
+  "stats.castComplete": "Every show is covered.",
+  "stats.dim.studios": "Studios",
+  "stats.dim.seiyuu": "Seiyuu",
+  "stats.dim.staff": "Technical staff",
+  "stats.dim.producers": "Producers",
+  "stats.dim.tags": "Tags",
+  "stats.dim.genres": "Genres"
 }

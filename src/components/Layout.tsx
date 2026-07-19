@@ -10,7 +10,7 @@ interface LayoutProps {
 }
 
 // Routes grouped under the "Others" dropdown.
-const OTHER_ROUTES = ['/rate', '/discrepancies', '/settings'];
+const OTHER_ROUTES = ['/stats', '/rate', '/discrepancies', '/settings'];
 
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
@@ -64,6 +64,13 @@ function OthersDropdown() {
       </button>
       {open && (
         <div className="nav-dropdown-menu" role="menu">
+          <Link
+            href="/stats"
+            role="menuitem"
+            className={`nav-dropdown-item ${router.pathname === '/stats' ? 'active' : ''}`}
+          >
+            {t('nav.stats')}
+          </Link>
           <Link
             href="/rate"
             role="menuitem"

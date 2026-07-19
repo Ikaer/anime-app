@@ -176,6 +176,27 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
 - **Single-title query, so `Media(...)` is used directly** — the aliased-`Media`
   null-bomb caveat that forces `Page.media` in `anilistSync.ts` is a batching
   concern and doesn't apply. Takes `idMal` OR `id`, so AniList-only titles work.
+- **Send ONLY the id you have — never the other one as an explicit `null`.**
+  AniList applies a supplied-but-null argument as a real filter (`id = null`),
+  matching nothing and answering 404; omitting the variable is what makes the
+  argument absent. This is not a hypothetical: the original code sent
+  `{malId, anilistId: null}` on every call, so every fetch 404'd, was read as
+  "AniList has no cast", and persisted an empty `characters: []` — permanently,
+  since empties short-circuit. Verified live 2026-07-19 and fixed.
+- **Producers ride along on this query** (`studios { edges { isMain node } }`),
+  and it is the app's ONLY producers source — MAL's API has no producers field,
+  and the batched `TAGS_QUERY` already sits near the complexity ceiling, so this
+  single-title query (which has headroom) carries them instead. `isMain: false`
+  = producer. Consequence: `catalog.studios` is catalog-complete (MAL), while
+  producers exist only for titles the cast sweep has reached.
+- **`performAnilistCastSweep()` bulk-fills the STATUSED list** (~500-700 titles),
+  behind the /stats page's button — never the ~25k catalog. It reuses the
+  single-title path rather than batching `characters { voiceActors }` through
+  `Page.media`, which is exactly the complexity gamble this file keeps warning
+  about. **Resumable by construction**: each title persists as it lands and only
+  missing ones re-queue, so an interrupted ~20-minute run loses nothing (verified
+  live: cut at 69/665, restart queued 596). Fire-and-forget + `appendLog(
+  'anilist-cast-sweep', …)`, same idiom as meta-sync/catalog-crawl.
 - **Japanese VAs only** (`voiceActors(language: JAPANESE)`) — these are seiyuu, not
   dub actors. **All** of a character's VAs render, not just the first: dual casting
   (a child self + an adult inner monologue) and mid-series recasts are common.
@@ -237,6 +258,35 @@ A drag-and-drop rating surface at [src/pages/tier.tsx](src/pages/tier.tsx) (rout
 - **Remote-write failures are surfaced, not silent.** The endpoint returns the registry's per-provider `outcomes` map; the board shows a red badge on the card when a source didn't take. This matters because a SIMKL-first effective score would otherwise *hide* a failed SIMKL push (local MAL + local SIMKL already show the new value, so no discrepancy, and no sync corrects it). Both [tier.tsx](src/pages/tier.tsx) and `PersonalStateEditor` **iterate the outcomes map** rather than naming providers — hardcoding `mal`/`simkl` is what silently swallowed AniList failures once OAuth write-back shipped. `local` needs no filtering: its `writeRemote` is a no-op that always reports `ok`.
 - **SIMKL ratings bucket = `shows` for anime** (live-verified 2026-07-05: a TV anime rating returned `201 added.shows:1`, empty `not_found`, `type:"show"` — score-only, status untouched). `pushSimklRating` still tries a bucket by `media_type` and self-corrects on `not_found` (kept as a safety net — anime *movies* under `media_type=movie` try `movies` first and are not yet live-verified). Every write is logged (`[simkl-rating]`).
 - **Client write queue is serial** (`await` each before the next) — sidesteps SIMKL's 20s per-user write-lock and 1 req/s POST cap without batching. Optimistic move with revert-on-failure. Drag/drop is native HTML5 (zero-dep; score is the only persisted state, so within-row order doesn't matter). One shared hover-zoom preview element shows the large poster (not 500 large `<img>`s).
+
+### "/stats" — repartition of the statused list
+
+A read-only analysis surface at [src/pages/stats.tsx](src/pages/stats.tsx), its own
+route with its own lean URL state ([useStatsUrlState](src/hooks/useStatsUrlState.ts):
+just `st` statuses + `dim` dimension). Six dimensions, each a top-50 ranked by
+share desc: studios, seiyuu (with portraits), technical staff, producers, tags,
+genres.
+
+- **Scope is the STATUSED list** (`getEffectiveStatus` defined), not the ~25k
+  crawled catalog — a repartition over never-watched titles would describe MAL's
+  catalog rather than the user's taste. Unlike the tier board, `plan_to_watch` IS
+  offered (asking what your backlog is made of is legitimate; you just can't rate it).
+- **Aggregation counts DISTINCT anime, never credits** — a seiyuu voicing three
+  characters in one show counts once. Multi-valued dimensions sum past 100% on
+  purpose (a title has many genres); the percentage reads "X% of your list
+  features this", denominator = filtered title count.
+- **Computed server-side** ([api/anime/stats.ts](src/pages/api/anime/stats.ts) over
+  the pure [src/lib/stats.ts](src/lib/stats.ts)), same reasoning as `/quick-rate`:
+  shipping ~600 records PLUS their cast entries to rank them in the browser would
+  be tens of megabytes for a few kilobytes of output. The cast slice is read
+  separately — it is deliberately not in `getAnimeForDisplay()`'s join.
+- **Four dimensions are free off the record** (studios/genres from `catalog`,
+  tags/staff from `sources.anilist`); **seiyuu and producers are not** — both come
+  from the lazily-filled cast slice, so every dimension reports its own `covered`
+  count and the two cast-backed ones offer the sweep button when titles are missing.
+- Staff rows link to `/credits/staff/[id]`; **seiyuu rows deliberately do not** —
+  that page scans production credits, which never contain voice actors (see the
+  Cast section above).
 
 ### First-run onboarding (empty store)
 

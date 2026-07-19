@@ -10,5 +10,8 @@ export type { TierUrlState, UseTierUrlStateReturn } from './useTierUrlState';
 export { useQuickRateUrlState, QUICK_RATE_DEFAULTS, toQuickRateQuery } from './useQuickRateUrlState';
 export type { QuickRateUrlState, UseQuickRateUrlStateReturn } from './useQuickRateUrlState';
 
+export { useStatsUrlState, STATS_DEFAULTS } from './useStatsUrlState';
+export type { StatsUrlState, UseStatsUrlStateReturn } from './useStatsUrlState';
+
 export { useConnections } from './useConnections';
 

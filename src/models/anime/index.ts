@@ -259,7 +259,29 @@ export interface AniListCastEntry {
    *  (not an empty one) is the "never fetched" signal — same discipline as
    *  `banner_image: null` / `relations: []` on `AniListMetaEntry`. */
   characters: AniListCharacterEntry[];
+  /**
+   * Studio credits, split by `isMain` — **the app's only source of producers**.
+   * MAL's API has no producers field at all, and AniList's batched meta query
+   * already sits near the complexity ceiling (see `TAGS_QUERY`), so this rides
+   * along on the single-title cast query instead, which has complexity headroom
+   * to spare. Consequence: `isMain` studios here duplicate `catalog.studios`
+   * (MAL-sourced, catalog-complete), while producers exist ONLY for titles the
+   * cast sweep has reached. That asymmetry is unavoidable and accepted.
+   *
+   * `undefined` = fetched before this field existed, and is the backfill signal
+   * (same pattern as `staff`/`banner_image` on `AniListMetaEntry`); `[]` = asked
+   * and AniList has none.
+   */
+  studios?: AniListCastStudioEntry[];
   fetched_at: string;
+}
+
+/** One studio credit on a title. `isMain: false` is what the app calls a producer. */
+export interface AniListCastStudioEntry {
+  id: number;
+  name: string;
+  /** AniList's `isMain`: true = animation studio, false = producer. */
+  isMain: boolean;
 }
 
 export interface AniListMetaEntry {
