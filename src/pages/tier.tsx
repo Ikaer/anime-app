@@ -167,15 +167,15 @@ export default function TierPage() {
   }, [animes]);
 
   // Bucket the filtered list by effective score. Index 0 holds the tray.
-  // Still-watching anime aren't done yet, so they're excluded from the tray
-  // (unrated watching titles just don't appear on the board at all).
+  // Unrated `watching` titles DO land in the tray: rating mid-watch is a
+  // legitimate verdict ("I'm 8 episodes in and it's an 8"), and excluding them
+  // made the board render empty whenever the status filter was narrowed to
+  // En Cours alone. Dropping into a row is score-only — status is untouched.
   const buckets = useMemo(() => {
     const b = new Map<number, AnimeRecord[]>();
     for (let s = 0; s <= 10; s++) b.set(s, []);
     for (const a of filtered) {
-      const score = effScoreOf(a.id);
-      if (score === 0 && getEffectiveStatus(a) === 'watching') continue;
-      b.get(score)!.push(a);
+      b.get(effScoreOf(a.id))!.push(a);
     }
     for (const list of b.values()) list.sort((a, c) => getPrimaryTitle(a).localeCompare(getPrimaryTitle(c)));
     return b;
