@@ -13,6 +13,7 @@ export { default as PersonalStateEditor } from './PersonalStateEditor';
 export { default as MalConnectionBadge } from './MalConnectionBadge';
 export { default as FirstRunOnboarding } from './FirstRunOnboarding';
 export { default as SimklConnectionBadge } from './SimklConnectionBadge';
+export { default as AnilistConnectionBadge } from './AnilistConnectionBadge';
 
 export { default as AccountSection } from './sidebar/AccountSection';
 export { default as SimklSection } from './sidebar/SimklSection';
