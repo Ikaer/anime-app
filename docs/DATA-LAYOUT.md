@@ -98,6 +98,8 @@ doing it before H1 shrinks H1's reader count, so the natural order is
     anilist_import.json          # last-import count/date
   cache/
     recommendations.json         # rebuildable: crowd/AniList seeds + hydrated candidates
+  logs/
+    connection_log.json          # the sync-progress feed — app data, not diagnostics
 ```
 
 **Organized by role, not by provider.** The alternative (`mal/`, `simkl/`,
@@ -144,7 +146,7 @@ appearing under `catalog/` and `personal/` is the point, not a collision.
 | `simkl_sync_checkpoint.json` | `sync/simkl_checkpoint.json` |
 | `anilist_personal_config.json` | `sync/anilist_import.json` |
 | `recommendations.json` | `cache/recommendations.json` |
-| `connection_log.json` | *(see §3.2)* |
+| `connection_log.json` | `logs/connection_log.json` (see [§3.2](#32-the-connection-log-is-app-data)) |
 
 Merging the three `oauth_state` files is the one contents change proposed here —
 they hold transient per-provider CSRF state, are written and consumed within a
@@ -152,14 +154,36 @@ single OAuth round-trip, and a `{provider: state}` map is the same shape three
 times over. **Optional**; keep them separate if the merge feels like scope creep,
 in which case they become `auth/oauth_state_{mal,simkl,anilist}.json`.
 
-### 3.2 A note on logs
+### 3.2 The connection log is app data
 
-`LOGS_PATH` falls back to *the resolved data path* ([bootstrap.ts:69](../src/lib/bootstrap.ts)),
-so on a default install `connection_log.json` lands in the middle of the store.
-That is a separate seam (`logsFile`, not `dataFile`) and this document does not
-move it — but the fallback is worth revisiting, because "logs default into the
-data folder" is precisely the kind of thing that makes an `ls` uninformative.
-See [open question 3](#73-do-logs-get-their-own-folder).
+`connection_log.json` is named like diagnostics but behaves like a feature: it is
+the progress feed the Connections panel and the onboarding progress bar **poll**
+(there is no SSE for meta-sync, cast-sweep or the catalog crawl — the log *is* the
+transport). It is capped at 500 entries and read by the UI on a timer.
+
+So it belongs to the store, at a fixed `logs/connection_log.json` under
+`DATA_PATH` — **not** under `LOGS_PATH`. `LOGS_PATH` stays what its name says: a
+folder for debug/error output, independently configurable and free to point at a
+volume with a different retention policy.
+
+Today it is the other way round: `connection_log.json` is the *only* consumer of
+`LOGS_PATH`, which falls back to the data path
+([bootstrap.ts:70](../src/lib/bootstrap.ts)), so a default install drops it in the
+middle of the store and a configured `LOGS_PATH` moves a *feature's* data out of
+the store.
+
+Two consequences worth stating plainly:
+
+- **`LOGS_PATH` ends up with zero consumers.** It remains a valid, displayed
+  setting reserved for real diagnostics, but nothing writes there until something
+  does. That is deliberate, not an oversight — better than keeping a feature file
+  under a diagnostics path to justify the setting.
+- **`connectionLog.ts` gets simpler.** It stops resolving a second root and just
+  uses `dataFile('logs/connection_log.json')`. Its existing `LEGACY_LOG_FILE`
+  fallback (which already reads the pre-`LOGS_PATH` location) is superseded by the
+  migration and can go — with the caveat in [§5.1](#51-code-changes) about installs
+  that set `LOGS_PATH` explicitly. The `LOGS_PATH` export moves to the settings
+  route, its only other reader.
 
 ## 4. The orphan sweep
 
@@ -182,11 +206,14 @@ That migration is long shipped and verified.
 the legacy pure-hide dismiss list, superseded by 👎 feedback but **still read**
 and still excluded from the feed. It keeps its place under `user/`.
 
-**Recommended handling: quarantine, don't delete.** The sweep moves them to
-`_orphans/` inside the data folder rather than unlinking. Deleting user data on
-the strength of a grep is the one irreversible step in this plan, and the cost of
-keeping a folder around for a release is nil. Delete `_orphans/` by hand once the
-new layout has run for a while.
+**Handling: delete.** The sweep unlinks them. This is safe because of the
+[runbook](#52-runbook) rather than because of the grep: the migration runs against
+a stopped app, off a backup taken minutes earlier, so "irreversible" means
+"restore the backup" and quarantining would just add a folder to clean up later.
+
+The script still **lists what it will delete** and honours `--dry-run`, and the
+sweep stays behind its own `--sweep-orphans` flag — deleting is the default
+handling, not a default action.
 
 ## 5. Migration
 
@@ -229,7 +256,36 @@ the layout change can ship without touching anything's contents.
 - **Docker needs no change** — `/app/data` is a single volume mount and
   subdirectories live inside it.
 
-### 5.2 Which copies of the store get migrated
+### 5.2 Runbook
+
+A **script**, not a startup migration — matching the canonical-id precedent. A
+migration that runs inside a container on a NAS is a migration whose output
+nobody reads, and this one has a delete step.
+
+The app is down for the whole of it, and old code never sees the new layout:
+
+1. **Back up** the data folder.
+2. **Stop** the app.
+3. **Run** `node scripts/migrate-layout.js <dataPath> --sweep-orphans`
+   (`--dry-run` first — it prints the moves and the deletions).
+4. **Deploy** the new image.
+5. **Start** the app.
+
+Steps 3 and 4 are ordered but not interlocked, which is the one sharp edge:
+**the old image cannot read the new layout, and the new image cannot read the
+old one.** A wrong order or a half-finished step 3 shows up as an app that boots
+onto an empty store — indistinguishable, at a glance, from data loss.
+
+So the new code should **refuse to start** when it finds a pre-layout store
+(flat `animes_*.json` present, no `catalog/`) and say so, rather than falling
+through to first-run onboarding on top of a full store. This is cheap: one
+existence check at boot, in the same place `resolveDataPath()` is already called.
+
+Because the app is down and the backup is minutes old, rollback is "restore the
+backup and redeploy the old image" — which is what makes deleting the orphans
+([§4](#4-the-orphan-sweep)) reasonable.
+
+### 5.3 Which copies of the store get migrated
 
 There are several, and they are not rivals — `DATA_PATH` is configuration, and
 each copy is a different install:
@@ -252,16 +308,14 @@ Consequences for the migration:
   in the same change, or a post-migration pull silently repopulates the old flat
   names next to the new folders.
 - **A dev machine can hold a pre-layout store and a post-layout one at the same
-  time.** That is the strongest argument for [§7.2](#72-migration-script-or-automatic-on-startup)'s
-  refuse-to-start check: the app should say which layout it found rather than
+  time**, which is the second argument for the refuse-to-start check in
+  [§5.2](#52-runbook): the app should name the layout it found rather than
   quietly reading half a store.
 
-### 5.3 Rollback
+### 5.4 Rollback
 
-The script's inverse mapping is mechanical; a `--reverse` flag is cheap and worth
-having for one release. Simpler still: the pre-run backup. Take one — the
-canonical-id migration did, and it is the reason its findings doc can be so
-relaxed about what went wrong.
+Restore the step-1 backup and redeploy the old image. A `--reverse` flag is cheap
+(the mapping is mechanical) but is a convenience, not the plan — the backup is.
 
 ## 6. Risks
 
@@ -272,28 +326,22 @@ relaxed about what went wrong.
   a host path that looks like it. Passing `<dataPath>` explicitly (rather than
   relying on env) makes this visible.
 - **Migrating a copy instead of the original.** `DATA_PATH` is configuration and
-  the store exists in several places ([§5.2](#52-which-copies-of-the-store-get-migrated));
+  the store exists in several places ([§5.3](#53-which-copies-of-the-store-get-migrated));
   the debug pull in particular is downstream and must be re-pulled, not migrated.
+- **An install with `LOGS_PATH` set outside the data folder** keeps its
+  `connection_log.json` there, out of the script's reach. The script takes a
+  `<dataPath>` and cannot know about it. Handled by leaving the read fallback in
+  `connectionLog.ts` for one release rather than by widening the script's scope —
+  losing a capped progress log is the mildest failure in this document.
 
-## 7. Open questions
+## 7. Open items
 
-### 7.1 Quarantine or delete the orphans?
+None blocking. Sequenced behind [PROVIDER-PARITY.md](PROVIDER-PARITY.md) H1
+([§2](#2-prerequisite-h1)); the questions this document opened on orphan
+handling, migration mechanism and log placement are answered in
+[§4](#4-the-orphan-sweep), [§5.2](#52-runbook) and
+[§3.2](#32-the-connection-log-is-app-data) respectively.
 
-Recommendation above is quarantine to `_orphans/`. Deleting is one flag away if
-that reads as over-caution.
-
-### 7.2 Migration script, or automatic on startup?
-
-Recommendation: **script**, matching the canonical-id precedent. A startup
-migration that runs inside a container on a NAS is a migration whose output
-nobody reads. The counter-argument is that a script requires the user to know it
-exists — mitigated by having the app refuse to start with a clear message when it
-detects a pre-layout store.
-
-### 7.3 Do logs get their own folder?
-
-`connection_log.json` currently lands in the data folder by default (§3.2).
-Options: leave it, move it to `logs/` inside the data folder, or change the
-`LOGS_PATH` fallback to `<DATA_PATH>/logs`. The last is cleanest and is a
-two-line change in `bootstrap.ts`, but it is a behaviour change for existing
-installs that rely on the current fallback.
+One thing this does not decide: **merging the three `oauth_state` files**
+([§3.1](#31-full-mapping)) is still marked optional. It is the only proposed
+contents change and can be dropped without affecting anything else here.
