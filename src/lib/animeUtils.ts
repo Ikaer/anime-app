@@ -4,6 +4,7 @@ import type {
   LocalPersonalEntry, SourceIds, Discrepancy,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
+import { buildProviderStates, toAnimePersonal } from '@/lib/personalState';
 
 // ============================================================================
 // Display titles (English-first)
@@ -368,47 +369,6 @@ function catalogFromLocal(): Partial<AnimeCatalog> {
   return {};
 }
 
-/** MAL's `my_list_status` → the provider-neutral `AnimePersonal` field names. */
-function personalFromMal(mal?: MALAnime): Partial<AnimePersonal> {
-  const status = mal?.my_list_status;
-  if (!status) return {};
-  return {
-    status: status.status as AnimePersonal['status'],
-    score: status.score > 0 ? status.score : undefined,
-    progress: status.num_episodes_watched,
-  };
-}
-
-/** SIMKL's personal entry → `AnimePersonal` field names. */
-function personalFromSimkl(simkl?: SimklPersonalEntry): Partial<AnimePersonal> {
-  if (!simkl) return {};
-  return {
-    status: simkl.status,
-    score: simkl.score != null && simkl.score > 0 ? simkl.score : undefined,
-    progress: simkl.num_episodes_watched ?? undefined,
-  };
-}
-
-/** AniList's (anonymously-imported) personal entry → `AnimePersonal` field names. */
-function personalFromAnilist(entry?: AniListPersonalEntry): Partial<AnimePersonal> {
-  if (!entry) return {};
-  return {
-    status: entry.status,
-    score: entry.score != null && entry.score > 0 ? entry.score : undefined,
-    progress: entry.progress,
-  };
-}
-
-/** In-app local entry → `AnimePersonal` field names (docs/localRating/). */
-function personalFromLocal(entry?: LocalPersonalEntry): Partial<AnimePersonal> {
-  if (!entry) return {};
-  return {
-    status: entry.status,
-    score: entry.score != null && entry.score > 0 ? entry.score : undefined,
-    progress: entry.progress,
-  };
-}
-
 /**
  * The raw per-provider slices `toAnimeRecord` hydrates from — exactly what
  * `getAnimeRecord` gathers per canonical id before any merging happens.
@@ -445,9 +405,15 @@ export function toAnimeRecord(
     catalogPrecedence,
     { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anilistMeta), simkl: catalogFromSimkl(), local: catalogFromLocal() }
   );
+  const providerStates = buildProviderStates({ mal, simkl, anilist: anilistPersonal, local }, personalPrecedence);
   const { merged: personalMerged, provenance: personalProvenance } = mergeWithProvenance<AnimePersonal>(
     personalPrecedence,
-    { mal: personalFromMal(mal), simkl: personalFromSimkl(simkl), anilist: personalFromAnilist(anilistPersonal), local: personalFromLocal(local) }
+    {
+      mal: toAnimePersonal(providerStates.mal),
+      simkl: toAnimePersonal(providerStates.simkl),
+      anilist: toAnimePersonal(providerStates.anilist),
+      local: toAnimePersonal(providerStates.local),
+    }
   );
 
   return {

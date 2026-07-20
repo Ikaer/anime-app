@@ -14,11 +14,11 @@
    a real account (spec: docs/ANILIST-OAUTH.md, now WIP). Landed as a 4th PersonalWriter in
    src/lib/personalWriters.ts and flips hasWritableExternal(), so tier/quick-rate/detail all
    push to AniList once connected.
-[] AniList — the authenticated PRIVATE-LIST READ (the other half of the spec). The import in
-   src/lib/anilistPersonalSync.ts is still anonymous-by-username and doesn't send the viewer
-   token, so private profiles still can't be read. Also still open: AniList is excluded from
-   discrepancy detection until that exclusion gets a token gate (see store.ts
-   buildProviderStates).
+[X] AniList — the authenticated PRIVATE-LIST READ. Was already implemented (viewer's own list by
+   userId, private entries included); 2026-07-20 the anonymous by-username tier was REMOVED so the
+   import is authenticated-only. That closed the AniList discrepancy exclusion for free — no token
+   gate needed, since an entry in the slice now always belongs to a connected account. The state
+   extractors moved from store.ts to src/lib/personalState.ts, shared with hydration.
 [] Entry DELETION across providers — removing a status is a distinct Delete action on the list
    entry in BOTH AniList and MAL (not a status value), so today every remote writer refuses
    `status: null` with a reason. Fix belongs in the registry, not per-provider: add an optional

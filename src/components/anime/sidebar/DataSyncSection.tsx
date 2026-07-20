@@ -24,11 +24,11 @@ interface DataSyncSectionProps {
   anilistCatalogCrawlMessage: string;
   anilistCatalogStats: { totalCanonicalIds: number; anilistOnlyIds: number } | null;
   onAnilistCatalogCrawl: () => void;
+  anilistConnected: boolean;
   isAnilistImporting: boolean;
   anilistImportResult: AniListPersonalImportResult | null;
-  anilistImportUsername?: string;
   anilistImportStoredCount: number | null;
-  onAnilistPersonalImport: (username: string) => void;
+  onAnilistPersonalImport: () => void;
   simklConnected: boolean;
   isSimklSyncing: boolean;
   simklSyncMessage: string;
@@ -53,9 +53,9 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   anilistCatalogCrawlMessage,
   anilistCatalogStats,
   onAnilistCatalogCrawl,
+  anilistConnected,
   isAnilistImporting,
   anilistImportResult,
-  anilistImportUsername,
   anilistImportStoredCount,
   onAnilistPersonalImport,
   simklConnected,
@@ -64,11 +64,6 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
   onSimklSync,
 }) => {
   const t = useT();
-  const [anilistUsername, setAnilistUsername] = React.useState('');
-  // Pre-fill the field once the saved username loads, without clobbering typing.
-  React.useEffect(() => {
-    if (anilistImportUsername) setAnilistUsername(prev => prev || anilistImportUsername);
-  }, [anilistImportUsername]);
   const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistImporting || isSimklSyncing;
   const crawlDone = historicalStats !== null && historicalStats.remaining === 0;
 
@@ -81,9 +76,8 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
       });
     }
     switch (anilistImportResult.errorKind) {
-      case 'private': return t('dataSync.anilistImportPrivate');
+      case 'no_auth': return t('dataSync.anilistImportNoAuth');
       case 'not_found': return t('dataSync.anilistImportNotFound');
-      case 'empty': return t('dataSync.anilistImportEmpty');
       default: return t('dataSync.anilistImportError');
     }
   })();
@@ -148,31 +142,18 @@ const DataSyncSection: React.FC<DataSyncSectionProps> = ({
       )}
       {anilistCatalogCrawlMessage && <div className={styles.crawlStats}>{anilistCatalogCrawlMessage}</div>}
       <div className={styles.importRow}>
-        <input
-          type="text"
-          className={styles.usernameInput}
-          placeholder={t('dataSync.anilistUsernamePlaceholder')}
-          value={anilistUsername}
-          onChange={e => setAnilistUsername(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && anilistUsername.trim() && !anyBusy) onAnilistPersonalImport(anilistUsername);
-          }}
-          disabled={anyBusy}
-          spellCheck={false}
-          autoCapitalize="none"
-          autoCorrect="off"
-        />
         <Button
-          onClick={() => onAnilistPersonalImport(anilistUsername)}
-          disabled={anyBusy || !anilistUsername.trim()}
+          onClick={onAnilistPersonalImport}
+          disabled={anyBusy || !anilistConnected}
           variant="secondary"
         >
           {isAnilistImporting ? t('dataSync.anilistImporting') : t('dataSync.anilistImport')}
         </Button>
       </div>
+      {!anilistConnected && <div className={styles.crawlStats}>{t('dataSync.anilistImportNoAuth')}</div>}
       {anilistImportStoredCount !== null && anilistImportStoredCount > 0 && (
         <div className={styles.crawlStats}>
-          {t('dataSync.anilistImportStored', { count: anilistImportStoredCount, user: anilistImportUsername ?? '' })}
+          {t('dataSync.anilistImportStored', { count: anilistImportStoredCount })}
         </div>
       )}
       {importMessage && <div className={styles.crawlStats}>{importMessage}</div>}

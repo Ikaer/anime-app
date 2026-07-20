@@ -30,13 +30,7 @@ export interface MALAnime {
   updated_at?: string;
   media_type?: string;
   status?: string; // 'finished_airing' | 'currently_airing' | 'not_yet_aired'
-  my_list_status?: {
-    status: string; // 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch'
-    score: number;
-    num_episodes_watched: number;
-    is_rewatching: boolean;
-    updated_at: string;
-  };
+  my_list_status?: MALListStatus;
   num_episodes?: number;
   start_season?: {
     year: number;
@@ -80,6 +74,28 @@ export interface RelatedAnime {
 
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
 
+/**
+ * MAL's personal-list block — the counterpart to `SimklPersonalEntry` /
+ * `AniListPersonalEntry` / `LocalPersonalEntry`, except it lives INSIDE
+ * `MALAnime` rather than in its own slice file. `animes_mal.json` is stored as
+ * raw MAL JSON, so the API-shaped field names here are load-bearing: renaming
+ * them to the app's vocabulary would break the stored payload.
+ *
+ * `status` is a bare `string`, not `UserAnimeStatus`: it is whatever MAL sent,
+ * including the empty string the local write path seeds before a score-only
+ * patch. Read it through `personalState.ts`, never directly.
+ *
+ * The embedding is a legacy asymmetry, not a design choice — see
+ * docs/PROVIDER-PARITY.md "H1".
+ */
+export interface MALListStatus {
+  status: string; // 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch'
+  score: number;
+  num_episodes_watched: number;
+  is_rewatching: boolean;
+  updated_at: string;
+}
+
 export interface Studio {
   id: number;
   name: string;
@@ -117,8 +133,8 @@ export interface AniListPersonalEntry {
  * In-app **local** personal state (docs/localRating/) — the write target when no
  * external provider (MAL/SIMKL/…) is connected. Un-conflates local edits from
  * `animes_mal.json`'s `my_list_status`: local edits get their own slice
- * (`animes_local_personal.json`, keyed by canonical id) + `personalFromLocal`
- * extractor + precedence tier, exactly like SIMKL and AniList already have.
+ * (`animes_local_personal.json`, keyed by canonical id) + its own extractor in
+ * `personalState.ts` + precedence tier, like SIMKL and AniList already have.
  * Deliberately the locked shape (no `mal_id` — the store keys by canonical id
  * externally). Local edits ARE the authority, so `updated_at` is kept as a mtime.
  */
@@ -146,8 +162,10 @@ export interface SourceIds {
 }
 
 /**
- * One provider's RAW personal state, as fed to the discrepancy comparison
- * (docs/localRating/ phase 4). Built from `sources.<provider>`, never from the
+ * One provider's RAW personal state — the shape every provider's slice is
+ * mapped onto by `personalState.ts`, feeding BOTH hydration (narrowed to
+ * `AnimePersonal`) and the discrepancy comparison, which additionally needs the
+ * `present`/`total` fields below. Built from `sources.<provider>`, never from the
  * merged/effective value — the whole point is to detect mismatches *between*
  * sources. `total` is that provider's own episode count: MAL and SIMKL disagree
  * on totals often enough that the reconciliation below needs each side's own.

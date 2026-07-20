@@ -14,8 +14,9 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, ProviderPersonalState, UserAnimeStatus } from '@/models/anime';
+import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, MALListStatus } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/discrepancy';
+import { buildProviderStates } from '@/lib/personalState';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
 import { getResolvedPersonalPrecedence } from '@/lib/providers';
@@ -513,66 +514,6 @@ function assembleCrosswalk(
 }
 
 /**
- * Build the per-provider RAW personal states the discrepancy comparison runs on
- * (docs/localRating/ phase 4). Deliberately raw `sources.*` reads, NOT the
- * effective/merged values — the point is to detect mismatches *between* sources.
- *
- * `local` only participates when the local provider is enabled, which is exactly
- * what `personalPrecedence` already encodes (it carries `local` only then), so a
- * stray entry left behind by a disabled provider never surfaces as a mismatch.
- * `anilistPersonal` is STILL left out, but the original reason ("until it becomes
- * a writable provider") expired when AniList OAuth shipped. The reason now is
- * that the slice is filled by TWO paths with different actionability: the
- * anonymous username import (docs/PROVIDER-FREE.md P3b) fills it for users with
- * no AniList token, who cannot act on a mismatch it would surface. Including it
- * would have to be gated on `getAnilistAuthData().token != null` — the way
- * `local` is gated on `personalPrecedence` below — which is a deliberate
- * follow-up, not an oversight. See docs/ANILIST-OAUTH.md "Not yet done".
- */
-function buildProviderStates(
-  mal: MALAnime | undefined,
-  simkl: SimklPersonalEntry | undefined,
-  local: LocalPersonalEntry | undefined,
-  personalPrecedence: ProvenanceSource[]
-): Partial<Record<ProvenanceSource, ProviderPersonalState>> {
-  const states: Partial<Record<ProvenanceSource, ProviderPersonalState>> = {};
-
-  // A MAL slice always exists for a MAL-catalogued title, so "present" means
-  // "statused on your MAL list", not "the catalog knows about it".
-  if (mal) {
-    const s = mal.my_list_status;
-    states.mal = {
-      status: s?.status ? (s.status as UserAnimeStatus) : undefined,
-      score: s?.score ? s.score : null,
-      progress: s?.num_episodes_watched ?? null,
-      total: mal.num_episodes ?? null,
-      present: !!s?.status,
-    };
-  }
-  if (simkl) {
-    states.simkl = {
-      status: simkl.status,
-      score: simkl.score ?? null,
-      progress: simkl.num_episodes_watched ?? null,
-      total: simkl.total_episodes ?? null,
-      present: true,
-    };
-  }
-  if (local && personalPrecedence.includes('local')) {
-    states.local = {
-      status: local.status,
-      score: local.score ?? null,
-      progress: local.progress ?? null,
-      // The local slice carries no total of its own — it's an in-app annotation
-      // on a catalogued title, so the catalog's count is its count.
-      total: mal?.num_episodes ?? null,
-      present: true,
-    };
-  }
-  return states;
-}
-
-/**
  * Assemble one `AnimeRecord` row for a canonical id from the already-read
  * slices. Shared by `getAnimeForDisplay` (loops every canonical id) and
  * `getAnimeByCanonicalId` (looks up one, bypassing the cache). Returns
@@ -602,7 +543,9 @@ function assembleDisplayRow(
   const malId = mal?.id ?? toNum(crosswalk?.mal);
   if (malId === undefined) return undefined;
   const hidden = hiddenIds.has(canonicalId);
-  const discrepancy = computeDiscrepancy(buildProviderStates(mal, simkl, local, personalPrecedence));
+  const discrepancy = computeDiscrepancy(
+    buildProviderStates({ mal, simkl, anilist: anilistPersonal, local }, personalPrecedence)
+  );
   return toAnimeRecord(
     { mal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
     canonicalId,
@@ -728,14 +671,6 @@ export function getSyncMetadata(): SyncMetadata | null {
 // ============================================================================
 // Personal status writes (MAL's `my_list_status` slice of the local record)
 // ============================================================================
-
-interface MALListStatus {
-  status: string;
-  score: number;
-  num_episodes_watched: number;
-  is_rewatching: boolean;
-  updated_at: string;
-}
 
 interface PersonalStatusUpdateResult {
   updated: boolean;

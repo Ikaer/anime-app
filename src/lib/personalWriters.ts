@@ -1,8 +1,8 @@
 /**
  * Personal-state **writer registry** (server-only, docs/localRating/ phase 2).
  *
- * The write-side mirror of the read-side per-provider *extractors*
- * (`personalFromMal`, `personalFromSimkl`, …). A rating/status/progress edit
+ * The write-side mirror of the read-side per-provider *extractors* in
+ * [personalState.ts](personalState.ts). A rating/status/progress edit
  * fans out to every enabled writable provider — MAL, SIMKL, and the in-app
  * `local` slice — and returns a per-provider outcome map. Adding a writable
  * provider (Betaseries, a future AniList OAuth) is a one-line registry entry:

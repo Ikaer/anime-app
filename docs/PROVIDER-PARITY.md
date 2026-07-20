@@ -3,7 +3,7 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Todo`** — inventory complete, no fix started.
+> **Status: `WIP`** — A1 and G1 `Done` (2026-07-20). Rest `Todo`.
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
 > this document measures against) and [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md)
 > (whose dropped registry is **not** what this proposes — see [§3](#3-the-unifying-fix)).
@@ -57,7 +57,7 @@ they are not a sequence.
 
 Highest ratio in the codebase: the expensive half is already built.
 
-#### A1 — `buildProviderStates` omits AniList
+#### A1 — `buildProviderStates` omits AniList — **`Done` 2026-07-20**
 
 **Evidence:** [store.ts:532](../src/lib/store.ts) —
 `buildProviderStates(mal, simkl, local, personalPrecedence)`, three positional
@@ -69,12 +69,78 @@ to `toAnimeRecord` at [store.ts:607](../src/lib/store.ts), one line after the
 `disc` filter, never shows a `DiscrepancyBadge`. A user whose AniList list
 disagrees with MAL is told the two agree.
 
-**Fix:** build an `anilist` state from `anilistPersonal`. Both consumers already
-handle it. Note the entry is keyed on the AniList media id and carries no
-episode total of its own — same situation as `local`, which resolves it by
-borrowing the catalog count.
+**What shipped — three findings the inventory's "small, one function" missed:**
 
-**Size:** small. One function, no consumer changes.
+1. **The real defect was a duplicated mapping, not a missing branch.** The
+   slice → status/score/progress mapping existed *twice*: `personalFrom*` in
+   `animeUtils.ts` for hydration, and inline branches in `buildProviderStates`
+   for discrepancy. `ProviderPersonalState` is a strict superset of
+   `AnimePersonal` (it adds `present` and `total`), so the two were the same
+   function with different lossiness — and a provider added to one was not added
+   to the other. That is the actual mechanism by which AniList ended up hydrated
+   but invisible. Both now come from one extractor table in the new
+   [personalState.ts](../src/lib/personalState.ts); hydration narrows via
+   `toAnimePersonal`. Adding a provider is one row, and it is not possible to add
+   it to one consumer only.
+
+2. **The gate was the hard part, and it was dissolved rather than built.** The
+   slice was filled by two paths with different actionability — OAuth login and
+   the anonymous by-username import — so including AniList appeared to need a
+   token gate (`store.ts` said so; so did ANILIST-OAUTH.md). Instead the
+   **anonymous by-username import was removed entirely**: post-OAuth it read a
+   list the user could not write back to, and it was the only way the slice could
+   be filled by someone with no AniList connection. With it gone, an entry always
+   belongs to a connected account, so there is nothing to gate. Removing a
+   feature was cheaper and more correct than adding the conditional.
+
+3. **Participation is now expressed once.** A provider is in the map iff it
+   appears in the resolved `personalPrecedence` — the same list that decides who
+   can win a hydrated field. Previously `local` was gated that way ad hoc and the
+   others were unconditional. This is the predicate D2's capability descriptor
+   should replace when it lands.
+
+**Two defects caught by testing the new path rather than assuming it:**
+
+- **Presence meant "the slice has a key", which is not the same as "the user has
+  an entry."** The AniList and local writers reflect a push by upserting an entry
+  keyed on the provider id, and a patch carrying only a cleared score leaves an
+  entry with no personal dimension at all — live-observed in the real store as
+  `{"a_31": {"anilist_id": 198409}}`. Admitting AniList would have made that
+  artifact raise a phantom "present on AniList, absent from MAL" split. The rule
+  is now `hasPersonalData`, asked of every provider **except MAL**, which keeps
+  its stricter `!!status`: MAL's own artifact shape is `{status:'', score:8}`,
+  which `hasPersonalData` would admit and `!!status` correctly rejects. Verified
+  inert on the real store — 0 of 646 SIMKL entries change presence; the only
+  entry affected anywhere is the one AniList artifact above.
+- **The fully-watched reconciliation used `progress === total`, which breaks for
+  a provider borrowing another's episode count.** AniList's personal entry has no
+  total of its own, so it borrows the catalog's: MAL says 12 episodes, AniList
+  says you watched 13 of its own 13, and `13 !== 12` flagged a progress
+  disagreement — the exact count disagreement the exception exists to absorb.
+  Now `>=`. Watching past the total is never itself a progress disagreement.
+  Also verified inert on today's data: 0 rows across both stores have any
+  provider reporting progress above its total, which is the only case where the
+  two operators differ.
+
+**Also in this pass:** `MALListStatus` extracted as a named model type (MAL's
+`my_list_status` was the one anonymous inline personal shape, and `store.ts`
+carried a private duplicate of it). **One deliberate behaviour change:** MAL's
+empty status string (`''`, seeded by the write path before a score-only patch)
+now normalizes to `undefined` in hydration, as it always did in the comparison.
+It previously counted as a defined value, so it could win the precedence merge
+and make an unstatused title read as statused. Latent on the real store — a
+25,370-row before/after diff of the hydrated `personal` block showed **zero**
+differences, so the refactor is behaviour-preserving on today's data.
+
+**Follow-up this exposed (not fixed here):** `AniListPersonalEntry` carries no
+`episodes` count, which is why it borrows MAL's. The `>=` relaxation absorbs the
+symptom; storing AniList's own total from the import query would remove the
+guess. Same shape as the rest of this document — one provider's data forced
+through another provider's units. Small, and worth doing when AniList personal
+data grows past one account's list.
+
+**Size:** was "small, one function, no consumer changes" — actually a shared
+extractor module, a feature removal, and its UI/locale/API surface.
 
 #### A2 — `PRESENCE_ANCHORS = ['mal']`
 
@@ -309,7 +375,7 @@ enablement check, not one abstracted one.
 
 ### G. Documentation drift
 
-#### G1 — CLAUDE.md understates the AniList integration
+#### G1 — CLAUDE.md understates the AniList integration — **`Done` 2026-07-20**
 
 **Evidence:** CLAUDE.md's AniList OAuth section lists *"the authenticated
 private-list read is not implemented yet"* as an open item.
@@ -320,7 +386,56 @@ private entries included, and passes the bearer token even on by-name reads.
 **Symptom:** the doc understates capability, which matters because CLAUDE.md is
 the map future work is planned against — a real feature reads as missing.
 
-**Size:** trivial. Worth doing in the same pass as any AniList fix.
+**Fixed alongside A1**, which is also what made the claim unambiguous: with the
+by-username tier removed, the import *is* the authenticated private-list read,
+rather than one branch of a dual-mode function. CLAUDE.md now documents it, and
+`docs/mytodo.md`'s corresponding open item is closed.
+
+### H. Structural asymmetry: MAL conflates catalog and personal
+
+#### H1 — MAL's personal state lives inside its catalog payload
+
+**Evidence:** every other provider stores personal state in its own slice file
+with its own entry type — `SimklPersonalEntry` / `animes_simkl.json`,
+`AniListPersonalEntry` / `animes_anilist_personal.json`, `LocalPersonalEntry` /
+`animes_local_personal.json`. MAL alone embeds it: `MALListStatus` sits inside
+`MALAnime` inside `animes_mal.json`, which is also the catalog.
+
+**The justification does not survive contact with AniList.** The stated reason is
+that MAL's API ships catalog and list status in one payload and the file is
+stored as raw MAL JSON. But **AniList's API does exactly the same** — `Media`
+carries `mediaListEntry`, and the list query returns media alongside entries —
+and AniList is nonetheless split into `AniListMetaEntry` (catalog, tags, staff,
+banner, relations) and `AniListPersonalEntry` (status/score/progress), in two
+files. So the split is achievable against a combined API; MAL is simply the one
+provider that predates the convention. **The asymmetry is legacy, not design.**
+
+**What it costs today** — this is not cosmetic:
+
+- **The presence exception.** MAL is the only provider whose `present` cannot
+  mean "the slice has an entry", because its slice exists for every *catalogued*
+  title. Hence `!!status` and the carve-out documented in `personalState.ts`.
+  Split the file and the exception evaporates: presence becomes "there is a row
+  in the personal slice", uniformly.
+- **A rating write rewrites 39 MB.** `malWriter.writeLocal` calls `getAllAnime()`
+  → mutate → `saveAnime()`, which serializes the *entire catalog* to record one
+  score. It also bumps `animes_mal.json`'s mtime, invalidating the parse cache
+  and every assembled row — for a personal edit that touched one field. The tier
+  board's serial write queue does this per drag.
+- **`MALAnime` cannot be typed as catalog.** `catalogFromMal` and
+  `providerStateFromMal` both take the whole record because there is nothing
+  narrower to take.
+
+**Fix:** extract `my_list_status` into `animes_mal_personal.json` keyed by
+canonical id, with `MALPersonalEntry` joining the other three. `MALAnime` becomes
+pure catalog. One migration script; the write path, `malSync`'s
+`updatePersonalStatusBatch`, and the ~12 files reading `my_list_status` follow.
+Note **C1 overlaps**: three of those readers are the list views that should be
+going through `getEffective*` anyway, so doing C1 first shrinks this.
+
+**Size:** medium, and touches shipped data — needs a migration with a backup,
+like the canonical-id cutover had. The 39 MB write is the strongest argument for
+scheduling it rather than filing it.
 
 ## 3. The unifying fix
 
@@ -369,13 +484,23 @@ in particular are small, high-symptom, and blocked on nothing.
 
 Nothing here is a committed plan — it is the ranking implied by the inventory.
 
-1. **A1, C1** — small, self-contained, immediately visible. C1 is the one that
-   makes the app look empty to a non-MAL user; A1 is the exemplar gap.
-2. **G1** — trivial, do it alongside 1.
+1. ~~**A1**~~ **Done 2026-07-20**, together with ~~**G1**~~. **C1** remains and
+   is now the top item — it is the one that makes the app look empty to a
+   non-MAL user.
+
+   > A1 came in larger than ranked, and the lesson generalizes to the rest of
+   > this document: the gaps are stated as "generic core, hardcoded feeder", but
+   > the feeder is usually hardcoded *because the mapping it needs exists twice*.
+   > Look for the duplicate before adding the branch. And check whether a
+   > blocking asymmetry can be **removed** rather than conditionalized — A2 and
+   > D1 both describe asymmetries that may not need to exist.
 3. **B1, then B2** — unblocks the keyless onboarding path end to end. The
    highest-value fix, and the one most aligned with the provider-free direction.
 4. **D2** — the capability descriptor, once the standalone defects are cleared.
 5. **A2, D1** — fall out of D2 cheaply.
 6. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
 7. **F1** — independent; slot in whenever cron matters.
-8. **B3** — recommend deferring indefinitely. Documented as deliberate.
+8. **H1** — the MAL catalog/personal split. Independent of everything above and
+   schedulable whenever; do **C1** first, which removes three of its readers. The
+   39 MB rewrite per rating is the reason not to leave it filed forever.
+9. **B3** — recommend deferring indefinitely. Documented as deliberate.

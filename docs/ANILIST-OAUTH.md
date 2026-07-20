@@ -190,12 +190,15 @@ standalone build is unaffected. Worth remembering before concluding that a
   Deferred by the user 2026-07-18 ("for the moment it's ok"). Until it exists,
   the UI correctly only offers "clear" to a local-only user.
 
-- **AniList is absent from discrepancy detection.** `buildProviderStates` in
-  `store.ts` still excludes `anilistPersonal`. Its original reason ("until it
-  becomes a writable provider") expired with this change; the live reason is that
-  the slice is *also* filled by the anonymous username import for users with no
-  token, who can't act on a mismatch. Including it needs a token gate, mirroring
-  how `local` is gated on `personalPrecedence`.
+- ~~**AniList is absent from discrepancy detection.**~~ **RESOLVED 2026-07-20**
+  (docs/PROVIDER-PARITY.md A1). The blocker was that the slice could *also* be
+  filled by the anonymous username import, for users with no token who couldn't
+  act on a mismatch — so including it needed a token gate. Rather than add the
+  gate, **the anonymous by-username import was removed entirely**: it read a list
+  the user couldn't write back to, and it was the sole source of the ambiguity.
+  With it gone an entry here always belongs to a connected account, so no gate is
+  needed and AniList participates like any other provider. `buildProviderStates`
+  also moved out of `store.ts` into the shared `personalState.ts` extractor table.
 - **Write surfaces**: because the writer lives in the shared registry, ALL of the
   tier board, `/quick-rate`, and the detail-page editor push to AniList once
   connected — broader than this doc's original "keep it to one surface first".

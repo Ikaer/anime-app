@@ -1,25 +1,17 @@
 /**
- * AniList personal-list import (docs/PROVIDER-FREE.md Phase 3 "P3b" — the
- * north-star no-key feature). Read-only: pull an AniList user's anime list,
- * normalize it to MAL-keyed AniListPersonalEntry records, and persist.
+ * AniList personal-list import: pulls the **authenticated viewer's OWN** list by
+ * `userId`, private entries included, normalizes it to MAL-keyed
+ * `AniListPersonalEntry` records, and persists.
  *
- * **Two tiers, one code path** (docs/ANILIST-OAUTH.md):
- *  - **Anonymous** — by USERNAME, public profiles only. The username is
- *    persisted so re-import needs no re-entry.
- *  - **Authenticated** — the OAuth'd viewer's OWN list, by `userId`, with a
- *    Bearer token. This is what unlocks a **private** list, and it is the read
- *    half of the OAuth spec. A token is attached whenever we have one (it is
- *    harmless on a public-username read and unlocks the private case when the
- *    username happens to be the viewer's own).
+ * **Requires a token — there is no anonymous read.** That is an invariant other
+ * code depends on, not just a limitation: because every entry in
+ * `animes_anilist_personal.json` belongs to a connected account, AniList can
+ * participate in discrepancy detection without an actionability gate.
  *
  * `MediaListCollection` returns the WHOLE list in one response — it is not a
  * paginated connection — so this is a SINGLE GraphQL call, not a throttled
  * batch loop like the tags/catalog syncs. The endpoint / 429-retry style
  * mirrors anilistSync.ts.
- *
- * Phase 0 (2026-07-12) verified three distinguishable outcomes, so we never
- * fail opaquely: public → data; private profile → 404 "Private User";
- * nonexistent username → 404 "User not found".
  *
  * Server-only (persists via store.ts / jsonStore).
  */
@@ -55,32 +47,25 @@ const LIST_SELECTION = `
     }
   }`;
 
-const LIST_QUERY_BY_NAME = `
-query ($u: String) {
-  MediaListCollection(userName: $u, type: ANIME) {${LIST_SELECTION}
-  }
-}`;
-
-// The authenticated variant. Keyed on `userId` rather than `userName` because
-// that is what the token identifies — and a viewer reading their OWN list by id
-// is the case AniList lets through the private-profile gate.
+// Keyed on `userId` rather than `userName` because that is what the token
+// identifies — and a viewer reading their OWN list by id is the case AniList
+// lets through the private-profile gate.
 const LIST_QUERY_BY_ID = `
 query ($id: Int) {
   MediaListCollection(userId: $id, type: ANIME) {${LIST_SELECTION}
   }
 }`;
 
-// ---- Persisted config (username + last-import stats). Not part of the merged
-// record, so it writes through jsonStore directly (no cache to invalidate). ----
+// ---- Persisted last-import stats. Not part of the merged record, so it writes
+// through jsonStore directly (no cache to invalidate). The viewer's name is not
+// persisted here — it is available live from the auth data. ----
 export interface AniListPersonalConfig {
-  username: string | null;
   lastImportedCount: number | null;
   lastImportedAt: string | null;
 }
 
 export function getAnilistPersonalConfig(): AniListPersonalConfig {
   return readJsonFile<AniListPersonalConfig>(CONFIG_FILE, {
-    username: null,
     lastImportedCount: null,
     lastImportedAt: null,
   });
@@ -91,18 +76,21 @@ function saveAnilistPersonalConfig(cfg: AniListPersonalConfig): void {
 }
 
 // ---- Import result + error kinds ----
-export type AniListPersonalErrorKind = 'private' | 'not_found' | 'empty' | 'network';
+// `no_auth` = not connected; `not_found` = connected but the viewer could not be
+// identified. There is no "private profile" kind: reading your own list is never
+// blocked for privacy.
+export type AniListPersonalErrorKind = 'no_auth' | 'not_found' | 'network';
 
 export interface AniListPersonalImportResult {
   ok: boolean;
   imported: number;      // entries stored (MAL-id-keyed; visibility depends on catalog coverage)
   skippedNoMal: number;  // AniList-only entries (media.idMal === null) — skipped, can't join yet
-  username?: string;
+  username?: string;     // the viewer's AniList name, for display
   error?: string;
   errorKind?: AniListPersonalErrorKind;
 }
 
-// Typed error so the fetch layer can surface the private/not-found distinction.
+// Typed error so the fetch layer can surface the error kind to the API route.
 class AniListPersonalError extends Error {
   constructor(message: string, public kind: AniListPersonalErrorKind) {
     super(message);
@@ -133,8 +121,6 @@ async function fetchList(
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
-      // Attached whenever we have a token: harmless on a public read, and the
-      // only thing that unlocks a private list.
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
     body: JSON.stringify({ query, variables }),
@@ -159,7 +145,6 @@ async function fetchList(
   if (Array.isArray(json.errors) && json.errors.length > 0) {
     const first = json.errors[0]?.message ?? '';
     const joined = json.errors.map(e => e.message ?? 'unknown error').join('; ');
-    if (first.includes('Private User')) throw new AniListPersonalError(joined, 'private');
     if (first.includes('User not found')) throw new AniListPersonalError(joined, 'not_found');
     throw new AniListPersonalError(`AniList GraphQL error: ${joined}`, 'network');
   }
@@ -221,31 +206,21 @@ export async function fetchAuthenticatedAnilistList(): Promise<AniListRemoteEntr
 }
 
 /**
- * Import an AniList user's anime list. Single GraphQL call, full-replace store
- * write (removals drop out for free). Returns real counts in the response so
- * the API route can stay synchronous.
- *
- * With no username and a live token, imports the **viewer's own** list (private
- * included). With a username, reads by name — still token-bearing when we have
- * one, so a logged-in user typing their own name gets the private list too.
+ * Import the connected viewer's AniList list. Single GraphQL call, full-replace
+ * store write (removals drop out for free). Returns real counts in the response
+ * so the API route can stay synchronous.
  */
-export async function importAnilistPersonalList(usernameRaw: string): Promise<AniListPersonalImportResult> {
-  const username = (usernameRaw || '').trim();
+export async function importAnilistPersonalList(): Promise<AniListPersonalImportResult> {
   const accessToken = getAnilistAccessToken();
-  if (!username && !accessToken) {
-    return { ok: false, imported: 0, skippedNoMal: 0, error: 'Username required', errorKind: 'empty' };
+  if (!accessToken) {
+    return { ok: false, imported: 0, skippedNoMal: 0, error: 'Not connected to AniList', errorKind: 'no_auth' };
   }
 
-  // Label for logs/config: the typed name, else the token holder's.
   const viewerName = getAnilistAuthData().user?.name;
-  const label = username || viewerName || 'viewer';
+  const label = viewerName || 'viewer';
 
   try {
-    const entries = username
-      ? normalizeLists(
-          (await fetchList(LIST_QUERY_BY_NAME, { u: username }, accessToken)).data?.MediaListCollection?.lists ?? []
-        )
-      : (await fetchAuthenticatedAnilistList()) ?? [];
+    const entries = (await fetchAuthenticatedAnilistList()) ?? [];
 
     const byMalId: Record<string, AniListPersonalEntry> = {};
     let skippedNoMal = 0;
@@ -269,7 +244,6 @@ export async function importAnilistPersonalList(usernameRaw: string): Promise<An
     replaceAnilistPersonalEntries(byMalId);
     const imported = Object.keys(byMalId).length;
     saveAnilistPersonalConfig({
-      username: username || viewerName || null,
       lastImportedCount: imported,
       lastImportedAt: new Date().toISOString(),
     });
@@ -278,7 +252,7 @@ export async function importAnilistPersonalList(usernameRaw: string): Promise<An
       'anilist-personal-import',
       'success',
       `AniList personal import for @${label}: ${imported} stored, ${skippedNoMal} skipped (no MAL id)`,
-      { username: label, authenticated: accessToken != null, imported, skippedNoMal }
+      { username: label, imported, skippedNoMal }
     );
 
     return { ok: true, imported, skippedNoMal, username: label };

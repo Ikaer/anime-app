@@ -51,10 +51,9 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [isAnilistAuthLoading, setIsAnilistAuthLoading] = useState(true);
   const [anilistAuthError, setAnilistAuthError] = useState('');
 
-  // AniList personal-list import state (docs/PROVIDER-FREE.md P3b, anonymous by username)
+  // AniList personal-list import state (the OAuth'd viewer's own list)
   const [isAnilistImporting, setIsAnilistImporting] = useState(false);
   const [anilistImportResult, setAnilistImportResult] = useState<AniListPersonalImportResult | null>(null);
-  const [anilistImportUsername, setAnilistImportUsername] = useState<string | undefined>(undefined);
   const [anilistImportStoredCount, setAnilistImportStoredCount] = useState<number | null>(null);
   const [anilistPushStats, setAnilistPushStats] = useState<AniListPushStats | null>(null);
 
@@ -90,7 +89,6 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       const res = await fetch('/api/anime/anilist/personal-import');
       if (res.ok) {
         const data = await res.json();
-        setAnilistImportUsername(data.username || undefined);
         setAnilistImportStoredCount(typeof data.storedCount === 'number' ? data.storedCount : null);
       }
     } catch {
@@ -409,21 +407,14 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  const handleAnilistPersonalImport = async (username: string) => {
-    const u = username.trim();
-    if (!u) return;
+  const handleAnilistPersonalImport = async () => {
     setIsAnilistImporting(true);
     setAnilistImportResult(null);
     try {
-      const response = await fetch('/api/anime/anilist/personal-import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u }),
-      });
+      const response = await fetch('/api/anime/anilist/personal-import', { method: 'POST' });
       const data: AniListPersonalImportResult = await response.json();
       setAnilistImportResult(data);
       if (data.ok) {
-        setAnilistImportUsername(u);
         fetchAnilistImportConfig();
         onDataChanged?.();
       }
@@ -492,7 +483,6 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       onCatalogCrawl: handleAnilistCatalogCrawl,
       isImporting: isAnilistImporting,
       importResult: anilistImportResult,
-      importUsername: anilistImportUsername,
       importStoredCount: anilistImportStoredCount,
       onPersonalImport: handleAnilistPersonalImport,
       pushStats: anilistPushStats,

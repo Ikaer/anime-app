@@ -35,7 +35,7 @@ All data is stored as JSON files under `DATA_PATH` (env var, defaults to `/app/d
 - `animes_hidden.json` — array of hidden **canonical ids**
 - `animes_simkl.json` — SIMKL personal entries (`SimklPersonalEntry`), keyed by canonical id
 - `animes_anilist_meta.json` — AniList catalog metadata (tags + staff + banner + catalog fields) keyed by canonical id (see "AniList tags + staff integration"). The code calls it `anilistMeta`.
-- `animes_anilist_personal.json` — anonymously-imported AniList personal-list entries (`AniListPersonalEntry`), keyed by canonical id (see "AniList tags + staff integration" P3b).
+- `animes_anilist_personal.json` — AniList personal-list entries (`AniListPersonalEntry`) imported from the **OAuth'd viewer's own list**, keyed by canonical id (see "AniList OAuth" below). An entry here always belongs to a connected account — there is no anonymous import path.
 - `animes_anilist_cast.json` — characters + Japanese seiyuu (`AniListCastEntry`), keyed by canonical id. **The one AniList slice that is NOT joined in `getAnimeForDisplay()`** — read only by the detail page, filled lazily per title (see "Cast" below).
 - `animes_local_personal.json` — **in-app** personal state (`LocalPersonalEntry`: status/score/progress + `updated_at`), keyed by canonical id (see "Local personal-data provider").
 - `mal_auth.json` — OAuth token + user data
@@ -68,7 +68,7 @@ interface AnimeRecord {
 }
 ```
 
-- **Hydration engine** ([src/lib/animeUtils.ts](src/lib/animeUtils.ts), `toAnimeRecord`): each provider exposes a partial extractor (`catalogFromMal`, `catalogFromAnilist`, `personalFromSimkl`, …); a generic precedence merge walks every field and takes the first source in precedence order with a defined value, recording the winner in `provenance`. Catalog precedence defaults MAL-first (`DEFAULT_CATALOG_PRECEDENCE`); personal precedence is SIMKL > MAL > AniList (`DEFAULT_PERSONAL_PRECEDENCE`).
+- **Hydration engine** ([src/lib/animeUtils.ts](src/lib/animeUtils.ts), `toAnimeRecord`): each provider exposes a partial extractor — catalog ones (`catalogFromMal`, `catalogFromAnilist`, …) live in `animeUtils.ts`; the **personal** ones live in [src/lib/personalState.ts](src/lib/personalState.ts) because they are shared with discrepancy detection (see below). A generic precedence merge walks every field and takes the first source in precedence order with a defined value, recording the winner in `provenance`. Catalog precedence defaults MAL-first (`DEFAULT_CATALOG_PRECEDENCE`); personal precedence is SIMKL > MAL > AniList (`DEFAULT_PERSONAL_PRECEDENCE`).
 - **`getEffectiveStatus`/`getEffectiveScore`/`getEffectiveProgress`** in `animeUtils.ts` are now thin reads of the already-hydrated `record.personal.*` — the SIMKL>MAL>AniList precedence itself lives in the hydration engine above, not in these three helpers. They're kept as the read seam: every personal read used for filtering, seeding, or exclusion still goes through them rather than reading `.sources.*` directly.
 - **The reco engine is the one deliberately MAL-keyed exception.** `computeFeed`/`computeSimilarTo` in [src/lib/recommendations.ts](src/lib/recommendations.ts) build an internal `Map<number, AnimeRecord>` keyed by `crosswalk.mal` (coerced via `toNum`), because MAL/AniList crowd edges, suggestions, and `recommendations.json` all arrive as MAL ids. Only the *outward* edges of the engine (each `RecommendationItem`'s `.id`, hidden/feedback exclusion checks) are canonical — see docs/PROVIDER-FREE-CUTOVER.md "Risks".
 - Legacy MAL-numeric-id URLs (bookmarks predating the cutover) resolve via `resolveByMalId()` and redirect to the canonical URL. `/rate?id=` is the one remaining genuinely-MAL-id-keyed route (`getAnimeByIdForDisplay()`), by design.
@@ -125,7 +125,7 @@ A fourth personal source — the app's own — so the whole thing is usable with
 - **One predicate ties it together**: `hasWritableExternal()` in [src/lib/providers.ts](src/lib/providers.ts) — "is a writable external personal provider connected?", keyed on token **presence, not validity**. The local provider is enabled by default iff that's false, so an existing MAL/SIMKL user is unaffected (`local` is then absent from the precedence list entirely and a stray slice entry is never consulted). Settings expose `localProviderEnabled` / `localPrecedenceMode` (`auto` | `localTop` | `localBottom`); the pure math is `resolveLocalPrecedence` in `animeUtils.ts`. `providers.ts` is its own module to dodge the settings↔simkl import cycle.
 - **Writes go through a registry**, [src/lib/personalWriters.ts](src/lib/personalWriters.ts): each `PersonalWriter` has `isEnabled` / `writeLocal` (sync) / `writeRemote` (async), and `writePersonal(canonicalId, patch)` runs **every** local-authority write before **any** remote push (structurally encoding local-cache-authority), then fans the remotes out serially (SIMKL's 20s write-lock). It returns `{ found, outcomes: Record<providerId, WriteOutcome> }` — both `rating.ts` and `mal-status.ts` are collapsed onto it. SIMKL's writer is score-only. `PersonalPatch.status = null` means **clear**, which no remote can express (MAL models it as a list DELETE), so remote writers report it unsupported and the UI only offers it when `hasWritableExternal()` is false.
 - **The bootstrap surface** is [PersonalStateEditor](src/components/anime/PersonalStateEditor.tsx) on the detail page — the one control that takes an *unstatused catalog title* to statused + scored. It has to exist: the tier board only fetches already-statused titles and the reco feed needs completed+scored seeds, so a fresh local-only install renders empty everywhere else. No auto-complete on rating (that's `docs/quickRate/`'s idea, not this page's).
-- **Discrepancy detection is N-provider**, [src/lib/discrepancy.ts](src/lib/discrepancy.ts) (client-safe/pure, the old `simklCompare.ts`): `computeDiscrepancy(states)` takes a `Partial<Record<ProvenanceSource, ProviderPersonalState>>` built from the RAW slices by `buildProviderStates` in `store.ts`, and reports a per-provider map + which dimensions `disagree`. Two rules worth knowing: differing progress where every present provider has watched all of **its own** total is not a disagreement (MAL 12/12 vs SIMKL 13/13); and **presence is deliberately asymmetric** — only "present somewhere, absent from MAL" flags (`PRESENCE_ANCHORS`), because MAL is the comprehensive list while SIMKL/local are subset feeds and a symmetric rule would flag the entire catalog. Surfaced by `DiscrepancyBadge`, the `discrepanciesOnly` (`disc`) URL filter, and the [discrepancies page](src/pages/discrepancies.tsx), which renders the **grouped long format** (one sub-row per provider under each anime) so a new provider costs a row, not a column.
+- **Discrepancy detection is N-provider**, [src/lib/discrepancy.ts](src/lib/discrepancy.ts) (client-safe/pure, the old `simklCompare.ts`): `computeDiscrepancy(states)` takes a `Partial<Record<ProvenanceSource, ProviderPersonalState>>` and reports a per-provider map + which dimensions `disagree`. The map is built from the RAW slices by `buildProviderStates` in [src/lib/personalState.ts](src/lib/personalState.ts) — **the same per-provider extractor table hydration uses**, so all four providers (MAL, SIMKL, AniList, local) participate and a provider cannot be added to one path without the other. **A provider participates iff it appears in the resolved `personalPrecedence`** — one enablement predicate, not one per surface. Two rules worth knowing: differing progress where every present provider has watched all of **its own** total is not a disagreement (MAL 12/12 vs SIMKL 13/13); and **presence is deliberately asymmetric** — only "present somewhere, absent from MAL" flags (`PRESENCE_ANCHORS`), because MAL is the comprehensive list while SIMKL/local are subset feeds and a symmetric rule would flag the entire catalog. Surfaced by `DiscrepancyBadge`, the `discrepanciesOnly` (`disc`) URL filter, and the [discrepancies page](src/pages/discrepancies.tsx), which renders the **grouped long format** (one sub-row per provider under each anime) so a new provider costs a row, not a column.
 
 ### "/quick-rate" — franchise-bulk rating (docs/quickRate/)
 
@@ -207,8 +207,8 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
 
 ### AniList OAuth (login tier: write-back)
 
-Above the anonymous read-by-username import sits an **OAuth'd** AniList tier
-(`docs/ANILIST-OAUTH.md`) — a fourth writable personal provider. Auth lives in
+AniList is a fourth **writable** personal provider, OAuth'd
+(`docs/ANILIST-OAUTH.md`). Auth lives in
 [src/lib/anilistAuth.ts](src/lib/anilistAuth.ts) (token store `anilist_auth.json`
 + the authenticated GraphQL transport), the flow in
 [src/pages/api/anime/anilist/auth.ts](src/pages/api/anime/anilist/auth.ts), and
@@ -234,9 +234,18 @@ progress (`SaveMediaListEntry` is an upsert). Note **AniList auto-fills
 `progress` to the episode count when status becomes COMPLETED** (live-verified) —
 so the app's own progress value is redundant on that path, not authoritative.
 Clearing a status is refused (`ok: false` with a reason, never a silent drop),
-same carve-out as MAL's writer. AniList still sits **last** in
-personal precedence even when OAuth'd, and the authenticated *private-list read*
-is not implemented yet — both are open items in the doc.
+same carve-out as MAL's writer. AniList still sits **last** in personal
+precedence even when OAuth'd — an open item in the doc.
+
+**The read half** is [src/lib/anilistPersonalSync.ts](src/lib/anilistPersonalSync.ts):
+`importAnilistPersonalList()` pulls the OAuth'd viewer's OWN list by `userId`,
+**private entries included**, in a single `MediaListCollection` call (it returns
+the whole list — not a paginated connection — so no throttled batch loop), and
+full-replaces `animes_anilist_personal.json`. It is **authenticated-only** —
+there is no anonymous read-by-username path. That is load-bearing rather than
+merely a limitation: because every entry in the slice belongs to a connected
+account, AniList participates in discrepancy detection with no actionability
+gate.
 
 ### "Plus comme ça" — the single-target drill-down (detail page)
 

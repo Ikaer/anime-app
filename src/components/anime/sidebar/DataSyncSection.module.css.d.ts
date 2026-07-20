@@ -4,7 +4,6 @@ declare const styles: {
   readonly "dataSyncSection": string;
   readonly "error": string;
   readonly "importRow": string;
-  readonly "usernameInput": string;
 };
 export = styles;
 
