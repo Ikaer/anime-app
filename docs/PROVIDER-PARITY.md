@@ -7,6 +7,8 @@
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
 > this document measures against) and [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md)
 > (whose dropped registry is **not** what this proposes — see [§3](#3-the-unifying-fix)).
+> [DATA-LAYOUT.md](DATA-LAYOUT.md) depends on H1 here and covers the on-disk
+> reorganization, which is deliberately out of scope for this inventory.
 
 ## 1. Thesis
 
@@ -437,6 +439,11 @@ going through `getEffective*` anyway, so doing C1 first shrinks this.
 like the canonical-id cutover had. The 39 MB write is the strongest argument for
 scheduling it rather than filing it.
 
+**Also a prerequisite elsewhere:** [DATA-LAYOUT.md](DATA-LAYOUT.md) organizes the
+store into folders, with `personal/` holding *one file per `ProvenanceSource`*.
+That rule yields three of four until H1 creates MAL's, so the layout work is
+blocked on this and would otherwise bake the anomaly in.
+
 ## 3. The unifying fix
 
 **A capability descriptor per provider**, declaring:
@@ -494,13 +501,14 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > Look for the duplicate before adding the branch. And check whether a
    > blocking asymmetry can be **removed** rather than conditionalized — A2 and
    > D1 both describe asymmetries that may not need to exist.
-3. **B1, then B2** — unblocks the keyless onboarding path end to end. The
+2. **B1, then B2** — unblocks the keyless onboarding path end to end. The
    highest-value fix, and the one most aligned with the provider-free direction.
-4. **D2** — the capability descriptor, once the standalone defects are cleared.
-5. **A2, D1** — fall out of D2 cheaply.
-6. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
-7. **F1** — independent; slot in whenever cron matters.
-8. **H1** — the MAL catalog/personal split. Independent of everything above and
-   schedulable whenever; do **C1** first, which removes three of its readers. The
-   39 MB rewrite per rating is the reason not to leave it filed forever.
-9. **B3** — recommend deferring indefinitely. Documented as deliberate.
+3. **D2** — the capability descriptor, once the standalone defects are cleared.
+4. **A2, D1** — fall out of D2 cheaply.
+5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
+6. **F1** — independent; slot in whenever cron matters.
+7. **H1** — the MAL catalog/personal split. Independent of everything above, but
+   do **C1** first (it removes three of its readers), and note
+   [DATA-LAYOUT.md](DATA-LAYOUT.md) is blocked on it. The 39 MB rewrite per
+   rating is the reason not to leave it filed forever.
+8. **B3** — recommend deferring indefinitely. Documented as deliberate.
