@@ -3,9 +3,8 @@
 > A **proposal + migration plan** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Blocked`** — on [open question 1](#71-which-data-folder-is-canonical-blocking)
-> (two data folders exist and the app points at the smaller one) and on
-> [PROVIDER-PARITY.md](PROVIDER-PARITY.md) H1 shipping first (see [§2](#2-prerequisite-h1)).
+> **Status: `Todo`** — sequenced behind [PROVIDER-PARITY.md](PROVIDER-PARITY.md)
+> H1 (see [§2](#2-prerequisite-h1)); nothing else blocks it.
 >
 > Scope: how the JSON store is laid out on disk. It changes **no data shapes and
 > no keys** — every file keeps its contents and its canonical-id keying. Only
@@ -160,7 +159,7 @@ so on a default install `connection_log.json` lands in the middle of the store.
 That is a separate seam (`logsFile`, not `dataFile`) and this document does not
 move it — but the fallback is worth revisiting, because "logs default into the
 data folder" is precisely the kind of thing that makes an `ls` uninformative.
-See [open question 4](#74-do-logs-get-their-own-folder).
+See [open question 3](#73-do-logs-get-their-own-folder).
 
 ## 4. The orphan sweep
 
@@ -230,7 +229,34 @@ the layout change can ship without touching anything's contents.
 - **Docker needs no change** — `/app/data` is a single volume mount and
   subdirectories live inside it.
 
-### 5.2 Rollback
+### 5.2 Which copies of the store get migrated
+
+There are several, and they are not rivals — `DATA_PATH` is configuration, and
+each copy is a different install:
+
+| Copy | What it is |
+|---|---|
+| `\\syno\root4\AppData\AnimeTracker\data` | **Production.** The NAS volume the container mounts at `/app/data`. |
+| `E:\Workspace\local\AnimeTracker\data` | A **pull of production** for local debugging, refreshed by script. |
+| `%APPDATA%\anime-app\data` | The **first-launch default** — whatever a fresh install accumulated before being pointed elsewhere. |
+
+Consequences for the migration:
+
+- **Production is the one that matters**, and it is the one behind a container.
+  The script must run against the mounted path — see the Docker note in
+  [§6](#6-risks).
+- **The debug copy is downstream, so do not migrate it** — re-pull it after
+  production has moved. Migrating it separately just creates a second thing that
+  can disagree.
+- **The refresh script copies files by name** and will need its file list updated
+  in the same change, or a post-migration pull silently repopulates the old flat
+  names next to the new folders.
+- **A dev machine can hold a pre-layout store and a post-layout one at the same
+  time.** That is the strongest argument for [§7.2](#72-migration-script-or-automatic-on-startup)'s
+  refuse-to-start check: the app should say which layout it found rather than
+  quietly reading half a store.
+
+### 5.3 Rollback
 
 The script's inverse mapping is mechanical; a `--reverse` flag is cheap and worth
 having for one release. Simpler still: the pre-run backup. Take one — the
@@ -245,30 +271,18 @@ relaxed about what went wrong.
 - **Docker path confusion.** The script must run against the *mounted* path, not
   a host path that looks like it. Passing `<dataPath>` explicitly (rather than
   relying on env) makes this visible.
-- **Two data folders.** See below — this is the blocking one, because migrating
-  the wrong folder is worse than not migrating.
+- **Migrating a copy instead of the original.** `DATA_PATH` is configuration and
+  the store exists in several places ([§5.2](#52-which-copies-of-the-store-get-migrated));
+  the debug pull in particular is downstream and must be re-pulled, not migrated.
 
 ## 7. Open questions
 
-### 7.1 Which data folder is canonical? *(blocking)*
-
-Settings resolve `DATA_PATH` to `C:\Users\Xav\AppData\Roaming\anime-app\data` —
-9 files, **no MAL slice**, 1 AniList personal entry, 108 anchored titles.
-
-Meanwhile `E:\Workspace\local\AnimeTracker\data` holds a 39 MB / 25,370-title MAL
-catalog, 646 SIMKL entries, the season checkpoint, and MAL + SIMKL auth.
-
-Both look live. Only the first is wired up. This needs an answer before anything
-moves, and it is worth answering regardless of this document: if the E: folder is
-the real store, **the app is currently pointed at the wrong place**, which
-matters more than the layout does.
-
-### 7.2 Quarantine or delete the orphans?
+### 7.1 Quarantine or delete the orphans?
 
 Recommendation above is quarantine to `_orphans/`. Deleting is one flag away if
 that reads as over-caution.
 
-### 7.3 Migration script, or automatic on startup?
+### 7.2 Migration script, or automatic on startup?
 
 Recommendation: **script**, matching the canonical-id precedent. A startup
 migration that runs inside a container on a NAS is a migration whose output
@@ -276,7 +290,7 @@ nobody reads. The counter-argument is that a script requires the user to know it
 exists — mitigated by having the app refuse to start with a clear message when it
 detects a pre-layout store.
 
-### 7.4 Do logs get their own folder?
+### 7.3 Do logs get their own folder?
 
 `connection_log.json` currently lands in the data folder by default (§3.2).
 Options: leave it, move it to `logs/` inside the data folder, or change the

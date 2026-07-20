@@ -21,9 +21,9 @@
    extractors moved from store.ts to src/lib/personalState.ts, shared with hydration.
 [] Data-store layout — folders instead of filename prefixes, plus sweeping 4 orphan files
    (ratings.json, rating_criteria.json, animes_extensions.json, user_preferences.json) and 2
-   stale .bak files. Spec: docs/DATA-LAYOUT.md. BLOCKED on PROVIDER-PARITY H1 (personal/ holds
-   one file per ProvenanceSource, which is 3 of 4 until MAL's personal state leaves the catalog
-   file) and on deciding which of the two data folders on this machine is canonical.
+   stale .bak files. Spec: docs/DATA-LAYOUT.md. Sequenced behind PROVIDER-PARITY H1 (personal/
+   holds one file per ProvenanceSource, which is 3 of 4 until MAL's personal state leaves the
+   catalog file), so the natural order is C1 -> H1 -> this.
 [] Entry DELETION across providers — removing a status is a distinct Delete action on the list
    entry in BOTH AniList and MAL (not a status value), so today every remote writer refuses
    `status: null` with a reason. Fix belongs in the registry, not per-provider: add an optional
