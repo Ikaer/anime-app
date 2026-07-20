@@ -125,7 +125,7 @@
   "table.unhide": "Afficher",
   "table.hide": "Masquer",
   "table.update": "Mettre à jour",
-  "table.updateMalStatus": "Mettre à jour le statut MAL",
+  "table.updatePersonalState": "Mettre à jour mon statut",
 
   "recoHint.recommendedBy": "Recommandé par les fans de {title}",
   "recoHint.andOther": " (+{count} autre anime)",

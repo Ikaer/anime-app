@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoVerdict } from '@/models/anime';
-import { getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
+import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
@@ -99,7 +99,10 @@ export default function AnimeCardView({
         window.open(justWatchUrl, '_blank');
     };
 
-    const getDisplayStatus = (anime: AnimeRecord) => anime.sources.mal?.my_list_status?.status ?? '';
+    // Effective (hydrated) personal status, NOT MAL's raw slice — a SIMKL-only,
+    // AniList-only or local-only user has no `sources.mal` and used to see an
+    // empty badge here. Per-provider detail stays on the DiscrepancyBadge.
+    const getDisplayStatus = (anime: AnimeRecord) => getEffectiveStatus(anime) ?? '';
 
     const getScoreClass = (score?: number) => {
         if (score === undefined || score === 0) return styles.scoreNa;
@@ -120,7 +123,7 @@ export default function AnimeCardView({
         return status ? t(`airing.${status}` as TranslationKey) : t('common.unknown');
     };
 
-    const getMALStatusClass = (status: string) => {
+    const getStatusClass = (status: string) => {
         switch (status) {
             case 'watching': return styles.watching;
             case 'completed': return styles.completed;
@@ -131,7 +134,7 @@ export default function AnimeCardView({
         }
     };
 
-    const getMALStatusIcon = (status: string) => {
+    const getStatusIcon = (status: string) => {
         switch (status) {
             case 'watching': return '📺';
             case 'completed': return '✅';
@@ -317,9 +320,9 @@ export default function AnimeCardView({
                         )}
                         <div className={styles.infoRow}>
                             {getDisplayStatus(anime) && (
-                                <span className={`${styles.malStatusLabel} ${getMALStatusClass(getDisplayStatus(anime))}`}>
-                                    <span className={styles.malStatusIcon}>{getMALStatusIcon(getDisplayStatus(anime))}</span>
-                                    <span className={styles.malStatusText}>{t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}</span>
+                                <span className={`${styles.personalStatusLabel} ${getStatusClass(getDisplayStatus(anime))}`}>
+                                    <span className={styles.personalStatusIcon}>{getStatusIcon(getDisplayStatus(anime))}</span>
+                                    <span className={styles.personalStatusText}>{t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}</span>
                                 </span>
                             )}
                             {(visibleColumns?.score ?? true) && (

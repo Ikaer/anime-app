@@ -3,7 +3,7 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1 and G1 `Done` (2026-07-20). Rest `Todo`.
+> **Status: `WIP`** — A1, G1 and C1 `Done` (2026-07-20). Rest `Todo`.
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
 > this document measures against) and [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md)
 > (whose dropped registry is **not** what this proposes — see [§3](#3-the-unifying-fix)).
@@ -229,7 +229,7 @@ resolve without a MAL id at all.
 
 ### C. Personal state still displayed MAL-only
 
-#### C1 — List views bypass the effective-value seam
+#### C1 — List views bypass the effective-value seam — **`Done` 2026-07-20**
 
 **Evidence:**
 [AnimeCardView.tsx:102](../src/components/anime/AnimeCardView.tsx) —
@@ -257,7 +257,55 @@ discrepancy badge, which is where it belongs.
 (`updates?.status ?? …`). Reading effective while writing MAL-shaped needs the
 optimistic overlay reconciled, or an edit will appear to revert.
 
-**Size:** small to medium — small for the read, medium with the optimistic path.
+**What shipped:**
+
+1. **Both views route through `getEffective*`.** `AnimeCardView`'s status badge
+   and `AnimeTable`'s three "Moi" reads (status / score / progress). The staged
+   per-row `pendingUpdates` overlay is unchanged and still wins; only its
+   *fallback* moved off `sources.mal`. `getEffectiveScore` maps unrated to
+   `undefined` (via `toAnimePersonal`), so the score select keeps `?? 0` to stay
+   on its "no score" option.
+
+2. **The caveat was real, and worse than stated.** The overlay didn't merely need
+   reconciling — it was guarded by `a.sources.mal &&`, so on a title with *no MAL
+   slice* (exactly the SIMKL-only case C1 exists to fix) it was skipped entirely
+   and the committed edit reverted on the spot. The overlay now patches
+   `record.personal`, which is what the views read. Normalization matches
+   hydration: `status: ''` and `score: 0` become `undefined`, not stored zeros.
+
+3. **The MAL-shaped naming went with it.** The endpoint has been provider-agnostic
+   since it became a `writePersonal` wrapper, so `onUpdateMALStatus` →
+   `onUpdatePersonalState`, `MALStatusUpdate` → `PersonalStateUpdate`,
+   `getMALStatusClass/Icon` → `getStatusClass/Icon`, and the CSS classes
+   `malStatus`/`malScore`/`malEpisodes`/`malStatusLabel…` → `personal*`. Locale
+   key `table.updateMalStatus` → `table.updatePersonalState` ("Mettre à jour mon
+   statut"). The wire field `num_episodes_watched` **stays** — it is the
+   endpoint's contract, not a display concern. Leaving `mal*` names on a
+   now-effective value would re-plant the exact confusion this fixed.
+
+**Verified against the real store:** the change is inert for a MAL-connected user
+— across 25,382 rows, **0** score-value changes and **0** progress-value changes;
+it newly fills 2 status rows and 1 score row, all SIMKL-only titles that rendered
+blank before. Live-checked on a production build (`next dev` does not hydrate):
+`a_22208` "Sayonara Lara" — no MAL slice — now shows `watching` + `1/12` from
+SIMKL in both layouts, with correct status styling and no hydration warning. The
+commit path was exercised with a stubbed `fetch` (no write left the browser): one
+`{"score":8}` request, pending map cleared, value **held** at 8 afterwards — the
+revert the caveat predicted, confirmed fixed.
+
+**Dead CSS swept in the same pass:** the rename exposed `.malStatusCell` /
+`.malScoreCell` / `.malEpisodesCell` as unreferenced — leftovers from an earlier
+table layout, never rendered (a CSS Module class with no TSX reference cannot
+apply to anything, since the class names are hashed). Auditing the sibling `*Cell`
+rules while there found `.genresCell` dead as well, including its `max-width`
+override in the ≤1600px media query — genres have moved inside the title cell
+(`.genresInTitle`). All four deleted; `.episodesCell` / `.seasonCell` are live and
+were kept.
+
+**Size:** was "small to medium" — accurate, with the optimistic path the larger half.
+
+**Unblocks:** H1, which noted C1 first "removes three of its readers" — it does;
+`sources.mal.my_list_status` now has three fewer consumers.
 
 ### D. Silent asymmetries
 
@@ -432,8 +480,8 @@ provider that predates the convention. **The asymmetry is legacy, not design.**
 canonical id, with `MALPersonalEntry` joining the other three. `MALAnime` becomes
 pure catalog. One migration script; the write path, `malSync`'s
 `updatePersonalStatusBatch`, and the ~12 files reading `my_list_status` follow.
-Note **C1 overlaps**: three of those readers are the list views that should be
-going through `getEffective*` anyway, so doing C1 first shrinks this.
+**C1 already shrank this**: three of those readers were the list views, and they
+now go through `getEffective*` (done 2026-07-20).
 
 **Size:** medium, and touches shipped data — needs a migration with a backup,
 like the canonical-id cutover had. The 39 MB write is the strongest argument for
@@ -491,9 +539,8 @@ in particular are small, high-symptom, and blocked on nothing.
 
 Nothing here is a committed plan — it is the ranking implied by the inventory.
 
-1. ~~**A1**~~ **Done 2026-07-20**, together with ~~**G1**~~. **C1** remains and
-   is now the top item — it is the one that makes the app look empty to a
-   non-MAL user.
+1. ~~**A1**~~, ~~**G1**~~, ~~**C1**~~ — all **Done 2026-07-20**. The main list no
+   longer looks empty to a non-MAL user. **B1** is now the top item.
 
    > A1 came in larger than ranked, and the lesson generalizes to the rest of
    > this document: the gaps are stated as "generic core, hardcoded feeder", but
@@ -507,8 +554,8 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
 4. **A2, D1** — fall out of D2 cheaply.
 5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
 6. **F1** — independent; slot in whenever cron matters.
-7. **H1** — the MAL catalog/personal split. Independent of everything above, but
-   do **C1** first (it removes three of its readers), and note
+7. **H1** — the MAL catalog/personal split. Independent of everything above;
+   **C1** is done and already removed three of its readers. Note
    [DATA-LAYOUT.md](DATA-LAYOUT.md) is blocked on it. The 39 MB rewrite per
    rating is the reason not to leave it filed forever.
 8. **B3** — recommend deferring indefinitely. Documented as deliberate.

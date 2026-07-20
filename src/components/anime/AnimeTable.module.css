@@ -219,28 +219,7 @@
   min-width: 8rem;
 }
 
-.malStatusCell {
-  width: 8rem;
-  /* Use rem for better scaling */
-  min-width: 8rem;
-  text-align: center;
-}
-
-.malScoreCell {
-  width: 5rem;
-  /* Use rem for better scaling */
-  min-width: 5rem;
-  text-align: center;
-}
-
-.malEpisodesCell {
-  width: 6rem;
-  /* Use rem for better scaling */
-  min-width: 6rem;
-  text-align: center;
-}
-
-.malEpisodes {
+.personalEpisodes {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -269,7 +248,7 @@
   color: #fef3c7;
 }
 
-.malStatus {
+.personalStatus {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -281,27 +260,27 @@
   color: #f9fafb;
 }
 
-.malStatus.watching {
+.personalStatus.watching {
   background: #3b82f6;
   color: white;
 }
 
-.malStatus.completed {
+.personalStatus.completed {
   background: #10b981;
   color: white;
 }
 
-.malStatus.onHold {
+.personalStatus.onHold {
   background: #f59e0b;
   color: white;
 }
 
-.malStatus.dropped {
+.personalStatus.dropped {
   background: #ef4444;
   color: white;
 }
 
-.malStatus.planToWatch {
+.personalStatus.planToWatch {
   background: #8b5cf6;
   color: white;
 }
@@ -320,15 +299,6 @@
   text-align: center;
   font-size: 0.875rem;
 }
-
-.genresCell {
-  max-width: 10rem;
-  /* Use rem for better scaling */
-  min-width: 8rem;
-  font-size: 0.875rem;
-  color: #9ca3af;
-}
-
 
 .linksCell {
   width: 12rem;
@@ -352,7 +322,7 @@
   color: #9ca3af;
 }
 
-.malScore {
+.personalScore {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-weight: 500;
@@ -363,14 +333,14 @@
   color: #f9fafb;
 }
 
-.malScore.editable {
+.personalScore.editable {
   background: #374151;
   border: 1px solid #4b5563;
   cursor: pointer;
   color: #f9fafb;
 }
 
-.malScore.editable:hover {
+.personalScore.editable:hover {
   background: #4b5563;
   border-color: #6b7280;
 }
@@ -426,11 +396,6 @@
   .titleCell {
     max-width: 15rem;
     /* Reduce max width for title */
-  }
-
-  .genresCell {
-    max-width: 8rem;
-    /* Reduce genres column width */
   }
 }
 

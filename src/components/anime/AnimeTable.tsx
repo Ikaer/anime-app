@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
-import { formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
+import { formatSeason, getEffectiveProgress, getEffectiveScore, getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { Button } from '@/components/shared';
 import DiscrepancyBadge from './DiscrepancyBadge';
 import { useT, type TranslationKey } from '@/lib/i18n';
@@ -33,7 +33,13 @@ const getImageDimensions = (size: ImageSize) => {
   }
 };
 
-interface MALStatusUpdate {
+/**
+ * One pending edit, in the wire shape `PUT …/animes/[id]/mal-status` takes
+ * (`num_episodes_watched` is MAL's field name, kept as the endpoint's contract).
+ * The endpoint itself is provider-agnostic — it fans out over `writePersonal` —
+ * so this is no longer a MAL-only patch.
+ */
+interface PersonalStateUpdate {
   status?: string;
   score?: number;
   num_episodes_watched?: number;
@@ -45,13 +51,13 @@ interface AnimeTableProps {
   visibleColumns: VisibleColumns;
   sortColumn: SortColumn;
   sortDirection: SortDirection;
-  onUpdateMALStatus?: (animeId: string, updates: MALStatusUpdate) => void;
+  onUpdatePersonalState?: (animeId: string, updates: PersonalStateUpdate) => void;
   onHideToggle?: (animeId: string, hide: boolean) => void;
 }
 
-export default function AnimeTable({ animes, imageSize, visibleColumns, sortColumn, sortDirection, onUpdateMALStatus, onHideToggle }: AnimeTableProps) {
+export default function AnimeTable({ animes, imageSize, visibleColumns, sortColumn, sortDirection, onUpdatePersonalState, onHideToggle }: AnimeTableProps) {
   const t = useT();
-  const [pendingUpdates, setPendingUpdates] = useState<Map<string, MALStatusUpdate>>(new Map());
+  const [pendingUpdates, setPendingUpdates] = useState<Map<string, PersonalStateUpdate>>(new Map());
   const imageDimensions = getImageDimensions(imageSize);
 
   const sortedAnimes = useMemo(() => {
@@ -127,7 +133,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
     window.open(justWatchUrl, '_blank');
   };
 
-  const updateMALStatus = (animeId: string, field: keyof MALStatusUpdate, value: any) => {
+  const stagePersonalUpdate = (animeId: string, field: keyof PersonalStateUpdate, value: any) => {
     const currentUpdates = pendingUpdates.get(animeId) || {};
     const newUpdates = { ...currentUpdates, [field]: value };
 
@@ -137,45 +143,50 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
   };
 
   const handleStatusChange = (animeId: string, status: string) => {
-    updateMALStatus(animeId, 'status', status);
+    stagePersonalUpdate(animeId, 'status', status);
   };
 
   const handleScoreChange = (animeId: string, score: number) => {
-    updateMALStatus(animeId, 'score', score);
+    stagePersonalUpdate(animeId, 'score', score);
   };
 
   const handleEpisodeChange = (animeId: string, episodes: number) => {
-    updateMALStatus(animeId, 'num_episodes_watched', Math.max(0, episodes));
+    stagePersonalUpdate(animeId, 'num_episodes_watched', Math.max(0, episodes));
   };
 
-  const handleUpdateMAL = async (animeId: string) => {
+  const handleCommitUpdate = async (animeId: string) => {
     const updates = pendingUpdates.get(animeId);
-    if (!updates || !onUpdateMALStatus) return;
+    if (!updates || !onUpdatePersonalState) return;
 
     try {
-      await onUpdateMALStatus(animeId, updates);
+      await onUpdatePersonalState(animeId, updates);
       // Remove from pending updates after successful update
       const newPendingUpdates = new Map(pendingUpdates);
       newPendingUpdates.delete(animeId);
       setPendingUpdates(newPendingUpdates);
     } catch (error) {
-      console.error('Failed to update MAL status:', error);
+      console.error('Failed to update personal state:', error);
     }
   };
 
+  // Displayed value = staged edit, else the EFFECTIVE (hydrated) personal value.
+  // Reading `sources.mal` here left the whole "Moi" column blank for a SIMKL-,
+  // AniList- or local-only user; every other surface (/tier, /stats, /quick-rate)
+  // already goes through these helpers. `getEffectiveScore` maps unrated to
+  // undefined, so `?? 0` keeps the select on its "no score" option.
   const getDisplayStatus = (anime: AnimeRecord) => {
     const updates = pendingUpdates.get(anime.id);
-    return updates?.status ?? anime.sources.mal?.my_list_status?.status ?? '';
+    return updates?.status ?? getEffectiveStatus(anime) ?? '';
   };
 
   const getDisplayScore = (anime: AnimeRecord) => {
     const updates = pendingUpdates.get(anime.id);
-    return updates?.score ?? anime.sources.mal?.my_list_status?.score ?? 0;
+    return updates?.score ?? getEffectiveScore(anime) ?? 0;
   };
 
   const getDisplayEpisodes = (anime: AnimeRecord) => {
     const updates = pendingUpdates.get(anime.id);
-    return updates?.num_episodes_watched ?? anime.sources.mal?.my_list_status?.num_episodes_watched ?? 0;
+    return updates?.num_episodes_watched ?? getEffectiveProgress(anime) ?? 0;
   };
 
   const getStatusClass = (status: string) => {
@@ -370,7 +381,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                     <select
                       value={getDisplayStatus(anime)}
                       onChange={(e) => handleStatusChange(anime.id, e.target.value)}
-                      className={`${styles.malStatus} ${getStatusClass(getDisplayStatus(anime))}`}
+                      className={`${styles.personalStatus} ${getStatusClass(getDisplayStatus(anime))}`}
                     >
                       <option value="">{t('table.selectStatus')}</option>
                       <option value="watching">{t('statusShort.watching')}</option>
@@ -385,7 +396,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                     <select
                       value={getDisplayScore(anime)}
                       onChange={(e) => handleScoreChange(anime.id, parseInt(e.target.value))}
-                      className={`${styles.malScore} ${styles.editable}`}
+                      className={`${styles.personalScore} ${styles.editable}`}
                     >
                       <option value={0}>{t('table.noScore')}</option>
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(score => (
@@ -393,7 +404,7 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                       ))}
                     </select>
                   </div>
-                  <div className={styles.malEpisodes}>
+                  <div className={styles.personalEpisodes}>
 
                     <Button
                       variant="secondary"
@@ -475,10 +486,10 @@ export default function AnimeTable({ animes, imageSize, visibleColumns, sortColu
                     </Button>
                     {hasPendingUpdates(anime.id) && (
                       <Button
-                        onClick={() => handleUpdateMAL(anime.id)}
+                        onClick={() => handleCommitUpdate(anime.id)}
                         variant="primary"
                         size="sm"
-                        title={t('table.updateMalStatus')}
+                        title={t('table.updatePersonalState')}
                       >
                         {t('table.update')}
                       </Button>
