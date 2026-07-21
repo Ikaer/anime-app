@@ -9,9 +9,9 @@
  * participate in discrepancy detection without an actionability gate.
  *
  * `MediaListCollection` returns the WHOLE list in one response — it is not a
- * paginated connection — so this is a SINGLE GraphQL call, not a throttled
- * batch loop like the tags/catalog syncs. The endpoint / 429-retry style
- * mirrors anilistSync.ts.
+ * paginated connection — so this is a SINGLE GraphQL call, not a batch loop like
+ * the tags/catalog syncs. Endpoint, throttle and 429 retry come from `client.ts`
+ * like every other AniList call.
  *
  * Server-only (persists via store.ts / jsonStore).
  */
@@ -20,8 +20,8 @@ import { appendLog } from '@/lib/config/connectionLog';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { AniListPersonalEntry, UserAnimeStatus } from '@/models/anime';
 import { getAnilistAuthData, getAnilistAccessToken, fetchAnilistViewer } from '@/lib/providers/anilist/auth';
+import { anilistFetch, httpErrorMessage } from '@/lib/providers/anilist/client';
 
-const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const CONFIG_FILE = dataFile('sync/anilist_import.json');
 
 // AniList list-status vocabulary -> MAL vocabulary (docs/PROVIDER-FREE.md P3b).
@@ -105,55 +105,39 @@ interface RawEntry {
   media?: { id?: number | null; idMal?: number | null };
 }
 interface RawList { entries?: RawEntry[] | null }
-interface RawResponse {
-  data?: { MediaListCollection?: { lists?: RawList[] | null } | null };
-  errors?: { message?: string }[];
-}
+interface RawListCollection { MediaListCollection?: { lists?: RawList[] | null } | null }
 
+/**
+ * The one list read. Uses `anilistFetch` rather than the strict `anilistQuery`
+ * because this caller doesn't just need "did it fail" — it has to classify the
+ * failure into an `AniListPersonalErrorKind` the API route can act on, and
+ * AniList reports "User not found" as a GraphQL error under a 404.
+ */
 async function fetchList(
   query: string,
   variables: Record<string, unknown>,
-  accessToken: string | null,
-  retryOn429 = true
-): Promise<RawResponse> {
-  const res = await fetch(ANILIST_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (res.status === 429 && retryOn429) {
-    const retryAfterHeader = res.headers.get('Retry-After');
-    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
-    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
-    return fetchList(query, variables, accessToken, false);
-  }
-
-  const text = await res.text().catch(() => '');
-  let json: RawResponse;
-  try {
-    json = text ? (JSON.parse(text) as RawResponse) : {};
-  } catch {
-    throw new AniListPersonalError(`AniList returned non-JSON (${res.status})`, 'network');
-  }
+  accessToken: string | null
+): Promise<RawListCollection | undefined> {
+  const res = await anilistFetch<RawListCollection>(query, variables, { accessToken })
+    .catch(error => {
+      const message = error instanceof Error ? error.message : 'AniList request failed';
+      throw new AniListPersonalError(message, 'network');
+    });
 
   // GraphQL surfaces the meaningful cases as `errors` even on a 404 HTTP code.
-  if (Array.isArray(json.errors) && json.errors.length > 0) {
-    const first = json.errors[0]?.message ?? '';
-    const joined = json.errors.map(e => e.message ?? 'unknown error').join('; ');
+  const errors = res.body.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    const first = errors[0]?.message ?? '';
+    const joined = errors.map(e => e.message ?? 'unknown error').join('; ');
     if (first.includes('User not found')) throw new AniListPersonalError(joined, 'not_found');
     throw new AniListPersonalError(`AniList GraphQL error: ${joined}`, 'network');
   }
 
   if (!res.ok) {
-    throw new AniListPersonalError(`AniList request failed: ${res.status} ${res.statusText}`, 'network');
+    throw new AniListPersonalError(httpErrorMessage(res), 'network');
   }
 
-  return json;
+  return res.body.data;
 }
 
 /** One remote list entry, normalized onto the app's vocabulary and 1-10 scale. */
@@ -201,8 +185,8 @@ export async function fetchAuthenticatedAnilistList(): Promise<AniListRemoteEntr
   if (!viewerId) viewerId = (await fetchAnilistViewer(accessToken))?.id;
   if (!viewerId) throw new AniListPersonalError('Could not identify the AniList viewer', 'not_found');
 
-  const json = await fetchList(LIST_QUERY_BY_ID, { id: viewerId }, accessToken);
-  return normalizeLists(json.data?.MediaListCollection?.lists ?? []);
+  const data = await fetchList(LIST_QUERY_BY_ID, { id: viewerId }, accessToken);
+  return normalizeLists(data?.MediaListCollection?.lists ?? []);
 }
 
 /**

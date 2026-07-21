@@ -1,8 +1,8 @@
 /**
- * AniList OAuth token store + authenticated GraphQL transport
- * (docs/ANILIST-OAUTH.md). The login tier above `anilistPersonalSync.ts`'s
- * anonymous read-by-username: a viewer token unlocks private-list reads and —
- * the point of this module — `SaveMediaListEntry` writes (see anilistWrite.ts).
+ * AniList OAuth token store (docs/ANILIST-OAUTH.md). The login tier above
+ * `personalSync.ts`'s anonymous reads: a viewer token unlocks private-list reads
+ * and — the point of this module — `SaveMediaListEntry` writes (see write.ts).
+ * The transport itself lives in `client.ts`; this module only supplies the token.
  *
  * Shaped after `simkl.ts`, with three deliberate differences forced by AniList's
  * OAuth2 implementation (verified against docs.anilist.co/guide/auth/):
@@ -20,12 +20,12 @@
  * Server-only (reads/writes JSON under DATA_PATH).
  */
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
+import { anilistGraphQL } from '@/lib/providers/anilist/client';
 
 const ANILIST_AUTH_FILE = dataFile('auth/anilist.json');
 const ANILIST_STATE_FILE = dataFile('auth/oauth_state_anilist.json');
 const STATE_TTL_MS = 10 * 60_000;
 
-export const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 export const ANILIST_AUTHORIZE_URL = 'https://anilist.co/api/v2/oauth/authorize';
 export const ANILIST_TOKEN_URL = 'https://anilist.co/api/v2/oauth/token';
 
@@ -90,46 +90,7 @@ export function consumeOAuthState(state: string): boolean {
   return Date.now() - issuedAt <= STATE_TTL_MS;
 }
 
-// ── Authenticated GraphQL ────────────────────────────────────────────────────
-
-export interface AnilistGraphQLResult<T> {
-  data?: T;
-  errors?: Array<{ message: string; status?: number }>;
-}
-
-/**
- * POST a GraphQL document to AniList with a Bearer token. Returns the parsed
- * envelope untouched — AniList reports business errors in `errors` with a 200,
- * so callers MUST check `errors`, not just the HTTP status.
- */
-export async function anilistGraphQL<T>(
-  query: string,
-  variables: Record<string, unknown>,
-  accessToken: string
-): Promise<AnilistGraphQLResult<T>> {
-  const response = await fetch(ANILIST_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-
-  const text = await response.text();
-  let parsed: AnilistGraphQLResult<T>;
-  try {
-    parsed = JSON.parse(text) as AnilistGraphQLResult<T>;
-  } catch {
-    throw new Error(`AniList returned non-JSON (${response.status}): ${text.slice(0, 200)}`);
-  }
-  // A transport-level failure with no GraphQL error body still has to surface.
-  if (!response.ok && !parsed.errors) {
-    throw new Error(`AniList request failed: ${response.status} ${text.slice(0, 200)}`);
-  }
-  return parsed;
-}
+// ── Viewer identity ──────────────────────────────────────────────────────────
 
 const VIEWER_QUERY = `
 query {

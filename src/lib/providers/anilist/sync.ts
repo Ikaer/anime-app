@@ -7,17 +7,14 @@
  */
 import { getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry, toNum } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
+import { anilistQuery } from '@/lib/providers/anilist/client';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry, AniListRelationEntry } from '@/models/anime';
 
-const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const BATCH_SIZE = 50;
 // Top-relevance staff credits to keep per anime — enough for the discriminative
 // creative roles (director, character design, music…) without bloating storage.
 const STAFF_PER_ANIME = 15;
-// Conservative delay between batches (~28 req/min), safely under AniList's
-// documented degraded limit of 30 req/min (normally 90/min).
-const ANILIST_MIN_DELAY_MS = 2100;
 
 // Tags, staff AND relations in one query per batch (verified live 2026-07-18:
 // perPage:50 with nested staff(perPage:15) + the relations connection still
@@ -151,37 +148,12 @@ function chunk<T>(items: T[], size: number): T[][] {
  * MAL ids (the overwhelming majority of the catalog), `'anilist'` for titles
  * that have no MAL id. A batch is homogeneous by construction (see the query).
  */
-async function fetchTagsBatch(ids: number[], by: MetaIdSpace, retryOn429 = true): Promise<RawMedia[]> {
-  const res = await fetch(ANILIST_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      query: by === 'mal' ? TAGS_QUERY_BY_MAL : TAGS_QUERY_BY_ANILIST,
-      variables: { ids },
-    }),
-  });
-
-  if (res.status === 429) {
-    if (!retryOn429) {
-      throw new Error('AniList rate limit exceeded (retry already attempted)');
-    }
-    const retryAfterHeader = res.headers.get('Retry-After');
-    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
-    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
-    return fetchTagsBatch(ids, by, false);
-  }
-
-  if (!res.ok) {
-    const bodyText = await res.text().catch(() => '');
-    throw new Error(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 500)}` : ''}`);
-  }
-
-  const json = await res.json();
-  if (Array.isArray(json?.errors) && json.errors.length > 0) {
-    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
-    throw new Error(`AniList GraphQL error: ${messages}`);
-  }
-  return (json?.data?.Page?.media ?? []) as RawMedia[];
+async function fetchTagsBatch(ids: number[], by: MetaIdSpace): Promise<RawMedia[]> {
+  const data = await anilistQuery<{ Page?: { media?: RawMedia[] } }>(
+    by === 'mal' ? TAGS_QUERY_BY_MAL : TAGS_QUERY_BY_ANILIST,
+    { ids }
+  );
+  return data?.Page?.media ?? [];
 }
 
 // Crowd recommendations query — kept SEPARATE from TAGS_QUERY (tags + staff
@@ -229,37 +201,15 @@ export interface AniListRecEdge {
   rating: number;
 }
 
-async function fetchRecsBatch(malIds: number[], retryOn429 = true): Promise<RawRecMedia[]> {
-  const res = await fetch(ANILIST_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ query: RECS_QUERY, variables: { ids: malIds } }),
-  });
-
-  if (res.status === 429) {
-    if (!retryOn429) throw new Error('AniList rate limit exceeded (retry already attempted)');
-    const retryAfterHeader = res.headers.get('Retry-After');
-    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
-    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
-    return fetchRecsBatch(malIds, false);
-  }
-
-  if (!res.ok) {
-    const bodyText = await res.text().catch(() => '');
-    throw new Error(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 500)}` : ''}`);
-  }
-
-  const json = await res.json();
-  if (Array.isArray(json?.errors) && json.errors.length > 0) {
-    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
-    throw new Error(`AniList GraphQL error: ${messages}`);
-  }
-  return (json?.data?.Page?.media ?? []) as RawRecMedia[];
+async function fetchRecsBatch(malIds: number[]): Promise<RawRecMedia[]> {
+  const data = await anilistQuery<{ Page?: { media?: RawRecMedia[] } }>(RECS_QUERY, { ids: malIds });
+  return data?.Page?.media ?? [];
 }
 
 /**
  * Fetch AniList crowd recommendations for the given seed MAL ids, batched by 50
- * and throttled like the tags sync. Returns a map of seed MAL id -> recommended
+ * (throttled by `client.ts` like every other AniList call). Returns a map of
+ * seed MAL id -> recommended
  * MAL edges (recs AniList couldn't map to a MAL id, or with a non-positive net
  * rating, are dropped). AniList silently skips ids it doesn't know, so the map
  * only contains seeds it recognized.
@@ -289,9 +239,6 @@ export async function fetchAnilistRecommendations(
     }
     processed += batch.length;
     if (onBatch) onBatch(processed, ids.length);
-    if (processed < ids.length) {
-      await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
-    }
   }
   return out;
 }
@@ -417,9 +364,9 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
       { byMalId: malIds.length, byAnilistId: anilistIds.length }
     );
 
-    // Two id spaces, one throttled stream — a batch is homogeneous (AniList
-    // treats a supplied-but-null filter argument as real), but the pacing and
-    // the counters span both.
+    // Two id spaces, one stream — a batch is homogeneous (AniList treats a
+    // supplied-but-null filter argument as real), but the counters span both.
+    // Pacing is `client.ts`'s job, shared with every other AniList caller.
     const batches: Array<{ ids: number[]; by: MetaIdSpace }> = [
       ...chunk(malIds, BATCH_SIZE).map(ids => ({ ids, by: 'mal' as const })),
       ...chunk(anilistIds, BATCH_SIZE).map(ids => ({ ids, by: 'anilist' as const })),
@@ -461,10 +408,6 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
             error: errorMessage,
           }
         );
-      }
-
-      if (processed < totalMissing) {
-        await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
       }
     }
 
@@ -677,32 +620,9 @@ function toCatalogEntry(m: RawCatalogMedia): AniListCatalogEntry | null {
     : { anilist_id: m.id, catalog };
 }
 
-async function fetchCatalogPage(season: string, seasonYear: number, page: number, retryOn429 = true): Promise<RawCatalogPage> {
-  const res = await fetch(ANILIST_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ query: CATALOG_QUERY, variables: { season, seasonYear, page } }),
-  });
-
-  if (res.status === 429) {
-    if (!retryOn429) throw new Error('AniList rate limit exceeded (retry already attempted)');
-    const retryAfterHeader = res.headers.get('Retry-After');
-    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
-    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
-    return fetchCatalogPage(season, seasonYear, page, false);
-  }
-
-  if (!res.ok) {
-    const bodyText = await res.text().catch(() => '');
-    throw new Error(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 500)}` : ''}`);
-  }
-
-  const json = await res.json();
-  if (Array.isArray(json?.errors) && json.errors.length > 0) {
-    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
-    throw new Error(`AniList GraphQL error: ${messages}`);
-  }
-  return (json?.data?.Page ?? { media: [] }) as RawCatalogPage;
+async function fetchCatalogPage(season: string, seasonYear: number, page: number): Promise<RawCatalogPage> {
+  const data = await anilistQuery<{ Page?: RawCatalogPage }>(CATALOG_QUERY, { season, seasonYear, page });
+  return data?.Page ?? { media: [] };
 }
 
 /**
@@ -720,8 +640,8 @@ async function fetchCatalogPage(season: string, seasonYear: number, page: number
  * Persists through `upsertAnilistCatalogFields`, so a hydrated title lands as a
  * `catalog` block on the AniList meta slice and renders through the normal
  * provenance hydration — exactly like a title the season crawler found. Titles
- * AniList doesn't know are silently skipped. Batched by 50 and throttled like
- * every other sweep here.
+ * AniList doesn't know are silently skipped. Batched by 50, on the shared
+ * `client.ts` throttle like every other sweep here.
  */
 export async function fetchAnilistCatalogByMalIds(
   malIds: number[],
@@ -735,18 +655,11 @@ export async function fetchAnilistCatalogByMalIds(
 
   for (const batch of batches) {
     try {
-      const res = await fetch(ANILIST_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ query: CATALOG_BY_MAL_QUERY, variables: { ids: batch } }),
-      });
-      if (!res.ok) throw new Error(`AniList request failed: ${res.status} ${res.statusText}`);
-      const json = await res.json();
-      if (Array.isArray(json?.errors) && json.errors.length > 0) {
-        throw new Error(`AniList GraphQL error: ${json.errors.map((e: { message?: string }) => e.message ?? 'unknown').join('; ')}`);
-      }
-      const media = (json?.data?.Page?.media ?? []) as RawCatalogMedia[];
-      const entries = media
+      const data = await anilistQuery<{ Page?: { media?: RawCatalogMedia[] } }>(
+        CATALOG_BY_MAL_QUERY,
+        { ids: batch }
+      );
+      const entries = (data?.Page?.media ?? [])
         .map(toCatalogEntry)
         .filter((e): e is AniListCatalogEntry => e !== null);
       if (entries.length > 0) {
@@ -761,7 +674,6 @@ export async function fetchAnilistCatalogByMalIds(
     }
     processed += batch.length;
     if (onBatch) onBatch(processed, ids.length);
-    if (processed < ids.length) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
   }
 
   return { requested: ids.length, hydrated, failed };
@@ -818,7 +730,6 @@ async function crawlCatalogSeason(season: string, seasonYear: number, maxPages: 
     if (logPages) appendLog('anilist-catalog-crawl', 'info', `AniList catalog: page ${page}/${maxPages} fetched`, { page, maxPages });
 
     if (!result.pageInfo?.hasNextPage) break;
-    if (page < maxPages) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
   }
 
   return { entries, pagesFetched, withMal, anilistOnly };
@@ -989,7 +900,6 @@ export async function performAnilistBulkCatalogCrawl(
           { seasonIndex: i + 1, totalSeasons: seasons.length, season, year, error: message }
         );
       }
-      if (i < seasons.length - 1) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
     }
 
     if (seasonsCrawled === 0) {

@@ -11,9 +11,8 @@
  */
 import { getAnilistCast, upsertAnilistCast } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
+import { anilistFetch, graphqlErrorMessage, httpErrorMessage } from '@/lib/providers/anilist/client';
 import { AniListCastEntry, AniListCastStudioEntry, AniListCharacterEntry, AniListVoiceActorEntry, AnimeRecord } from '@/models/anime';
-
-const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 
 // Characters to keep per anime. Sorted [ROLE, RELEVANCE], so this is "every
 // MAIN plus the most relevant supporting cast" — a long tail of BACKGROUND
@@ -129,10 +128,7 @@ class AniListCastError extends Error {}
  * that as a failure would leave the title permanently unfetched and re-query it
  * on every single page view; the caller instead persists an empty cast.
  */
-async function fetchCast(
-  ids: { malId?: number; anilistId?: number },
-  retryOn429 = true
-): Promise<RawCastMedia | null> {
+async function fetchCast(ids: { malId?: number; anilistId?: number }): Promise<RawCastMedia | null> {
   // Only the id we actually have is sent. Passing the other one as an explicit
   // `null` is NOT equivalent to omitting it: AniList applies a supplied-but-null
   // argument as a real filter (`id = null`), which matches nothing and answers
@@ -143,35 +139,22 @@ async function fetchCast(
   if (ids.malId !== undefined) variables.malId = ids.malId;
   if (ids.anilistId !== undefined) variables.anilistId = ids.anilistId;
 
-  const res = await fetch(ANILIST_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ query: CAST_QUERY, variables }),
-  });
-
-  if (res.status === 429) {
-    if (!retryOn429) throw new AniListCastError('AniList rate limit exceeded (retry already attempted)');
-    const retryAfterHeader = res.headers.get('Retry-After');
-    const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
-    await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
-    return fetchCast(ids, false);
-  }
+  // Deliberately `anilistFetch` rather than the strict `anilistQuery`: a 404 is
+  // a legitimate answer here, so this caller has to see the status itself.
+  const res = await anilistFetch<{ Media: RawCastMedia | null }>(CAST_QUERY, variables);
 
   if (!res.ok && res.status !== 404) {
-    const bodyText = await res.text().catch(() => '');
-    throw new AniListCastError(`AniList request failed: ${res.status} ${res.statusText}${bodyText ? ` — ${bodyText.slice(0, 300)}` : ''}`);
+    throw new AniListCastError(httpErrorMessage(res));
   }
 
-  const json = await res.json();
-  const media = json?.data?.Media ?? null;
-  if (Array.isArray(json?.errors) && json.errors.length > 0) {
+  const media = res.body.data?.Media ?? null;
+  const errors = res.body.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
     // A 404 alongside a null Media is the "AniList doesn't have it" answer.
-    const notFound = json.errors.some((e: { status?: number }) => e.status === 404);
-    if (notFound && !media) return null;
-    const messages = json.errors.map((e: { message?: string }) => e.message ?? 'unknown error').join('; ');
-    throw new AniListCastError(`AniList GraphQL error: ${messages}`);
+    if (errors.some(e => e.status === 404) && !media) return null;
+    throw new AniListCastError(graphqlErrorMessage(errors));
   }
-  return media as RawCastMedia | null;
+  return media;
 }
 
 export interface AniListCastResult {
@@ -257,12 +240,10 @@ export async function getOrFetchAnilistCast(
 //
 // Deliberately reuses the single-title path rather than batching through
 // `Page.media`: nested `characters { voiceActors }` across 50 media is exactly
-// the query-complexity gamble anilistSync.ts keeps warning about, and the
-// payoff is not needed — this is a ONE-TIME fill whose results persist, so
-// ~500 × 2.1s is a cost paid once, not per page view.
-
-/** Same conservative throttle the batched syncs use (~28 req/min). */
-const SWEEP_DELAY_MS = 2100;
+// the query-complexity gamble sync.ts keeps warning about, and the payoff is not
+// needed — this is a ONE-TIME fill whose results persist, so ~500 × 2.1s is a
+// cost paid once, not per page view. The pacing itself is not this loop's
+// business: `client.ts` throttles every AniList request process-wide.
 
 /** `SourceIds` values may arrive as strings (SIMKL mirrors some as such). */
 function toNum(value: number | string | undefined): number | undefined {
@@ -364,10 +345,6 @@ export async function performAnilistCastSweep(): Promise<AniListCastSweepResult>
         appendLog('anilist-cast-sweep', 'info',
           `AniList cast sweep: ${i + 1}/${queue.length} titles processed`,
           { index: i + 1, total: queue.length, fetched, failed });
-      }
-
-      if (i < queue.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, SWEEP_DELAY_MS));
       }
     }
 

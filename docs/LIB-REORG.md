@@ -1,6 +1,6 @@
 # `src/lib` — inventory and reorganization guide
 
-**Status:** Phases 1–2 applied (2026-07-21). Phases 3–5 still proposals.
+**Status:** Phases 1–3 applied (2026-07-21). Phases 4–5 still proposals.
 **Measured:** 2026-07-21, at `326d74d` (36 modules, 10,132 lines).
 
 The inventory below still uses the **pre-move** filenames, since that is what
@@ -372,7 +372,7 @@ plus the pre-existing `weights` / `byCredits`. Notes:
   imports it client-side yet. Phase 5's ESLint zone is what would keep it that
   way.
 
-### Phase 3 — `providers/anilist/client.ts` (F4) *(medium risk, fixes a real bug)*
+### Phase 3 — `providers/anilist/client.ts` (F4) *(medium risk, fixes a real bug)* ✅ DONE
 
 Extract one transport: endpoint, a **single module-level throttle**, the
 429/`Retry-After` retry, optional auth header. Migrate the four callers to it.
@@ -382,6 +382,48 @@ This is the only phase that changes runtime behaviour meaningfully — and
 deliberately, since a shared throttle is the point (F4). Verify by running a
 meta-sync and a cast sweep concurrently against real data and watching for 429s
 in the connection log.
+
+**Applied 2026-07-21** as one commit: `client.ts` (185 lines) added, 252 lines
+deleted across the six callers for 82 added. Notes:
+
+- **The throttle is a slot allocator, not a sleep.** Each caller claims the next
+  free 2.1s slot *before* its fetch (`nextSlotAt = max(now, nextSlotAt) + delay`)
+  rather than sleeping after it, which is what lets concurrent sweeps interleave
+  on one cadence instead of each pacing itself. Consequence: **every
+  `setTimeout` in the sweep loops is gone** — `sync.ts` lost five (between meta
+  batches, rec batches, hydration batches, catalog pages and bulk-crawl seasons),
+  `cast.ts` and `push.ts` one each. A loop that still slept would be
+  double-pacing, not belt-and-braces. A 429 additionally calls `backOff`, which
+  pushes *every* waiting caller out, not just the one that hit it.
+- **Verified live, on the exact F4 scenario.** `client.ts` has no `@/` imports,
+  so it transpiles standalone: two sweeps (3 batched `Page.media` enrichment
+  queries + 3 single-title cast queries) were run concurrently against the real
+  API through one compiled copy. Requests came out strictly alternating at
+  +206/2267/4358/6439/8555/10653 ms — min gap 2061 ms, six requests in 10.7 s
+  (~34 req/min → the old behaviour would have been ~57), no 429, every response
+  valid. Before this, the same pair each ran its own 2.1s loop.
+- **Three entry points, because the callers disagree about what an error is.**
+  `anilistQuery` (strict: throws on non-2xx or any `errors` entry, returns
+  `data`) covers the sweeps. `cast.ts` needs `anilistFetch` — the raw
+  `{status, ok, body}` — because a **404 is a legitimate answer** there, and
+  collapsing it into the strict variant would have re-broken the empty-cast bug
+  CLAUDE.md documents. `personalSync.ts` also takes the raw form: it must
+  classify failures into `AniListPersonalErrorKind`, and AniList reports
+  "User not found" as a GraphQL error under a 404. `anilistGraphQL` (envelope
+  passthrough) moved out of `auth.ts` unchanged in contract, so `write.ts` still
+  maps `errors` onto its own `WriteOutcome`.
+- **`auth.ts` is now purely the token store** (153 → 114 lines): file I/O, CSRF
+  state, validity clock, viewer lookup. It imports the transport like everyone
+  else. `ANILIST_ENDPOINT` no longer belongs to it.
+- **`sync.ts` was NOT split into `meta.ts` + `catalogCrawl.ts`.** §3's layout
+  still shows that split; it is a separate concern from F4 (which is about the
+  transport, not the sweeps), and this phase's own brief says to keep every query
+  where it is. 1026 → 936 lines, all of the loss being deleted transport.
+- Interactive writes (a tier-board drag) now share the throttle too, so one can
+  wait up to ~2.1s while a sweep runs. That is the intended trade: a queued write
+  beats a 429'd one, and the sweeps are the rare case.
+- CLAUDE.md's AniList section gained a `client.ts` bullet; the per-sweep
+  "throttled to ~28 req/min" sentence moved there rather than being repeated.
 
 ### Phase 4 — Split `store.ts` (F2) *(medium risk, most invasive)*
 

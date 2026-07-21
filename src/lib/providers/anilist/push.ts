@@ -29,9 +29,6 @@ import { pushAnilistEntry } from '@/lib/providers/anilist/write';
 import { upsertAnilistPersonalEntries } from '@/lib/store';
 import { AniListPersonalEntry, AnimeRecord, UserAnimeStatus } from '@/models/anime';
 
-/** Same conservative throttle the other AniList sweeps use (~28 req/min). */
-const PUSH_DELAY_MS = 2100;
-
 /** `SourceIds` values may arrive as strings (SIMKL mirrors some as such). */
 function toNum(value: number | string | undefined): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
@@ -118,7 +115,9 @@ export interface AniListPushResult {
  * Fire-and-forget (the API route doesn't await it) — progress surfaces through
  * `appendLog('anilist-personal-push', …)`, polled client-side, the same pattern
  * as the cast sweep and catalog crawl. Individual failures are non-fatal and
- * counted; only an unexpected throw aborts the run.
+ * counted; only an unexpected throw aborts the run. Pacing is not this loop's
+ * concern — `client.ts` throttles every AniList request process-wide, so the
+ * writes here queue behind whatever other sweep is running rather than racing it.
  *
  * **Resumable by construction**, like the cast sweep: each push lands on AniList
  * immediately and is reflected into the local slice as it goes, and the queue is
@@ -195,10 +194,6 @@ export async function performAnilistPersonalPush(): Promise<AniListPushResult> {
         appendLog('anilist-personal-push', 'info',
           `AniList push: ${i + 1}/${queue.length} titles processed`,
           { index: i + 1, total: queue.length, pushed, failed });
-      }
-
-      if (i < queue.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, PUSH_DELAY_MS));
       }
     }
 
