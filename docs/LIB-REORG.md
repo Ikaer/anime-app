@@ -1,7 +1,11 @@
 # `src/lib` — inventory and reorganization guide
 
-**Status:** proposal. Nothing here has been applied.
+**Status:** Phase 1 applied (2026-07-21). Phases 2–5 still proposals.
 **Measured:** 2026-07-21, at `326d74d` (36 modules, 10,132 lines).
+
+The inventory below still uses the **pre-move** filenames, since that is what
+the measurements and findings were taken against. §3 gives the target layout and
+§4.1 records what Phase 1 actually landed, including three deliberate deviations.
 
 `src/lib` is the only directory under `src/` with no internal structure —
 `components/` splits into `anime/`, `calculator/`, `shared/`; `models/` into
@@ -273,7 +277,7 @@ store vs reco vs domain) and **where it may run** (`domain/`, `url/`,
 Ordered by *value ÷ risk*. Each phase compiles independently; stop after any of
 them and the tree is in a better state than before.
 
-### Phase 1 — Pure moves, no code changes *(low risk, high clarity)*
+### Phase 1 — Pure moves, no code changes *(low risk, high clarity)* ✅ DONE
 
 Move files into the folders above, updating only import paths. Add
 `store/index.ts` re-exporting the three store modules so `@/lib/store` keeps
@@ -285,6 +289,30 @@ the proof.
 Do this as **one commit per folder** (`store/`, `providers/`, `reco/`,
 `domain/`), each with its CLAUDE.md path updates included. A single 36-file move
 commit is unreviewable and unrevertable.
+
+**Applied 2026-07-21** in five commits (`store/`, `providers/`, `reco/`,
+`domain/`, then `url/` + `config/` together — the last two are two files each and
+did not warrant separate commits). `npx tsc --noEmit` clean after each. Notes for
+whoever picks up Phase 2:
+
+- **`store.ts` became `store/index.ts` rather than a new barrel over three
+  files.** Splitting it is Phase 4; making the barrel now would have meant either
+  an index that re-exports one file (noise) or doing Phase 4 early. The 27
+  `@/lib/store` importers were left untouched either way, which was the point.
+- **`anilistSync.ts` landed as `providers/anilist/sync.ts`, not as
+  `meta.ts` + `catalogCrawl.ts`.** That split is a Phase 3 concern; Phase 1 moved
+  no code.
+- **`recommendations.ts` landed as `reco/engine.ts`** — a holding name for a file
+  Phase 2 empties into `scoring/feed/similar/refresh/feedback/data`. The region
+  table in F3 still describes it accurately, just under the new path.
+- Module *names* inside `domain/` were kept as-is (`animeUtils.ts` is still
+  `animeUtils.ts`); the F5 split into `hydrate/effective/filters/titles/season`
+  has no phase of its own yet.
+- `animeUrlParams.ts`'s lone relative import (`'./animeUtils'`, the only one in
+  `src/lib`) became an alias import, so no cross-folder relative paths remain.
+- CLAUDE.md and `.github/copilot-instructions.md` were updated in the same
+  commits; every `src/lib/…` link in CLAUDE.md was verified to resolve to a real
+  file afterwards.
 
 ### Phase 2 — Split `recommendations.ts` (F3) *(low risk, highest payoff)*
 

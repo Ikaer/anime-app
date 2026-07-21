@@ -22,14 +22,13 @@ src/
 │   ├── api/anime/        # Anime API endpoints
 │   └── index.tsx         # Main anime page
 ├── hooks/                # Custom hooks (useAnimeUrlState)
-├── lib/                  # Server-side data operations & utilities
-│   ├── jsonStore.ts      # DATA_PATH + JSON read/write primitives
-│   ├── store.ts          # The local record (server-side)
-│   ├── mal.ts            # MAL auth + API reads
-│   ├── malSync.ts        # MAL big-sync / historical crawl
-│   ├── animeUtils.ts     # Anime filtering & sorting logic
-│   ├── animeUrlParams.ts # URL state parsing
-│   └── searchLinks.ts    # Google/JustWatch search-link generators
+├── lib/                  # Data operations & utilities, split by owner
+│   ├── store/            # jsonStore (DATA_PATH primitives) + the local record
+│   ├── providers/        # capabilities/registry/status/writers + mal|simkl|anilist pipes
+│   ├── reco/             # recommendation engine, weights, credit similarity
+│   ├── domain/           # pure & client-safe: animeUtils, stats, ratingGrids, searchLinks
+│   ├── url/              # URL state encoding (animeParams.ts)
+│   └── config/           # settings.ts, connectionLog.ts
 └── styles/
     └── globals.css       # Global theme (CSS custom properties)
 ```

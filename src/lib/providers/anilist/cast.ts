@@ -10,7 +10,7 @@
  * then never again unless explicitly refreshed.
  */
 import { getAnilistCast, upsertAnilistCast } from '@/lib/store';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import { AniListCastEntry, AniListCastStudioEntry, AniListCharacterEntry, AniListVoiceActorEntry, AnimeRecord } from '@/models/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';

@@ -20,7 +20,7 @@
  */
 import type { UserAnimeStatus } from '@/models/anime';
 import { anilistGraphQL, getAnilistAccessToken } from '@/lib/providers/anilist/auth';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 
 /** MAL vocabulary -> AniList's. The inverse of anilistPersonalSync's STATUS_MAP.
  *  AniList's REPEATING has no MAL equivalent, so nothing maps onto it. */

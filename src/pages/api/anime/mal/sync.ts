@@ -3,7 +3,7 @@ import { upsertAnime, getSyncMetadata, updatePersonalStatusBatch } from '@/lib/s
 import { requireMalAuth, fetchSeasonalAnime, fetchUserAnimelist } from '@/lib/providers/mal/client';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
 import { MALAnime } from '@/models/anime';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 
 /**
  * The lightweight sync: the three seasons around today, plus the user's

@@ -1,5 +1,5 @@
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import { getSimklAppName, getSimklClientId } from '@/lib/settings';
+import { getSimklAppName, getSimklClientId } from '@/lib/config/settings';
 
 const SIMKL_AUTH_FILE = dataFile('auth/simkl.json');
 const SIMKL_STATE_FILE = dataFile('auth/oauth_state_simkl.json');

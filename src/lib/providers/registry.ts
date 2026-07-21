@@ -28,7 +28,7 @@ import {
   DEFAULT_PERSONAL_PRECEDENCE,
   resolveLocalPrecedence,
 } from '@/lib/domain/animeUtils';
-import { getLocalPrecedenceMode, getLocalProviderEnabledMode } from '@/lib/settings';
+import { getLocalPrecedenceMode, getLocalProviderEnabledMode } from '@/lib/config/settings';
 import {
   PROVIDER_IDS,
   isExternalPersonalProvider,

@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getMALAuthData, saveMALAuthData, clearMALAuthData, isMALTokenValid } from '@/lib/providers/mal/client';
 import { MALAuthData, MALUser } from '@/models/anime';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import crypto from 'crypto';
 import fs from 'fs';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import { getMalClientId } from '@/lib/settings';
+import { getMalClientId } from '@/lib/config/settings';
 import { getMalRedirectUri } from '@/lib/redirectUri';
 
 /**

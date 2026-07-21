@@ -10,8 +10,8 @@ import {
   isRecommendationsRefreshRunning,
   performRecommendationsRefresh,
 } from '@/lib/reco/engine';
-import { appendLog } from '@/lib/connectionLog';
-import { getCronSecret } from '@/lib/settings';
+import { appendLog } from '@/lib/config/connectionLog';
+import { getCronSecret } from '@/lib/config/settings';
 
 /**
  * Cron entry point. This route deliberately does NOT live under

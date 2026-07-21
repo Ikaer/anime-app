@@ -11,7 +11,7 @@ import {
   resolveSetting,
   getLocalProviderEnabledMode,
   getLocalPrecedenceMode,
-} from '@/lib/settings';
+} from '@/lib/config/settings';
 import {
   hasWritableExternal,
   isLocalProviderEnabled,

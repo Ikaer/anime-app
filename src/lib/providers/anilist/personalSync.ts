@@ -16,7 +16,7 @@
  * Server-only (persists via store.ts / jsonStore).
  */
 import { replaceAnilistPersonalEntries } from '@/lib/store';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { AniListPersonalEntry, UserAnimeStatus } from '@/models/anime';
 import { getAnilistAuthData, getAnilistAccessToken, fetchAnilistViewer } from '@/lib/providers/anilist/auth';

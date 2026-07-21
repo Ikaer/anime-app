@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { requireMalAuth } from '@/lib/providers/mal/client';
 import { getSyncMetadata } from '@/lib/store';
 import { performBigSync, BigSyncProgress } from '@/lib/providers/mal/sync';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 
 // Store ongoing big sync processes
 const syncProcesses = new Map<string, {

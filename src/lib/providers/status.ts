@@ -34,7 +34,7 @@ import {
   getMalClientId,
   getSimklClientId,
   getAnilistClientId,
-} from '@/lib/settings';
+} from '@/lib/config/settings';
 import {
   isPersonalProviderEnabled,
   getResolvedPersonalPrecedence,

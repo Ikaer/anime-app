@@ -4,7 +4,7 @@ import { getValidMalToken, fetchAnimeById } from '@/lib/providers/mal/client';
 import { refreshAnilistMetaForIds } from '@/lib/providers/anilist/sync';
 import { getOrFetchAnilistCast } from '@/lib/providers/anilist/cast';
 import { performSimklSync } from '@/lib/providers/simkl/sync';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 
 /**
  * Refresh a single anime's data from all three sources, on demand (detail page).

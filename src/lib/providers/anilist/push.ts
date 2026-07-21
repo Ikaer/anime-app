@@ -22,7 +22,7 @@
  *
  * Server-only.
  */
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import { getAnilistAccessToken } from '@/lib/providers/anilist/auth';
 import { fetchAuthenticatedAnilistList, AniListRemoteEntry } from '@/lib/providers/anilist/personalSync';
 import { pushAnilistEntry } from '@/lib/providers/anilist/write';
