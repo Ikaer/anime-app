@@ -8,7 +8,7 @@
  */
 
 import type { AnimeRecord } from '@/models/anime';
-import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
+import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
 
 export interface AnimeSearchHit {
   /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */

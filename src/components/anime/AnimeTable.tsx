@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, SortColumn, SortDirection, ImageSize, VisibleColumns } from '@/models/anime';
-import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
-import { formatSeason, getEffectiveProgress, getEffectiveScore, getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
+import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
+import { formatSeason, getEffectiveProgress, getEffectiveScore, getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
 import { Button } from '@/components/shared';
 import DiscrepancyBadge from './DiscrepancyBadge';
 import { useT, type TranslationKey } from '@/lib/i18n';

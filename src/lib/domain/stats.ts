@@ -19,7 +19,7 @@
  */
 
 import type { AniListCastEntry, AnimeRecord } from '@/models/anime';
-import { getEffectiveStatus } from '@/lib/animeUtils';
+import { getEffectiveStatus } from '@/lib/domain/animeUtils';
 
 /** The six repartition dimensions. */
 export type StatsDimension =

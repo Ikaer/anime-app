@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import styles from './SeasonSelector.module.css';
-import { getSeasonInfos } from '@/lib/animeUtils';
+import { getSeasonInfos } from '@/lib/domain/animeUtils';
 import { useT, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
 import type { SeasonInfo, SeasonName } from '@/models/anime';

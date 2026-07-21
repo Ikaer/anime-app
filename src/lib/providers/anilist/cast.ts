@@ -325,7 +325,7 @@ export async function performAnilistCastSweep(): Promise<AniListCastSweepResult>
     // Imported lazily: this module is otherwise a leaf that the detail page's
     // single-title path uses, and store.ts is the heavy `fs`-bound join.
     const { getAnimeForDisplay } = await import('@/lib/store');
-    const { getEffectiveStatus } = await import('@/lib/animeUtils');
+    const { getEffectiveStatus } = await import('@/lib/domain/animeUtils');
 
     const queue = getAnimeForDisplay()
       .filter(a => !!getEffectiveStatus(a))
@@ -394,7 +394,7 @@ export async function getAnilistCastSweepStats(): Promise<{
   sweepRunning: boolean;
 }> {
   const { getAnimeForDisplay } = await import('@/lib/store');
-  const { getEffectiveStatus } = await import('@/lib/animeUtils');
+  const { getEffectiveStatus } = await import('@/lib/domain/animeUtils');
 
   const statusedTitles = getAnimeForDisplay().filter(a => !!getEffectiveStatus(a));
   const missing = statusedTitles.filter(a => needsCastFetch(a.id)).length;

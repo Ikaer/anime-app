@@ -18,7 +18,7 @@ import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEnt
 import { computeDiscrepancy } from '@/lib/providers/discrepancy';
 import { buildProviderStates } from '@/lib/providers/personalState';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
+import { getSeasonInfos, toAnimeRecord } from '@/lib/domain/animeUtils';
 import { getResolvedPersonalPrecedence } from '@/lib/providers/registry';
 
 // Role folders, not filename prefixes (docs/DATA-LAYOUT.md). The same basename

@@ -14,7 +14,7 @@ import {
   SeasonName,
   SeasonInfo
 } from '@/models/anime';
-import { getSeasonInfos } from './animeUtils';
+import { getSeasonInfos } from '@/lib/domain/animeUtils';
 
 // ============================================================================
 // Types

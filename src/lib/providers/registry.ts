@@ -27,7 +27,7 @@ import { getAnilistAuthData } from '@/lib/providers/anilist/auth';
 import {
   DEFAULT_PERSONAL_PRECEDENCE,
   resolveLocalPrecedence,
-} from '@/lib/animeUtils';
+} from '@/lib/domain/animeUtils';
 import { getLocalPrecedenceMode, getLocalProviderEnabledMode } from '@/lib/settings';
 import {
   PROVIDER_IDS,

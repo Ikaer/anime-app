@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import type { LocalPrecedenceMode } from '@/lib/animeUtils';
+import type { LocalPrecedenceMode } from '@/lib/domain/animeUtils';
 
 export type { LocalPrecedenceMode };
 export type LocalProviderEnabled = 'auto' | 'on' | 'off';

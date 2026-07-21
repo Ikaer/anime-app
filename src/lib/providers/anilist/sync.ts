@@ -7,7 +7,7 @@
  */
 import { getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry, toNum } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
-import { getSeasonInfos } from '@/lib/animeUtils';
+import { getSeasonInfos } from '@/lib/domain/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry, AniListRelationEntry } from '@/models/anime';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';

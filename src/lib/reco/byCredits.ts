@@ -16,7 +16,7 @@
  */
 
 import type { AnimeRecord } from '@/models/anime';
-import { getCatalogPrimaryTitle } from '@/lib/animeUtils';
+import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
 
 export interface SharedStaffCredit {
   name: string;

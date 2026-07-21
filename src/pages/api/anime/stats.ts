@@ -12,7 +12,7 @@
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllAnilistCast, getAnimeForDisplay } from '@/lib/store';
-import { computeStats, type StatsResult } from '@/lib/stats';
+import { computeStats, type StatsResult } from '@/lib/domain/stats';
 
 export interface StatsApiResponse extends StatsResult {
   /** Echoed back so the client can confirm what it asked for. */

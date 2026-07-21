@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
-import { searchCatalog, MIN_QUERY_LENGTH, type GlobalSearchResults } from '@/lib/globalSearch';
+import { searchCatalog, MIN_QUERY_LENGTH, type GlobalSearchResults } from '@/lib/domain/globalSearch';
 
 /**
  * Header global search. Catalog-only (title/studio/staff), so the shared cached

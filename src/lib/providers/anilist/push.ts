@@ -233,7 +233,7 @@ async function buildQueue(): Promise<{ queue: QueueItem[]; remoteCount: number; 
   // Imported lazily for the same reason the cast sweep does it: store.ts is the
   // heavy `fs`-bound join and this module is otherwise a leaf.
   const { getAnimeForDisplay } = await import('@/lib/store');
-  const { getEffectiveStatus, getEffectiveScore, getEffectiveProgress } = await import('@/lib/animeUtils');
+  const { getEffectiveStatus, getEffectiveScore, getEffectiveProgress } = await import('@/lib/domain/animeUtils');
 
   const remoteEntries = (await fetchAuthenticatedAnilistList()) ?? [];
   // Keyed by MAL id — the join key both sides share. An AniList-only remote

@@ -2,7 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import type { GetServerSideProps } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
-import { listAnimeByStudio, listAnimeByStaff, type CreditedAnime } from '@/lib/creditsCatalog';
+import { listAnimeByStudio, listAnimeByStaff, type CreditedAnime } from '@/lib/domain/creditsCatalog';
 import { useT } from '@/lib/i18n';
 
 type CreditType = 'studio' | 'staff';

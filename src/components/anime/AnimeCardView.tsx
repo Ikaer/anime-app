@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoVerdict } from '@/models/anime';
-import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
-import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
+import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
+import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
 import DiscrepancyBadge from './DiscrepancyBadge';

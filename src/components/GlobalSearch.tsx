@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useT } from '@/lib/i18n';
-import type { GlobalSearchResults, AnimeSearchHit, CreditSearchHit } from '@/lib/globalSearch';
-import { MIN_QUERY_LENGTH } from '@/lib/globalSearch';
+import type { GlobalSearchResults, AnimeSearchHit, CreditSearchHit } from '@/lib/domain/globalSearch';
+import { MIN_QUERY_LENGTH } from '@/lib/domain/globalSearch';
 import styles from './GlobalSearch.module.css';
 
 const EMPTY: GlobalSearchResults = { animes: [], studios: [], staff: [] };
