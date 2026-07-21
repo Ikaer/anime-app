@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { computeFeed } from '@/lib/reco/engine';
+import { computeFeed } from '@/lib/reco/feed';
 import { getFeedbackAnime } from '@/lib/reco/feedback';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { applyNarrowingFilters } from '@/lib/domain/animeUtils';

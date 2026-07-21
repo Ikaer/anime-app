@@ -5,7 +5,7 @@ import { performSimklSync } from '@/lib/providers/simkl/sync';
 import { importAnilistPersonalList } from '@/lib/providers/anilist/personalSync';
 import { isAnilistMetaSyncRunning, performAnilistMetaSync } from '@/lib/providers/anilist/sync';
 import { isPersonalProviderEnabled } from '@/lib/providers/registry';
-import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/engine';
+import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { appendLog } from '@/lib/config/connectionLog';
 import { getCronSecret } from '@/lib/config/settings';

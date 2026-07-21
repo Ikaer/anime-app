@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import type { RecoContribution } from '@/models/anime';
-import type { SimilarItem } from '@/lib/reco/engine';
+import type { SimilarItem } from '@/lib/reco/similar';
 import { useI18n, TranslationKey } from '@/lib/i18n';
 import styles from './MoreLikeThis.module.css';
 
