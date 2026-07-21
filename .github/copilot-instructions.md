@@ -63,7 +63,7 @@ import { Button, CollapsibleSection } from '@/components/shared';
 
 ### Data Storage
 - JSON file-based storage in `/app/data/`
-- `lib/store/jsonStore.ts` owns `dataFile`/`readJsonFile`/`writeJsonFile`
+- `lib/store/jsonStore.ts` owns `dataFile`/`readJsonFile`/`writeJsonFile`; above it `store/` is `registry.ts` (canonical ids) → `slices.ts` (one block per JSON file) → `record.ts` (the join), behind an `index.ts` barrel
 - Automatic directory creation via `ensureDataDirectory()`
 
 ### API Routes

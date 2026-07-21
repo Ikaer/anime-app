@@ -1,6 +1,6 @@
 # `src/lib` — inventory and reorganization guide
 
-**Status:** Phases 1–3 applied (2026-07-21). Phases 4–5 still proposals.
+**Status:** Phases 1–4 applied (2026-07-21). Phase 5 still a proposal.
 **Measured:** 2026-07-21, at `326d74d` (36 modules, 10,132 lines).
 
 The inventory below still uses the **pre-move** filenames, since that is what
@@ -223,7 +223,8 @@ src/lib/
     jsonStore.ts              (unchanged)
     registry.ts               ← identity spine out of store.ts (F2.2)
     slices.ts                 ← the 7 CRUD blocks   (F2.1)
-    record.ts                 ← getAnimeForDisplay + row cache (F2.3)
+    record.ts                 ← getAnimeForDisplay + the join (F2.3)
+    recordCache.ts            ← the row cache, extracted to keep the two acyclic
     bootstrap.ts
     index.ts                  ← re-exports; keeps `@/lib/store` working
 
@@ -425,7 +426,7 @@ deleted across the six callers for 82 added. Notes:
 - CLAUDE.md's AniList section gained a `client.ts` bullet; the per-sweep
   "throttled to ~28 req/min" sentence moved there rather than being repeated.
 
-### Phase 4 — Split `store.ts` (F2) *(medium risk, most invasive)*
+### Phase 4 — Split `store.ts` (F2) *(medium risk, most invasive)* ✅ DONE
 
 Cut into `registry.ts` / `slices.ts` / `record.ts` behind the `index.ts` barrel
 from Phase 1. Left until last on purpose: 27 importers and the app's central
@@ -436,6 +437,38 @@ Optional follow-up, only if the CRUD repetition actually starts costing:
 collapse the seven slice blocks into a `defineSlice<T>()` factory. Weigh it
 carefully — the cache-eviction and shared-reference contracts documented in
 `jsonStore.ts` are exactly the kind of subtlety a generic factory blurs.
+
+**Applied 2026-07-21.** 907-line `index.ts` → `registry.ts` (163) + `slices.ts`
+(541) + `record.ts` (185) + `recordCache.ts` (44) + a 79-line barrel. No call
+site changed: every importer already used `@/lib/store` or a leaf
+(`jsonStore`/`bootstrap`), so the barrel absorbed the whole split. Notes:
+
+- **A fourth module was needed, and it is the interesting part.** `record.ts`
+  imports every slice reader, so the row cache could not live there — the slice
+  *writers* clear it, which would have made the two files mutually recursive.
+  `recordCache.ts` holds the two variables and `invalidateRecordCache()`, and the
+  dependency arrows then point one way: `registry` → `slices` → `record`, with
+  `recordCache` off to the side. The 20-odd `cachedAnime = null` statements
+  became that call.
+- **`getMalIdForCanonical` had the same shape of problem and went the other way.**
+  It reads like registry code, but its first step consults the MAL catalog slice,
+  and `registry.ts` must stay *below* the slices (they resolve ids at write
+  time). It lives in `slices.ts` with a comment saying why. `getSyncMetadata` and
+  `updatePersonalStatusBatch` are likewise slice operations, not row-join ones.
+- **Verified behaviour-preserving the way Phase 2 recommends, and it was worth
+  doing.** `src/lib` + `src/models` compiled to CommonJS in a scratch dir with a
+  `@/`→`src/` require hook, `getAnimeForDisplay()` run against the salon store on
+  the stashed tree and on the result, both dumps sorted by id: **byte-identical,
+  97,194,679 bytes over 25,382 rows**. A second probe covered the seam the split
+  actually changed — cache hit returns the same reference, a no-op write and a
+  cast write both keep it, a hidden-id write invalidates it.
+- **Caution for whoever repeats that probe: it writes to the real store.** The
+  cache probe's `upsertAnilistCast('a_1', {characters:[]})` persisted an empty
+  cast entry, which is exactly the permanently-short-circuiting state CLAUDE.md
+  warns about; it had to be deleted by hand afterwards. Point `DATA_PATH` at a
+  copy, or probe only read paths.
+- CLAUDE.md's store paragraph was rewritten to name the four modules and both
+  layering exceptions; `cachedAnime` no longer appears in it.
 
 ### Phase 5 — Enforce the boundary (F1)
 
