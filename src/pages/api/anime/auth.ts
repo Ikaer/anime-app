@@ -4,7 +4,7 @@ import { MALAuthData, MALUser } from '@/models/anime';
 import { appendLog } from '@/lib/connectionLog';
 import crypto from 'crypto';
 import fs from 'fs';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { getMalClientId } from '@/lib/settings';
 import { getMalRedirectUri } from '@/lib/redirectUri';
 

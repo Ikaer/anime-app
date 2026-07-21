@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { resolveDataPath } from '@/lib/bootstrap';
+import { resolveDataPath } from '@/lib/store/bootstrap';
 
 /**
  * The JSON-file store that stands in for a database. Every persisted file lives

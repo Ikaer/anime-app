@@ -23,8 +23,8 @@ import {
   writeBootstrapConfig,
   bootstrapConfigFile,
   resolveLogsPath,
-} from '@/lib/bootstrap';
-import { DATA_PATH } from '@/lib/jsonStore';
+} from '@/lib/store/bootstrap';
+import { DATA_PATH } from '@/lib/store/jsonStore';
 import { getMalRedirectUri, getSimklRedirectUri, getAnilistRedirectUri } from '@/lib/redirectUri';
 
 /**

@@ -11,7 +11,7 @@
 
 import type { NextApiResponse } from 'next';
 import { MALAnime, MALAuthData, MALUser } from '@/models/anime';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 
 const MAL_AUTH_FILE = dataFile('auth/mal.json');
 const MAL_API = 'https://api.myanimelist.net/v2';

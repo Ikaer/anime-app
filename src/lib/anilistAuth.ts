@@ -19,7 +19,7 @@
  *
  * Server-only (reads/writes JSON under DATA_PATH).
  */
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 
 const ANILIST_AUTH_FILE = dataFile('auth/anilist.json');
 const ANILIST_STATE_FILE = dataFile('auth/oauth_state_anilist.json');

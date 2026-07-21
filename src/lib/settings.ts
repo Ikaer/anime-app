@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import type { LocalPrecedenceMode } from '@/lib/animeUtils';
 
 export type { LocalPrecedenceMode };

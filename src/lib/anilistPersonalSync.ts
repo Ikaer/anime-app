@@ -17,7 +17,7 @@
  */
 import { replaceAnilistPersonalEntries } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { AniListPersonalEntry, UserAnimeStatus } from '@/models/anime';
 import { getAnilistAuthData, getAnilistAccessToken, fetchAnilistViewer } from '@/lib/anilistAuth';
 

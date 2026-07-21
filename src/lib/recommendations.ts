@@ -15,7 +15,7 @@ import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds, toNum 
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/anilistSync';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { MAL_ANIME_FIELDS } from '@/lib/mal';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 

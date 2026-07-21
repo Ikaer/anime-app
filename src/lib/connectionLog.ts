@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { resolveLogsPath } from '@/lib/bootstrap';
-import { dataFile, ensureDataDirectory } from '@/lib/jsonStore';
+import { resolveLogsPath } from '@/lib/store/bootstrap';
+import { dataFile, ensureDataDirectory } from '@/lib/store/jsonStore';
 
 /**
  * The connection log is **app data, not diagnostics** (docs/DATA-LAYOUT.md §3.2):

@@ -14,7 +14,7 @@
 import { MALAnime } from '@/models/anime';
 import { upsertAnime, getSyncMetadata } from '@/lib/store';
 import { fetchSeasonalAnime, fetchUpcomingAnime, MalFetchProgress } from '@/lib/mal';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { appendLog } from '@/lib/connectionLog';
 
 const SYNC_CHECKPOINT_FILE = dataFile('sync/mal_seasons.json');
