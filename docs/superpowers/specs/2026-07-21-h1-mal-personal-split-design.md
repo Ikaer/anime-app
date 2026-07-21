@@ -3,7 +3,7 @@
 > A **design + implementation spec** for PROVIDER-PARITY.md task **H1**.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Todo`** — approved 2026-07-21.
+> **Status: `Done`** — shipped and migrated in production 2026-07-21.
 > Implements [PROVIDER-PARITY.md](../../PROVIDER-PARITY.md) §H1; unblocks
 > [DATA-LAYOUT.md](../../DATA-LAYOUT.md)'s `personal/` folder rule.
 
