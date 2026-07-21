@@ -306,7 +306,18 @@ export interface AniListMetaSyncResult {
   error?: string;
 }
 
-let isAnilistMetaSyncRunning = false;
+let anilistMetaSyncRunning = false;
+
+/**
+ * Is a metadata sync in flight? The sync is normally fire-and-forget (it can run
+ * for minutes and reports through `appendLog`), so a caller that starts one
+ * without awaiting has no other way to tell "started" from "one was already
+ * going" — which is exactly what cron-sync reports per provider. Same shape as
+ * `isRecommendationsRefreshRunning` and the catalog crawl's `crawlRunning`.
+ */
+export function isAnilistMetaSyncRunning(): boolean {
+  return anilistMetaSyncRunning;
+}
 
 /**
  * Which titles still need enrichment, split by the id space they can be queried
@@ -384,12 +395,12 @@ export async function refreshAnilistMetaForIds(
 }
 
 export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
-  if (isAnilistMetaSyncRunning) {
+  if (anilistMetaSyncRunning) {
     appendLog('anilist-meta-sync', 'info', 'AniList metadata sync skipped: already running');
     return { ok: false, alreadyRunning: true, totalMissing: 0, processed: 0, tagged: 0, failed: 0 };
   }
 
-  isAnilistMetaSyncRunning = true;
+  anilistMetaSyncRunning = true;
   try {
     const { malIds, anilistIds } = selectMetaTargets();
     const totalMissing = malIds.length + anilistIds.length;
@@ -479,7 +490,7 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   } finally {
-    isAnilistMetaSyncRunning = false;
+    anilistMetaSyncRunning = false;
   }
 }
 

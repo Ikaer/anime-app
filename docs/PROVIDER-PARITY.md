@@ -3,12 +3,13 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2, A2, D1,
-> E1–E4 `Done` (2026-07-21); B3 `Dropped` (assessed, deliberately deferred).
-> **F1 is what remains.** D2 landed the capability descriptor; A2 and D1 then
+> **Status: `Done`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2, A2, D1,
+> E1–E4, F1 `Done` (2026-07-21); B3 `Dropped` (assessed, deliberately deferred).
+> **Every item is now closed.** D2 landed the capability descriptor; A2 and D1 then
 > consumed it — neither as the one-line swap D2 had left ready (see both) — and
 > E1–E4 needed a runtime peer to it that the inventory never named (see
-> [E1–E4](#e1e4--what-shipped)).
+> [E1–E4](#e1e4--what-shipped)). F1 closed it, and was the third item whose
+> *stated* gap ("three explicit calls") sat behind an unstated auth gate.
 > B4 was **not in the original inventory** — it came from asking whether the
 > keyless promise actually holds for the reco feed. It did not. See [B4](#b4--the-recommendation-feed-was-unreachable-without-a-mal-account--done-2026-07-21).
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
@@ -821,7 +822,7 @@ status endpoint and its hook, which the inventory did not mention at all.
 
 ### F. Orchestration
 
-#### F1 — cron-sync is MAL-only
+#### F1 — cron-sync is MAL-only — **`Done` 2026-07-21**
 
 **Evidence:** [cron-sync.ts:2-4](../src/pages/api/anime/cron-sync.ts) imports
 `getMALAuthData`, `isMALTokenValid`, `performHistoricalCrawl`, plus
@@ -839,6 +840,90 @@ different operations. The fix is three explicit calls, each guarded by its own
 enablement check, not one abstracted one.
 
 **Size:** small per provider.
+
+**What shipped — the three explicit calls the inventory asked for, plus one
+thing it named as the symptom and one it did not name at all:**
+
+1. **The MAL-only-ness was a *gate*, not just missing calls.** The handler
+   returned **400 for the whole run** when the MAL token was missing or expired,
+   before reaching anything else. So the fix is not only "add SIMKL and AniList
+   next to MAL" — it is that no provider gates the run. MAL is now one skippable
+   step among five, guarded by the same `isPersonalProviderEnabled('mal')` every
+   other personal step uses. This is B4's shape one layer up, and it had the same
+   consequence: a feature that already worked for a keyless install was
+   unreachable because of an auth check on the route in front of it.
+2. **The recommendations refresh was the collateral damage.** It sat *inside* the
+   MAL-token branch and took `token.access_token`. B4 had already made
+   `performRecommendationsRefresh` take `string | null` and run on the anonymous
+   AniList crowd source alone — but on a keyless install cron never got that far,
+   so the one scheduled consumer of B4's work never exercised it. It now runs on
+   every tick with `null` when there is no valid MAL token.
+3. **The AniList *metadata* sync is deliberately ungated** — the catalog role's
+   auth kind is `anonymous`, so it runs on an install with no account of any
+   kind. Gating it on the AniList *account* would be E4's exact mistake (filing an
+   unauthenticated catalog action under an account) transplanted into
+   orchestration. It stays fire-and-forget, as its own route is: it is incremental
+   but unbounded, and awaiting a multi-minute sweep here would put the *next*
+   tick's SIMKL delta behind it. That made a small addition necessary —
+   `isAnilistMetaSyncRunning()`, exported alongside the existing
+   `isRecommendationsRefreshRunning` — because a step that does not await has no
+   other way to tell "started" from "one was already going".
+4. **Reporting is per step, and 200 is the only status.** Each step returns a
+   `CronStepOutcome` (`skipped: true` = no account, so not applicable; `ok: false`
+   = should have run and didn't) and the handler echoes the map — the same
+   "declare the degraded mode" shape as `RecoRefreshSources`. A step that throws
+   is caught and reported, never fatal to the others. The handler answers **200
+   even when a step failed**, because a non-2xx tells the NAS cron job "nothing
+   ran", which is the conflation this item removes. The old response's
+   `historicalCrawl` key is gone; the only caller is a `curl` in
+   docker-compose.yml that discards the body.
+5. **Order is load-bearing, and the measurement below shows it.** Data pulls
+   first, then the reco refresh (so it ranks over what just landed), then the
+   AniList sweep last — both it and the reco refresh throttle against the same
+   AniList rate limit, and the sweep is the one that can run for minutes.
+6. **"Connected but expired" is its own outcome**, not a skip: `ok: false` with
+   *"MAL token expired — re-authenticate"*. Same distinction E1–E4 drew for the
+   badges — token *presence* is enablement, validity is a separate, actionable
+   state.
+
+**MAL's list sync was deliberately not added as a fourth call.** `mal/sync`
+exists, but MAL's seasonal payload carries `my_list_status` inline and
+`upsertAnime` splits it into the personal slice on ingest (H1), so big-sync
+already refreshes MAL personal state for every season it touches. A separate call
+would be a second path to the same data.
+
+**Verified on three synthetic stores against a production build** (2026-07-21),
+each a 10-title catalog with 4 in-app ratings, differing *only* in `auth/` — which
+is the point, since the whole item is about which configurations get a tick. The
+SIMKL and AniList tokens are the real ones (both steps are read-only pulls); the
+expired MAL token is fabricated and never sent anywhere (`isMALTokenValid`
+short-circuits offline).
+
+| store | HEAD | this change |
+|---|---|---|
+| **keyless** (no `auth/` at all) | **400**, nothing ran | **200** — all three personal steps `skipped`, reco refresh ran (4 seeds, 51 candidates hydrated via AniList), metadata sync started |
+| **SIMKL + AniList, no MAL** | **400**, nothing ran | **200** — SIMKL `initial` pull **659** entries, AniList import **671**, reco refresh **274 seeds**, metadata sync started on 1,608 titles |
+| **MAL token expired** | **400**, nothing ran | **200** — `malCatalog {ok:false, reason:"MAL token expired"}`, the other four steps unaffected |
+
+Two details worth keeping: the **274 vs 4** seed counts are the same store before
+and after the personal imports landed in the same tick — direct evidence that
+ordering the reco refresh after the pulls matters, not just tidiness. And a
+**second consecutive tick** on the SIMKL+AniList store returned SIMKL `phase:
+"noop"` (the watermark held) and `anilistCatalog {skipped: true, reason: "A
+metadata sync is already running"}` — the run lock reported honestly through a
+fire-and-forget step, which is what item 3 above needed.
+
+**Not verified live:** the MAL-connected path. `startBigSync` +
+`performHistoricalCrawl` are unchanged code moved under a guard, and exercising
+them means an 8-year seasonal crawl against the real MAL API. The *guard* is
+verified in both directions (skipped with no token, `ok: false` with an expired
+one); the body it guards is not.
+
+**Known gap left open:** the per-step outcomes are returned in the response and
+written to the `cron-sync` log channel, but nothing renders them — the same gap
+B4 and E1–E4 both left. A cron tick has no user watching, so the log panel on
+`/connections` is the natural home; it already polls that channel, it just shows
+the messages rather than the structured `steps` map.
 
 ### G. Documentation drift
 
@@ -1010,7 +1095,10 @@ gaps actually demand rather than by what a fourth provider might.
 ### What it does not touch
 
 A1, B1, B2, C1 and F1 are **independent** and should not wait on it. A1 and C1
-in particular are small, high-symptom, and blocked on nothing.
+in particular are small, high-symptom, and blocked on nothing. *(As built, F1
+used it anyway — not for capability but for the single enablement predicate
+`isPersonalProviderEnabled`, which is D2's other half. "Independent of" turned out
+to mean "not blocked by", not "does not benefit from".)*
 
 ## 4. Suggested order
 
@@ -1097,7 +1185,21 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > duplication, check whether the thing being duplicated is a missing seam.**
    > Same shape as B1's "check what feeds it before changing what it accepts",
    > applied to a read model instead of a query.
-6. **F1** — independent; slot in whenever cron matters.
+6. ~~**F1**~~ — cron-sync across every provider. **Done 2026-07-21.** Scheduled
+   sync now runs for a SIMKL-only, AniList-only or entirely keyless install, and
+   no provider can abort the run. **This closes the inventory.**
+
+   > The lesson is B4's, and the fact that it recurs *is* the lesson. F1's
+   > evidence line named three missing imports, so the item read as "add three
+   > calls" — but the reason those calls were missing is that a `400` on the MAL
+   > token sat in front of them, and the inventory never wrote that down. Same
+   > with B4 (a `401` in front of a feed that worked keyless) and A2 (a check
+   > that had silently stopped firing). **Three of the last four items were
+   > larger than their evidence line, always in the same direction: the stated
+   > gap was a missing capability, the real gap was a guard in front of a
+   > capability that already existed.** Worth carrying into whatever inventory
+   > comes next — for each entry, ask what refuses the request before the code
+   > you are looking at runs.
 7. ~~**H1**~~ — the MAL catalog/personal split. **Done 2026-07-21.** The 39 MB
    rewrite per rating is gone, `MALAnime` is pure catalog, and
    [DATA-LAYOUT.md](DATA-LAYOUT.md)'s `personal/` folder is unblocked (its fourth

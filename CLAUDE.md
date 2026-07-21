@@ -114,7 +114,7 @@ Ranking + fetch logic is in [src/lib/recommendations.ts](src/lib/recommendations
 - `/api/anime/mal/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)
 - `/api/anime/mal/big-sync` — full seasonal sync, fetches 8 years of seasons + upcoming ranking via MAL API, SSE progress streaming
 - `/api/anime/mal/historical-crawl` — GET returns crawl stats; POST runs a 5-season batch crawl going back to 1960. Uses a module-level lock to prevent concurrent runs. Cron-sync also calls this directly from lib after triggering big-sync.
-- `/api/anime/cron-sync` — cron-triggered, authenticated via `CRON_SECRET` header. Stays outside `mal/` on purpose: an external cron job on the NAS calls this exact path, and it spans MAL + recommendations. `/api/anime/auth` likewise stays put — it is the MAL OAuth app's registered redirect URI.
+- `/api/anime/cron-sync` — cron-triggered, authenticated via `CRON_SECRET` header. Stays outside `mal/` on purpose: an external cron job on the NAS calls this exact path, and it spans **every** provider, not just MAL. `/api/anime/auth` likewise stays put — it is the MAL OAuth app's registered redirect URI. See "Scheduled sync (cron-sync)" below for what it runs.
 - `/api/anime/animes/[id]/refresh` (POST) — on-demand single-title refill from ALL THREE sources in parallel (MAL single-title GET merged over the local record, AniList force-refetch of tags+staff+banner+relations — by MAL id when there is one, by AniList id otherwise, so it works on a MAL-less title; SIMKL incremental sync). Each source is isolated/non-fatal; returns a per-source `{ mal, anilist, simkl }` outcome. Backs the detail-page `RefreshButton`.
 
 ### SIMKL integration (read-only)
@@ -123,7 +123,7 @@ A second, read-only personal-data source alongside MAL. SIMKL data lives in a le
 
 - Sync is **one-way (SIMKL → app), personal library only** (statused anime), following SIMKL's two-phase model (`docs/simkl/apirules.md`): initial `/sync/all-items/anime` (plain — NOT `extended=ids_only`, which strips per-item status/rating/progress; the plain call already returns those plus full `ids` incl. `mal`, verified against a live account), then `/sync/activities` + `date_from` deltas, with `sync/simkl_checkpoint.json` holding the `anime.all` watermark. **Rating-only edits are a delta blind spot** (verified live 2026-07-06): a freshly-rated title does NOT appear in `all-items?date_from=…` even though its `activities.anime.rated_at`/`all` advanced — so the checkpoint also tracks `lastRatedAt`, and when it moves the sync falls back to a **FULL** `all-items` pull to capture the new score. Existing checkpoints predate `lastRatedAt` (undefined), so the first sync after this shipped does one backfilling full pull. Deletion reconciliation diffs `extended=simkl_ids_only` against the local store. Orchestration in [src/lib/simklSync.ts](src/lib/simklSync.ts); auth/state/watermark in [src/lib/simkl.ts](src/lib/simkl.ts); endpoints under `src/pages/api/anime/simkl/` (`auth`, `sync`). **Writes to SIMKL are limited to ONE narrow carve-out: user-initiated ratings** pushed from the Tier list board (see below). Nothing else is ever written to SIMKL — sync remains one-way SIMKL → app.
 - **Discrepancy detection** is no longer SIMKL-specific — see "Local personal-data provider" below.
-- Deferred: MAL-internal discrepancies, and wiring SIMKL delta into cron-sync. (Catalog-wide **tags** were originally planned as a SIMKL "big-sync" — superseded, see below: SIMKL's public API has no tags field or tag-filterable endpoint, verified against its live OpenAPI spec.)
+- Deferred: MAL-internal discrepancies. (The SIMKL delta is wired into cron-sync since PROVIDER-PARITY.md F1.) (Catalog-wide **tags** were originally planned as a SIMKL "big-sync" — superseded, see below: SIMKL's public API has no tags field or tag-filterable endpoint, verified against its live OpenAPI spec.)
 
 ### Local cache authority (personal-state precedence)
 
@@ -323,6 +323,38 @@ genres.
 - **The header badges are one component** ([ConnectionBadges](src/components/anime/ConnectionBadges.tsx)) over that one fetch, replacing three near-identical stateful wrappers. `local` gets a badge **only while enabled** — an off local provider is not a connection.
 - **`local` has a card**: active/inactive, entry count, precedence rank, why `auto` switched it off, and a link to `/settings`. On a keyless install it is the only active personal provider, and it previously appeared nowhere in the UI.
 - **Actions are NOT abstracted.** Each provider's sync stays its own block in [CatalogRoleActions](src/components/anime/connections/CatalogRoleActions.tsx) / [PersonalRoleActions](src/components/anime/connections/PersonalRoleActions.tsx), passed to the card as children — MAL's seasonal crawl, SIMKL's delta and AniList's GraphQL batch are different operations (PROVIDER-ABSTRACTION.md). Only the card around them is uniform. Note MAL's list sync is a *personal*-role action while big-sync/historical-crawl are *catalog* ones; the sync-error state is split the same way.
+
+### Scheduled sync (cron-sync) — five steps, none of them a gate
+
+[cron-sync.ts](src/pages/api/anime/cron-sync.ts) is the one place scheduled work
+is orchestrated, and since PROVIDER-PARITY.md F1 it covers every provider, not
+just MAL. It is **not** a generic loop, per PROVIDER-ABSTRACTION.md: MAL's
+seasonal crawl, SIMKL's two-phase delta and AniList's GraphQL batch are
+genuinely different operations. What is uniform is *enablement* and *reporting*.
+
+- **Five steps, each isolated and non-fatal**: MAL catalog (big-sync via HTTP,
+  which owns the run lock, then a 5-season historical crawl), SIMKL delta,
+  AniList list import, the recommendations refresh, then the AniList metadata
+  sync. Each returns a `CronStepOutcome` and they are all echoed in the response
+  — same "declare the degraded mode" shape as `RecoRefreshSources` (B4).
+  `skipped: true` = not applicable (no account); `ok: false` = it should have run
+  and didn't. **The handler answers 200 even when a step failed** — a non-2xx
+  would tell the NAS cron job "nothing ran", which is exactly what F1 removed.
+- **No provider gates the run.** Until F1 a missing or expired MAL token was a
+  400 for the whole handler, so a SIMKL-only, AniList-only or keyless install got
+  nothing at all — including the recommendations refresh, which B4 had already
+  made MAL-optional. Each personal step now guards itself with the one enablement
+  predicate, `isPersonalProviderEnabled(id)`.
+- **The AniList metadata sync is ungated on purpose** — that role's auth kind is
+  `anonymous`, so it runs on an install with no account of any kind. Gating it on
+  the AniList *account* is E4's mistake in orchestration form.
+- **Order is load-bearing.** Data pulls first, so the reco refresh consumes what
+  they just landed (measured: 4 seeds keyless vs 274 after the SIMKL + AniList
+  imports on the same store). The AniList metadata sweep goes **last** and
+  fire-and-forget: it is incremental but unbounded, awaiting it would put the
+  next tick's SIMKL delta behind it, and it throttles against the same AniList
+  rate limit the reco refresh just used. `isAnilistMetaSyncRunning()` is what
+  lets a fire-and-forget step still report "already running" honestly.
 
 ### First-run onboarding (empty store)
 
