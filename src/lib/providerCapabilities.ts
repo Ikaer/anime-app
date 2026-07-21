@@ -195,11 +195,45 @@ export function supportsStatusClear(id: ProvenanceSource): boolean {
 /**
  * Providers claiming to hold the user's COMPLETE list.
  *
- * This is what `PRESENCE_ANCHORS` in [discrepancy.ts](discrepancy.ts) means, and
- * A2 is the swap: that constant is `['mal']` — this field frozen back when MAL
- * was the only full list. Not wired yet, because it is a *behaviour* change
- * (AniList joins the anchors), which A2 owns.
+ * This is what `PRESENCE_ANCHORS` in [discrepancy.ts](discrepancy.ts) used to
+ * freeze as `['mal']`, back when MAL was the only full list. Prefer
+ * `presenceAnchors` below over calling this directly — the *set* is not the
+ * answer presence detection wants.
  */
 export function fullListProviders(): ProvenanceSource[] {
   return PROVIDER_IDS.filter(id => PROVIDER_CAPABILITIES[id].personal?.listCoverage === 'full');
+}
+
+/**
+ * The **reference list** a title's absence is judged against (A2) — at most one,
+ * chosen as the first full-list provider in the resolved personal precedence, so
+ * a provider that is not enabled (absent from the precedence) never anchors.
+ *
+ * **Why one and not the full set.** The obvious reading of A2 is
+ * `PRESENCE_ANCHORS = fullListProviders()`, i.e. `['mal', 'anilist']`. Measured
+ * against the real store that reports **430 of 671** tracked titles as a presence
+ * split — every MAL entry the (smaller, later-connected) AniList account happens
+ * not to hold. That is the exact failure the original asymmetry existed to avoid,
+ * re-created one level up: with two mutual anchors, "absent from a reference
+ * list" degenerates into "the two lists differ", which is the whole list.
+ *
+ * `listCoverage: 'full'` is an **API** claim — this provider's read returns the
+ * account's entire list rather than a subset feed. It is not a claim that the
+ * account IS the user's comprehensive record. Presence detection needs the
+ * latter, and precedence is where the app already states which provider it
+ * believes: the winner of a conflict is the reference the others are compared to.
+ *
+ * Consequences, all intended:
+ * - MAL + anything → `['mal']`, today's behaviour, preserved.
+ * - No MAL (the keyless / AniList-only install) → `['anilist']`, which is A2's
+ *   stated symptom: previously there was no anchor at all and no presence split
+ *   could ever be reported.
+ * - SIMKL-only or local-only → `[]`. Nothing claims completeness, so an absence
+ *   is not news — correct, and previously expressed as a dangling `['mal']`.
+ */
+export function presenceAnchors(precedence: ProvenanceSource[]): ProvenanceSource[] {
+  const anchor = precedence.find(
+    id => PROVIDER_CAPABILITIES[id].personal?.listCoverage === 'full'
+  );
+  return anchor ? [anchor] : [];
 }

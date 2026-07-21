@@ -25,6 +25,9 @@ const SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 interface WriteOutcome {
   ok: boolean;
   matched?: boolean;
+  /** Dimensions the provider never claimed and therefore did not apply (D1). */
+  unsupported?: ('status' | 'score' | 'progress')[];
+  skipped?: boolean;
   error?: string;
 }
 
@@ -87,6 +90,12 @@ export default function PersonalStateEditor({
   // Only remote pushes can fail here — the local-cache authority write already
   // landed — so a failed provider means "didn't reach the service", not "lost".
   const failed = Object.entries(outcomes || {}).filter(([, o]) => o.ok === false);
+  // Distinct from failure: a provider that never claimed the dimension (SIMKL is
+  // score-only). It used to report a bare `ok: true` and render as a success —
+  // gap D1. Shown muted, and only when something was actually discarded.
+  const partial = Object.entries(outcomes || {}).filter(
+    ([, o]) => o.ok !== false && (o.unsupported?.length ?? 0) > 0
+  );
 
   return (
     <div className={styles.editor}>
@@ -187,6 +196,20 @@ export default function PersonalStateEditor({
         <div className={styles.error}>
           {failed.map(([provider, o]) => (
             <div key={provider}>{t('personalEdit.providerFailed', { provider: provider.toUpperCase() })} {o.error || ''}</div>
+          ))}
+        </div>
+      )}
+      {partial.length > 0 && (
+        <div className={styles.note}>
+          {partial.map(([provider, o]) => (
+            <div key={provider}>
+              {t('personalEdit.providerUnsupported', {
+                provider: provider.toUpperCase(),
+                dimensions: (o.unsupported || [])
+                  .map(d => t(`personalEdit.${d}` as TranslationKey).toLowerCase())
+                  .join(', '),
+              })}
+            </div>
           ))}
         </div>
       )}

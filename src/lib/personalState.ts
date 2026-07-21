@@ -34,6 +34,10 @@ import type {
   SimklPersonalEntry,
   UserAnimeStatus,
 } from '@/models/anime';
+import { presenceAnchors } from '@/lib/providerCapabilities';
+
+/** The anchor's state when it holds no entry at all — "asked, has nothing". */
+const ABSENT: ProviderPersonalState = { present: false, score: null, progress: null, total: null };
 
 /**
  * The raw personal-bearing slices for one title, as `store.ts` gathers them.
@@ -176,6 +180,14 @@ export function toAnimePersonal(state?: ProviderPersonalState): Partial<AnimePer
  *
  * Deliberately RAW per-provider reads, never the effective/merged value — the
  * point of the comparison downstream is to detect mismatches *between* sources.
+ *
+ * **The anchor is the one provider that appears without a slice entry** (A2). A
+ * missing entry is exactly what a presence split is about, so it cannot be
+ * represented by omission: post-H1, MAL's personal slice holds only statused
+ * titles, so a title absent from the MAL list produced no `mal` state at all and
+ * the presence check — which asks `states[p] && !states[p].present` — had nothing
+ * to test. Presence detection had silently stopped firing entirely. The anchor
+ * therefore always gets a state, `present: false` when it holds nothing.
  */
 export function buildProviderStates(
   slices: RawPersonalSlices,
@@ -199,6 +211,10 @@ export function buildProviderStates(
   for (const source of personalPrecedence) {
     const state = all[source];
     if (state) states[source] = state;
+  }
+
+  for (const anchor of presenceAnchors(personalPrecedence)) {
+    states[anchor] = { ...(states[anchor] ?? ABSENT), anchor: true };
   }
   return states;
 }

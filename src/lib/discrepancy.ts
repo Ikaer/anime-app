@@ -28,13 +28,18 @@ export function mapSimklStatus(raw: string | undefined | null): UserAnimeStatus 
 }
 
 /**
- * The provider a title is expected to reach. Presence is deliberately
- * **asymmetric**: MAL is the comprehensive list, while SIMKL / local are subset
- * feeds, so "on SIMKL but not on MAL" is news and the inverse is not. A
- * symmetric rule would flag every MAL-only title — i.e. the entire list.
- * Extend this set when a second full-list writable provider lands (Betaseries).
+ * Presence is deliberately **asymmetric**: the anchor is the user's reference
+ * list, while the others are subset feeds, so "on SIMKL but not on the reference"
+ * is news and the inverse is not. A symmetric rule would flag every title the
+ * reference holds and a smaller list does not — i.e. most of the list.
+ *
+ * WHICH provider anchors was `['mal']` frozen as a constant (A2) and is now a
+ * capability read: `presenceAnchors` in
+ * [providerCapabilities.ts](providerCapabilities.ts) picks it from the resolved
+ * precedence, and `buildProviderStates` marks the chosen state `anchor: true`.
+ * This module only compares what it is handed — including on the discrepancies
+ * page, which re-runs it client-side over a filtered subset of the same states.
  */
-const PRESENCE_ANCHORS: ProvenanceSource[] = ['mal'];
 
 /** Distinct defined values across the present providers, in provider order. */
 function distinct<T>(values: T[]): T[] {
@@ -89,7 +94,9 @@ export function computeDiscrepancy(
   };
 
   // Presence split (soft): the title reached some providers but not the anchor.
-  const absentAnchors = PRESENCE_ANCHORS.filter(p => states[p] && !states[p]!.present);
+  const absentAnchors = (Object.entries(states) as [ProvenanceSource, ProviderPersonalState][])
+    .filter(([, s]) => s.anchor && !s.present)
+    .map(([p]) => p);
   const presence =
     absentAnchors.length > 0
       ? { present: entries.map(([p]) => p), absent: absentAnchors }

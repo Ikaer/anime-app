@@ -89,3 +89,10 @@
   color: #f87171;
   font-size: 0.8rem;
 }
+
+/* NOT a failure: a provider that never claimed this dimension (SIMKL is
+   score-only). Muted on purpose — it is information, not an alarm (D1). */
+.note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}

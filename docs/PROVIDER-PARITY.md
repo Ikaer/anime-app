@@ -3,9 +3,10 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2 `Done`
-> (2026-07-21); B3 `Dropped` (assessed, deliberately deferred). Rest `Todo`.
-> D2 landed the capability descriptor, so A2, D1 and E1–E4 are now unblocked.
+> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2, A2, D1
+> `Done` (2026-07-21); B3 `Dropped` (assessed, deliberately deferred). **E1–E4
+> and F1 are what remains.** D2 landed the capability descriptor; A2 and D1 then
+> consumed it — neither as the one-line swap D2 had left ready (see both).
 > B4 was **not in the original inventory** — it came from asking whether the
 > keyless promise actually holds for the reco feed. It did not. See [B4](#b4--the-recommendation-feed-was-unreachable-without-a-mal-account--done-2026-07-21).
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
@@ -148,7 +149,7 @@ data grows past one account's list.
 **Size:** was "small, one function, no consumer changes" — actually a shared
 extractor module, a feature removal, and its UI/locale/API surface.
 
-#### A2 — `PRESENCE_ANCHORS = ['mal']`
+#### A2 — `PRESENCE_ANCHORS = ['mal']` — **`Done` 2026-07-21**
 
 **Evidence:** [discrepancy.ts:36](../src/lib/discrepancy.ts).
 
@@ -164,6 +165,66 @@ providers claim to hold a full list" is a **capability**, not a constant. This
 gap is the clearest argument for [§3](#3-the-unifying-fix).
 
 **Size:** small as a constant edit; correct as a capability read.
+
+**What shipped — and the one-line swap D2 left ready is NOT what shipped:**
+
+1. **`PRESENCE_ANCHORS = fullListProviders()` is wrong, measurably.** D2 declared
+   `listCoverage` (MAL and AniList `full`) and left the swap as a line. Measured
+   against the real store first, that line reports **430 of 671** tracked titles
+   as a presence split — every MAL entry the smaller, later-connected AniList
+   account (241 entries) happens not to hold. That is precisely the failure the
+   original asymmetry existed to prevent, re-created one level up: with two
+   mutual anchors, "absent from a reference list" degenerates into "the two lists
+   differ", which is most of the list.
+2. **The descriptor field was right; what it means was conflated.**
+   `listCoverage: 'full'` is an **API** claim — this provider's read returns the
+   account's entire list rather than a subset feed (AniList's
+   `MediaListCollection` genuinely does). It is *not* a claim that this account
+   IS the user's comprehensive record, which is what presence detection needs.
+   So the anchor is now **one** provider, not the set: `presenceAnchors()` takes
+   the first full-list provider **in the resolved personal precedence** — the
+   list where the app already states which provider it believes when they
+   conflict. MAL + anything → `['mal']` (today's behaviour, preserved); no MAL →
+   `['anilist']`, which is A2's stated symptom fixed; SIMKL-/local-only → `[]`,
+   nothing claims completeness so an absence is not news (previously a dangling
+   `['mal']`).
+3. **Presence detection had silently stopped firing altogether** — found while
+   wiring this, not from the inventory, and it is the larger half of what A2
+   actually fixed. The check reads `states[p] && !states[p].present`, so an anchor
+   can only be reported absent if it has a *state*. Pre-H1 MAL always had one: its
+   personal state rode on the catalog slice, which exists for every catalogued
+   title. **H1 split it out**, and `personal/mal.json` holds only *statused*
+   titles — so a title absent from the MAL list now produces no `mal` state and
+   there is nothing to test. Zero presence splits were reportable on any install.
+   Measured at HEAD on the real store: **0**, where the two titles below should
+   have flagged. (H1's writeup reports a 0-change before/after diff of every row's
+   `discrepancy` block, so this slipped through it; a diff cannot see a feature
+   that goes quiet, only one that changes its answer.) The anchor now always gets
+   a state — `present: false` when it holds nothing — which is the other reason
+   this could not be the constant edit D2 left ready.
+4. **The anchor rides on the state (`ProviderPersonalState.anchor`)** rather than
+   becoming a second argument to `computeDiscrepancy`. The comparison stays a
+   pure function of what it is handed, which the discrepancies page depends on:
+   it re-runs the same function client-side over a *filtered* subset of these
+   states, and unchecking the anchor provider there correctly removes the
+   anchoring with it.
+
+**Verified on the real store** — two production builds of the same tree, HEAD and
+this change, run against the same store on the same endpoint
+(`/api/anime/animes?discrepancies=true&limit=all`), 2026-07-21:
+
+| | rows | presence splits | status / score / progress disagreements |
+|---|---|---|---|
+| HEAD | 2 | **0** | 0 / 0 / 2 |
+| this | 4 | **2** | 0 / 0 / 2 |
+
+The 2 recovered rows are `a_22208` "Sayonara Lara" and `a_23793` "Star Wars:
+Visions Presents - The Ninth Jedi", both `present: [simkl, anilist], absent:
+[mal]` — and both exactly what a raw scan of the four personal slices reports as
+tracked-somewhere-but-absent-from-the-MAL-list (2, independently). Every row
+carries `anchor: true` on `mal` and on nothing else. The pre-existing progress
+disagreements are byte-identical, and the hydrated `personal` block is untouched
+(the anchor placeholder narrows to `{}` and cannot win a precedence merge).
 
 ### B. MAL as a mandatory join key
 
@@ -468,7 +529,7 @@ were kept.
 The category that motivates the capability descriptor: in each case a provider
 cannot do something, and the absence is invisible rather than stated.
 
-#### D1 — SIMKL reports success for writes it discards
+#### D1 — SIMKL reports success for writes it discards — **`Done` 2026-07-21**
 
 **Evidence:** [personalWriters.ts:147](../src/lib/personalWriters.ts) —
 `if (patch.score === undefined) return { ok: true, matched: false };`
@@ -488,6 +549,49 @@ success, and have the UI distinguish *failed* from *not applicable*. Cleanest as
 a capability read (below), but correctable standalone.
 
 **Size:** small.
+
+**What shipped:**
+
+1. **The patch is narrowed once, in the registry, from the descriptor.**
+   `writePersonal` intersects the patch's dimensions with `supportedDimensions(id)`
+   before either pass, so a writer no longer needs to know its own capabilities —
+   SIMKL's two hand-rolled `if (patch.score === undefined)` guards are what D1
+   *was*. A provider that can take part of the patch takes that part; one that
+   can take none is never called, locally or remotely.
+2. **The discard is now in the outcome**: `unsupported: PersonalDimension[]`, plus
+   `skipped` when the whole patch was inapplicable. `ok` stays **true** — nothing
+   failed, and conflating "declined a dimension it never claimed" with "the push
+   didn't land" would just move the lie. That distinction is the item: the
+   outcomes map went from two states to three (*applied* / *partial* / *failed*).
+3. **The UI reads the third state.** `PersonalStateEditor` renders unsupported
+   dimensions as a **muted note** naming them, separate from the red failure list
+   it already had. It is the only surface that can produce one — the tier board
+   writes score-only and quick-rate always includes a score, so SIMKL applies
+   something in both; a status-only edit from the detail page is the case that
+   used to report a bare success.
+4. **Clearing a status was deliberately left as it was** (`ok: false` with a
+   reason). It is not the same shape: `status` is a dimension MAL and AniList both
+   *do* claim, and clearing is a shape of it they refuse — an explicit refusal was
+   already the good precedent this item was measured against. Both codepaths are
+   now named in `personalWriters.ts` so the two are not confused later.
+
+**Verified on a synthetic store** (production build, 2026-07-21) — synthetic
+because the test needs SIMKL *enabled* while contacting no real service: one
+title with MAL + SIMKL personal entries and a fabricated SIMKL token.
+
+- **Wholly unsupported.** `PUT …/mal-status {"status":"completed"}` → `simkl:
+  {ok:true, matched:false, skipped:true, unsupported:["status"]}`, where it used
+  to answer a bare `{ok:true, matched:false}`. `personal/simkl.json` is byte-
+  identical afterwards and no SIMKL request is attempted — the skip happens
+  before either pass.
+- **Partial.** `{"status":"completed","score":9,"num_episodes_watched":26}` →
+  `{ok:false, error:"Not authenticated with SIMKL", unsupported:["status","progress"]}`,
+  and the local SIMKL entry took the **score only** (status/progress unchanged at
+  `watching` / 3). Run with the synthetic token aged past expiry on purpose: token
+  *presence* keeps SIMKL enabled while `isSimklTokenValid` short-circuits the push
+  offline, so the partial-merge path is exercised with no outbound call. It also
+  shows the two signals composing rather than competing — a real failure and a
+  declared discard on the same outcome.
 
 #### D2 — No capability descriptor; enablement logic duplicated — **`Done` 2026-07-21**
 
@@ -788,10 +892,15 @@ gaps actually demand rather than by what a fourth provider might.
 
 ### What it buys, per gap
 
-- **A2** — `PRESENCE_ANCHORS` becomes "providers declaring a full list",
-  correct on any install rather than only a MAL one.
+- **A2** — `PRESENCE_ANCHORS` becomes a capability read, correct on any install
+  rather than only a MAL one. *(Done — though **not** as "providers declaring a
+  full list": that set is two providers and reports 430 of 671 titles as a
+  presence split. It is the first full-list provider **in precedence**, i.e. one
+  reference list. See [A2](#a2--presence_anchors--mal--done-2026-07-21).)*
 - **D1** — a write against an undeclared dimension is refused explicitly instead
-  of returning a bare success.
+  of returning a bare success. *(Done — the patch is narrowed from the descriptor
+  in `writePersonal`, so the writers no longer carry their own capability checks
+  either; the outcome gained `unsupported`/`skipped`.)*
 - **D2** — one source of truth; `hasWritableExternal` becomes a query over
   declared write capability rather than three hand-read auth files. *(Done — and
   the per-writer `isEnabled` went with it: enablement is now the single
@@ -850,9 +959,32 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > have baked E4's own bug into E4's fix. When a descriptor is written to
    > replace scattered derivations, check it against the provider that is least
    > like the others *before* the derivations are deleted.
-4. **A2, D1** — fall out of D2 cheaply, and the descriptor already declares what
-   each needs (`listCoverage` / `fullListProviders()` for A2, `supportedDimensions()`
-   for D1). Deliberately left unwired: both are behaviour changes, not refactors.
+4. ~~**A2, D1**~~ — both **Done 2026-07-21**. Presence detection works on any
+   install (and works *at all* again — see below); a write SIMKL discards now
+   says so. **E1–E4 is now the top item.**
+
+   > Two lessons, and the second is the sharper one.
+   >
+   > **The declared data was right and the swap using it was not.** D2 left both
+   > items as "a line each" and named the line. For A2 that line —
+   > `PRESENCE_ANCHORS = fullListProviders()` — was measurably wrong (430 of 671
+   > titles flagged), because `listCoverage: 'full'` answers *"does this
+   > provider's read return the whole account?"* while presence detection asks
+   > *"is this account the user's reference record?"*. A descriptor field can be
+   > correct and still not be the predicate a consumer needs; **check the swap
+   > against the store, not against the field name.**
+   >
+   > **Wiring A2 is what revealed presence detection had been dead since H1.**
+   > The check needs the anchor to *have a state*, and H1 moved MAL's personal
+   > data out of the catalog slice (one row per catalogued title) into one that
+   > holds only statused titles — so from that day no install could report a
+   > presence split, MAL-connected or not. Nothing surfaced it, including H1's own
+   > verification, which diffed the `discrepancy` block over 25,382 rows and read
+   > 0 changes. **A feature going quiet looks exactly like a feature with nothing
+   > to say** — the two titles it should have flagged are 2 rows in 25,382, and a
+   > row count that drops to zero reads as "no discrepancies today". Same shape as
+   > B4's "a ranked inventory can hide a gap by adjacency", one level down: verify
+   > that a path still *fires*, not only that its output did not change.
 5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
    Render from `PROVIDER_CAPABILITIES`; split the page by role (its `catalog` /
    `personal` keys are exactly E4's axis).

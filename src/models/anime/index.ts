@@ -193,6 +193,19 @@ export interface ProviderPersonalState {
   progress?: number | null;
   total?: number | null;
   present: boolean; // does this provider have an entry for the title at all?
+  /**
+   * Is this the **reference list** absence is judged against (`presenceAnchors`)?
+   * Set by `buildProviderStates`, which is the only place the resolved precedence
+   * — and therefore the anchor — is known. It rides on the state rather than
+   * being a second argument to `computeDiscrepancy` so that the comparison stays
+   * a pure function of what it is handed: the discrepancies page re-runs it
+   * client-side over a filtered subset of these very states, and excluding the
+   * anchor provider there correctly removes the anchoring with it.
+   *
+   * An anchor is the one provider that may appear with `present: false` and no
+   * slice entry at all — see `buildProviderStates`.
+   */
+  anchor?: boolean;
 }
 
 /**

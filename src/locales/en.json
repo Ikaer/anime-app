@@ -331,6 +331,7 @@
   "personalEdit.plusOne": "+1 ep.",
   "personalEdit.writeFailed": "Write failed",
   "personalEdit.providerFailed": "{provider} did not take the write:",
+  "personalEdit.providerUnsupported": "{provider} does not support: {dimensions} — not sent.",
 
   "credits.pageTitle": "{name} — Anime",
   "credits.studioHeading": "Anime produced by {name}",
