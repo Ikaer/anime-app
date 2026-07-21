@@ -65,14 +65,22 @@ export function computeDiscrepancy(
   // everywhere — that's not a real discrepancy (e.g. 12 eps on MAL vs 13 on
   // SIMKL, both completed) and it would be impossible to reconcile.
   //
-  // `>=`, not `===`: providers carrying no episode count of their own (AniList's
-  // personal entry, the local slice) borrow the catalog's, so progress counted
-  // against their OWN larger total lands above the borrowed one — MAL says 12
-  // episodes, AniList says you watched 13 of its 13. Watching past the total is
-  // never itself a progress disagreement.
+  // A provider counts as fully-watched if EITHER:
+  //  - its status is `completed` — a completed title is watched in full whatever
+  //    its episode count. This is load-bearing now that each provider borrows
+  //    its OWN catalog's episode total (H1): AniList's catalog count is often
+  //    unknown, and without this clause an unknown total would resurface a raw
+  //    progress difference between two *completed* entries (MAL 1/1 vs AniList
+  //    24/?) as a phantom disagreement.
+  //  - it watched `>= total`. `>=`, not `===`: watching past the total (a
+  //    provider whose real count exceeds the borrowed one) is never itself a
+  //    progress disagreement.
   const allFullyWatched = entries
     .filter(([, s]) => s.progress != null)
-    .every(([, s]) => s.total != null && s.total > 0 && s.progress! >= s.total);
+    .every(
+      ([, s]) =>
+        s.status === 'completed' || (s.total != null && s.total > 0 && s.progress! >= s.total)
+    );
 
   const disagree = {
     status: distinct(statuses).length > 1,

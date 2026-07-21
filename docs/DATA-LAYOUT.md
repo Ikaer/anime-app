@@ -3,8 +3,9 @@
 > A **proposal + migration plan** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Todo`** — sequenced behind [PROVIDER-PARITY.md](PROVIDER-PARITY.md)
-> H1 (see [§2](#2-prerequisite-h1)); nothing else blocks it.
+> **Status: `Todo`** — its prerequisite [PROVIDER-PARITY.md](PROVIDER-PARITY.md)
+> H1 is **`Done` (2026-07-21)**, so `personal/` now has its fourth file
+> (`animes_mal_personal.json`) and nothing blocks this (see [§2](#2-prerequisite-h1)).
 >
 > Scope: how the JSON store is laid out on disk. It changes **no data shapes and
 > no keys** — every file keeps its contents and its canonical-id keying. Only
@@ -52,17 +53,17 @@ That rule is what makes the folder worth having: a missing file becomes a
 visible bug rather than something to remember, and adding Betaseries is "add a
 file, add a `ProvenanceSource`" with no third place to update.
 
-**Today the rule yields three of four.** `simkl`, `anilist` and `local` have
-their own slice files; MAL's personal state is embedded in `animes_mal.json`
-alongside the catalog — [PROVIDER-PARITY.md](PROVIDER-PARITY.md) **H1**. Moving
-first would bake the anomaly into the new layout (a `personal/` folder
-conspicuously missing `mal.json`) and then require a *second* migration over the
-same files when H1 lands.
+**The rule now yields four of four.** `simkl`, `anilist`, `local` and — since
+[PROVIDER-PARITY.md](PROVIDER-PARITY.md) **H1** (done 2026-07-21) — `mal`
+(`animes_mal_personal.json`) each have their own slice file. Doing H1 first was
+deliberate: moving the layout first would have baked the anomaly into it (a
+`personal/` folder conspicuously missing `mal.json`) and then required a *second*
+migration over the same files when H1 landed.
 
-**So: H1 first, then one move.** H1 is independently justified — it also removes
-the presence carve-out in `personalState.ts` and stops a rating write from
-rewriting 39 MB — and this document is a further argument for it, not a
-dependency that makes it more expensive.
+**H1 was independently justified** — it stopped a rating write from rewriting
+39 MB and made `MALAnime` typeable as pure catalog. (It did *not* remove the
+presence carve-out in `personalState.ts`, as originally expected — split-on-ingest
+can still seed an empty-status entry, so `!!status` stays; see H1's writeup.)
 
 **C1 is not a prerequisite** (it is a UI read path, not a storage concern), but
 doing it before H1 shrinks H1's reader count, so the natural order is

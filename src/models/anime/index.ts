@@ -30,6 +30,15 @@ export interface MALAnime {
   updated_at?: string;
   media_type?: string;
   status?: string; // 'finished_airing' | 'currently_airing' | 'not_yet_aired'
+  /**
+   * TRANSIENT / ingest-only. MAL's API ships the viewer's personal-list block
+   * inline on every seasonal/single-title fetch, so it is part of the wire
+   * shape — but it is NEVER persisted to the catalog file. `upsertAnime` strips
+   * it into the MAL personal slice (`animes_mal_personal.json`, see
+   * `MALPersonalEntry`); a stored catalog `MALAnime` carries no `my_list_status`.
+   * The boot guard in store.ts refuses to start if it finds one embedded (that
+   * means the store predates the H1 split — run scripts/migrate-mal-personal.js).
+   */
   my_list_status?: MALListStatus;
   num_episodes?: number;
   start_season?: {
@@ -75,18 +84,13 @@ export interface RelatedAnime {
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
 
 /**
- * MAL's personal-list block — the counterpart to `SimklPersonalEntry` /
- * `AniListPersonalEntry` / `LocalPersonalEntry`, except it lives INSIDE
- * `MALAnime` rather than in its own slice file. `animes_mal.json` is stored as
- * raw MAL JSON, so the API-shaped field names here are load-bearing: renaming
- * them to the app's vocabulary would break the stored payload.
+ * MAL's personal-list block. This is the API **wire** shape — MAL ships it
+ * inline on `MALAnime.my_list_status` on every fetch. The API-shaped field names
+ * are load-bearing.
  *
  * `status` is a bare `string`, not `UserAnimeStatus`: it is whatever MAL sent,
  * including the empty string the local write path seeds before a score-only
  * patch. Read it through `personalState.ts`, never directly.
- *
- * The embedding is a legacy asymmetry, not a design choice — see
- * docs/PROVIDER-PARITY.md "H1".
  */
 export interface MALListStatus {
   status: string; // 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch'
@@ -95,6 +99,19 @@ export interface MALListStatus {
   is_rewatching: boolean;
   updated_at: string;
 }
+
+/**
+ * MAL's personal-list **stored** entry — the peer of `SimklPersonalEntry` /
+ * `AniListPersonalEntry` / `LocalPersonalEntry`, living in its own slice file
+ * (`animes_mal_personal.json`, keyed by canonical id) since the H1 split
+ * (docs/PROVIDER-PARITY.md "H1"). It ended MAL's legacy asymmetry of embedding
+ * personal state inside the catalog payload.
+ *
+ * Structurally identical to the wire shape `MALListStatus` (verbatim MAL field
+ * names — no vocabulary rename rode on the data migration), so it is a type
+ * alias rather than a second maintained shape.
+ */
+export type MALPersonalEntry = MALListStatus;
 
 export interface Studio {
   id: number;
@@ -464,7 +481,11 @@ export interface AnimePersonal {
  * effective — see CLAUDE.md "Local cache authority").
  */
 export interface AnimeSources {
+  /** Raw MAL catalog slice. Post-H1 it carries NO `my_list_status` — MAL's
+   *  personal state lives in `malPersonal` (see `MALPersonalEntry`). */
   mal?: MALAnime;
+  /** MAL's personal-list entry, split out of the catalog payload (H1). */
+  malPersonal?: MALPersonalEntry;
   simkl?: SimklPersonalEntry;
   anilist?: AniListMetaEntry;
   anilistPersonal?: AniListPersonalEntry;

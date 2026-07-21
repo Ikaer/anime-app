@@ -1,6 +1,6 @@
 import type {
   AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
-  ProvenanceSource, SeasonName, SeasonInfo, MALAnime, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
+  ProvenanceSource, SeasonName, SeasonInfo, MALAnime, MALPersonalEntry, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
   LocalPersonalEntry, SourceIds, Discrepancy,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
@@ -377,6 +377,7 @@ function catalogFromLocal(): Partial<AnimeCatalog> {
  */
 export interface RawAnimeSlices {
   mal?: MALAnime;
+  malPersonal?: MALPersonalEntry;
   simkl?: SimklPersonalEntry;
   anilistMeta?: AniListMetaEntry;
   anilistPersonal?: AniListPersonalEntry;
@@ -399,13 +400,13 @@ export function toAnimeRecord(
   catalogPrecedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
   personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE
 ): AnimeRecord {
-  const { mal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk } = slices;
+  const { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk } = slices;
 
   const { merged: catalogMerged, provenance: catalogProvenance } = mergeWithProvenance<AnimeCatalog>(
     catalogPrecedence,
     { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anilistMeta), simkl: catalogFromSimkl(), local: catalogFromLocal() }
   );
-  const providerStates = buildProviderStates({ mal, simkl, anilist: anilistPersonal, local }, personalPrecedence);
+  const providerStates = buildProviderStates({ mal, malPersonal, simkl, anilist: anilistPersonal, local, anilistMeta }, personalPrecedence);
   const { merged: personalMerged, provenance: personalProvenance } = mergeWithProvenance<AnimePersonal>(
     personalPrecedence,
     {
@@ -432,7 +433,7 @@ export function toAnimeRecord(
     },
     personal: personalMerged,
     provenance: { catalog: catalogProvenance, personal: personalProvenance },
-    sources: { mal, simkl, anilist: anilistMeta, anilistPersonal, local },
+    sources: { mal, malPersonal, simkl, anilist: anilistMeta, anilistPersonal, local },
     hidden,
     discrepancy,
   };

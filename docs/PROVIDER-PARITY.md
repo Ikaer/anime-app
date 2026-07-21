@@ -3,7 +3,7 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1, G1 and C1 `Done` (2026-07-20). Rest `Todo`.
+> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1 `Done` (2026-07-21). Rest `Todo`.
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
 > this document measures against) and [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md)
 > (whose dropped registry is **not** what this proposes — see [§3](#3-the-unifying-fix)).
@@ -443,7 +443,7 @@ rather than one branch of a dual-mode function. CLAUDE.md now documents it, and
 
 ### H. Structural asymmetry: MAL conflates catalog and personal
 
-#### H1 — MAL's personal state lives inside its catalog payload
+#### H1 — MAL's personal state lives inside its catalog payload — **`Done` 2026-07-21**
 
 **Evidence:** every other provider stores personal state in its own slice file
 with its own entry type — `SimklPersonalEntry` / `animes_simkl.json`,
@@ -479,18 +479,62 @@ provider that predates the convention. **The asymmetry is legacy, not design.**
 **Fix:** extract `my_list_status` into `animes_mal_personal.json` keyed by
 canonical id, with `MALPersonalEntry` joining the other three. `MALAnime` becomes
 pure catalog. One migration script; the write path, `malSync`'s
-`updatePersonalStatusBatch`, and the ~12 files reading `my_list_status` follow.
+`updatePersonalStatusBatch`, and the readers of `my_list_status` follow.
 **C1 already shrank this**: three of those readers were the list views, and they
 now go through `getEffective*` (done 2026-07-20).
 
-**Size:** medium, and touches shipped data — needs a migration with a backup,
-like the canonical-id cutover had. The 39 MB write is the strongest argument for
-scheduling it rather than filing it.
+**What shipped — and one claim above that did NOT survive contact:**
 
-**Also a prerequisite elsewhere:** [DATA-LAYOUT.md](DATA-LAYOUT.md) organizes the
-store into folders, with `personal/` holding *one file per `ProvenanceSource`*.
-That rule yields three of four until H1 creates MAL's, so the layout work is
-blocked on this and would otherwise bake the anomaly in.
+1. **`MALPersonalEntry` = a type alias of the wire shape `MALListStatus`**
+   (verbatim MAL field names). One shape, two roles: `MALListStatus` stays on
+   `MALAnime.my_list_status` (the API still ships it inline); `MALPersonalEntry`
+   is the stored slice entry. No field rename rode on the data migration.
+2. **Split on ingest.** `upsertAnime` strips `my_list_status` off every incoming
+   MAL record and routes it into the personal slice (clearing the entry when a
+   fetch returns the title *without* a status — mirroring the old full-overwrite
+   exactly, so a title removed from the MAL list still clears). The catalog file
+   is pure catalog; the personal slice is the only thing a rating write touches.
+3. **The presence carve-out did NOT evaporate.** This section predicted "split
+   the file and the exception evaporates". It does not: split-on-ingest can still
+   seed a `{ status: '' }` entry, so `providerStateFromMal` still keys presence on
+   `!!status`, and `personalState.ts`'s `hasPersonalData` carve-out (MAL excepted)
+   stays. What the split *did* remove are the two costs that were real — the 39 MB
+   rating write, and `MALAnime` being untypeable as catalog. The claim is
+   corrected here rather than the carve-out forced.
+4. **Refuse-to-start guard.** There is no process-boot hook, so it is a one-time
+   lazy guard on the first catalog read: post-split code never writes
+   `my_list_status` into the catalog, so finding one embedded throws with the name
+   of the migration script. Live-verified — an un-migrated store 500s every list
+   request with the named error; the migrated store serves normally.
+5. **A per-provider-total fix shipped alongside** (out of H1's literal scope, but
+   the split exposed it). The fully-watched reconciliation borrowed
+   `mal.num_episodes` as *every* provider's episode total — hardcoding MAL as the
+   catalog authority in the one spot the provider-free direction says is AniList's.
+   Now each provider is judged against its OWN catalog's count (MAL vs MAL's,
+   AniList/local vs AniList's, SIMKL vs its own). That surfaced a latent weakness:
+   AniList's catalog episode count is often unknown, and an unknown total
+   resurfaced a raw progress difference between two *completed* entries as a
+   phantom disagreement — so the exception now treats **`status === 'completed'`
+   as fully-watched whatever the count**. Verified inert on the real store:
+   before/after diff of every row's `discrepancy` block = **0 changes** across
+   25,382 rows, and the hydrated `personal` block = 0 changes (the total never
+   feeds hydration).
+
+**Verified on the real store (2026-07-21):** 25,382 catalog rows, 670 embedded
+`my_list_status` → 669 statused entries extracted (1 empty-status artifact
+dropped); catalog rewritten with 0 remaining; migration idempotent (a second run
+is a no-op). A tier-drag write now touches only the ~100 KB personal file, not
+the 39 MB catalog (verified by construction — `saveAnime`'s only remaining caller
+is catalog ingest).
+
+**Size:** medium, touched shipped data — a migration script
+(`scripts/migrate-mal-personal.js`, modeled on `migrate-canonical.js`) run
+against a stopped app before deploy, backed by the refuse-to-start guard.
+
+**Unblocked elsewhere:** [DATA-LAYOUT.md](DATA-LAYOUT.md) organizes the store into
+folders, with `personal/` holding *one file per `ProvenanceSource`*. That rule
+yielded three of four until H1; `animes_mal_personal.json` is now the fourth, so
+the layout work is no longer blocked on this.
 
 ## 3. The unifying fix
 
@@ -554,8 +598,8 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
 4. **A2, D1** — fall out of D2 cheaply.
 5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
 6. **F1** — independent; slot in whenever cron matters.
-7. **H1** — the MAL catalog/personal split. Independent of everything above;
-   **C1** is done and already removed three of its readers. Note
-   [DATA-LAYOUT.md](DATA-LAYOUT.md) is blocked on it. The 39 MB rewrite per
-   rating is the reason not to leave it filed forever.
+7. ~~**H1**~~ — the MAL catalog/personal split. **Done 2026-07-21.** The 39 MB
+   rewrite per rating is gone, `MALAnime` is pure catalog, and
+   [DATA-LAYOUT.md](DATA-LAYOUT.md)'s `personal/` folder is unblocked (its fourth
+   file now exists). A per-provider-total fix rode along (see H1's writeup).
 8. **B3** — recommend deferring indefinitely. Documented as deliberate.

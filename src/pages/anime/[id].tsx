@@ -96,7 +96,7 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
   const primaryTitle = getPrimaryTitle(anime);
   const secondaryTitle = getSecondaryTitle(anime);
 
-  const mal = anime.sources.mal?.my_list_status;
+  const mal = anime.sources.malPersonal;
   const simkl = anime.sources.simkl;
   const disc = anime.discrepancy;
   const tags = anime.sources.anilist?.tags || [];

@@ -14,7 +14,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, MALListStatus } from '@/models/anime';
+import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, MALListStatus, MALPersonalEntry } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/discrepancy';
 import { buildProviderStates } from '@/lib/personalState';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
@@ -22,12 +22,40 @@ import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
 import { getResolvedPersonalPrecedence } from '@/lib/providers';
 
 const ANIME_MAL_FILE = dataFile('animes_mal.json');
+const ANIME_MAL_PERSONAL_FILE = dataFile('animes_mal_personal.json');
 const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
 const ANIME_SIMKL_FILE = dataFile('animes_simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
 const ANIME_ANILIST_CAST_FILE = dataFile('animes_anilist_cast.json');
 const ANIME_ANILIST_PERSONAL_FILE = dataFile('animes_anilist_personal.json');
 const ANIME_LOCAL_PERSONAL_FILE = dataFile('animes_local_personal.json');
+
+// ============================================================================
+// H1 migration boot guard
+// ============================================================================
+//
+// There is no central process-boot hook (no instrumentation.ts), so "refuse to
+// start on an un-migrated store" is a one-time lazy guard on the first catalog
+// read. Post-H1 code NEVER writes `my_list_status` into the catalog file, so
+// finding one embedded is an unambiguous "this store predates the split" signal.
+// Runs once per process (the check is cheap but not free on 25k rows).
+
+let malStoreChecked = false;
+
+function assertMigratedMalStore(animes?: Record<string, MALAnime>): void {
+  if (malStoreChecked) return;
+  const catalog = animes ?? readJsonFile<Record<string, MALAnime>>(ANIME_MAL_FILE, {});
+  for (const anime of Object.values(catalog)) {
+    if (anime && anime.my_list_status !== undefined) {
+      throw new Error(
+        'Un-migrated MAL store: `my_list_status` is still embedded in ' +
+          'animes_mal.json. Run `node scripts/migrate-mal-personal.js <dataPath>` ' +
+          'before starting this version (docs/PROVIDER-PARITY.md H1).'
+      );
+    }
+  }
+  malStoreChecked = true;
+}
 
 // ============================================================================
 // Hidden anime ids
@@ -60,7 +88,9 @@ export function removeHiddenAnimeId(canonicalId: string): void {
 // ============================================================================
 
 export function getAllAnime(): Record<string, MALAnime> {
-  return readJsonFile(ANIME_MAL_FILE, {});
+  const animes = readJsonFile<Record<string, MALAnime>>(ANIME_MAL_FILE, {});
+  assertMigratedMalStore(animes);
+  return animes;
 }
 
 export function saveAnime(animeData: Record<string, MALAnime>): void {
@@ -68,16 +98,76 @@ export function saveAnime(animeData: Record<string, MALAnime>): void {
   cachedAnime = null;
 }
 
+/**
+ * Ingest incoming MAL API records (docs/PROVIDER-PARITY.md H1: **split on
+ * ingest**). MAL ships the viewer's `my_list_status` inline on every fetch; the
+ * catalog file must stay pure catalog, so we strip it off each record and route
+ * it into the MAL personal slice.
+ *
+ * Mirrors the previous full-object-replace semantics exactly, scoped to the
+ * batch: a record WITH a status upserts the personal entry; a record WITHOUT one
+ * clears any existing entry (a title removed from the MAL list stops being
+ * statused). Every caller is an authenticated MAL fetch that carries the
+ * viewer's status inline, so this never wipes a still-listed title.
+ */
 export function upsertAnime(newAnime: MALAnime[]): void {
   if (newAnime.length === 0) return;
   const existingAnime = getAllAnime();
   const ids = resolveCanonicalIds(newAnime.map(a => ({ mal: a.id }))).ids;
 
+  const personalUpserts: Record<string, MALPersonalEntry> = {};
+  const personalClears: string[] = [];
   newAnime.forEach((anime, i) => {
-    existingAnime[ids[i]] = anime;
+    const { my_list_status, ...catalog } = anime;
+    existingAnime[ids[i]] = catalog as MALAnime;
+    if (my_list_status?.status) personalUpserts[ids[i]] = my_list_status;
+    else personalClears.push(ids[i]);
   });
 
   saveAnime(existingAnime);
+  upsertMalPersonal(personalUpserts); // no-op on empty
+  removeMalPersonal(personalClears);  // no-op unless an entry actually existed
+}
+
+// ============================================================================
+// MAL personal-list slice (docs/PROVIDER-PARITY.md H1), keyed by canonical id —
+// the peer of the SIMKL / AniList / local personal slices. Split out of
+// `animes_mal.json` so a rating write no longer rewrites the 39 MB catalog, and
+// so `MALAnime` is pure catalog. Filled by `upsertAnime` (split-on-ingest) and
+// by the personal-list sync (`updatePersonalStatusBatch`).
+// ============================================================================
+
+export function getAllMalPersonal(): Record<string, MALPersonalEntry> {
+  const entries = readJsonFile<Record<string, MALPersonalEntry>>(ANIME_MAL_PERSONAL_FILE, {});
+  assertMigratedMalStore();
+  return entries;
+}
+
+/** Merge canonical-id-keyed MAL personal entries onto the store. */
+export function upsertMalPersonal(entriesByCanonicalId: Record<string, MALPersonalEntry>): void {
+  const keys = Object.keys(entriesByCanonicalId);
+  if (keys.length === 0) return;
+  const existing = readJsonFile<Record<string, MALPersonalEntry>>(ANIME_MAL_PERSONAL_FILE, {});
+  for (const key of keys) existing[key] = entriesByCanonicalId[key];
+  writeJsonFile(ANIME_MAL_PERSONAL_FILE, existing);
+  cachedAnime = null;
+}
+
+/** Delete MAL personal entries by canonical id. */
+export function removeMalPersonal(canonicalIds: string[]): void {
+  if (canonicalIds.length === 0) return;
+  const existing = readJsonFile<Record<string, MALPersonalEntry>>(ANIME_MAL_PERSONAL_FILE, {});
+  let changed = false;
+  for (const id of canonicalIds) {
+    if (existing[id]) {
+      delete existing[id];
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeJsonFile(ANIME_MAL_PERSONAL_FILE, existing);
+    cachedAnime = null;
+  }
 }
 
 // ============================================================================
@@ -523,6 +613,7 @@ function assembleCrosswalk(
 function assembleDisplayRow(
   canonicalId: string,
   malAnime: Record<string, MALAnime>,
+  malPersonalByCanonical: Record<string, MALPersonalEntry>,
   simklByCanonical: Record<string, SimklPersonalEntry>,
   anilistMetaByCanonical: Record<string, AniListMetaEntry>,
   anilistPersonalByCanonical: Record<string, AniListPersonalEntry>,
@@ -532,6 +623,7 @@ function assembleDisplayRow(
   personalPrecedence: ProvenanceSource[]
 ): AnimeRecord | undefined {
   const mal = malAnime[canonicalId];
+  const malPersonal = malPersonalByCanonical[canonicalId];
   const simkl = simklByCanonical[canonicalId];
   const anilistMeta = anilistMetaByCanonical[canonicalId];
   const anilistPersonal = anilistPersonalByCanonical[canonicalId];
@@ -544,10 +636,10 @@ function assembleDisplayRow(
   if (malId === undefined) return undefined;
   const hidden = hiddenIds.has(canonicalId);
   const discrepancy = computeDiscrepancy(
-    buildProviderStates({ mal, simkl, anilist: anilistPersonal, local }, personalPrecedence)
+    buildProviderStates({ mal, malPersonal, simkl, anilist: anilistPersonal, local, anilistMeta }, personalPrecedence)
   );
   return toAnimeRecord(
-    { mal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
+    { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
     canonicalId,
     undefined,
     personalPrecedence
@@ -561,6 +653,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   // seeded by the AniList catalog crawler) still produces a row, with
   // `sources.mal` left undefined (docs/PROVIDER-FREE-CUTOVER.md Phase C).
   const malAnime = getAllAnime();
+  const malPersonalByCanonical = getAllMalPersonal();
   const hiddenIdList = getHiddenAnimeIds();
   const simklByCanonical = getAllSimklEntries();
   const anilistMetaByCanonical = getAllAnilistMeta();
@@ -575,7 +668,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   // Same parsed slices as last time (reference equality — see the parse cache
   // in jsonStore.ts) → the assembled rows are still valid. The precedence join
   // is a value-compared string (see 1d.3), so a mode/token change invalidates.
-  const inputs = [malAnime, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|')];
+  const inputs = [malAnime, malPersonalByCanonical, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|')];
   if (cachedAnime && cachedAnimeInputs && inputs.every((v, i) => v === cachedAnimeInputs![i])) {
     return cachedAnime;
   }
@@ -584,6 +677,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const canonicalIds = new Set<string>([
     ...Object.keys(registry),
     ...Object.keys(malAnime),
+    ...Object.keys(malPersonalByCanonical),
     ...Object.keys(simklByCanonical),
     ...Object.keys(anilistMetaByCanonical),
     ...Object.keys(anilistPersonalByCanonical),
@@ -593,7 +687,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const rows: AnimeRecord[] = [];
   for (const canonicalId of canonicalIds) {
     const row = assembleDisplayRow(
-      canonicalId, malAnime, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, personalPrecedence
+      canonicalId, malAnime, malPersonalByCanonical, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, personalPrecedence
     );
     if (row) rows.push(row);
   }
@@ -619,6 +713,7 @@ export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefi
   return assembleDisplayRow(
     canonicalId,
     getAllAnime(),
+    getAllMalPersonal(),
     getAllSimklEntries(),
     getAllAnilistMeta(),
     getAllAnilistPersonalEntries(),
@@ -669,7 +764,9 @@ export function getSyncMetadata(): SyncMetadata | null {
 }
 
 // ============================================================================
-// Personal status writes (MAL's `my_list_status` slice of the local record)
+// Personal status writes — the MAL personal slice (docs/PROVIDER-PARITY.md H1).
+// Was a mutation of `animes_mal.json` (39 MB rewrite per call); now targets the
+// lean `animes_mal_personal.json`.
 // ============================================================================
 
 interface PersonalStatusUpdateResult {
@@ -678,30 +775,37 @@ interface PersonalStatusUpdateResult {
 }
 
 /**
- * Update personal status for a single anime if it exists and differs from current state.
- * Does NOT insert new anime - only updates existing ones.
+ * Update personal status for a single anime if it exists and differs from
+ * current state. Does NOT insert — only updates titles the catalog already
+ * holds (unchanged "don't insert" contract; the personal-list sync must never
+ * add a catalog row).
+ *
+ * `existing` is the current MAL personal map, mutated in place by the caller
+ * (`updatePersonalStatusBatch` reads once and persists once) so a batch is a
+ * single ~100 KB write rather than one write per title.
  */
 function updatePersonalStatus(
   animeId: number,
-  newListStatus: MALListStatus
+  newListStatus: MALListStatus,
+  catalog: Record<string, MALAnime>,
+  personal: Record<string, MALPersonalEntry>
 ): PersonalStatusUpdateResult {
-  const existingAnime = getAllAnime();
-  // `animeId` is a MAL id; the slice is canonical-keyed. Resolve read-only —
+  // `animeId` is a MAL id; the slices are canonical-keyed. Resolve read-only —
   // an un-anchored MAL id means the title isn't in the local record, which is
   // exactly the "don't insert" case below.
   const animeKey = resolveByMalId(animeId);
 
   // Anime doesn't exist locally - don't insert it
-  if (!animeKey || !existingAnime[animeKey]) {
+  if (!animeKey || !catalog[animeKey]) {
     return { updated: false, changes: [] };
   }
 
-  const anime = existingAnime[animeKey];
+  const current = personal[animeKey];
   const changes: string[] = [];
 
-  // If anime doesn't have personal status yet, initialize it
-  if (!anime.my_list_status) {
-    anime.my_list_status = {
+  // If no personal entry yet, initialize it
+  if (!current) {
+    personal[animeKey] = {
       status: newListStatus.status,
       score: newListStatus.score,
       num_episodes_watched: newListStatus.num_episodes_watched,
@@ -709,47 +813,38 @@ function updatePersonalStatus(
       updated_at: newListStatus.updated_at,
     };
     changes.push('initialized');
-  } else {
-    // Compare each field and track changes
-    if (anime.my_list_status.status !== newListStatus.status) {
-      changes.push(`status: ${anime.my_list_status.status} -> ${newListStatus.status}`);
-      anime.my_list_status.status = newListStatus.status;
-    }
-
-    if (anime.my_list_status.score !== newListStatus.score) {
-      changes.push(`score: ${anime.my_list_status.score} -> ${newListStatus.score}`);
-      anime.my_list_status.score = newListStatus.score;
-    }
-
-    if (anime.my_list_status.num_episodes_watched !== newListStatus.num_episodes_watched) {
-      changes.push(
-        `episodes: ${anime.my_list_status.num_episodes_watched} -> ${newListStatus.num_episodes_watched}`
-      );
-      anime.my_list_status.num_episodes_watched = newListStatus.num_episodes_watched;
-    }
-
-    if (anime.my_list_status.is_rewatching !== newListStatus.is_rewatching) {
-      changes.push(`rewatching: ${anime.my_list_status.is_rewatching} -> ${newListStatus.is_rewatching}`);
-      anime.my_list_status.is_rewatching = newListStatus.is_rewatching;
-    }
-
-    // Refresh updated_at only when something else changed: with jsonStore's
-    // shared parse cache, mutating the read object without writing it back
-    // would leak into every later read (and an unchanged record was never
-    // persisted with the new timestamp anyway).
-    if (changes.length > 0) {
-      anime.my_list_status.updated_at = newListStatus.updated_at;
-    }
-  }
-
-  // If changes were made, save
-  if (changes.length > 0) {
-    existingAnime[animeKey] = anime;
-    saveAnime(existingAnime);
     return { updated: true, changes };
   }
 
-  return { updated: false, changes: [] };
+  // Compare each field and track changes
+  if (current.status !== newListStatus.status) {
+    changes.push(`status: ${current.status} -> ${newListStatus.status}`);
+    current.status = newListStatus.status;
+  }
+
+  if (current.score !== newListStatus.score) {
+    changes.push(`score: ${current.score} -> ${newListStatus.score}`);
+    current.score = newListStatus.score;
+  }
+
+  if (current.num_episodes_watched !== newListStatus.num_episodes_watched) {
+    changes.push(
+      `episodes: ${current.num_episodes_watched} -> ${newListStatus.num_episodes_watched}`
+    );
+    current.num_episodes_watched = newListStatus.num_episodes_watched;
+  }
+
+  if (current.is_rewatching !== newListStatus.is_rewatching) {
+    changes.push(`rewatching: ${current.is_rewatching} -> ${newListStatus.is_rewatching}`);
+    current.is_rewatching = newListStatus.is_rewatching;
+  }
+
+  // Refresh updated_at only when something else changed.
+  if (changes.length > 0) {
+    current.updated_at = newListStatus.updated_at;
+  }
+
+  return { updated: changes.length > 0, changes };
 }
 
 interface BatchUpdateStats {
@@ -775,13 +870,20 @@ export function updatePersonalStatusBatch(
     updates: [],
   };
 
+  // Read both slices once; mutate the personal map in place; persist once at the
+  // end (a single ~100 KB write for the whole batch).
+  const catalog = getAllAnime();
+  const personal = getAllMalPersonal();
+  let anyChange = false;
+
   for (const update of updates) {
     try {
-      const result = updatePersonalStatus(update.animeId, update.listStatus);
+      const result = updatePersonalStatus(update.animeId, update.listStatus, catalog, personal);
       stats.totalProcessed++;
 
       if (result.updated) {
         stats.updated++;
+        anyChange = true;
         stats.updates.push({ animeId: update.animeId, changes: result.changes });
       } else {
         stats.skipped++;
@@ -790,6 +892,11 @@ export function updatePersonalStatusBatch(
       stats.failed++;
       console.error(`Failed to update personal status for anime ${update.animeId}:`, error);
     }
+  }
+
+  if (anyChange) {
+    writeJsonFile(ANIME_MAL_PERSONAL_FILE, personal);
+    cachedAnime = null;
   }
 
   return stats;

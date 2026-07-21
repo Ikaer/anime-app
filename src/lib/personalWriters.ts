@@ -22,12 +22,14 @@ import type {
   AnimeRecord,
   AniListPersonalEntry,
   LocalPersonalEntry,
+  MALPersonalEntry,
   ProvenanceSource,
   UserAnimeStatus,
 } from '@/models/anime';
 import {
   getAllAnime,
-  saveAnime,
+  getAllMalPersonal,
+  upsertMalPersonal,
   getAllSimklEntries,
   upsertSimklEntries,
   getAllLocalEntries,
@@ -90,24 +92,26 @@ function malIdOf(record?: AnimeRecord): number | undefined {
 }
 
 // ── MAL ──────────────────────────────────────────────────────────────────────
-// Writes to BOTH the local `animes_mal.json` slice (authority) and the MAL API.
+// Writes to BOTH the local MAL personal slice (`animes_mal_personal.json`,
+// authority — H1 split it out of the 39 MB catalog) and the MAL API.
 // isEnabled by token PRESENCE (not validity): an expired-but-refreshable token
 // still means "this is a MAL user", so we keep bumping the local slice as today.
 const malWriter: PersonalWriter = {
   id: 'mal',
   isEnabled: () => getMALAuthData().token != null,
   writeLocal({ canonicalId }, patch) {
-    const animes = getAllAnime();
-    const anime = animes[canonicalId];
-    if (!anime) return; // no MAL slice for this title — nothing to bump
-    if (!anime.my_list_status) {
-      anime.my_list_status = { status: '', score: 0, num_episodes_watched: 0, is_rewatching: false, updated_at: '' };
-    }
-    if (patch.status !== undefined) anime.my_list_status.status = patch.status ?? '';
-    if (patch.score !== undefined) anime.my_list_status.score = patch.score;
-    if (patch.progress !== undefined) anime.my_list_status.num_episodes_watched = patch.progress;
-    anime.my_list_status.updated_at = new Date().toISOString();
-    saveAnime(animes);
+    // Only titles the MAL catalog holds get a MAL personal entry — a MAL-less
+    // title has no business in the MAL slice (the local writer covers it).
+    if (!getAllAnime()[canonicalId]) return;
+    const existing = getAllMalPersonal()[canonicalId];
+    const entry: MALPersonalEntry = existing
+      ? { ...existing }
+      : { status: '', score: 0, num_episodes_watched: 0, is_rewatching: false, updated_at: '' };
+    if (patch.status !== undefined) entry.status = patch.status ?? '';
+    if (patch.score !== undefined) entry.score = patch.score;
+    if (patch.progress !== undefined) entry.num_episodes_watched = patch.progress;
+    entry.updated_at = new Date().toISOString();
+    upsertMalPersonal({ [canonicalId]: entry });
   },
   async writeRemote({ record }, patch) {
     if (patch.status === null) return { ok: false, error: 'MAL cannot clear a status (list removal only)' };

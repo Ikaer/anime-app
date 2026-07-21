@@ -1,6 +1,6 @@
 /**
  * Per-provider RAW personal state — the ONE place a provider's own slice shape
- * (`MALAnime.my_list_status`, `SimklPersonalEntry`, `AniListPersonalEntry`,
+ * (`MALPersonalEntry`, `SimklPersonalEntry`, `AniListPersonalEntry`,
  * `LocalPersonalEntry`) is mapped onto the app's status/score/progress
  * vocabulary. Client-safe: model types only, no fs.
  *
@@ -24,21 +24,38 @@
  */
 import type {
   AnimePersonal,
+  AniListMetaEntry,
   AniListPersonalEntry,
   LocalPersonalEntry,
   MALAnime,
+  MALPersonalEntry,
   ProvenanceSource,
   ProviderPersonalState,
   SimklPersonalEntry,
   UserAnimeStatus,
 } from '@/models/anime';
 
-/** The raw personal-bearing slices for one title, as `store.ts` gathers them. */
+/**
+ * The raw personal-bearing slices for one title, as `store.ts` gathers them.
+ *
+ * `mal` (the catalog slice) and `anilistMeta` are here NOT for personal reads —
+ * both providers' personal state lives in dedicated slices (`malPersonal`,
+ * `anilist`) — but only to reach each provider's own catalog **episode total**,
+ * which the fully-watched reconciliation compares progress against. Each
+ * provider is judged against its own catalog's count (MAL personal vs MAL's
+ * count, AniList/local vs AniList's), never against MAL's for everyone.
+ */
 export interface RawPersonalSlices {
+  /** MAL catalog slice — consulted ONLY for `num_episodes` (MAL's own total). */
   mal?: MALAnime;
+  /** MAL personal-list entry (H1 split — was `mal.my_list_status`). */
+  malPersonal?: MALPersonalEntry;
   simkl?: SimklPersonalEntry;
   anilist?: AniListPersonalEntry;
   local?: LocalPersonalEntry;
+  /** AniList catalog slice — consulted ONLY for `catalog.numEpisodes`, the total
+   *  the AniList and `local` (main-catalog) providers borrow. */
+  anilistMeta?: AniListMetaEntry;
 }
 
 /**
@@ -63,19 +80,26 @@ function hasPersonalData(
 }
 
 /**
- * MAL's `my_list_status`. Note an EMPTY status string is normalized to
- * `undefined`: the write path initializes `my_list_status` with `status: ''`
- * before applying a score-only patch, and an empty status is not a status.
+ * MAL's personal-list entry (H1: its own slice, was `mal.my_list_status`).
+ * Takes MAL's own catalog episode count separately — post-split the total is a
+ * catalog field, so MAL now borrows it like AniList/local do (see
+ * `buildProviderStates`), rather than reading it off the same object.
+ *
+ * Note an EMPTY status string is normalized to `undefined`: the write path
+ * initializes the entry with `status: ''` before applying a score-only patch,
+ * and an empty status is not a status.
  */
-export function providerStateFromMal(mal?: MALAnime): ProviderPersonalState | undefined {
-  if (!mal) return undefined;
-  const s = mal.my_list_status;
+export function providerStateFromMal(
+  entry?: MALPersonalEntry,
+  malEpisodes?: number
+): ProviderPersonalState | undefined {
+  if (!entry) return undefined;
   return {
-    status: s?.status ? (s.status as UserAnimeStatus) : undefined,
-    score: s?.score ? s.score : null,
-    progress: s?.num_episodes_watched ?? null,
-    total: mal.num_episodes ?? null,
-    present: !!s?.status,
+    status: entry.status ? (entry.status as UserAnimeStatus) : undefined,
+    score: entry.score ? entry.score : null,
+    progress: entry.num_episodes_watched ?? null,
+    total: malEpisodes ?? null,
+    present: !!entry.status,
   };
 }
 
@@ -157,14 +181,18 @@ export function buildProviderStates(
   slices: RawPersonalSlices,
   personalPrecedence: ProvenanceSource[]
 ): Partial<Record<ProvenanceSource, ProviderPersonalState>> {
-  const { mal, simkl, anilist, local } = slices;
-  const catalogEpisodes = mal?.num_episodes;
+  const { mal, malPersonal, simkl, anilist, local, anilistMeta } = slices;
+  // Each provider's total is its OWN catalog's episode count — MAL personal is
+  // judged against MAL's count, AniList/local against AniList's (the main
+  // catalog). SIMKL carries its own total on its entry.
+  const malEpisodes = mal?.num_episodes;
+  const anilistEpisodes = anilistMeta?.catalog?.numEpisodes;
 
   const all: Partial<Record<ProvenanceSource, ProviderPersonalState | undefined>> = {
-    mal: providerStateFromMal(mal),
+    mal: providerStateFromMal(malPersonal, malEpisodes),
     simkl: providerStateFromSimkl(simkl),
-    anilist: providerStateFromAnilist(anilist, catalogEpisodes),
-    local: providerStateFromLocal(local, catalogEpisodes),
+    anilist: providerStateFromAnilist(anilist, anilistEpisodes),
+    local: providerStateFromLocal(local, anilistEpisodes),
   };
 
   const states: Partial<Record<ProvenanceSource, ProviderPersonalState>> = {};
