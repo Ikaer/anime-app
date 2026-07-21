@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { computeFeed, getFeedbackAnime, getRecommendationsData } from '@/lib/recommendations';
+import { computeFeed, getFeedbackAnime, getRecommendationsData } from '@/lib/reco/engine';
 import { applyNarrowingFilters } from '@/lib/animeUtils';
-import { parseSourceWeights } from '@/lib/recoWeights';
+import { parseSourceWeights } from '@/lib/reco/weights';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {

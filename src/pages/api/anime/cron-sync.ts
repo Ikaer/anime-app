@@ -9,7 +9,7 @@ import {
   getRecommendationsData,
   isRecommendationsRefreshRunning,
   performRecommendationsRefresh,
-} from '@/lib/recommendations';
+} from '@/lib/reco/engine';
 import { appendLog } from '@/lib/connectionLog';
 import { getCronSecret } from '@/lib/settings';
 

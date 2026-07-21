@@ -12,7 +12,7 @@ import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
-import { encodeSourceWeights } from '@/lib/recoWeights';
+import { encodeSourceWeights } from '@/lib/reco/weights';
 import { useI18n } from '@/lib/i18n';
 
 type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };

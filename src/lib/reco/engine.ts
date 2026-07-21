@@ -12,7 +12,7 @@
 
 import { MALAnime, AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
 import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds, toNum } from '@/lib/store';
-import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
+import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
 import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/providers/anilist/sync';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';

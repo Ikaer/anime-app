@@ -1,6 +1,6 @@
 import React from 'react';
 import { SourceWeights } from '@/models/anime';
-import { RECO_WEIGHT_PRESETS, resolveWeights } from '@/lib/recoWeights';
+import { RECO_WEIGHT_PRESETS, resolveWeights } from '@/lib/reco/weights';
 import { Button } from '@/components/shared';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './RecoWeightPresetsSection.module.css';

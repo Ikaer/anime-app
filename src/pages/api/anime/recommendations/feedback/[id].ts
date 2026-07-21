@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { setFeedbackVerdict, removeFeedback } from '@/lib/recommendations';
+import { setFeedbackVerdict, removeFeedback } from '@/lib/reco/engine';
 import { isCanonicalId } from '@/lib/store';
 import type { RecoVerdict } from '@/models/anime';
 

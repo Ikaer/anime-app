@@ -6,7 +6,7 @@ import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalI
 import type { AnimeRecord, AniListCharacterEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
-import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
+import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/reco/byCredits';
 import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection } from '@/components/anime';

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import styles from './RecommendationsSection.module.css';
 import { Button } from '@/components/shared';
-import { DIVERSITY_MAX, DIVERSITY_STEP } from '@/lib/recoWeights';
+import { DIVERSITY_MAX, DIVERSITY_STEP } from '@/lib/reco/weights';
 import { useT } from '@/lib/i18n';
 
 interface RecommendationsSectionProps {

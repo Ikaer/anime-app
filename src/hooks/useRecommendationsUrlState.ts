@@ -10,7 +10,7 @@
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageSize, SourceWeights, RecoVerdict } from '@/models/anime';
-import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/recoWeights';
+import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/reco/weights';
 
 export interface RecoUrlState {
   /** Engine: include 2-hop edges (damped) in the ranking. */
