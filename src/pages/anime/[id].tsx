@@ -7,7 +7,7 @@ import type { AnimeRecord, AniListCharacterEntry, Discrepancy, ProvenanceSource,
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
-import { hasWritableExternal } from '@/lib/providers';
+import { canClearStatus } from '@/lib/providers';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
@@ -689,10 +689,11 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       anime: JSON.parse(JSON.stringify(anime)),
       similar: JSON.parse(JSON.stringify(similar)),
       cast: cast ? JSON.parse(JSON.stringify(cast)) : null,
-      // Clearing a status has no remote equivalent (MAL models it as a list
-      // DELETE, SIMKL is score-only), so only offer it when there's no remote
-      // to diverge from — see `PersonalPatch` in personalWriters.ts.
-      canClearStatus: !hasWritableExternal(),
+      // Offered only when every enabled provider declares it can clear a status
+      // (`personal.clearStatus` in providerCapabilities.ts) — in practice, when
+      // local is the only one on. MAL models a clear as a list DELETE and SIMKL
+      // is score-only, so neither can express it without losing the score.
+      canClearStatus: canClearStatus(),
     },
   };
 };

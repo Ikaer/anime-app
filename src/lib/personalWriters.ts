@@ -40,10 +40,7 @@ import {
 import { updateMalListStatus } from '@/lib/malWrite';
 import { pushSimklRating } from '@/lib/simklWrite';
 import { pushAnilistEntry } from '@/lib/anilistWrite';
-import { getMALAuthData } from '@/lib/mal';
-import { getSimklAuthData } from '@/lib/simkl';
-import { getAnilistAuthData } from '@/lib/anilistAuth';
-import { isLocalProviderEnabled } from '@/lib/providers';
+import { isPersonalProviderEnabled } from '@/lib/providers';
 
 /**
  * The provider-neutral edit. `score` 0 clears the rating; `status: null` clears
@@ -73,10 +70,15 @@ interface WriteContext {
   record?: AnimeRecord;
 }
 
+/**
+ * A writer carries no enablement of its own: "is this provider usable right
+ * now?" is `isPersonalProviderEnabled` (providers.ts), one predicate over the
+ * capability descriptors + auth files. Each writer used to repeat its own token
+ * check, which `hasWritableExternal` then repeated a second time — the
+ * duplication D2 removed.
+ */
 interface PersonalWriter {
   id: ProvenanceSource;
-  /** Usable right now (token present / local enabled). */
-  isEnabled(): boolean;
   /** Authority write into the local cache slice — sync, cannot fail on network. */
   writeLocal(ctx: WriteContext, patch: PersonalPatch): void;
   /** Remote push. Local writer is a no-op ({ ok: true }). */
@@ -94,11 +96,8 @@ function malIdOf(record?: AnimeRecord): number | undefined {
 // ── MAL ──────────────────────────────────────────────────────────────────────
 // Writes to BOTH the local MAL personal slice (`personal/mal.json`,
 // authority — H1 split it out of the 39 MB catalog) and the MAL API.
-// isEnabled by token PRESENCE (not validity): an expired-but-refreshable token
-// still means "this is a MAL user", so we keep bumping the local slice as today.
 const malWriter: PersonalWriter = {
   id: 'mal',
-  isEnabled: () => getMALAuthData().token != null,
   writeLocal({ canonicalId }, patch) {
     // Only titles the MAL catalog holds get a MAL personal entry — a MAL-less
     // title has no business in the MAL slice (the local writer covers it).
@@ -138,7 +137,6 @@ const malWriter: PersonalWriter = {
 // exists — SIMKL-first `getEffectiveScore` needs it — then pushes to SIMKL.
 const simklWriter: PersonalWriter = {
   id: 'simkl',
-  isEnabled: () => getSimklAuthData().token != null,
   writeLocal({ canonicalId }, patch) {
     if (patch.score === undefined) return; // score-only source
     const entries = getAllSimklEntries();
@@ -166,7 +164,6 @@ const simklWriter: PersonalWriter = {
 // to a live idMal lookup when the crosswalk has no AniList id yet.
 const anilistWriter: PersonalWriter = {
   id: 'anilist',
-  isEnabled: () => getAnilistAuthData().token != null,
   writeLocal({ canonicalId, record }, patch) {
     const existing = record?.sources.anilistPersonal;
     // The slice is keyed on the AniList media id; with no existing entry and no
@@ -196,7 +193,6 @@ const anilistWriter: PersonalWriter = {
 // local-only title has no MAL slice). Always stamps `updated_at`.
 const localWriter: PersonalWriter = {
   id: 'local',
-  isEnabled: () => isLocalProviderEnabled(),
   writeLocal({ canonicalId }, patch) {
     const existing = getAllLocalEntries()[canonicalId];
     const next: LocalPersonalEntry = {
@@ -228,7 +224,7 @@ export interface WritePersonalResult {
  */
 export async function writePersonal(canonicalId: string, patch: PersonalPatch): Promise<WritePersonalResult> {
   const record = getAnimeByCanonicalId(canonicalId);
-  const active = REGISTRY.filter(w => w.isEnabled());
+  const active = REGISTRY.filter(w => isPersonalProviderEnabled(w.id));
   const ctx: WriteContext = { canonicalId, record };
 
   // A title is "found" if it assembles a row, or the local provider can create

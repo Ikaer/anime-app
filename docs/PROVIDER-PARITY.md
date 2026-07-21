@@ -3,8 +3,9 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4 `Done`
+> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2 `Done`
 > (2026-07-21); B3 `Dropped` (assessed, deliberately deferred). Rest `Todo`.
+> D2 landed the capability descriptor, so A2, D1 and E1–E4 are now unblocked.
 > B4 was **not in the original inventory** — it came from asking whether the
 > keyless promise actually holds for the reco feed. It did not. See [B4](#b4--the-recommendation-feed-was-unreachable-without-a-mal-account--done-2026-07-21).
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
@@ -488,7 +489,7 @@ a capability read (below), but correctable standalone.
 
 **Size:** small.
 
-#### D2 — No capability descriptor; enablement logic duplicated
+#### D2 — No capability descriptor; enablement logic duplicated — **`Done` 2026-07-21**
 
 **Evidence:** [providers.ts:31](../src/lib/providers.ts) — `hasWritableExternal()`
 hand-reads three auth files. [personalWriters.ts](../src/lib/personalWriters.ts) —
@@ -502,6 +503,68 @@ what can it do?"* — so every surface that wants to render or branch on a provi
 re-derives it, which is the mechanism behind A2, D1, and all of E.
 
 **Size:** medium. This is [§3](#3-the-unifying-fix).
+
+**What shipped:**
+
+1. **Two modules, split on client-safety, not on subject.** The declarative half
+   is the new [providerCapabilities.ts](../src/lib/providerCapabilities.ts) —
+   static data, no fs, no auth reads — so the connections UI (E) can import a
+   provider's shape directly. The runtime half ("is it connected *right now*?")
+   stays in [providers.ts](../src/lib/providers.ts), server-only, and is where
+   the two compose. Every question of the form *"who can do X?"* is answered
+   there and nowhere else.
+2. **Roles are keys, and each role carries its OWN auth kind.** §3 below listed
+   *auth kind* as one field per provider. That is wrong for AniList, and
+   discovering it was the useful part of this item: AniList's **catalog** role is
+   `anonymous` (the tags/staff sync and the bulk season crawl need no account and
+   no key — it is the whole keyless promise) while its **personal** role is
+   `oauth+secret`. A single per-provider auth field would have encoded "AniList
+   requires OAuth", which is exactly E4's mistake — filing an unauthenticated
+   catalog action under an account section — frozen into the descriptor that is
+   supposed to fix it. So a provider holds `catalog?` and/or `personal?`, role
+   presence is key presence, and auth is per role.
+3. **The duplication is gone by removal, not by indirection.** Writers no longer
+   carry `isEnabled` at all; the registry filters on
+   `isPersonalProviderEnabled(w.id)` — one predicate, which `hasWritableExternal`
+   is now also a query over. A writer can no longer disagree with it. And because
+   descriptors are a `Record<ProvenanceSource, …>`, registering a writer without
+   a descriptor row is a compile error rather than something to remember.
+4. **One consumer moved to the descriptor, as a demonstration that it is load-
+   bearing.** The detail page's `canClearStatus` was `!hasWritableExternal()` —
+   the right answer from the wrong question, since it assumed no external
+   provider could *ever* clear a status instead of reading whether one declares
+   it. It is now `canClearStatus()`: every **enabled** provider declares
+   `personal.clearStatus`. Same answer on every configuration that exists today.
+
+**Deliberately NOT wired — these are A2 and D1, and both are behaviour changes:**
+
+- `listCoverage: 'full' | 'subset'` is declared (MAL and AniList `full`; SIMKL
+  and local `subset`) and `fullListProviders()` exists, but `PRESENCE_ANCHORS`
+  still reads `['mal']`. Swapping it makes AniList a presence anchor — a real
+  change in what the discrepancies page reports, which A2 owns and should verify
+  against the store.
+- `supportedDimensions()` / `supportsDimension()` are declared (SIMKL: `['score']`),
+  but `simklWriter.writeRemote` still returns a bare `{ ok: true, matched: false }`
+  for a status or progress patch. Refusing it explicitly is D1.
+
+Doing either here would have made this item's diff a behaviour change wearing a
+refactor's clothes. The data they need now exists; the swaps are a line each.
+
+**Verified live on both branches** (production build, 2026-07-21) — the point
+being that the two configurations differ in exactly the predicate that was
+rewritten:
+
+- *Real store, MAL + SIMKL + AniList all connected:* `/api/anime/settings`
+  reports `hasWritableExternal: true`, `local` disabled, precedence
+  `[simkl, mal, anilist]` — unchanged. The detail page (`a_23695`) renders the
+  status row with **no** clear chip.
+- *Synthetic keyless store (same data, `auth/` emptied):* `hasWritableExternal:
+  false`, `local` enabled, precedence `[local, simkl, mal, anilist]`, and the
+  same page renders the status-clear chip. `canClearStatus()` flips exactly where
+  `!hasWritableExternal()` used to.
+
+**Unblocks:** A2, D1, and E1–E4, which were all waiting on "what is this
+provider, and what can it do?" having one answer.
 
 ### E. Connections UI: three bespoke shapes, one absent peer
 
@@ -691,17 +754,23 @@ folders, with `personal/` holding *one file per `ProvenanceSource`*. That rule
 yielded three of four until H1; `animes_mal_personal.json` is now the fourth, so
 the layout work is no longer blocked on this.
 
-## 3. The unifying fix
+## 3. The unifying fix — **shipped as D2, 2026-07-21**
 
 **A capability descriptor per provider**, declaring:
 
 - **role** — `catalog` and/or `personal` (AniList holds both; MAL holds both;
   SIMKL and local are personal-only)
-- **auth kind** — `oauth` · `oauth+secret` · `anonymous` · `none`
+- **auth kind** — `oauth` · `oauth+secret` · `anonymous` · `none`, **per role,
+  not per provider** (as-built correction: AniList's catalog role is anonymous
+  while its personal role is OAuth'd — see [D2](#d2--no-capability-descriptor-enablement-logic-duplicated--done-2026-07-21))
 - **read capabilities** — catalog fields, personal list, full-list vs subset
   feed, crowd recommendations
 - **write capabilities** — which of status/score/progress, and whether a status
   can be cleared
+
+As built: [providerCapabilities.ts](../src/lib/providerCapabilities.ts) (the
+declarative half, client-safe) + [providers.ts](../src/lib/providers.ts) (the
+runtime half — connection status — server-only).
 
 ### Why this is not the registry PROVIDER-ABSTRACTION.md dropped
 
@@ -724,7 +793,9 @@ gaps actually demand rather than by what a fourth provider might.
 - **D1** — a write against an undeclared dimension is refused explicitly instead
   of returning a bare success.
 - **D2** — one source of truth; `hasWritableExternal` becomes a query over
-  declared write capability rather than three hand-read auth files.
+  declared write capability rather than three hand-read auth files. *(Done — and
+  the per-writer `isEnabled` went with it: enablement is now the single
+  `isPersonalProviderEnabled`.)*
 - **E1–E4** — one uniform card renders from the descriptor; capability
   differences appear as stated, disabled slots rather than as absence. Role
   splits the page the way the user thinks about it.
@@ -769,9 +840,22 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > never written down. **A ranked inventory can hide a gap by adjacency.**
    > Worth re-asking of the other sections: for each subsystem, does the keyless
    > path actually run end to end, or is it merely un-flagged?
-3. **D2** — the capability descriptor, once the standalone defects are cleared.
-4. **A2, D1** — fall out of D2 cheaply.
+3. ~~**D2**~~ — the capability descriptor. **Done 2026-07-21.** Two modules
+   (declarative + client-safe, runtime + server-only); the per-writer `isEnabled`
+   is gone. **A2 and D1 are now the top items**, one line each.
+
+   > The lesson is the inverse of B1's. There the *stated* gap was too narrow;
+   > here the stated **shape** was — §3 asked for one auth kind per provider,
+   > which cannot describe AniList (anonymous catalog, OAuth'd list) and would
+   > have baked E4's own bug into E4's fix. When a descriptor is written to
+   > replace scattered derivations, check it against the provider that is least
+   > like the others *before* the derivations are deleted.
+4. **A2, D1** — fall out of D2 cheaply, and the descriptor already declares what
+   each needs (`listCoverage` / `fullListProviders()` for A2, `supportedDimensions()`
+   for D1). Deliberately left unwired: both are behaviour changes, not refactors.
 5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
+   Render from `PROVIDER_CAPABILITIES`; split the page by role (its `catalog` /
+   `personal` keys are exactly E4's axis).
 6. **F1** — independent; slot in whenever cron matters.
 7. ~~**H1**~~ — the MAL catalog/personal split. **Done 2026-07-21.** The 39 MB
    rewrite per rating is gone, `MALAnime` is pure catalog, and
