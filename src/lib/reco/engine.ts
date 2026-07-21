@@ -10,180 +10,39 @@
  * ranking knob never requires a re-fetch.
  */
 
-import { MALAnime, AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWeights, RecoVerdict } from '@/models/anime';
+import { MALAnime, AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
 import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds, toNum } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
+import {
+  TUNING,
+  FIELD_EXTRACTORS,
+  computeIdfSet,
+  buildFieldProfile,
+  buildFieldProfileSet,
+  buildRejectionProfiles,
+  fieldMatch,
+  isPrematureSequel,
+  seedWeight,
+  SEEN_STATUSES,
+} from '@/lib/reco/scoring';
+import {
+  RecoEdge,
+  RecommendationsData,
+  getRecommendationsData,
+  saveRecommendationsData,
+} from '@/lib/reco/data';
+import { feedbackIds, getFeedback, getFeedbackAnime, getDismissedIds } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/providers/anilist/sync';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { MAL_ANIME_FIELDS } from '@/lib/providers/mal/client';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
-const RECOMMENDATIONS_FILE = dataFile('cache/recommendations.json');
-const DISMISSED_FILE = dataFile('user/reco_dismissed.json');
-const FEEDBACK_FILE = dataFile('user/reco_feedback.json');
-
-// ============================================================================
-// Tuning constants (all knobs live here — no scattered magic numbers)
-// ============================================================================
-
-const TUNING = {
-  /** Default seed threshold: completed && score >= this value. */
-  DEFAULT_SEED_THRESHOLD: 8,
-  /** Damping λ applied to hop=2 edges (affinity *= λ^(hop-1)). */
-  NICHE_DAMPING: 0.3,
-  /** Popularity floor: log10 input is clamped to >= this (avoids log10(0)). */
-  POPULARITY_FLOOR: 10,
-  /** A personal score <= this marks an anime as "rejected" (negative profile). */
-  NEGATIVE_SCORE_THRESHOLD: 5,
-  /** Relative weight of genre vs studio overlap in the rejection profile match. */
-  GENRE_WEIGHT: 0.6,
-  STUDIO_WEIGHT: 0.4,
-  /** How many top seeds to surface per candidate for the match hint. */
-  TOP_SEEDS_PER_CANDIDATE: 2,
-  /** Synthetic edge weight for a 👍 "bonne pioche" acting as a crowd seed
-   *  (it has no MAL personal score to derive a weight from). ~ a score-9 seed. */
-  FEEDBACK_SEED_WEIGHT: 2,
-  /** MAL caps recommendations at 10 per anime. */
-  MAX_RECS_PER_ANIME: 10,
-  /** Delay between MAL detail calls during a refresh (ms). */
-  FETCH_DELAY_MS: 350,
-  /** Max retries on HTTP 429 before giving up on a single call. */
-  MAX_429_RETRIES: 4,
-} as const;
-
-/** Metadata fields exposed as taste-profile sources, with their value extractor. */
-type MetaField = 'genre' | 'studio' | 'nsfw' | 'rating' | 'anilistTags' | 'anilistStaff';
-type FieldValue = string | number;
-
-const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[]> = {
-  genre: a => (a.catalog.genres || []).map(g => g.name),
-  studio: a => (a.catalog.studios || []).map(s => s.id),
-  nsfw: a => (a.catalog.nsfw ? [a.catalog.nsfw] : []),
-  rating: a => (a.catalog.rating ? [a.catalog.rating] : []),
-  anilistTags: a => (a.sources.anilist?.tags || []).map(t => t.name),
-  anilistStaff: a => (a.sources.anilist?.staff || []).map(s => s.id),
-};
-
-/**
- * Inverse document frequency per value of a discrete field, over the whole
- * corpus: `log(N / (1 + df))`. Rare studios / ratings get a high weight, so a
- * shared `rx` rating or an obscure studio counts far more than a ubiquitous
- * `pg_13`. This is the lever that makes low- and high-cardinality fields
- * (rating ~6 values vs studios ~1000) comparable.
- */
-function computeIdf(all: AnimeRecord[], extract: (a: AnimeRecord) => FieldValue[]): Map<FieldValue, number> {
-  const df = new Map<FieldValue, number>();
-  for (const a of all) {
-    for (const v of new Set(extract(a))) df.set(v, (df.get(v) || 0) + 1);
-  }
-  const N = all.length;
-  const idf = new Map<FieldValue, number>();
-  df.forEach((count, v) => idf.set(v, Math.log(N / (1 + count))));
-  return idf;
-}
-
-interface FieldProfile {
-  /** value -> taste weight in [0,1] (seed-weighted × IDF, normalized to max 1). */
-  weights: Map<FieldValue, number>;
-  extract: (a: AnimeRecord) => FieldValue[];
-}
-
-/** Build an IDF-scaled taste profile for one field from weighted seed animes. */
-function buildFieldProfile(
-  animes: AnimeRecord[],
-  weightFn: (a: AnimeRecord) => number,
-  extract: (a: AnimeRecord) => FieldValue[],
-  idf: Map<FieldValue, number>
-): FieldProfile {
-  const acc = new Map<FieldValue, number>();
-  for (const a of animes) {
-    const w = weightFn(a);
-    if (w <= 0) continue;
-    for (const v of new Set(extract(a))) acc.set(v, (acc.get(v) || 0) + w);
-  }
-  acc.forEach((v, k) => acc.set(k, v * (idf.get(k) ?? 0)));
-  normalize(acc);
-  return { weights: acc, extract };
-}
-
-/** Candidate's overlap with a field profile in [0,1], plus the matched values. */
-function fieldMatch(candidate: AnimeRecord, profile: FieldProfile): { score: number; matched: FieldValue[] } {
-  const vals = profile.extract(candidate);
-  if (vals.length === 0) return { score: 0, matched: [] };
-  let sum = 0;
-  const matched: FieldValue[] = [];
-  for (const v of vals) {
-    const w = profile.weights.get(v) || 0;
-    sum += w;
-    if (w > 0) matched.push(v);
-  }
-  return { score: sum / vals.length, matched };
-}
-
-/**
- * Negative taste profiles = MAL dislikes (dropped / low-scored) ∪ 👎 "pas pour
- * moi". Shared by the global feed and the single-target drill-down: both push a
- * candidate down when it resembles what the user has rejected.
- */
-function buildRejectionProfiles(
-  all: AnimeRecord[],
-  downIds: Set<string>,
-  idfGenre: Map<FieldValue, number>,
-  idfStudio: Map<FieldValue, number>
-): { negGenre: FieldProfile; negStudio: FieldProfile } {
-  const dislikedBase = all.filter(a => {
-    const st = getEffectiveStatus(a);
-    const sc = getEffectiveScore(a) ?? 0;
-    return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
-  });
-  const dislikedSeen = new Set(dislikedBase.map(a => a.id));
-  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
-  return {
-    negGenre: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idfGenre),
-    negStudio: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idfStudio),
-  };
-}
-
-/** Statuses that mean "already seen" — hard-excluded from the feed (spec §2). */
-const SEEN_STATUSES = new Set(['completed', 'watching', 'on_hold', 'dropped']);
-
-/**
- * Prequel statuses that make a sequel a legitimate recommendation. If a
- * candidate's prequel is anything else (unseen, plan_to_watch, on_hold,
- * dropped, or absent from the dataset), recommending the sequel is premature
- * and the candidate is hard-filtered. Prevents "Jian Lai 2nd Season"-type junk.
- */
-const PREQUEL_OK_STATUSES = new Set(['completed', 'watching']);
+/** Max retries on HTTP 429 before giving up on a single call. */
+const MAX_429_RETRIES = 4;
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export interface RecoEdge {
-  /** Recommended anime id. */
-  id: number;
-  /** num_recommendations (crowd backers) for this edge. */
-  num: number;
-  /** 1 = direct reco of a seed, 2 = reco of a 1-hop candidate. */
-  hop: 1 | 2;
-}
-
-export interface RecommendationsData {
-  lastRefresh: string | null;
-  seedThreshold: number;
-  nicheMode: boolean;
-  /** Keyed by seed id (string) -> edges produced within that seed's subtree. */
-  seeds: Record<string, RecoEdge[]>;
-  /**
-   * AniList crowd recommendations, keyed by seed MAL id (string) -> edges.
-   * Parallel to `seeds` but sourced from AniList's `Media.recommendations`
-   * connection. `num` holds AniList's net recommendation rating. Optional for
-   * backward compat: files written before this feature lack it.
-   */
-  anilistSeeds?: Record<string, RecoEdge[]>;
-  suggestions: { id: number; rank: number }[];
-}
 
 export interface RecommendationItem extends AnimeRecord {
   recoMeta: RecoMeta;
@@ -244,81 +103,9 @@ export interface FeedOptions {
   lang?: Lang;
 }
 
-const EMPTY_DATA: RecommendationsData = {
-  lastRefresh: null,
-  seedThreshold: TUNING.DEFAULT_SEED_THRESHOLD,
-  nicheMode: false,
-  seeds: {},
-  anilistSeeds: {},
-  suggestions: [],
-};
-
-export function getRecommendationsData(): RecommendationsData {
-  return readJsonFile<RecommendationsData>(RECOMMENDATIONS_FILE, { ...EMPTY_DATA });
-}
-
-function saveRecommendationsData(data: RecommendationsData): void {
-  writeJsonFile(RECOMMENDATIONS_FILE, data);
-}
-
-// ============================================================================
-// Feedback store (👍 "bonne pioche" / 👎 "pas pour moi")
-// ============================================================================
-//
-// A durable, standalone verdict map (id -> 'up'|'down'), decoupled from the
-// transient feed: a thumb persists even after the title leaves the feed. 👎
-// subsumes the old pure-hide "Écarter" (it hides AND feeds negative taste); 👍
-// both re-ranks the feed (the `feedback` source) and, at the next refresh,
-// joins the crowd seeds so new candidates enter.
-
-/** Keyed by canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D — re-keyed from MAL id). */
-export type FeedbackMap = Record<string, RecoVerdict>;
-
-function getFeedback(): FeedbackMap {
-  return readJsonFile<FeedbackMap>(FEEDBACK_FILE, {});
-}
-
-export function setFeedbackVerdict(canonicalId: string, verdict: RecoVerdict): void {
-  const fb = getFeedback();
-  fb[canonicalId] = verdict;
-  writeJsonFile(FEEDBACK_FILE, fb);
-}
-
-export function removeFeedback(canonicalId: string): void {
-  const fb = getFeedback();
-  if (canonicalId in fb) {
-    delete fb[canonicalId];
-    writeJsonFile(FEEDBACK_FILE, fb);
-  }
-}
-
-/** Canonical ids carrying the given verdict. */
-function feedbackIds(fb: FeedbackMap, verdict: RecoVerdict): Set<string> {
-  return new Set(
-    Object.entries(fb).filter(([, v]) => v === verdict).map(([k]) => k)
-  );
-}
-
-/** Anime carrying the given verdict, for the review lists. */
-export function getFeedbackAnime(verdict: RecoVerdict): AnimeRecord[] {
-  const ids = feedbackIds(getFeedback(), verdict);
-  return getAnimeForDisplay().filter(a => ids.has(a.id));
-}
-
-// Legacy pure-hide dismiss list — superseded by 👎 feedback. Kept read-only so
-// any previously-dismissed ids stay excluded from the feed (union below).
-function getDismissedIds(): number[] {
-  return readJsonFile<number[]>(DISMISSED_FILE, []);
-}
-
 // ============================================================================
 // Seeds
 // ============================================================================
-
-function seedWeight(score: number, threshold: number): number {
-  // threshold=8: 8->1, 9->2, 10->3
-  return score - (threshold - 1);
-}
 
 /**
  * Completed anime scored >= threshold, sorted by score desc. Uses the effective
@@ -335,47 +122,6 @@ function getSeeds(threshold: number): AnimeRecord[] {
       return score != null && score >= threshold;
     })
     .sort((a, b) => (getEffectiveScore(b) ?? 0) - (getEffectiveScore(a) ?? 0));
-}
-
-// ============================================================================
-// Taste profiles (for the metadata ranking sources)
-// ============================================================================
-
-function normalize<K>(m: Map<K, number>): void {
-  let max = 0;
-  m.forEach(v => { if (v > max) max = v; });
-  if (max > 0) m.forEach((v, k) => m.set(k, v / max));
-}
-
-/**
- * Title markers for "2nd Season / Season 3 / Third Stage"-style sequels.
- * Used only as a fallback when a candidate has no `related_anime` links — many
- * obscure donghua ship with empty relations on MAL, so the relation check alone
- * misses exactly the worst offenders. Deliberately narrow (explicit ordinal +
- * Season/Stage/Cour) to avoid flagging standalone titles.
- */
-const SEQUEL_TITLE_REGEX =
-  /(\b\d+(?:st|nd|rd|th)\s+(?:season|stage|cour)\b)|(\bseason\s+\d+\b)|(\b(?:second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+(?:season|stage|cour)\b)/i;
-
-/**
- * True if recommending this candidate would mean surfacing a later season of a
- * show the user hasn't started. Two signals:
- *  1. A `prequel` relation whose target isn't completed/watching (gap in chain).
- *  2. Fallback when relations are absent: the title looks like an Nth season.
- * If relations exist and every prequel is seen, the candidate is kept even if
- * its title matches the pattern (the user is caught up).
- */
-function isPrematureSequel(anime: AnimeRecord, byId: Map<number, AnimeRecord>): boolean {
-  const prequels = (anime.catalog.relatedAnime || []).filter(r => r.relation_type === 'prequel');
-  if (prequels.length > 0) {
-    return prequels.some(rel => {
-      const target = byId.get(rel.node.id);
-      const status = target ? getEffectiveStatus(target) : undefined;
-      return !status || !PREQUEL_OK_STATUSES.has(status);
-    });
-  }
-  // No relation data — fall back to the title heuristic.
-  return SEQUEL_TITLE_REGEX.test(anime.catalog.title);
 }
 
 // ============================================================================
@@ -550,22 +296,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // negative = dropped / low-scored). IDF is computed once over the full corpus.
   const seeds = getSeeds(threshold);
   const seedW = (a: AnimeRecord) => seedWeight(getEffectiveScore(a) ?? threshold, threshold);
-  const idf = {
-    genre: computeIdf(all, FIELD_EXTRACTORS.genre),
-    studio: computeIdf(all, FIELD_EXTRACTORS.studio),
-    nsfw: computeIdf(all, FIELD_EXTRACTORS.nsfw),
-    rating: computeIdf(all, FIELD_EXTRACTORS.rating),
-    anilistTags: computeIdf(all, FIELD_EXTRACTORS.anilistTags),
-    anilistStaff: computeIdf(all, FIELD_EXTRACTORS.anilistStaff),
-  };
-  const pos = {
-    genre: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.genre, idf.genre),
-    studio: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.studio, idf.studio),
-    nsfw: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.nsfw, idf.nsfw),
-    rating: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.rating, idf.rating),
-    anilistTags: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.anilistTags, idf.anilistTags),
-    anilistStaff: buildFieldProfile(seeds, seedW, FIELD_EXTRACTORS.anilistStaff, idf.anilistStaff),
-  };
+  const idf = computeIdfSet(all);
+  const pos = buildFieldProfileSet(seeds, seedW, idf);
   // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
   // numeric score). Its own weighted source, separate from the MAL-seed genre /
   // studio profiles, so the user can dial their explicit likes independently.
@@ -748,7 +480,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /** Fetch with retry/backoff on HTTP 429. Returns parsed JSON or throws. */
 async function malFetch(url: string, accessToken: string): Promise<any> {
-  for (let attempt = 0; attempt <= TUNING.MAX_429_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (response.status === 429) {
       const retryAfter = parseInt(response.headers.get('Retry-After') || '', 10);
@@ -1137,23 +869,8 @@ export function computeSimilarTo(
   // IDF over the full corpus (as in the feed), but the positive profiles are
   // built from the single target: "shares a RARE genre/tag/studio/creator with
   // this title" scores far above "shares a ubiquitous one".
-  const idf = {
-    genre: computeIdf(all, FIELD_EXTRACTORS.genre),
-    studio: computeIdf(all, FIELD_EXTRACTORS.studio),
-    nsfw: computeIdf(all, FIELD_EXTRACTORS.nsfw),
-    rating: computeIdf(all, FIELD_EXTRACTORS.rating),
-    anilistTags: computeIdf(all, FIELD_EXTRACTORS.anilistTags),
-    anilistStaff: computeIdf(all, FIELD_EXTRACTORS.anilistStaff),
-  };
-  const one = () => 1;
-  const self = {
-    genre: buildFieldProfile([target], one, FIELD_EXTRACTORS.genre, idf.genre),
-    studio: buildFieldProfile([target], one, FIELD_EXTRACTORS.studio, idf.studio),
-    nsfw: buildFieldProfile([target], one, FIELD_EXTRACTORS.nsfw, idf.nsfw),
-    rating: buildFieldProfile([target], one, FIELD_EXTRACTORS.rating, idf.rating),
-    anilistTags: buildFieldProfile([target], one, FIELD_EXTRACTORS.anilistTags, idf.anilistTags),
-    anilistStaff: buildFieldProfile([target], one, FIELD_EXTRACTORS.anilistStaff, idf.anilistStaff),
-  };
+  const idf = computeIdfSet(all);
+  const self = buildFieldProfileSet([target], () => 1, idf);
   const { negGenre, negStudio } = buildRejectionProfiles(all, downCanonical, idf.genre, idf.studio);
 
   // Names/roles as the TARGET credits them — the explain says what the candidate

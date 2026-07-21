@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getValidMalToken } from '@/lib/providers/mal/client';
 import { getMalIdForCanonical, isCanonicalId } from '@/lib/store';
-import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AniListEdgeInput, type RecoEdge } from '@/lib/reco/engine';
+import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AniListEdgeInput } from '@/lib/reco/engine';
+import type { RecoEdge } from '@/lib/reco/data';
 import { fetchAnilistRecommendations } from '@/lib/providers/anilist/sync';
 
 /**
