@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, saveMALAuthData, clearMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { getMALAuthData, saveMALAuthData, clearMALAuthData, isMALTokenValid } from '@/lib/providers/mal/client';
 import { MALAuthData, MALUser } from '@/models/anime';
 import { appendLog } from '@/lib/connectionLog';
 import crypto from 'crypto';

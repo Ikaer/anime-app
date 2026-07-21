@@ -1,10 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getValidMalToken } from '@/lib/mal';
-import { performHistoricalCrawl } from '@/lib/malSync';
-import { performSimklSync } from '@/lib/simklSync';
-import { importAnilistPersonalList } from '@/lib/anilistPersonalSync';
-import { isAnilistMetaSyncRunning, performAnilistMetaSync } from '@/lib/anilistSync';
-import { isPersonalProviderEnabled } from '@/lib/providers';
+import { getValidMalToken } from '@/lib/providers/mal/client';
+import { performHistoricalCrawl } from '@/lib/providers/mal/sync';
+import { performSimklSync } from '@/lib/providers/simkl/sync';
+import { importAnilistPersonalList } from '@/lib/providers/anilist/personalSync';
+import { isAnilistMetaSyncRunning, performAnilistMetaSync } from '@/lib/providers/anilist/sync';
+import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import {
   getRecommendationsData,
   isRecommendationsRefreshRunning,

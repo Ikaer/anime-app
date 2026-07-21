@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import type { HistoricalCrawlStats } from '@/lib/malSync';
-import type { AniListPersonalImportResult } from '@/lib/anilistPersonalSync';
-import type { AniListPushStats } from '@/lib/anilistPush';
+import type { HistoricalCrawlStats } from '@/lib/providers/mal/sync';
+import type { AniListPersonalImportResult } from '@/lib/providers/anilist/personalSync';
+import type { AniListPushStats } from '@/lib/providers/anilist/push';
 import { useProviderStatuses } from './useProviderStatuses';
 
 interface UseConnectionsOptions {

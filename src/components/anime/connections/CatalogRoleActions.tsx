@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './ProviderActions.module.css';
 import { Button } from '@/components/shared';
-import type { HistoricalCrawlStats } from '@/lib/malSync';
+import type { HistoricalCrawlStats } from '@/lib/providers/mal/sync';
 import { useT } from '@/lib/i18n';
 
 /**

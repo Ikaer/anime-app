@@ -3,7 +3,7 @@
  * far the two have drifted, POST starts the push.
  */
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAnilistPushStats, performAnilistPersonalPush } from '@/lib/anilistPush';
+import { getAnilistPushStats, performAnilistPersonalPush } from '@/lib/providers/anilist/push';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

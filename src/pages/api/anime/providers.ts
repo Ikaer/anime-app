@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getProviderStatuses } from '@/lib/providerStatus';
+import { getProviderStatuses } from '@/lib/providers/status';
 
 /**
  * **The** provider status read (docs/PROVIDER-PARITY.md E1–E4): one row per

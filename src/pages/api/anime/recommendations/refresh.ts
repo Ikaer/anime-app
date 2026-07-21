@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getValidMalToken } from '@/lib/mal';
+import { getValidMalToken } from '@/lib/providers/mal/client';
 import { performRecommendationsRefresh, isRecommendationsRefreshRunning, RecoRefreshProgress } from '@/lib/recommendations';
 
 // Store ongoing refresh processes (mirrors big-sync.ts).

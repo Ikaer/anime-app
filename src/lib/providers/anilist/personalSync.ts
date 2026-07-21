@@ -19,7 +19,7 @@ import { replaceAnilistPersonalEntries } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { AniListPersonalEntry, UserAnimeStatus } from '@/models/anime';
-import { getAnilistAuthData, getAnilistAccessToken, fetchAnilistViewer } from '@/lib/anilistAuth';
+import { getAnilistAuthData, getAnilistAccessToken, fetchAnilistViewer } from '@/lib/providers/anilist/auth';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 const CONFIG_FILE = dataFile('sync/anilist_import.json');

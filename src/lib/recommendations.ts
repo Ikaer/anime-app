@@ -14,9 +14,9 @@ import { MALAnime, AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWe
 import { getAnimeForDisplay, getAllAnime, upsertAnime, getHiddenAnimeIds, toNum } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/recoWeights';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/animeUtils';
-import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/anilistSync';
+import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/providers/anilist/sync';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import { MAL_ANIME_FIELDS } from '@/lib/mal';
+import { MAL_ANIME_FIELDS } from '@/lib/providers/mal/client';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 const RECOMMENDATIONS_FILE = dataFile('cache/recommendations.json');

@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllAnime, getAnilistMetaCount } from '@/lib/store';
-import { performAnilistMetaSync } from '@/lib/anilistSync';
+import { performAnilistMetaSync } from '@/lib/providers/anilist/sync';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

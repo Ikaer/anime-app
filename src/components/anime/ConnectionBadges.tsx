@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import ConnectionStatusBadge from './ConnectionStatusBadge';
 import { useProviderStatuses } from '@/hooks';
-import { providersWithRole } from '@/lib/providerCapabilities';
+import { providersWithRole } from '@/lib/providers/capabilities';
 import { useT } from '@/lib/i18n';
 
 /**

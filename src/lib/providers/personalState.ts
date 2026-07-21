@@ -34,7 +34,7 @@ import type {
   SimklPersonalEntry,
   UserAnimeStatus,
 } from '@/models/anime';
-import { presenceAnchors } from '@/lib/providerCapabilities';
+import { presenceAnchors } from '@/lib/providers/capabilities';
 
 /** The anchor's state when it holds no entry at all — "asked, has nothing". */
 const ABSENT: ProviderPersonalState = { present: false, score: null, progress: null, total: null };

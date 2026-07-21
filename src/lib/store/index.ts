@@ -15,11 +15,11 @@
  */
 
 import { MALAnime, AnimeRecord, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, MALListStatus, MALPersonalEntry } from '@/models/anime';
-import { computeDiscrepancy } from '@/lib/discrepancy';
-import { buildProviderStates } from '@/lib/personalState';
+import { computeDiscrepancy } from '@/lib/providers/discrepancy';
+import { buildProviderStates } from '@/lib/providers/personalState';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
-import { getResolvedPersonalPrecedence } from '@/lib/providers';
+import { getResolvedPersonalPrecedence } from '@/lib/providers/registry';
 
 // Role folders, not filename prefixes (docs/DATA-LAYOUT.md). The same basename
 // under catalog/ and personal/ is the point: `catalog/mal.json` is the MAL

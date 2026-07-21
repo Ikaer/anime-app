@@ -10,7 +10,7 @@ import {
   consumeOAuthState,
   SimklAuthData,
   SimklUser,
-} from '@/lib/simkl';
+} from '@/lib/providers/simkl/client';
 import { getSimklClientId, getSimklClientSecret, getSimklAppName } from '@/lib/settings';
 import { getSimklRedirectUri } from '@/lib/redirectUri';
 

@@ -3,9 +3,9 @@
  * anime library, normalizes it to MAL-keyed SimklPersonalEntry records, and
  * persists via anime.ts. See docs/simkl/apirules.md for the protocol.
  */
-import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/simkl';
+import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/providers/simkl/client';
 import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/store';
-import { mapSimklStatus } from '@/lib/discrepancy';
+import { mapSimklStatus } from '@/lib/providers/discrepancy';
 import { SimklPersonalEntry, SourceIds } from '@/models/anime';
 
 export interface SimklSyncResult {

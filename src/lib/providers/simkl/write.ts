@@ -10,7 +10,7 @@
  * SIMKL echoes the item under `not_found`, we retry the other bucket. The full
  * request body + SIMKL response are logged so the first live write is auditable.
  */
-import { getSimklAuthData, isSimklTokenValid, simklPost } from '@/lib/simkl';
+import { getSimklAuthData, isSimklTokenValid, simklPost } from '@/lib/providers/simkl/client';
 import { SourceIds } from '@/models/anime';
 
 export interface SimklRatingResult {

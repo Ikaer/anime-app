@@ -15,7 +15,7 @@ import {
   providersWithRole,
   isExternalPersonalProvider,
   isWritableProvider,
-} from '@/lib/providerCapabilities';
+} from '@/lib/providers/capabilities';
 import { useT } from '@/lib/i18n';
 
 /**

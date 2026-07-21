@@ -26,10 +26,10 @@ import {
   PROVIDER_IDS,
   type CatalogCapability,
   type PersonalCapability,
-} from '@/lib/providerCapabilities';
-import { getMALAuthData, isMALTokenValid } from '@/lib/mal';
-import { getSimklAuthData, isSimklTokenValid } from '@/lib/simkl';
-import { getAnilistAuthData, isAnilistTokenValid } from '@/lib/anilistAuth';
+} from '@/lib/providers/capabilities';
+import { getMALAuthData, isMALTokenValid } from '@/lib/providers/mal/client';
+import { getSimklAuthData, isSimklTokenValid } from '@/lib/providers/simkl/client';
+import { getAnilistAuthData, isAnilistTokenValid } from '@/lib/providers/anilist/auth';
 import {
   getMalClientId,
   getSimklClientId,
@@ -38,7 +38,7 @@ import {
 import {
   isPersonalProviderEnabled,
   getResolvedPersonalPrecedence,
-} from '@/lib/providers';
+} from '@/lib/providers/registry';
 import {
   getAllMalPersonal,
   getAllSimklEntries,

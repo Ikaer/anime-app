@@ -23,9 +23,9 @@
  * Server-only.
  */
 import { appendLog } from '@/lib/connectionLog';
-import { getAnilistAccessToken } from '@/lib/anilistAuth';
-import { fetchAuthenticatedAnilistList, AniListRemoteEntry } from '@/lib/anilistPersonalSync';
-import { pushAnilistEntry } from '@/lib/anilistWrite';
+import { getAnilistAccessToken } from '@/lib/providers/anilist/auth';
+import { fetchAuthenticatedAnilistList, AniListRemoteEntry } from '@/lib/providers/anilist/personalSync';
+import { pushAnilistEntry } from '@/lib/providers/anilist/write';
 import { upsertAnilistPersonalEntries } from '@/lib/store';
 import { AniListPersonalEntry, AnimeRecord, UserAnimeStatus } from '@/models/anime';
 

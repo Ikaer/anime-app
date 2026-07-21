@@ -4,7 +4,7 @@ import type {
   LocalPersonalEntry, SourceIds, Discrepancy,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
-import { buildProviderStates, toAnimePersonal } from '@/lib/personalState';
+import { buildProviderStates, toAnimePersonal } from '@/lib/providers/personalState';
 
 // ============================================================================
 // Display titles (English-first)

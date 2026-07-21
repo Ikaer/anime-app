@@ -19,7 +19,7 @@
  * Server-only.
  */
 import type { UserAnimeStatus } from '@/models/anime';
-import { anilistGraphQL, getAnilistAccessToken } from '@/lib/anilistAuth';
+import { anilistGraphQL, getAnilistAccessToken } from '@/lib/providers/anilist/auth';
 import { appendLog } from '@/lib/connectionLog';
 
 /** MAL vocabulary -> AniList's. The inverse of anilistPersonalSync's STATUS_MAP.

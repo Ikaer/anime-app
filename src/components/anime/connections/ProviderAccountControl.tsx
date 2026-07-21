@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './ProviderAccountControl.module.css';
-import type { ProviderStatus } from '@/lib/providerStatus';
+import type { ProviderStatus } from '@/lib/providers/status';
 import { Button } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 

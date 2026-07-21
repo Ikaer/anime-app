@@ -3,7 +3,7 @@
  * behind /stats. GET reports coverage, POST starts the sweep.
  */
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAnilistCastSweepStats, performAnilistCastSweep } from '@/lib/anilistCast';
+import { getAnilistCastSweepStats, performAnilistCastSweep } from '@/lib/providers/anilist/cast';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

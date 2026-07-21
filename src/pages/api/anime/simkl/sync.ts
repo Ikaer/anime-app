@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { performSimklSync } from '@/lib/simklSync';
+import { performSimklSync } from '@/lib/providers/simkl/sync';
 import { appendLog } from '@/lib/connectionLog';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

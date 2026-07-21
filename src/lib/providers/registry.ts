@@ -21,9 +21,9 @@
  */
 
 import type { ProvenanceSource } from '@/models/anime';
-import { getMALAuthData } from '@/lib/mal';
-import { getSimklAuthData } from '@/lib/simkl';
-import { getAnilistAuthData } from '@/lib/anilistAuth';
+import { getMALAuthData } from '@/lib/providers/mal/client';
+import { getSimklAuthData } from '@/lib/providers/simkl/client';
+import { getAnilistAuthData } from '@/lib/providers/anilist/auth';
 import {
   DEFAULT_PERSONAL_PRECEDENCE,
   resolveLocalPrecedence,
@@ -34,7 +34,7 @@ import {
   isExternalPersonalProvider,
   isWritableProvider,
   supportsStatusClear,
-} from '@/lib/providerCapabilities';
+} from '@/lib/providers/capabilities';
 
 /**
  * Token **presence** per external provider — the one place an auth file is read

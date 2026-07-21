@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getMalIdForCanonical, getRegistry, isCanonicalId, getAllAnilistMeta } from '@/lib/store';
-import { getOrFetchAnilistCast } from '@/lib/anilistCast';
+import { getOrFetchAnilistCast } from '@/lib/providers/anilist/cast';
 
 /**
  * One title's cast (characters + Japanese seiyuu), lazily filled from AniList.

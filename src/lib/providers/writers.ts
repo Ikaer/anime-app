@@ -37,11 +37,11 @@ import {
   upsertAnilistPersonalEntries,
   getAnimeByCanonicalId,
 } from '@/lib/store';
-import { updateMalListStatus } from '@/lib/malWrite';
-import { pushSimklRating } from '@/lib/simklWrite';
-import { pushAnilistEntry } from '@/lib/anilistWrite';
-import { isPersonalProviderEnabled } from '@/lib/providers';
-import { supportsDimension, type PersonalDimension } from '@/lib/providerCapabilities';
+import { updateMalListStatus } from '@/lib/providers/mal/write';
+import { pushSimklRating } from '@/lib/providers/simkl/write';
+import { pushAnilistEntry } from '@/lib/providers/anilist/write';
+import { isPersonalProviderEnabled } from '@/lib/providers/registry';
+import { supportsDimension, type PersonalDimension } from '@/lib/providers/capabilities';
 
 /**
  * The provider-neutral edit. `score` 0 clears the rating; `status: null` clears

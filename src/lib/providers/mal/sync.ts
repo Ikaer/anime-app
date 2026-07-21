@@ -13,7 +13,7 @@
 
 import { MALAnime } from '@/models/anime';
 import { upsertAnime, getSyncMetadata } from '@/lib/store';
-import { fetchSeasonalAnime, fetchUpcomingAnime, MalFetchProgress } from '@/lib/mal';
+import { fetchSeasonalAnime, fetchUpcomingAnime, MalFetchProgress } from '@/lib/providers/mal/client';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { appendLog } from '@/lib/connectionLog';
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ProvenanceSource } from '@/models/anime';
-import type { ProviderStatus } from '@/lib/providerStatus';
+import type { ProviderStatus } from '@/lib/providers/status';
 
 /**
  * The one client-side reader of `/api/anime/providers`

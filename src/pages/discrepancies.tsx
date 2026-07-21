@@ -5,7 +5,7 @@ import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
 import type { AnimeRecord, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/animeUtils';
-import { computeDiscrepancy } from '@/lib/discrepancy';
+import { computeDiscrepancy } from '@/lib/providers/discrepancy';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 const fmtStatus = (s: string | null | undefined, t: TFunction): string =>

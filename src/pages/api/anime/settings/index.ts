@@ -16,7 +16,7 @@ import {
   hasWritableExternal,
   isLocalProviderEnabled,
   getResolvedPersonalPrecedence,
-} from '@/lib/providers';
+} from '@/lib/providers/registry';
 import {
   BootstrapConfig,
   readBootstrapConfig,

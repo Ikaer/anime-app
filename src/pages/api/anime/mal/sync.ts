@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { upsertAnime, getSyncMetadata, updatePersonalStatusBatch } from '@/lib/store';
-import { requireMalAuth, fetchSeasonalAnime, fetchUserAnimelist } from '@/lib/mal';
+import { requireMalAuth, fetchSeasonalAnime, fetchUserAnimelist } from '@/lib/providers/mal/client';
 import { getSeasonInfos } from '@/lib/animeUtils';
 import { MALAnime } from '@/models/anime';
 import { appendLog } from '@/lib/connectionLog';

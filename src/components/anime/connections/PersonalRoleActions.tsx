@@ -2,8 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import styles from './ProviderActions.module.css';
 import { Button } from '@/components/shared';
-import type { AniListPersonalImportResult } from '@/lib/anilistPersonalSync';
-import type { AniListPushStats } from '@/lib/anilistPush';
+import type { AniListPersonalImportResult } from '@/lib/providers/anilist/personalSync';
+import type { AniListPushStats } from '@/lib/providers/anilist/push';
 import { useT } from '@/lib/i18n';
 
 /**

@@ -17,7 +17,7 @@ import {
   ANILIST_AUTHORIZE_URL,
   ANILIST_TOKEN_URL,
   AniListAuthData,
-} from '@/lib/anilistAuth';
+} from '@/lib/providers/anilist/auth';
 import { getAnilistClientId, getAnilistClientSecret } from '@/lib/settings';
 import { getAnilistRedirectUri } from '@/lib/redirectUri';
 

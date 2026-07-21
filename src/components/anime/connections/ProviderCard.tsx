@@ -1,8 +1,8 @@
 import React from 'react';
 import Image from 'next/image';
 import styles from './ProviderCard.module.css';
-import type { ProviderStatus } from '@/lib/providerStatus';
-import type { ProviderRole, ProviderAuthKind, PersonalDimension } from '@/lib/providerCapabilities';
+import type { ProviderStatus } from '@/lib/providers/status';
+import type { ProviderRole, ProviderAuthKind, PersonalDimension } from '@/lib/providers/capabilities';
 import { useT, type TranslationKey } from '@/lib/i18n';
 
 interface ProviderCardProps {

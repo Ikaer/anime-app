@@ -1,9 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllAnime, upsertAnime, getMalIdForCanonical, isCanonicalId, getAllAnilistMeta, getRegistry, toNum } from '@/lib/store';
-import { getValidMalToken, fetchAnimeById } from '@/lib/mal';
-import { refreshAnilistMetaForIds } from '@/lib/anilistSync';
-import { getOrFetchAnilistCast } from '@/lib/anilistCast';
-import { performSimklSync } from '@/lib/simklSync';
+import { getValidMalToken, fetchAnimeById } from '@/lib/providers/mal/client';
+import { refreshAnilistMetaForIds } from '@/lib/providers/anilist/sync';
+import { getOrFetchAnilistCast } from '@/lib/providers/anilist/cast';
+import { performSimklSync } from '@/lib/providers/simkl/sync';
 import { appendLog } from '@/lib/connectionLog';
 
 /**

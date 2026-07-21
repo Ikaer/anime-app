@@ -7,7 +7,7 @@ import type { AnimeRecord, AniListCharacterEntry, Discrepancy, ProvenanceSource,
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/similarByCredits';
-import { canClearStatus } from '@/lib/providers';
+import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
