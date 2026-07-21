@@ -1,11 +1,11 @@
 # `src/lib` — inventory and reorganization guide
 
-**Status:** Phase 1 applied (2026-07-21). Phases 2–5 still proposals.
+**Status:** Phases 1–2 applied (2026-07-21). Phases 3–5 still proposals.
 **Measured:** 2026-07-21, at `326d74d` (36 modules, 10,132 lines).
 
 The inventory below still uses the **pre-move** filenames, since that is what
 the measurements and findings were taken against. §3 gives the target layout and
-§4.1 records what Phase 1 actually landed, including three deliberate deviations.
+each phase records what it actually landed, including its deliberate deviations.
 
 `src/lib` is the only directory under `src/` with no internal structure —
 `components/` splits into `anime/`, `calculator/`, `shared/`; `models/` into
@@ -240,14 +240,14 @@ src/lib/
                auth.ts  meta.ts  catalogCrawl.ts  cast.ts
                personalSync.ts  push.ts  write.ts
 
-  reco/
+  reco/                     ← as built (Phase 2)
     weights.ts                (was recoWeights.ts)            C
-    scoring.ts                ← pure kernel out of recommendations.ts  C
-    feed.ts                   ← computeFeed
-    similar.ts                ← computeSimilarTo
-    refresh.ts                ← performRecommendationsRefresh
-    feedback.ts               ← reco_feedback.json store
-    data.ts                   ← RecommendationsData persistence
+    scoring.ts                pure kernel + TUNING            C
+    feed.ts                   computeFeed + getSeeds
+    similar.ts                computeSimilarTo
+    refresh.ts                performRecommendationsRefresh
+    feedback.ts               reco_feedback.json store
+    data.ts                   RecommendationsData persistence
     byCredits.ts              (was similarByCredits.ts)
 
   domain/                     ← all client-safe, all pure
@@ -314,7 +314,7 @@ whoever picks up Phase 2:
   commits; every `src/lib/…` link in CLAUDE.md was verified to resolve to a real
   file afterwards.
 
-### Phase 2 — Split `recommendations.ts` (F3) *(low risk, highest payoff)*
+### Phase 2 — Split `recommendations.ts` (F3) *(low risk, highest payoff)* ✅ DONE
 
 Mechanical extraction along the region table above; the seams are already marked
 by the file's own `// ===` banners. Order:
@@ -337,6 +337,40 @@ Leave `computeFeed` and `performRecommendationsRefresh` long for now. They are
 long because they are genuinely sequential pipelines, and splitting a 270-line
 function without tests buys less than it risks. Revisit only if a change
 actually needs it.
+
+**Applied 2026-07-21** in three commits — the extraction (in the order above,
+landed as two commits), then the MAL routing on its own as required. `engine.ts`
+is gone; `reco/` is now `scoring` `data` `feedback` `feed` `similar` `refresh`
+plus the pre-existing `weights` / `byCredits`. Notes:
+
+- **The extraction was verified as behaviour-preserving, not merely compiling.**
+  `computeFeed` and `computeSimilarTo` were run against the salon store on
+  `1da0f17` and on the result, and their output diffed: 1122 feed items with
+  identical ids, affinity scores to 6 decimals and breakdown lengths, plus an
+  identical drill-down. Worth redoing the same way for Phase 4 — a probe that
+  compiles `src/lib` to CommonJS in a scratch dir with a `@/`→`src/` require
+  hook takes minutes and is far stronger evidence than a clean build.
+- **`getSeeds` is exported from `feed.ts`**, not duplicated into `refresh.ts`.
+  Both halves need the seed set and it must stay one definition; that makes
+  `refresh` → `feed` the one intra-folder dependency (`FeedOptions` rides along).
+- **`TUNING` moved wholesale into `scoring.ts`** rather than being split by
+  consumer. "All knobs in one place" was worth more than a purist boundary,
+  even though `FETCH_DELAY_MS` is a fetch concern. `MAX_429_RETRIES` did leave —
+  it belongs to the transport, and the transport is now MAL's.
+- **`computeIdfSet` / `buildFieldProfileSet`** collapse the two identical
+  six-line idf/profile blocks `computeFeed` and `computeSimilarTo` each carried.
+- **The MAL step fixed a real gap.** The 429 retry existed *only* in the reco
+  copy, so `malGet` — and with it the seasonal crawl and the personal-list read,
+  the two calls that paginate hardest — had none. It now lives in `malGet`.
+  `fetchAnimeRecommendations` / `fetchUserSuggestions` are new there;
+  `fetchRecoEdges` survives in `refresh.ts` as a three-line wrapper holding only
+  the reco-side concerns (MAL's 10-per-anime cap, the `hop` tag). All three were
+  live-verified against a real token.
+- CLAUDE.md's "Pour toi" section was rewritten to name the six modules, and
+  every `src/lib/reco/…` link re-verified to resolve.
+- Not done, and still worth doing: `scoring.ts` is client-safe but nothing
+  imports it client-side yet. Phase 5's ESLint zone is what would keep it that
+  way.
 
 ### Phase 3 — `providers/anilist/client.ts` (F4) *(medium risk, fixes a real bug)*
 
