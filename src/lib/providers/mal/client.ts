@@ -92,16 +92,38 @@ export interface MalFetchProgress {
   fetched: number;
 }
 
-async function malGet(accessToken: string, url: string): Promise<any> {
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+/** Max retries on HTTP 429 before giving up on a single call. */
+const MAX_429_RETRIES = 4;
 
-  if (!response.ok) {
-    throw new Error(`MAL API request failed: ${response.status} ${response.statusText}`);
+/**
+ * The one MAL GET. Retries on 429, honouring `Retry-After` when MAL sends one
+ * and backing off linearly otherwise.
+ *
+ * The retry used to exist only in the reco engine's private copy of this
+ * function, so the seasonal crawl and the personal-list read — the two calls
+ * that paginate hardest — were the ones without it.
+ */
+async function malGet(accessToken: string, url: string): Promise<any> {
+  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (response.status === 429) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '', 10);
+      const wait = Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000 * (attempt + 1) * 2;
+      await new Promise(resolve => setTimeout(resolve, wait));
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(`MAL API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
   }
 
-  return response.json();
+  throw new Error('MAL API request failed: rate limited (429) after retries');
 }
 
 /** All anime of one season, paginated to exhaustion. */
@@ -169,6 +191,42 @@ export async function fetchAnimeById(
     `${MAL_API}/anime/${animeId}?fields=${MAL_ANIME_FIELDS}&nsfw=true`
   );
   return data?.id ? (data as MALAnime) : undefined;
+}
+
+/** One crowd recommendation edge as MAL reports it, before any reco-side capping. */
+export interface MalRecommendationEdge {
+  /** Recommended anime's MAL id. */
+  id: number;
+  /** `num_recommendations` — how many users backed this edge. */
+  num: number;
+}
+
+/**
+ * MAL's crowd recommendations for one title, in MAL's own order (best first).
+ * Returned uncapped: how many to keep is a recommender knob, not an API fact.
+ */
+export async function fetchAnimeRecommendations(
+  accessToken: string,
+  animeId: number
+): Promise<MalRecommendationEdge[]> {
+  const data = await malGet(accessToken, `${MAL_API}/anime/${animeId}?fields=recommendations`);
+  return (data.recommendations || []).map((r: any) => ({
+    id: r.node.id,
+    num: r.num_recommendations,
+  }));
+}
+
+/**
+ * MAL's personal suggestions for the logged-in user — authenticated by nature,
+ * so there is no anonymous equivalent. `rank` is MAL's own ordering, 1-based.
+ */
+export async function fetchUserSuggestions(
+  accessToken: string,
+  limit = 100
+): Promise<{ id: number; rank: number }[]> {
+  const params = new URLSearchParams({ limit: limit.toString(), fields: 'id,title' });
+  const data = await malGet(accessToken, `${MAL_API}/anime/suggestions?${params}`);
+  return (data.data || []).map((item: any, i: number) => ({ id: item.node.id, rank: i + 1 }));
 }
 
 // ============================================================================

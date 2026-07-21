@@ -15,10 +15,11 @@ import { RecoEdge, RecommendationsData, saveRecommendationsData } from '@/lib/re
 import { getFeedbackAnime } from '@/lib/reco/feedback';
 import { getSeeds, type FeedOptions } from '@/lib/reco/feed';
 import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/providers/anilist/sync';
-import { MAL_ANIME_FIELDS } from '@/lib/providers/mal/client';
-
-/** Max retries on HTTP 429 before giving up on a single call. */
-const MAX_429_RETRIES = 4;
+import {
+  fetchAnimeById,
+  fetchAnimeRecommendations,
+  fetchUserSuggestions,
+} from '@/lib/providers/mal/client';
 
 export interface RecoRefreshProgress {
   type: 'start' | 'progress' | 'seed_done' | 'suggestions' | 'anilist' | 'hop2' | 'hydrate' | 'complete' | 'error';
@@ -71,51 +72,24 @@ export function isRecommendationsRefreshRunning(): boolean {
   return isRefreshRunning;
 }
 
-interface MalRecommendationsResponse {
-  recommendations?: Array<{
-    node: { id: number; title: string; main_picture?: { medium: string; large: string } };
-    num_recommendations: number;
-  }>;
-}
-
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Fetch with retry/backoff on HTTP 429. Returns parsed JSON or throws. */
-async function malFetch(url: string, accessToken: string): Promise<any> {
-  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (response.status === 429) {
-      const retryAfter = parseInt(response.headers.get('Retry-After') || '', 10);
-      const wait = Number.isFinite(retryAfter) ? retryAfter * 1000 : 1000 * (attempt + 1) * 2;
-      await delay(wait);
-      continue;
-    }
-    if (!response.ok) {
-      throw new Error(`MAL API request failed: ${response.status} ${response.statusText}`);
-    }
-    return response.json();
-  }
-  throw new Error('MAL API request failed: rate limited (429) after retries');
-}
-
+/**
+ * The target's crowd edges, capped at MAL's own per-anime ceiling. Thin over
+ * `providers/mal/client.ts` — the cap and the `hop` tag are recommender
+ * concerns, the HTTP is not.
+ */
 export async function fetchRecoEdges(animeId: number, accessToken: string): Promise<RecoEdge[]> {
-  const url = `https://api.myanimelist.net/v2/anime/${animeId}?fields=recommendations`;
-  const data: MalRecommendationsResponse = await malFetch(url, accessToken);
-  return (data.recommendations || [])
+  const edges = await fetchAnimeRecommendations(accessToken, animeId);
+  return edges
     .slice(0, TUNING.MAX_RECS_PER_ANIME)
-    .map(r => ({ id: r.node.id, num: r.num_recommendations, hop: 1 as const }));
+    .map(e => ({ id: e.id, num: e.num, hop: 1 as const }));
 }
 
-async function fetchSuggestions(accessToken: string): Promise<{ id: number; rank: number }[]> {
-  const url = `https://api.myanimelist.net/v2/anime/suggestions?limit=100&fields=id,title`;
-  const data: any = await malFetch(url, accessToken);
-  return (data.data || []).map((item: any, i: number) => ({ id: item.node.id, rank: i + 1 }));
-}
-
+/** One candidate's full catalog record. Non-fatal: a dead title is skipped. */
 async function fetchAnimeDetail(animeId: number, accessToken: string): Promise<MALAnime | null> {
-  const url = `https://api.myanimelist.net/v2/anime/${animeId}?fields=${MAL_ANIME_FIELDS}&nsfw=true`;
   try {
-    return await malFetch(url, accessToken);
+    return (await fetchAnimeById(accessToken, animeId)) ?? null;
   } catch (error) {
     console.error(`Failed to hydrate anime ${animeId}:`, error);
     return null;
@@ -217,7 +191,7 @@ export async function performRecommendationsRefresh(
     } else {
       try {
         report({ type: 'suggestions', message: 'Fetching personal suggestions...' });
-        data.suggestions = await fetchSuggestions(accessToken);
+        data.suggestions = await fetchUserSuggestions(accessToken);
         saveRecommendationsData(data);
       } catch (error) {
         console.error('Failed to fetch suggestions:', error);
