@@ -10,10 +10,12 @@ interface ConnectionStatusBadgeProps {
   label?: string;
   alt: string;
   connected: boolean;
+  /** Connected, but the token is expired — shown as a third dot colour. */
+  stale?: boolean;
   title: string;
 }
 
-const ConnectionStatusBadge: React.FC<ConnectionStatusBadgeProps> = ({ iconSrc, label, alt, connected, title }) => {
+const ConnectionStatusBadge: React.FC<ConnectionStatusBadgeProps> = ({ iconSrc, label, alt, connected, stale = false, title }) => {
   return (
     <Link href="/connections" className={styles.badge} title={title}>
       {iconSrc ? (
@@ -33,7 +35,7 @@ const ConnectionStatusBadge: React.FC<ConnectionStatusBadgeProps> = ({ iconSrc, 
           {label}
         </span>
       )}
-      <span className={`${styles.dot} ${connected ? styles.connected : ''}`} />
+      <span className={`${styles.dot} ${stale ? styles.stale : connected ? styles.connected : ''}`} />
     </Link>
   );
 };

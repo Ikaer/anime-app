@@ -3,10 +3,12 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2, A2, D1
-> `Done` (2026-07-21); B3 `Dropped` (assessed, deliberately deferred). **E1–E4
-> and F1 are what remains.** D2 landed the capability descriptor; A2 and D1 then
-> consumed it — neither as the one-line swap D2 had left ready (see both).
+> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2, A2, D1,
+> E1–E4 `Done` (2026-07-21); B3 `Dropped` (assessed, deliberately deferred).
+> **F1 is what remains.** D2 landed the capability descriptor; A2 and D1 then
+> consumed it — neither as the one-line swap D2 had left ready (see both) — and
+> E1–E4 needed a runtime peer to it that the inventory never named (see
+> [E1–E4](#e1e4--what-shipped)).
 > B4 was **not in the original inventory** — it came from asking whether the
 > keyless promise actually holds for the reco feed. It did not. See [B4](#b4--the-recommendation-feed-was-unreachable-without-a-mal-account--done-2026-07-21).
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
@@ -670,7 +672,11 @@ rewritten:
 **Unblocks:** A2, D1, and E1–E4, which were all waiting on "what is this
 provider, and what can it do?" having one answer.
 
-### E. Connections UI: three bespoke shapes, one absent peer
+### E. Connections UI: three bespoke shapes, one absent peer — **`Done` 2026-07-21**
+
+E1–E4 shipped as one change, because they are one change: the four symptoms are
+four consequences of the page having no notion of "a provider" at all. See
+[the shared writeup](#e1e4--what-shipped) after E4.
 
 #### E1 — Three provider-named sections with no shared shape
 
@@ -723,6 +729,95 @@ Local appears in the personal group with its auth slot marked not-applicable
 rather than missing.
 
 **Size:** medium-large, and the largest visible payoff. Depends on D2.
+
+#### E1–E4 — what shipped
+
+The fix is the one the inventory names, and it landed as stated. Four things it
+did **not** say, in decreasing order of how much they mattered:
+
+1. **The missing piece was a uniform status *read*, not a uniform card.** D2
+   supplied "what is this provider and what can it do", which is half of what a
+   card needs; the other half — "is it connected, whose account, holding how
+   much" — existed only as three bespoke auth endpoints answering three
+   different payload shapes (`user.name` / `user.user.name` / `user.name` +
+   `isConfigured`), each with its own client caller. That is why E2's three badge
+   components were *stateful* duplicates over an already-shared presenter: they
+   were not duplicating rendering, they were duplicating the shape-flattening.
+   So this pass adds the runtime peer of `providerCapabilities.ts`:
+   [providerStatus.ts](../src/lib/providerStatus.ts) + `GET /api/anime/providers`,
+   one row per provider, and [useProviderStatuses](../src/hooks/useProviderStatuses.ts)
+   as its single client reader. The per-provider `auth` endpoints stay exactly as
+   they are — they own the OAuth *flows*, which genuinely differ. The read is
+   what was duplicated; the flows were not.
+2. **A card is a (provider, role) pair, not a provider.** E4 asks for the page to
+   be split by role, which sounds like a grouping change; it is really a change
+   to what a card *is*. MAL and AniList each render twice, and the auth kind is
+   read from the role, so AniList's catalog card says "no account required" while
+   its list card asks for OAuth. That is the whole of E4 and it costs nothing at
+   the call site — both groups come from `providersWithRole()`. Two details that
+   only appear once you build it: a dual-role provider must not grow two
+   disconnect buttons (the account control renders in the personal group only;
+   the catalog card states the requirement and points at it), and MAL's one
+   `syncError` string had to split by role too, since a list-sync failure and a
+   catalog-crawl failure now render on different cards.
+3. **`connected` is token *presence*, and "expired" became a third state.** The
+   old MAL badge showed a token that had lapsed as **not connected** — the same
+   conflation D1 is about, in the opposite direction: an actionable state
+   ("re-authenticate") rendered as a different one ("connect an account"). The
+   status row reports `connected` (presence, the same predicate
+   `isPersonalProviderEnabled` uses, so the badge cannot disagree with the write
+   path) *and* `tokenValid`, and both the badge dot and the card carry an amber
+   "session expirée" state between them.
+4. **E3 is smaller than it looks and E1 pays for it.** `local` needed no new
+   plumbing at all — one descriptor row it already had, plus not filtering it out.
+   It now gets a card (active/inactive, entry count, precedence rank, why `auto`
+   turned it off, a link to the switch) and a header badge **when enabled**, which
+   is the honest rule: an off local provider is not a connection, and a
+   connection badge for a thing with no account would otherwise be a permanent
+   grey dot.
+
+**Deleted, not left behind:** `MalConnectionBadge` / `SimklConnectionBadge` /
+`AnilistConnectionBadge`, and `AccountSection` / `SimklSection` /
+`AnilistAuthSection` / `DataSyncSection` with their CSS modules. The last is the
+important one — `DataSyncSection` was a 24-prop component holding MAL's seasonal
+crawl, SIMKL's delta, AniList's metadata sweep and AniList's list import behind a
+single "Synchro" heading, i.e. the page organized by *when things were added*.
+Its contents are now four role-filed action blocks. The blocks stay separate
+components rather than one generic loop, per
+[PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md): only the card around them is
+uniform.
+
+**Verified on two production builds against real data** (2026-07-21), which is
+the point — the whole item is about configurations rendering differently:
+
+| | MAL | AniList | SIMKL | local |
+|---|---|---|---|---|
+| *Real store* (3 accounts) | connecté Ikaer, 669 entries, préc. n°2 | connecté Ikaer, 241, n°3 | connecté Xavier Lefebvre, 652, n°1 | **inactif**, 0 entries, no rank |
+| *Keyless* (same store, `auth/` emptied) | non connecté | non connecté | non connecté | **actif**, 3 entries, **préc. n°1** |
+
+Header badges follow: 3 badges on the real store (local hidden, correctly), 4 in
+the keyless one with local the only green dot — E3's exact symptom, "on the
+default no-account configuration the only active provider is the one with no UI",
+inverted. The AniList catalog card stays fully actionable in both, with no
+account anywhere in the store (E4). A third run with a deliberately expired MAL
+token (fabricated, never sent anywhere — `isMALTokenValid` short-circuits offline)
+renders amber "Session expirée" on both MAL cards and the badge.
+
+**Not verified:** no screenshot — the browser pane's screenshot action timed out
+repeatedly on this page, while page text, the accessibility tree and in-page JS
+all read fine. Everything above is a DOM read, not a visual check, so the layout
+itself is unconfirmed beyond structure.
+
+**Known gap left open:** a disconnected provider still shows a precedence rank
+(it is in the resolved precedence, and its stale slice really would still be
+consulted, so the number is true) — but "Précédence n°3" on a card reading "Non
+connecté" is at best confusing. Also still unrendered: **B4's per-source refresh
+outcomes**, which that item deferred to "E1–E4's uniform provider cards". The
+cards now exist, but they live on `/connections` while the degraded-run signal
+belongs on `/recommendations`; wiring it is a separate, smaller job.
+
+**Size:** medium-large, as ranked — and the ratio held: ~half the diff is the
+status endpoint and its hook, which the inventory did not mention at all.
 
 ### F. Orchestration
 
@@ -907,7 +1002,10 @@ gaps actually demand rather than by what a fourth provider might.
   `isPersonalProviderEnabled`.)*
 - **E1–E4** — one uniform card renders from the descriptor; capability
   differences appear as stated, disabled slots rather than as absence. Role
-  splits the page the way the user thinks about it.
+  splits the page the way the user thinks about it. *(Done — but the descriptor
+  was only half of what a card needs. The other half, live status in one shape,
+  did not exist and is the new [providerStatus.ts](../src/lib/providerStatus.ts)
+  + `GET /api/anime/providers`. See [E1–E4](#e1e4--what-shipped).)*
 
 ### What it does not touch
 
@@ -985,9 +1083,20 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > row count that drops to zero reads as "no discrepancies today". Same shape as
    > B4's "a ranked inventory can hide a gap by adjacency", one level down: verify
    > that a path still *fires*, not only that its output did not change.
-5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
-   Render from `PROVIDER_CAPABILITIES`; split the page by role (its `catalog` /
-   `personal` keys are exactly E4's axis).
+5. ~~**E1–E4**~~ — the connections rework. **Done 2026-07-21.** The page is two
+   role groups of one uniform card, seven bespoke components are deleted, and
+   `local` has a card and a badge. **F1 is now the only item left.**
+
+   > The lesson is D2's, one turn later and from the other side. There the
+   > descriptor's *shape* was too narrow; here the descriptor was right and
+   > simply **not the whole input**. A card needs "what is this provider" (D2,
+   > static) *and* "what is it doing right now" (nowhere, until this pass) — and
+   > because the second half was missing, every consumer had invented its own,
+   > which is precisely why E2 read as three duplicated components rather than as
+   > three missing readers of an absent endpoint. **When a UI gap looks like
+   > duplication, check whether the thing being duplicated is a missing seam.**
+   > Same shape as B1's "check what feeds it before changing what it accepts",
+   > applied to a read model instead of a query.
 6. **F1** — independent; slot in whenever cron matters.
 7. ~~**H1**~~ — the MAL catalog/personal split. **Done 2026-07-21.** The 39 MB
    rewrite per rating is gone, `MALAnime` is pure catalog, and

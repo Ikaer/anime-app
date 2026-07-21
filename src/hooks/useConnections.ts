@@ -1,61 +1,67 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { MALAuthState } from '@/models/anime';
 import type { HistoricalCrawlStats } from '@/lib/malSync';
 import type { AniListPersonalImportResult } from '@/lib/anilistPersonalSync';
 import type { AniListPushStats } from '@/lib/anilistPush';
+import { useProviderStatuses } from './useProviderStatuses';
 
 interface UseConnectionsOptions {
   onDataChanged?: () => void;
 }
 
+/**
+ * Connections-page state (docs/PROVIDER-PARITY.md E1–E4).
+ *
+ * **Connection status is no longer part of it.** It comes from
+ * `useProviderStatuses` — one `/api/anime/providers` read covering every
+ * provider, including `local`, in one shape — where this hook used to carry
+ * three independent status checks answering three different payload shapes.
+ * What is left here is what genuinely differs per provider: the OAuth
+ * redirect/logout calls and the sync actions.
+ *
+ * The sync error is split by **role** rather than kept as one MAL-wide string:
+ * a list-sync failure and a catalog-crawl failure now render on their own cards,
+ * which is the same split the page itself is organized on (E4).
+ */
 export function useConnections(options: UseConnectionsOptions = {}) {
   const { onDataChanged } = options;
   const router = useRouter();
 
-  // MAL auth state
-  const [authState, setAuthState] = useState<MALAuthState>({ isAuthenticated: false });
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState('');
+  const { byId, precedence, isLoading: isStatusLoading, refresh: refreshStatuses } = useProviderStatuses();
 
-  // Sync state
+  const [authError, setAuthError] = useState('');
+  const [simklAuthError, setSimklAuthError] = useState('');
+  const [anilistAuthError, setAnilistAuthError] = useState('');
+
+  // MAL sync state, split by role.
   const [isSyncing, setIsSyncing] = useState(false);
   const [isBigSyncing, setIsBigSyncing] = useState(false);
   const [isHistoricalCrawling, setIsHistoricalCrawling] = useState(false);
-  const [syncError, setSyncError] = useState('');
+  const [listSyncError, setListSyncError] = useState('');
+  const [catalogSyncError, setCatalogSyncError] = useState('');
   const [historicalStats, setHistoricalStats] = useState<HistoricalCrawlStats | null>(null);
 
-  // SIMKL auth + sync state
-  const [simklConnected, setSimklConnected] = useState(false);
-  const [simklUser, setSimklUser] = useState<string | undefined>(undefined);
-  const [isSimklAuthLoading, setIsSimklAuthLoading] = useState(true);
-  const [simklAuthError, setSimklAuthError] = useState('');
+  // SIMKL sync state
   const [isSimklSyncing, setIsSimklSyncing] = useState(false);
   const [simklSyncMessage, setSimklSyncMessage] = useState('');
 
-  // AniList tags sync state (public API, no auth)
+  // AniList catalog-role state (public API, no auth)
   const [isAnilistMetaSyncing, setIsAnilistMetaSyncing] = useState(false);
   const [anilistMetaSyncMessage, setAnilistMetaSyncMessage] = useState('');
   const [anilistMetaStats, setAnilistMetaStats] = useState<{ totalAnime: number; taggedCount: number } | null>(null);
-
-  // AniList catalog crawl state (docs/PROVIDER-FREE.md Phase 3, public API, no auth)
   const [isAnilistCatalogCrawling, setIsAnilistCatalogCrawling] = useState(false);
   const [anilistCatalogCrawlMessage, setAnilistCatalogCrawlMessage] = useState('');
   const [anilistCatalogStats, setAnilistCatalogStats] = useState<{ totalCanonicalIds: number; anilistOnlyIds: number } | null>(null);
 
-  // AniList OAuth state (docs/ANILIST-OAUTH.md) — the login tier above the
-  // anonymous by-username import below; unlocks private reads + write-back.
-  const [anilistConnected, setAnilistConnected] = useState(false);
-  const [anilistUser, setAnilistUser] = useState<string | undefined>(undefined);
-  const [anilistConfigured, setAnilistConfigured] = useState(false);
-  const [isAnilistAuthLoading, setIsAnilistAuthLoading] = useState(true);
-  const [anilistAuthError, setAnilistAuthError] = useState('');
-
-  // AniList personal-list import state (the OAuth'd viewer's own list)
+  // AniList personal-role state (the OAuth'd viewer's own list)
   const [isAnilistImporting, setIsAnilistImporting] = useState(false);
   const [anilistImportResult, setAnilistImportResult] = useState<AniListPersonalImportResult | null>(null);
   const [anilistImportStoredCount, setAnilistImportStoredCount] = useState<number | null>(null);
   const [anilistPushStats, setAnilistPushStats] = useState<AniListPushStats | null>(null);
+
+  const malConnected = !!byId.mal?.connected;
+  const simklConnected = !!byId.simkl?.connected;
+  const anilistConnected = !!byId.anilist?.connected;
 
   const fetchHistoricalStats = async () => {
     try {
@@ -108,62 +114,15 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  const checkAuthStatus = async () => {
-    try {
-      setIsAuthLoading(true);
-      const response = await fetch('/api/anime/auth?action=status');
-      const data = await response.json();
-      setAuthState({ isAuthenticated: data.isAuthenticated, user: data.user });
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-      setAuthError('Failed to check authentication status');
-    } finally {
-      setIsAuthLoading(false);
-    }
-  };
-
-  const checkSimklStatus = async () => {
-    try {
-      setIsSimklAuthLoading(true);
-      const response = await fetch('/api/anime/simkl/auth?action=status');
-      const data = await response.json();
-      setSimklConnected(!!data.isAuthenticated);
-      setSimklUser(data.user?.user?.name);
-    } catch (error) {
-      console.error('Error checking SIMKL status:', error);
-    } finally {
-      setIsSimklAuthLoading(false);
-    }
-  };
-
-  const checkAnilistStatus = async () => {
-    try {
-      setIsAnilistAuthLoading(true);
-      const response = await fetch('/api/anime/anilist/auth?action=status');
-      const data = await response.json();
-      setAnilistConnected(!!data.isAuthenticated);
-      setAnilistUser(data.user?.name);
-      setAnilistConfigured(!!data.isConfigured);
-    } catch (error) {
-      console.error('Error checking AniList status:', error);
-    } finally {
-      setIsAnilistAuthLoading(false);
-    }
-  };
-
-  // Check auth status and historical stats on mount
   useEffect(() => {
-    checkAuthStatus();
     fetchHistoricalStats();
-    checkSimklStatus();
-    checkAnilistStatus();
     fetchAnilistMetaStats();
     fetchAnilistCatalogStats();
     fetchAnilistImportConfig();
   }, []);
 
   // Push drift is only computable — and only meaningful — once AniList is
-  // connected, so this waits for the auth check rather than running on mount.
+  // connected, so this waits for the status read rather than running on mount.
   useEffect(() => {
     if (!anilistConnected) {
       setAnilistPushStats(null);
@@ -181,133 +140,112 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     return () => clearTimeout(timer);
   }, [anilistPushStats]);
 
-  // Handle OAuth callback
+  // Handle OAuth callbacks. Every provider's callback lands the same way — a
+  // query param this strips — and every one re-reads the single status endpoint.
   useEffect(() => {
     if (!router.isReady) return;
 
+    const strip = (key: string) => {
+      const { [key]: _removed, ...rest } = router.query;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    };
+
     const authParam = router.query.auth;
     if (authParam) {
-      if (authParam === 'success') {
-        checkAuthStatus();
-      } else {
-        setAuthError('Authentication failed. Please try again.');
-      }
-      const { auth, ...rest } = router.query;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+      if (authParam === 'success') void refreshStatuses();
+      else setAuthError('Authentication failed. Please try again.');
+      strip('auth');
     }
 
     const simklAuthParam = router.query.simkl_auth;
     if (simklAuthParam) {
-      if (simklAuthParam === 'success') checkSimklStatus();
+      if (simklAuthParam === 'success') void refreshStatuses();
       else setSimklAuthError('SIMKL authentication failed. Please try again.');
-      const { simkl_auth, ...rest } = router.query;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+      strip('simkl_auth');
     }
 
     const anilistAuthParam = router.query.anilist_auth;
     if (anilistAuthParam) {
-      if (anilistAuthParam === 'success') checkAnilistStatus();
+      if (anilistAuthParam === 'success') void refreshStatuses();
       else setAnilistAuthError('AniList authentication failed. Please try again.');
-      const { anilist_auth, ...rest } = router.query;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+      strip('anilist_auth');
     }
-  }, [router.isReady, router.query, router]);
+  }, [router.isReady, router.query, router, refreshStatuses]);
 
-  // MAL auth handlers
+  // ── Auth handlers. One per provider because the endpoints differ. ──
   const handleConnect = async () => {
     try {
-      setIsAuthLoading(true);
       setAuthError('');
       const response = await fetch('/api/anime/auth?action=login');
       const data = await response.json();
-      if (data.authUrl) {
-        window.location.href = data.authUrl;
-      } else {
-        setAuthError('Failed to initiate authentication');
-      }
+      if (data.authUrl) window.location.href = data.authUrl;
+      else setAuthError('Failed to initiate authentication');
     } catch (error) {
       console.error('Error connecting to MAL:', error);
       setAuthError('Failed to connect to MyAnimeList');
-      setIsAuthLoading(false);
     }
   };
 
   const handleDisconnect = async () => {
     try {
-      setIsAuthLoading(true);
       setAuthError('');
       await fetch('/api/anime/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
-      setAuthState({ isAuthenticated: false });
+      await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from MAL:', error);
       setAuthError('Failed to disconnect from MyAnimeList');
-    } finally {
-      setIsAuthLoading(false);
     }
   };
 
-  // SIMKL auth handlers
   const handleSimklConnect = async () => {
     try {
-      setIsSimklAuthLoading(true);
       setSimklAuthError('');
       const response = await fetch('/api/anime/simkl/auth?action=login');
       const data = await response.json();
       if (data.authUrl) window.location.href = data.authUrl;
-      else { setSimklAuthError('Failed to initiate SIMKL authentication'); setIsSimklAuthLoading(false); }
+      else setSimklAuthError('Failed to initiate SIMKL authentication');
     } catch (error) {
       console.error('Error connecting to SIMKL:', error);
       setSimklAuthError('Failed to connect to SIMKL');
-      setIsSimklAuthLoading(false);
     }
   };
 
   const handleSimklDisconnect = async () => {
     try {
-      setIsSimklAuthLoading(true);
       setSimklAuthError('');
       await fetch('/api/anime/simkl/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
-      setSimklConnected(false);
-      setSimklUser(undefined);
+      await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from SIMKL:', error);
       setSimklAuthError('Failed to disconnect from SIMKL');
-    } finally {
-      setIsSimklAuthLoading(false);
     }
   };
 
-  // AniList auth handlers
   const handleAnilistConnect = async () => {
     try {
-      setIsAnilistAuthLoading(true);
       setAnilistAuthError('');
       const response = await fetch('/api/anime/anilist/auth?action=login');
       const data = await response.json();
       if (data.authUrl) window.location.href = data.authUrl;
-      else { setAnilistAuthError(data.error || 'Failed to initiate AniList authentication'); setIsAnilistAuthLoading(false); }
+      else setAnilistAuthError(data.error || 'Failed to initiate AniList authentication');
     } catch (error) {
       console.error('Error connecting to AniList:', error);
       setAnilistAuthError('Failed to connect to AniList');
-      setIsAnilistAuthLoading(false);
     }
   };
 
   const handleAnilistDisconnect = async () => {
     try {
-      setIsAnilistAuthLoading(true);
       setAnilistAuthError('');
       await fetch('/api/anime/anilist/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
-      setAnilistConnected(false);
-      setAnilistUser(undefined);
+      await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from AniList:', error);
       setAnilistAuthError('Failed to disconnect from AniList');
-    } finally {
-      setIsAnilistAuthLoading(false);
     }
   };
 
+  // ── Sync handlers ──
   const handleSimklSync = async () => {
     if (!simklConnected) return;
     setIsSimklSyncing(true);
@@ -320,6 +258,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
         `${data.phase}: +${data.added} updated, ${data.removed} removed${data.orphansSkipped ? `, ${data.orphansSkipped} skipped (no MAL id)` : ''}`
       );
       onDataChanged?.();
+      void refreshStatuses();
     } catch (error) {
       setSimklSyncMessage(error instanceof Error ? error.message : 'Failed to sync SIMKL.');
     } finally {
@@ -327,41 +266,41 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  // Sync handlers
   const handleSync = async () => {
-    if (!authState.isAuthenticated) return;
+    if (!malConnected) return;
     setIsSyncing(true);
-    setSyncError('');
+    setListSyncError('');
     try {
       const response = await fetch('/api/anime/mal/sync', { method: 'POST' });
       if (!response.ok) throw new Error('Sync failed');
       onDataChanged?.();
+      void refreshStatuses();
     } catch (error) {
-      setSyncError('Failed to sync data.');
+      setListSyncError('Failed to sync data.');
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handleBigSync = async () => {
-    if (!authState.isAuthenticated) return;
+    if (!malConnected) return;
     setIsBigSyncing(true);
-    setSyncError('');
+    setCatalogSyncError('');
     try {
       const response = await fetch('/api/anime/mal/big-sync', { method: 'POST' });
       if (!response.ok) throw new Error('Big sync failed');
       onDataChanged?.();
     } catch (error) {
-      setSyncError('Failed to start big sync.');
+      setCatalogSyncError('Failed to start big sync.');
     } finally {
       setIsBigSyncing(false);
     }
   };
 
   const handleHistoricalCrawl = async () => {
-    if (!authState.isAuthenticated) return;
+    if (!malConnected) return;
     setIsHistoricalCrawling(true);
-    setSyncError('');
+    setCatalogSyncError('');
     try {
       const res = await fetch('/api/anime/mal/historical-crawl', { method: 'POST' });
       if (!res.ok) throw new Error('Historical crawl failed');
@@ -369,7 +308,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       setHistoricalStats(data.stats);
       onDataChanged?.();
     } catch {
-      setSyncError('Failed to run historical crawl.');
+      setCatalogSyncError('Failed to run historical crawl.');
     } finally {
       setIsHistoricalCrawling(false);
     }
@@ -417,6 +356,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       if (data.ok) {
         fetchAnilistImportConfig();
         onDataChanged?.();
+        void refreshStatuses();
       }
     } catch {
       setAnilistImportResult({ ok: false, imported: 0, skippedNoMal: 0, errorKind: 'network', error: 'Network error' });
@@ -436,28 +376,32 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  // One group per source. The nesting is what carries the "which source?"
-  // information — no field inside a group needs its source as a prefix.
+  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling
+    || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistImporting || isSimklSyncing;
+
+  // Status (uniform, per provider) is kept separate from actions (per provider,
+  // genuinely different) — the same split the descriptor makes.
   return {
+    statuses: byId,
+    precedence,
+    isStatusLoading,
+    anyBusy,
+    refreshStatuses,
     mal: {
-      authState,
-      isAuthLoading,
       authError,
       onConnect: handleConnect,
       onDisconnect: handleDisconnect,
       isSyncing,
       isBigSyncing,
       isHistoricalCrawling,
-      syncError,
+      listSyncError,
+      catalogSyncError,
       historicalStats,
       onSync: handleSync,
       onBigSync: handleBigSync,
       onHistoricalCrawl: handleHistoricalCrawl,
     },
     simkl: {
-      isConnected: simklConnected,
-      userName: simklUser,
-      isAuthLoading: isSimklAuthLoading,
       authError: simklAuthError,
       isSyncing: isSimklSyncing,
       syncMessage: simklSyncMessage,
@@ -466,17 +410,13 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       onSync: handleSimklSync,
     },
     anilist: {
-      isConnected: anilistConnected,
-      userName: anilistUser,
-      isConfigured: anilistConfigured,
-      isAuthLoading: isAnilistAuthLoading,
       authError: anilistAuthError,
       onConnect: handleAnilistConnect,
       onDisconnect: handleAnilistDisconnect,
-      isSyncing: isAnilistMetaSyncing,
-      syncMessage: anilistMetaSyncMessage,
-      tagStats: anilistMetaStats,
-      onSync: handleAnilistMetaSync,
+      isMetaSyncing: isAnilistMetaSyncing,
+      metaSyncMessage: anilistMetaSyncMessage,
+      metaStats: anilistMetaStats,
+      onMetaSync: handleAnilistMetaSync,
       isCatalogCrawling: isAnilistCatalogCrawling,
       catalogCrawlMessage: anilistCatalogCrawlMessage,
       catalogStats: anilistCatalogStats,

@@ -1,0 +1,9 @@
+.hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.error {
+  font-size: 0.85rem;
+  color: var(--score-3);
+}

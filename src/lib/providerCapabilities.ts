@@ -84,6 +84,14 @@ export interface ProviderCapabilities {
   id: ProvenanceSource;
   /** Brand name, as displayed. Not translated — these are proper nouns. */
   label: string;
+  /**
+   * Brand asset under `public/`, when we ship one. Identity, so it belongs with
+   * the label rather than being re-picked by every surface that draws a
+   * provider — which is what the three copies of the connection badge did (E2).
+   */
+  iconSrc?: string;
+  /** Text glyph used when there is no `iconSrc`. Two or three characters. */
+  shortLabel: string;
   catalog?: CatalogCapability;
   personal?: PersonalCapability;
 }
@@ -100,6 +108,8 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
   mal: {
     id: 'mal',
     label: 'MyAnimeList',
+    iconSrc: '/mal.png',
+    shortLabel: 'MAL',
     catalog: { auth: 'oauth', crowdRecommendations: true },
     personal: {
       auth: 'oauth',
@@ -111,6 +121,8 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
   anilist: {
     id: 'anilist',
     label: 'AniList',
+    shortLabel: 'AL', // no brand asset shipped
+
     // The keyless default catalog provider: the tags/staff/relations sync and
     // the bulk season crawl need no account and no key. Only the LIST half is
     // OAuth'd — which is why the two must not be filed together in the UI.
@@ -127,6 +139,8 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
   simkl: {
     id: 'simkl',
     label: 'SIMKL',
+    iconSrc: '/simkl.png',
+    shortLabel: 'SK',
     // No catalog role: MAL/AniList are the catalog authorities, and SIMKL's
     // public API has no tags field or tag-filterable endpoint.
     personal: {
@@ -139,6 +153,7 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
   local: {
     id: 'local',
     label: 'Local',
+    shortLabel: 'APP', // the in-app provider — no service, so no brand asset
     // No catalog role: the local provider holds personal state only; the
     // catalog it annotates comes from MAL/AniList.
     personal: {
@@ -155,6 +170,17 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
 
 /** Stable display/iteration order. Personal precedence is a separate concern. */
 export const PROVIDER_IDS = Object.keys(PROVIDER_CAPABILITIES) as ProvenanceSource[];
+
+/**
+ * Providers holding `role`, in display order. **This is the axis the connections
+ * page is split on** (E4): filing AniList's anonymous metadata sync under an
+ * "AniList account" heading is what made an unauthenticated catalog action look
+ * like it needed a login. Role presence is key presence, so a provider joins a
+ * group by declaring the role and nothing else.
+ */
+export function providersWithRole(role: ProviderRole): ProvenanceSource[] {
+  return PROVIDER_IDS.filter(id => PROVIDER_CAPABILITIES[id][role] !== undefined);
+}
 
 /**
  * Is this an **external** personal provider — one backed by a real service with

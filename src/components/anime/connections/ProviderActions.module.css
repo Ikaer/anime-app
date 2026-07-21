@@ -1,0 +1,20 @@
+.buttonGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.stats {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.error {
+  font-size: 0.85rem;
+  color: var(--score-3);
+}
+
+.link {
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+}
