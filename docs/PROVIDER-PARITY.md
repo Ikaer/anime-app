@@ -3,7 +3,10 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1 `Done` (2026-07-21). Rest `Todo`.
+> **Status: `WIP`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4 `Done`
+> (2026-07-21); B3 `Dropped` (assessed, deliberately deferred). Rest `Todo`.
+> B4 was **not in the original inventory** — it came from asking whether the
+> keyless promise actually holds for the reco feed. It did not. See [B4](#b4--the-recommendation-feed-was-unreachable-without-a-mal-account--done-2026-07-21).
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
 > this document measures against) and [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md)
 > (whose dropped registry is **not** what this proposes — see [§3](#3-the-unifying-fix)).
@@ -166,7 +169,7 @@ gap is the clearest argument for [§3](#3-the-unifying-fix).
 These block the provider-free promise directly: the no-account path creates
 records that the rest of the system cannot process.
 
-#### B1 — AniList enrichment is queryable only by MAL id
+#### B1 — AniList enrichment is queryable only by MAL id — **`Done` 2026-07-21**
 
 **Evidence:** [anilistSync.ts:32](../src/lib/anilistSync.ts) — `media(idMal_in:
 $ids, type: ANIME)` in `TAGS_QUERY`; same at
@@ -192,7 +195,50 @@ explicit `null`, which AniList applies as a real filter.
 **Size:** medium. Touches the batch query shape and the id-selection logic, not
 the storage or hydration.
 
-#### B2 — Single-title refresh derives every source from the MAL id
+**What shipped:**
+
+1. **The query body is now built twice from one template**, `idMal_in` and
+   `id_in`. A batch is homogeneous by construction — the caveat this document
+   already cites (AniList applies a supplied-but-null argument as a real filter)
+   means a query carries exactly one id filter, so the id space is a parameter of
+   the *batch*, not of a title.
+2. **The bigger half was the feeder, not the query** — the same shape §1 warns
+   about. `performAnilistMetaSync` scanned `getAllAnime()`, the MAL catalog
+   slice, so it was structurally incapable of *naming* a title MAL doesn't know,
+   no matter which filter the query offered. It now scans the **registry** — the
+   identity spine every slice hangs off — and looks coverage up by canonical id
+   directly, which is what makes "every title we know of" mean every title.
+   MAL id wins when a title has both: it is the key the catalog is anchored on,
+   and a crosswalk's `anilist` can be a mirrored SIMKL value while `mal` is the
+   id the record was built from.
+3. **Relation edges stored both ids.** `AniListRelationEntry.idMal` was
+   required, and `parseRelations` dropped any edge whose target had no MAL id —
+   so the franchise graph would have kept losing exactly the titles this fix
+   reaches, *after* the query was fixed. Both ids are now optional-with-one-
+   present (`id` is always there — the edge came from AniList), and
+   `groupIntoFranchises` carries a second AniList→canonical index, MAL-first.
+4. **`fetchAnilistRecommendations` was deliberately left MAL-keyed.** Its only
+   consumer is the reco engine, which is MAL-keyed end to end (B3). An `id_in`
+   path there would return edges the engine has no key to store or rank; it moves
+   when B3 moves. Noted in the code at `RECS_QUERY`.
+
+**Verified.** *Live against AniList* (2026-07-21): three genuine AniList-only
+titles (`al:203275` Demons' Crest, `al:187990`, `al:213298` — no `idMal`) return
+**0 media** through the old `idMal_in` query and **3** through `id_in`, carrying
+tags, staff, banner and relations; the query stays under the complexity ceiling
+at the unchanged `perPage:50`. A title that *does* have a MAL id round-trips it
+through `id_in` (`al:1` → `idMal:1`), so the two paths agree where they overlap.
+*Against the real store*: it is **inert** — that install is MAL-anchored (0 of
+25,382 registry entries are AniList-only), and the registry scan queues the
+**identical** 6,085 ids as the old catalog scan, set-equal in both directions.
+The new capability activates only where the gap was: a keyless install.
+
+**One claim not reproduced:** the relation-edge widening measured **0 recovered
+edges** in a live 50-title sample (40 anime edges, all targets carrying a MAL
+id). MAL-less relation *targets* are rare in the popularity head. It is kept as
+cheap correctness insurance for the keyless catalog, not as a measured win.
+
+#### B2 — Single-title refresh derives every source from the MAL id — **`Done` 2026-07-21**
 
 **Evidence:** [refresh.ts:55-67](../src/pages/api/anime/animes/[id]/refresh.ts) —
 `getMalIdForCanonical(canonicalId)` gates the MAL refill *and*
@@ -207,7 +253,25 @@ through. Independently correct even before B1's batch path.
 
 **Size:** small, once B1 exists.
 
-#### B3 — The recommendation engine is MAL-keyed
+**What shipped:** exactly that — `refreshAnilistMetaForIds` takes the id space as
+a parameter, and the handler passes the MAL id when it has one, the AniList id
+otherwise. Two details the inventory did not name:
+
+- **The AniList id needed a second source.** `refresh.ts` read it from the meta
+  slice, which is filled *by the very sync this refresh triggers* — so on the
+  case B2 is about (a title enrichment has never reached) it could be absent
+  where the registry crosswalk has it. It now falls back to the registry, the
+  same resolve-order `getMalIdForCanonical` uses for MAL.
+- **`refreshAnilistMetaForIds` filtered its own results on `m.idMal`**, which
+  would have discarded every AniList-only title the new path fetched. Keyed on
+  `m.id` now. A one-word bug that would have made B2 look like it worked while
+  persisting nothing.
+
+Both MAL-less outcomes stay distinguishable in the response: `NO_MAL_ID` for the
+MAL refill, a separate "no MAL or AniList id" outcome for the metadata one — a
+title with neither is a SIMKL-only record AniList has no handle on.
+
+#### B3 — The recommendation engine is MAL-keyed — **`Dropped` 2026-07-21**
 
 **Evidence:** `computeFeed`/`computeSimilarTo` in
 [recommendations.ts](../src/lib/recommendations.ts) build an internal
@@ -226,6 +290,97 @@ a cache-file migration) and the benefit is bounded by how many crowd edges
 resolve without a MAL id at all.
 
 **Size:** large. Recommend deferring.
+
+**Decision (2026-07-21):** deferred as recommended, and marked `Dropped` rather
+than left `Todo` so it stops reading as pending work — this entry is an
+*assessment*, not a fix awaiting a turn. Nothing was rewritten. Two things were
+done instead, both of which make the boundary legible rather than moving it:
+
+- `RECS_QUERY` in `anilistSync.ts` now states in code *why* it stays MAL-keyed
+  while its neighbour `TAGS_QUERY` gained an AniList-id path — the two sit ten
+  lines apart and the asymmetry would otherwise read as an oversight, which is
+  precisely the "silent instead of declared" shape §2.D warns about.
+- The revisit trigger stays as stated: AniList-only titles becoming a large share
+  of the catalog. On the current store that share is **0 of 25,382**, so the
+  benefit is still bounded by roughly nothing.
+
+#### B4 — The recommendation feed was unreachable without a MAL account — **`Done` 2026-07-21**
+
+**Not in the original inventory.** It surfaced from a reader's question that this
+document could not answer — *"does the reco engine work without MAL?"* — and the
+honest answer was no, for a reason B3 does not name. Worth recording as its own
+item because **B3 was the decoy**: the visible MAL-ness of the engine is its id
+keying, and that is the part which does *not* block a keyless install.
+
+**The distinction that matters: MAL *ids* ≠ MAL *auth*.**
+
+- MAL ids come free off AniList's own payload (`idMal`), no account, no key. So
+  the engine being MAL-*id*-keyed costs a keyless install almost nothing — on the
+  real store 0 of 25,382 titles lack a MAL id. That is B3, and it stays deferred.
+- MAL *authentication* was a hard gate on the one route that fills the cache.
+  That is this item, and it made the entire feature unreachable.
+
+**Evidence:** [refresh.ts:24](../src/pages/api/anime/recommendations/refresh.ts) —
+`requireMalAuth(res)`, a 401; `performRecommendationsRefresh(accessToken, …)`
+took the token as a required first argument; and the client gated too
+(`if (!authState.isAuthenticated) return`, plus a `disabled` refresh button).
+
+**Symptom:** on a keyless install the feed could never be populated, so it was
+permanently empty — while `similar/[id]` ("Plus comme ça"), which asks the same
+question about one title, worked fine with no account.
+
+**The precedent was already in the repo.** `similar/[id]` treats the MAL token as
+optional, runs the anonymous AniList crowd source regardless, and returns a
+per-source outcome. The feed refresh is that same shape with the graceful half
+missing — a *silent asymmetry* in the §2.D sense, one file away from its own
+correct precedent, exactly as D1 is.
+
+**What shipped:**
+
+1. **MAL became optional, per source.** `accessToken: string | null`; the two MAL
+   sources (crowd edges, personal suggestions) are skipped with a stated reason,
+   the AniList crowd source always runs, and the niche 2-hop follows the MAL
+   crowd source it rides on. A new `RecoRefreshSources` is returned and put on the
+   terminal SSE event, so a degraded run is *declared* rather than just thinner.
+2. **Hydration had to move too, and this was the load-bearing half.** A candidate
+   with no local record is dropped by `computeFeed` — there is no metadata to rank
+   it on — so hydration decides whether the feed has *content*, and it was
+   `fetchAnimeDetail`, MAL-only. Keyless runs now hydrate via
+   `fetchAnilistCatalogByMalIds`: candidates already carry MAL ids, AniList
+   queries by MAL id happily, and the result lands as a `catalog` block through
+   the same `upsertAnilistCatalogFields` the season crawler uses — 50 titles per
+   request instead of one. Without this the route would have returned 200 and
+   produced an empty feed, which is a worse failure than the 401 it replaced.
+3. **The client gates went with it**, including the now-dead MAL auth probe on
+   `/recommendations` (the page fetched auth status solely to disable a button).
+
+**Verified end-to-end on a synthetic keyless store** (2026-07-21): 10
+AniList-crawled titles, 4 in-app ratings as seeds, **no `auth/mal.json` at all**,
+run against a production build.
+
+- `POST …/refresh` → **200** (was 401).
+- Terminal SSE event: `malCrowd` and `malSuggestions` both
+  `{ok:false, skipped:true, reason:"No MAL account connected"}`, `anilistCrowd`
+  `{ok:true}`, `hydration` `{ok:true, via:"anilist"}`.
+- Feed went 0 → **53 ranked items**, correctly ordered by affinity (Samurai
+  Champloo / Trigun / Space Dandy off the Cowboy Bebop seed; Re:ZERO / ERASED off
+  Steins;Gate), each with a real breakdown (`anilistCrowd` + `popularity` +
+  `genre`).
+- Registry grew 10 → 67, `catalog/anilist.json` to 67 entries, and
+  **`catalog/mal.json` stayed at 0** — no MAL write path was touched. Every
+  hydrated title's catalog provenance reads `anilist` across all 14 fields.
+
+**Not verified:** the MAL-connected path is unchanged *by construction* (the
+original body now sits under `if (accessToken)`) but was not re-run live — that
+needs a real MAL token.
+
+**Known gap left open:** the per-source outcomes are returned and streamed but
+**not rendered**. The complete-event message names the degraded mode, and the
+client clears it on completion. Surfacing "MAL skipped" durably in the sidebar is
+UI work that belongs with E1–E4's uniform provider cards, not bolted on here.
+
+**Size:** medium — small at the gate, medium once hydration had to gain a second
+provider.
 
 ### C. Personal state still displayed MAL-only
 
@@ -592,8 +747,28 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > Look for the duplicate before adding the branch. And check whether a
    > blocking asymmetry can be **removed** rather than conditionalized — A2 and
    > D1 both describe asymmetries that may not need to exist.
-2. **B1, then B2** — unblocks the keyless onboarding path end to end. The
-   highest-value fix, and the one most aligned with the provider-free direction.
+2. ~~**B1, then B2**~~ — both **Done 2026-07-21**. The keyless onboarding path is
+   unblocked end to end: a title the AniList catalog crawl mints can now receive
+   tags, staff, banner and relations from AniList, in bulk and on demand.
+   **D2** is now the top item.
+
+   > B1 confirmed the lesson A1 left: the query filter was the *stated* gap, but
+   > the sweep would still have reached nothing, because its id list came from
+   > the MAL catalog slice. When a core looks starved, check what feeds it names
+   > before changing what it accepts. The same pass caught two more instances of
+   > the identical mistake one layer down — a result filter on `m.idMal`, and a
+   > relation edge that stored only a MAL id.
+2b. ~~**B4**~~ — **Done 2026-07-21**, and it is the one that actually delivered
+   the headline: the recommendation feed now works with no MAL account at all,
+   on the AniList crowd source with AniList-hydrated candidates.
+
+   > The lesson is about this document rather than the code. B3 named the
+   > *visible* MAL-ness of the reco engine (its id keying) and correctly judged
+   > it low-value — but having an entry there made the area look inventoried,
+   > and the real blocker one layer up (an auth gate on the refresh route) was
+   > never written down. **A ranked inventory can hide a gap by adjacency.**
+   > Worth re-asking of the other sections: for each subsystem, does the keyless
+   > path actually run end to end, or is it merely un-flagged?
 3. **D2** — the capability descriptor, once the standalone defects are cleared.
 4. **A2, D1** — fall out of D2 cheaply.
 5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
@@ -602,4 +777,6 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    rewrite per rating is gone, `MALAnime` is pure catalog, and
    [DATA-LAYOUT.md](DATA-LAYOUT.md)'s `personal/` folder is unblocked (its fourth
    file now exists). A per-provider-total fix rode along (see H1's writeup).
-8. **B3** — recommend deferring indefinitely. Documented as deliberate.
+8. ~~**B3**~~ — **`Dropped` 2026-07-21.** Assessed and deferred indefinitely, as
+   recommended; the MAL-keying is now stated in code at `RECS_QUERY` rather than
+   left to be re-derived. Revisit only on the stated trigger.

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllAnime, upsertAnime, getMalIdForCanonical, isCanonicalId, getAllAnilistMeta } from '@/lib/store';
+import { getAllAnime, upsertAnime, getMalIdForCanonical, isCanonicalId, getAllAnilistMeta, getRegistry, toNum } from '@/lib/store';
 import { getValidMalToken, fetchAnimeById } from '@/lib/mal';
 import { refreshAnilistMetaForIds } from '@/lib/anilistSync';
 import { getOrFetchAnilistCast } from '@/lib/anilistCast';
@@ -13,12 +13,17 @@ import { appendLog } from '@/lib/connectionLog';
  *
  * - MAL: GET /v2/anime/{id} (single-title catalog + personal status), merged
  *   over the existing local record so unreturned fields are preserved.
- * - AniList: force-refetch tags + staff for this MAL id (bypasses "missing only").
+ * - AniList: force-refetch tags + staff + banner + relations, by MAL id when
+ *   there is one and by AniList id otherwise (PROVIDER-PARITY.md B2 — this used
+ *   to be gated on the MAL id, making the button a no-op for AniList-only
+ *   titles even though their AniList id was resolved right here).
  * - SIMKL: the standard incremental library delta (SIMKL has no per-id read; the
  *   user accepted the incremental sync for the refresh).
  */
 
 const NO_MAL_ID: { ok: false; error: string } = { ok: false, error: 'No MAL id known for this title' };
+const NO_ANILIST_HANDLE: { ok: false; tagged: number; error: string } =
+  { ok: false, tagged: 0, error: 'No MAL or AniList id known for this title' };
 
 async function refreshMal(
   canonicalId: string,
@@ -50,22 +55,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Invalid anime id' });
   }
 
-  // MAL + AniList refresh both need the real MAL id; a title with none known
-  // yet (true AniList-only) can't be queried by either — report, don't crash.
+  // The MAL refill needs the real MAL id; a title with none known yet (true
+  // AniList-only) can't be queried at all — report, don't crash.
   const malId = getMalIdForCanonical(canonicalId);
 
-  // The AniList id, for the cast refetch — it covers AniList-only titles that
-  // have no MAL id, which the other three refills can't touch.
-  const anilistId = getAllAnilistMeta()[canonicalId]?.anilist_id;
+  // The AniList id, for the cast AND metadata refetches — it covers AniList-only
+  // titles that have no MAL id, which the MAL refill can't touch. The meta slice
+  // is authoritative (it's AniList's own `id`, resolved by AniList); the registry
+  // crosswalk covers a title the enrichment sync has never reached.
+  const anilistId = getAllAnilistMeta()[canonicalId]?.anilist_id
+    ?? toNum(getRegistry()[canonicalId]?.anilist);
 
   // Each source is isolated: one failing must not sink the others.
   const [malResult, anilistResult, simklResult, castResult] = await Promise.all([
     malId !== undefined
       ? refreshMal(canonicalId, malId).catch(e => ({ ok: false, error: e instanceof Error ? e.message : 'MAL refresh failed' }))
       : Promise.resolve(NO_MAL_ID),
-    malId !== undefined
-      ? refreshAnilistMetaForIds([malId]).catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' }))
-      : Promise.resolve({ ...NO_MAL_ID, tagged: 0 }),
+    // MAL id preferred (the id space the catalog is anchored on), AniList id as
+    // the fallback that makes this work at all on a keyless install.
+    malId !== undefined || anilistId !== undefined
+      ? refreshAnilistMetaForIds(
+          malId !== undefined ? [malId] : [anilistId as number],
+          malId !== undefined ? 'mal' : 'anilist'
+        ).catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' }))
+      : Promise.resolve(NO_ANILIST_HANDLE),
     performSimklSync().catch(e => ({ ok: false, phase: 'noop' as const, added: 0, removed: 0, orphansSkipped: 0, error: e instanceof Error ? e.message : 'SIMKL sync failed' })),
     // `force` — the point of a manual refresh is to re-pull, and an existing
     // cast entry would otherwise short-circuit the fetch.

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { requireMalAuth } from '@/lib/mal';
+import { getValidMalToken } from '@/lib/mal';
 import { performRecommendationsRefresh, isRecommendationsRefreshRunning, RecoRefreshProgress } from '@/lib/recommendations';
 
 // Store ongoing refresh processes (mirrors big-sync.ts).
@@ -21,9 +21,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function handleStartRefresh(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const auth = requireMalAuth(res);
-    if (!auth) return;
-    const { token } = auth;
+    // MAL is OPTIONAL here, deliberately. This route used to `requireMalAuth`
+    // and 401, which made the whole feed unreachable without a MAL account —
+    // even though the engine only needs MAL *ids* (which AniList supplies for
+    // free), not a MAL *session*. With no token the refresh runs on the
+    // anonymous AniList crowd source alone and reports which pipes it skipped.
+    const token = getValidMalToken();
 
     // Spec §7.2: reject concurrent refreshes with 409.
     if (isRecommendationsRefreshRunning()) {
@@ -41,7 +44,7 @@ async function handleStartRefresh(req: NextApiRequest, res: NextApiResponse) {
     // Run asynchronously; the module-level lock inside the lib returns
     // alreadyRunning if a refresh is already in flight.
     performRecommendationsRefresh(
-      token.access_token,
+      token?.access_token ?? null,
       { nicheMode, threshold: Number.isFinite(threshold as number) ? threshold : null },
       (p) => {
         proc.progress.push(p);

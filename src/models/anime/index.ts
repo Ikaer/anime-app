@@ -225,11 +225,18 @@ export interface AniListStaffEntry {
   role: string;
 }
 /**
- * One AniList relation edge, flattened to the MAL join key. `relationType` is
- * AniList's vocabulary (`SEQUEL`, `PREQUEL`, `SIDE_STORY`, `PARENT`,
- * `ALTERNATIVE`, `ADAPTATION`…) — stored verbatim so the franchise rules can
- * change without a re-sync. Only ANIME targets are kept: an `ADAPTATION` edge's
- * `idMal` is the *manga's* id and would collide with an unrelated anime.
+ * One AniList relation edge. `relationType` is AniList's vocabulary (`SEQUEL`,
+ * `PREQUEL`, `SIDE_STORY`, `PARENT`, `ALTERNATIVE`, `ADAPTATION`…) — stored
+ * verbatim so the franchise rules can change without a re-sync. Only ANIME
+ * targets are kept: an `ADAPTATION` edge's `idMal` is the *manga's* id and would
+ * collide with an unrelated anime.
+ *
+ * **Both ids are optional, and at least one is always present.** The edge used
+ * to be flattened onto the MAL join key alone, which silently dropped every edge
+ * whose target has no MAL id — i.e. exactly the AniList-only titles the keyless
+ * catalog crawl mints (PROVIDER-PARITY.md B1). `id` is the target's AniList id,
+ * always available since the edge came from AniList; `idMal` is kept as the
+ * primary join key because the catalog is overwhelmingly MAL-anchored.
  *
  * This exists because MAL's `related_anime` is a **detail-only** field — its
  * list/seasonal endpoints omit it, so the crawled catalog has relations for
@@ -238,7 +245,9 @@ export interface AniListStaffEntry {
  * affordable at all (see `docs/quickRate/`).
  */
 export interface AniListRelationEntry {
-  idMal: number;
+  idMal?: number;
+  /** Target's AniList id. Absent only on entries written before B1 shipped. */
+  id?: number;
   relationType: string;
 }
 

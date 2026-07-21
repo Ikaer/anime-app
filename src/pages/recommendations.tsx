@@ -9,7 +9,7 @@ import {
   DisplaySection,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
-import { AnimeRecord, MALAuthState, ImageSize } from '@/models/anime';
+import { AnimeRecord, ImageSize } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
 import { encodeSourceWeights } from '@/lib/recoWeights';
@@ -20,9 +20,6 @@ type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
 export default function RecommendationsPage() {
   const { t, lang } = useI18n();
   const { state, update, isReady } = useRecommendationsUrlState();
-
-  // Auth (needed to gate the refresh button).
-  const [authState, setAuthState] = useState<MALAuthState>({ isAuthenticated: false });
 
   // Feed data.
   const [animes, setAnimes] = useState<RecoCard[]>([]);
@@ -44,17 +41,8 @@ export default function RecommendationsPage() {
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const checkAuthStatus = async () => {
-    try {
-      const response = await fetch('/api/anime/auth?action=status');
-      const data = await response.json();
-      setAuthState({ isAuthenticated: data.isAuthenticated, user: data.user });
-    } catch {
-      // non-critical: refresh button just stays disabled
-    }
-  };
-
-  useEffect(() => { checkAuthStatus(); }, []);
+  // No MAL auth probe on mount: nothing on this page is gated on it any more.
+  // The refresh route decides per source what it can run (PROVIDER-PARITY.md B4).
 
   const loadFeed = useCallback(async () => {
     try {
@@ -104,8 +92,10 @@ export default function RecommendationsPage() {
     loadFeed();
   }, [isReady, loadFeed]);
 
+  // No MAL gate: the refresh runs on whatever sources are available, falling
+  // back to the anonymous AniList crowd source when there is no MAL account
+  // (PROVIDER-PARITY.md B4). The route reports which pipes it skipped.
   const handleRefreshRecos = async () => {
-    if (!authState.isAuthenticated) return;
     setIsRefreshingRecos(true);
     setRecoError('');
     setRecoProgress(t('dataSync.starting'));
@@ -183,7 +173,6 @@ export default function RecommendationsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
       <CollapsibleSection title={t('section.recommendations')} isExpanded={expanded.recos} onToggle={() => toggle('recos')}>
         <RecommendationsSection
-          authState={authState}
           isRefreshingRecos={isRefreshingRecos}
           recoProgress={recoProgress}
           recoLastRefresh={recoLastRefresh}

@@ -1,5 +1,5 @@
 # Copies fresh AnimeTracker data from the Synology share to the local workspace,
-# overwriting existing files. Invoked via `npm run data:copy` or the VSCode task.
+# overwriting existing files. Invoked via `npm run data:copy-salon` or the VSCode task.
 
 $ErrorActionPreference = 'Stop'
 

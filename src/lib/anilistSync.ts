@@ -1,11 +1,11 @@
 /**
  * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
  * taxonomy, the top staff credits, the banner art and the franchise relation
- * edges (docs/quickRate/) for anime already known
- * locally (via catalog/mal.json) and persists them via store.ts. Read-only
- * against AniList; no writes.
+ * edges (docs/quickRate/) for every anime the **registry** knows of — by MAL id
+ * where there is one, by AniList id otherwise (PROVIDER-PARITY.md B1) — and
+ * persists them via store.ts. Read-only against AniList; no writes.
  */
-import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry } from '@/lib/store';
+import { getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry, toNum } from '@/lib/store';
 import { appendLog } from '@/lib/connectionLog';
 import { getSeasonInfos } from '@/lib/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry, AniListRelationEntry } from '@/models/anime';
@@ -26,10 +26,23 @@ const ANILIST_MIN_DELAY_MS = 2100;
 // null-bombs on any miss). `relations.node.type` is fetched because an
 // ADAPTATION edge's `idMal` is the MANGA's id and would otherwise be read as an
 // unrelated anime.
-const TAGS_QUERY = `
+//
+// Two id filters, one query body (PROVIDER-PARITY.md B1). The enrichment used to
+// accept ONLY `idMal_in`, so the titles minted by the keyless AniList catalog
+// crawl — which have an AniList id and no MAL id — could never receive tags,
+// staff, relations or banner art *from AniList, using an AniList id the record
+// already held*. `id_in` is the same filter over AniList's own id space. Which
+// one a batch uses is chosen per title by `selectMetaTargets`, never mixed
+// within a batch: AniList applies a supplied-but-null argument as a real filter
+// (the caveat `anilistCast.ts` documents), so a query carries exactly one.
+type MetaIdField = 'idMal_in' | 'id_in';
+/** Which provider's id space a batch of enrichment ids lives in. */
+export type MetaIdSpace = 'mal' | 'anilist';
+
+const buildTagsQuery = (idField: MetaIdField) => `
 query ($ids: [Int]) {
   Page(page: 1, perPage: ${BATCH_SIZE}) {
-    media(idMal_in: $ids, type: ANIME) {
+    media(${idField}: $ids, type: ANIME) {
       idMal
       id
       bannerImage
@@ -50,12 +63,15 @@ query ($ids: [Int]) {
       relations {
         edges {
           relationType
-          node { idMal type }
+          node { id idMal type }
         }
       }
     }
   }
 }`;
+
+const TAGS_QUERY_BY_MAL = buildTagsQuery('idMal_in');
+const TAGS_QUERY_BY_ANILIST = buildTagsQuery('id_in');
 
 interface RawStaffEdge {
   role?: string;
@@ -63,10 +79,11 @@ interface RawStaffEdge {
 }
 interface RawRelationEdge {
   relationType?: string;
-  node?: { idMal?: number | null; type?: string };
+  node?: { id?: number | null; idMal?: number | null; type?: string };
 }
 interface RawMedia {
-  idMal: number;
+  /** Null for an AniList-only title — the case the `id_in` path exists to serve. */
+  idMal?: number | null;
   id: number;
   bannerImage?: string | null;
   tags: AniListTagEntry[];
@@ -77,11 +94,13 @@ interface RawMedia {
 /**
  * One AniList media node -> our stored entry. `banner_image` is coerced to an
  * explicit `null` when AniList has none, so `undefined` keeps meaning "never
- * fetched" and stays usable as the backfill signal.
+ * fetched" and stays usable as the backfill signal. `mal_id` is left `undefined`
+ * for an AniList-only title, which is what `upsertAnilistMeta` then resolves
+ * off the `anilist` crosswalk alone.
  */
 function toEntry(m: RawMedia, fetchedAt: string): AniListMetaEntry {
   return {
-    mal_id: m.idMal,
+    mal_id: m.idMal ?? undefined,
     anilist_id: m.id,
     tags: m.tags ?? [],
     staff: parseStaff(m),
@@ -92,15 +111,24 @@ function toEntry(m: RawMedia, fetchedAt: string): AniListMetaEntry {
 }
 
 /**
- * Flatten AniList relation edges onto the MAL join key. Non-ANIME targets are
+ * Flatten AniList relation edges, keeping BOTH join keys. Non-ANIME targets are
  * dropped: an ADAPTATION edge points at the source manga, whose `idMal` lives in
  * a different id space and would otherwise be matched against an anime.
+ *
+ * The edge used to be kept only when the target had a MAL id, which dropped
+ * every edge into an AniList-only title — silently costing the franchise graph
+ * exactly the titles B1 is about. The AniList id is always present here (the
+ * edge came from AniList), so an edge is now dropped only for not being an anime.
  */
 function parseRelations(media: RawMedia): AniListRelationEntry[] {
   return (media.relations?.edges ?? [])
-    .filter((e): e is RawRelationEdge & { relationType: string; node: { idMal: number } } =>
-      !!e.relationType && e.node?.type === 'ANIME' && typeof e.node?.idMal === 'number')
-    .map(e => ({ idMal: e.node.idMal, relationType: e.relationType }));
+    .filter((e): e is RawRelationEdge & { relationType: string; node: { id: number } } =>
+      !!e.relationType && e.node?.type === 'ANIME' && typeof e.node?.id === 'number')
+    .map(e => ({
+      idMal: typeof e.node.idMal === 'number' ? e.node.idMal : undefined,
+      id: e.node.id,
+      relationType: e.relationType,
+    }));
 }
 
 /** Flatten AniList staff edges to our lean {id,name,role} records. */
@@ -118,11 +146,19 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-async function fetchTagsBatch(malIds: number[], retryOn429 = true): Promise<RawMedia[]> {
+/**
+ * One enrichment batch. `by` picks the id space the `ids` are in — `'mal'` for
+ * MAL ids (the overwhelming majority of the catalog), `'anilist'` for titles
+ * that have no MAL id. A batch is homogeneous by construction (see the query).
+ */
+async function fetchTagsBatch(ids: number[], by: MetaIdSpace, retryOn429 = true): Promise<RawMedia[]> {
   const res = await fetch(ANILIST_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ query: TAGS_QUERY, variables: { ids: malIds } }),
+    body: JSON.stringify({
+      query: by === 'mal' ? TAGS_QUERY_BY_MAL : TAGS_QUERY_BY_ANILIST,
+      variables: { ids },
+    }),
   });
 
   if (res.status === 429) {
@@ -132,7 +168,7 @@ async function fetchTagsBatch(malIds: number[], retryOn429 = true): Promise<RawM
     const retryAfterHeader = res.headers.get('Retry-After');
     const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : 60_000;
     await new Promise(resolve => setTimeout(resolve, Number.isFinite(retryAfterMs) ? retryAfterMs : 60_000));
-    return fetchTagsBatch(malIds, false);
+    return fetchTagsBatch(ids, by, false);
   }
 
   if (!res.ok) {
@@ -153,6 +189,12 @@ async function fetchTagsBatch(malIds: number[], retryOn429 = true): Promise<RawM
 // recommendations connection on top risks blowing it). Lightweight: only idMal
 // + the recommendations edge. `mediaRecommendation.idMal` resolves the rec
 // straight back onto our MAL join key, so no crosswalk is needed.
+//
+// This query stays MAL-keyed on purpose, unlike the enrichment one above: its
+// only consumer is the reco engine, which is deliberately MAL-keyed end to end
+// (PROVIDER-PARITY.md B3 — seeds, crowd edges and cache/recommendations.json
+// are all MAL ids). Giving it an `id_in` path would return edges the engine has
+// no key to store or rank. It moves when B3 moves, not before.
 const RECS_PER_ANIME = 15;
 const RECS_QUERY = `
 query ($ids: [Int]) {
@@ -267,25 +309,76 @@ export interface AniListMetaSyncResult {
 let isAnilistMetaSyncRunning = false;
 
 /**
- * Force-refresh AniList tags + staff for specific MAL ids, bypassing the
- * "missing only" filter that `performAnilistMetaSync` uses. Powers the per-anime
- * refresh on the detail page. One batch, no throttle loop (caller passes few ids).
- * Returns the number of ids AniList actually had (skips ones it doesn't know).
+ * Which titles still need enrichment, split by the id space they can be queried
+ * in (PROVIDER-PARITY.md B1).
+ *
+ * The scan source is the **registry**, not the MAL catalog slice. It used to be
+ * the latter, which made the sweep structurally incapable of reaching a title
+ * MAL doesn't know — so `performAnilistBulkCatalogCrawl`, the onboarding path
+ * for a keyless install, minted records its own enrichment could never enrich.
+ * The registry is the identity spine every slice hangs off, so iterating it is
+ * what makes "every title we know of" mean every title.
+ *
+ * A title is queued when it has no AniList entry yet, OR an entry predating
+ * staff / banner / relations support (field === `undefined`) so those backfill
+ * onto already-tagged titles. Absent values are stored as `null`/`[]` rather
+ * than left undefined, so a title AniList genuinely lacks never re-queues.
+ *
+ * MAL id wins when a title has both: it is the join key the catalog is anchored
+ * on, and the crosswalk's `anilist` id can be a mirrored SIMKL value, whereas
+ * `mal` is the id the record was built from.
+ */
+function selectMetaTargets(): { malIds: number[]; anilistIds: number[] } {
+  const meta = getAllAnilistMeta();
+  const malIds: number[] = [];
+  const anilistIds: number[] = [];
+
+  for (const [canonicalId, crosswalk] of Object.entries(getRegistry())) {
+    const e = meta[canonicalId];
+    const needed = !e || e.staff === undefined || e.banner_image === undefined || e.relations === undefined;
+    if (!needed) continue;
+    const malId = toNum(crosswalk.mal);
+    if (malId !== undefined) {
+      malIds.push(malId);
+      continue;
+    }
+    const anilistId = toNum(crosswalk.anilist);
+    if (anilistId !== undefined) anilistIds.push(anilistId);
+    // Neither id: a SIMKL-only title AniList has no handle on. Skipped, as before.
+  }
+
+  return { malIds, anilistIds };
+}
+
+/**
+ * Force-refresh AniList tags + staff + banner + relations for specific ids,
+ * bypassing the "missing only" filter that `performAnilistMetaSync` uses. Powers
+ * the per-anime refresh on the detail page (PROVIDER-PARITY.md B2). One batch,
+ * no throttle loop (caller passes few ids). Returns how many ids AniList
+ * actually had (it silently skips ones it doesn't know).
+ *
+ * `by` selects the id space, since the caller may only hold one of the two: a
+ * title with no MAL id is refreshed by its AniList id, which is precisely what
+ * made the RefreshButton a no-op on a keyless install's own catalog.
  */
 export async function refreshAnilistMetaForIds(
-  malIds: number[]
+  ids: number[],
+  by: MetaIdSpace = 'mal'
 ): Promise<{ ok: boolean; tagged: number; error?: string }> {
-  const ids = malIds.filter(id => Number.isInteger(id)).slice(0, BATCH_SIZE);
-  if (ids.length === 0) return { ok: true, tagged: 0 };
+  const batch = ids.filter(id => Number.isInteger(id)).slice(0, BATCH_SIZE);
+  if (batch.length === 0) return { ok: true, tagged: 0 };
   try {
-    const media = await fetchTagsBatch(ids);
+    const media = await fetchTagsBatch(batch, by);
     const now = new Date().toISOString();
-    const entries: AniListMetaEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
+    // Keyed on `m.id` (AniList's own, always present) rather than `m.idMal` —
+    // filtering on the MAL id here would discard exactly the AniList-only
+    // titles this path exists for.
+    const entries: AniListMetaEntry[] = media.filter(m => m.id).map(m => toEntry(m, now));
     if (entries.length > 0) upsertAnilistMeta(entries);
     return { ok: true, tagged: entries.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    appendLog('anilist-meta-sync', 'error', `AniList refresh failed for ids ${ids.join(',')}: ${message}`);
+    appendLog('anilist-meta-sync', 'error', `AniList refresh failed for ${by} ids ${batch.join(',')}: ${message}`);
     return { ok: false, tagged: 0, error: message };
   }
 }
@@ -298,53 +391,52 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 
   isAnilistMetaSyncRunning = true;
   try {
-    const malAnime = getAllAnime();
-    // Both slices are canonical-keyed now, so index the meta by its own `mal_id`
-    // to test coverage against the MAL slice's `a.id` (still the MAL id).
-    const metaByMal = new Map(Object.values(getAllAnilistMeta()).map(e => [e.mal_id, e]));
-    // Fetch anime with no AniList entry yet, OR an entry predating staff /
-    // banner / relations support (field === undefined) so those backfill onto
-    // already-tagged titles. Absent values are stored as null/[] rather than
-    // left undefined, so a title AniList genuinely lacks never re-queues.
-    const missingIds = Object.values(malAnime)
-      .map(a => a.id)
-      .filter(id => {
-        const e = metaByMal.get(id);
-        return !e || e.staff === undefined || e.banner_image === undefined || e.relations === undefined;
-      });
+    const { malIds, anilistIds } = selectMetaTargets();
+    const totalMissing = malIds.length + anilistIds.length;
 
-    if (missingIds.length === 0) {
+    if (totalMissing === 0) {
       appendLog('anilist-meta-sync', 'success', 'AniList sync: nothing to do, all anime already have tags + staff');
       return { ok: true, alreadyRunning: false, totalMissing: 0, processed: 0, tagged: 0, failed: 0 };
     }
 
-    appendLog('anilist-meta-sync', 'info', `AniList metadata sync started: ${missingIds.length} anime to fetch`);
+    appendLog(
+      'anilist-meta-sync',
+      'info',
+      `AniList metadata sync started: ${totalMissing} anime to fetch (${malIds.length} by MAL id, ${anilistIds.length} by AniList id)`,
+      { byMalId: malIds.length, byAnilistId: anilistIds.length }
+    );
 
-    const batches = chunk(missingIds, BATCH_SIZE);
+    // Two id spaces, one throttled stream — a batch is homogeneous (AniList
+    // treats a supplied-but-null filter argument as real), but the pacing and
+    // the counters span both.
+    const batches: Array<{ ids: number[]; by: MetaIdSpace }> = [
+      ...chunk(malIds, BATCH_SIZE).map(ids => ({ ids, by: 'mal' as const })),
+      ...chunk(anilistIds, BATCH_SIZE).map(ids => ({ ids, by: 'anilist' as const })),
+    ];
     let processed = 0;
     let tagged = 0;
     let failed = 0;
 
-    for (const [batchIndex, batch] of batches.entries()) {
+    for (const [batchIndex, { ids: batch, by }] of batches.entries()) {
       try {
-        const media = await fetchTagsBatch(batch);
+        const media = await fetchTagsBatch(batch, by);
         const now = new Date().toISOString();
-        const entries: AniListMetaEntry[] = media.filter(m => m.idMal).map(m => toEntry(m, now));
+        const entries: AniListMetaEntry[] = media.filter(m => m.id).map(m => toEntry(m, now));
         if (entries.length > 0) {
           upsertAnilistMeta(entries);
           tagged += entries.length;
         }
         processed += batch.length;
-        appendLog('anilist-meta-sync', 'info', `AniList tags: ${processed}/${missingIds.length} processed`, {
+        appendLog('anilist-meta-sync', 'info', `AniList tags: ${processed}/${totalMissing} processed`, {
           processed,
-          totalMissing: missingIds.length,
+          totalMissing,
           tagged,
         });
       } catch (error) {
         failed += batch.length;
         processed += batch.length;
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`AniList tags batch ${batchIndex + 1}/${batches.length} error (mal ids ${batch[0]}-${batch[batch.length - 1]}):`, error);
+        console.error(`AniList tags batch ${batchIndex + 1}/${batches.length} error (${by} ids ${batch[0]}-${batch[batch.length - 1]}):`, error);
         appendLog(
           'anilist-meta-sync',
           'error',
@@ -353,13 +445,14 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
             batchIndex: batchIndex + 1,
             batchCount: batches.length,
             batchSize: batch.length,
-            malIds: batch,
+            idSpace: by,
+            ids: batch,
             error: errorMessage,
           }
         );
       }
 
-      if (processed < missingIds.length) {
+      if (processed < totalMissing) {
         await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
       }
     }
@@ -370,7 +463,7 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
       failed,
     });
 
-    return { ok: true, alreadyRunning: false, totalMissing: missingIds.length, processed, tagged, failed };
+    return { ok: true, alreadyRunning: false, totalMissing, processed, tagged, failed };
   } catch (error) {
     console.error('AniList metadata sync error:', error);
     appendLog('anilist-meta-sync', 'error', 'AniList metadata sync failed', {
@@ -408,11 +501,10 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 // a title with genuinely no `idMal` anywhere stays out of scope (see that
 // doc's "Deferred" note) and is skipped at the row-set level, not here.
 
-const CATALOG_QUERY = `
-query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
-  Page(page: $page, perPage: ${BATCH_SIZE}) {
-    pageInfo { hasNextPage }
-    media(season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC, type: ANIME) {
+// The catalog field set, shared by the season crawler and the by-MAL-id
+// hydration path below so the two can never drift into producing differently
+// shaped rows for the same title.
+const CATALOG_FIELDS = `
       id
       idMal
       title { romaji english }
@@ -427,7 +519,21 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
       popularity
       averageScore
       genres
-      studios { nodes { id name } }
+      studios { nodes { id name } }`;
+
+const CATALOG_QUERY = `
+query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
+  Page(page: $page, perPage: ${BATCH_SIZE}) {
+    pageInfo { hasNextPage }
+    media(season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC, type: ANIME) {${CATALOG_FIELDS}
+    }
+  }
+}`;
+
+const CATALOG_BY_MAL_QUERY = `
+query ($ids: [Int]) {
+  Page(page: 1, perPage: ${BATCH_SIZE}) {
+    media(idMal_in: $ids, type: ANIME) {${CATALOG_FIELDS}
     }
   }
 }`;
@@ -513,6 +619,53 @@ interface RawCatalogPage {
   media: RawCatalogMedia[];
 }
 
+/**
+ * One AniList catalog media node → a storable entry, normalized to MAL's
+ * vocabulary. `null` when the title has no usable name (nothing to render).
+ *
+ * Shared by the season crawler and by `fetchAnilistCatalogByMalIds` — the
+ * keyless hydration path for reco candidates. Both need AniList's catalog view
+ * of a title in exactly the same shape; only the *query* that finds the media
+ * differs (by season vs. by MAL id).
+ */
+function toCatalogEntry(m: RawCatalogMedia): AniListCatalogEntry | null {
+  const title = m.title?.english || m.title?.romaji;
+  if (!title) return null;
+  const mean = typeof m.averageScore === 'number' ? m.averageScore / 10 : undefined;
+  // AniList genres are names only → synthetic id 0 (consumers key on name).
+  const genres = (m.genres ?? [])
+    .filter((g): g is string => !!g)
+    .map(name => ({ id: 0, name }));
+  // AniList studios carry AniList-namespace ids (see AniListMetaEntry.catalog caveat).
+  const studios = (m.studios?.nodes ?? [])
+    .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
+    .map(s => ({ id: s.id ?? 0, name: s.name as string }));
+  const cover = m.coverImage?.medium || m.coverImage?.large
+    ? { medium: m.coverImage?.medium ?? m.coverImage?.large ?? '', large: m.coverImage?.large ?? m.coverImage?.medium ?? '' }
+    : undefined;
+  const catalog: NonNullable<AniListMetaEntry['catalog']> = {
+    title,
+    titleRomaji: m.title?.romaji ?? undefined,
+    titleEnglish: m.title?.english ?? undefined,
+    mean,
+    genres,
+    studios,
+    coverImage: cover,
+    synopsis: stripHtml(m.description),
+    mediaType: mapFormat(m.format),
+    airingStatus: mapAiringStatus(m.status),
+    numEpisodes: typeof m.episodes === 'number' ? m.episodes : undefined,
+    startDate: mapStartDate(m.startDate),
+    startSeason: m.season && typeof m.seasonYear === 'number'
+      ? { year: m.seasonYear, season: m.season.toLowerCase() }
+      : undefined,
+    numListUsers: typeof m.popularity === 'number' ? m.popularity : undefined,
+  };
+  return m.idMal
+    ? { mal_id: m.idMal, anilist_id: m.id, catalog }
+    : { anilist_id: m.id, catalog };
+}
+
 async function fetchCatalogPage(season: string, seasonYear: number, page: number, retryOn429 = true): Promise<RawCatalogPage> {
   const res = await fetch(ANILIST_ENDPOINT, {
     method: 'POST',
@@ -539,6 +692,68 @@ async function fetchCatalogPage(season: string, seasonYear: number, page: number
     throw new Error(`AniList GraphQL error: ${messages}`);
   }
   return (json?.data?.Page ?? { media: [] }) as RawCatalogPage;
+}
+
+/**
+ * Fetch AniList's catalog view of specific MAL ids and persist it — the
+ * **keyless hydration path** for recommendation candidates.
+ *
+ * `performRecommendationsRefresh` hydrates candidate titles missing from the
+ * local catalog so the feed has something to rank. That was MAL-only
+ * (`fetchAnimeDetail`, authenticated), which meant a user with no MAL account
+ * could accumulate AniList crowd edges and then render none of them. This is the
+ * same job done against the public API: candidates arrive as MAL ids (the reco
+ * engine's join key — PROVIDER-PARITY.md B3), and AniList queries by MAL id
+ * happily, so no crosswalk is involved.
+ *
+ * Persists through `upsertAnilistCatalogFields`, so a hydrated title lands as a
+ * `catalog` block on the AniList meta slice and renders through the normal
+ * provenance hydration — exactly like a title the season crawler found. Titles
+ * AniList doesn't know are silently skipped. Batched by 50 and throttled like
+ * every other sweep here.
+ */
+export async function fetchAnilistCatalogByMalIds(
+  malIds: number[],
+  onBatch?: (done: number, total: number) => void
+): Promise<{ requested: number; hydrated: number; failed: number }> {
+  const ids = malIds.filter(id => Number.isInteger(id));
+  const batches = chunk(ids, BATCH_SIZE);
+  let processed = 0;
+  let hydrated = 0;
+  let failed = 0;
+
+  for (const batch of batches) {
+    try {
+      const res = await fetch(ANILIST_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ query: CATALOG_BY_MAL_QUERY, variables: { ids: batch } }),
+      });
+      if (!res.ok) throw new Error(`AniList request failed: ${res.status} ${res.statusText}`);
+      const json = await res.json();
+      if (Array.isArray(json?.errors) && json.errors.length > 0) {
+        throw new Error(`AniList GraphQL error: ${json.errors.map((e: { message?: string }) => e.message ?? 'unknown').join('; ')}`);
+      }
+      const media = (json?.data?.Page?.media ?? []) as RawCatalogMedia[];
+      const entries = media
+        .map(toCatalogEntry)
+        .filter((e): e is AniListCatalogEntry => e !== null);
+      if (entries.length > 0) {
+        resolveCanonicalIds(entries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id })));
+        upsertAnilistCatalogFields(entries);
+        hydrated += entries.length;
+      }
+    } catch (error) {
+      failed += batch.length;
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      appendLog('anilist-meta-sync', 'error', `AniList catalog hydration batch failed, continuing: ${message}`);
+    }
+    processed += batch.length;
+    if (onBatch) onBatch(processed, ids.length);
+    if (processed < ids.length) await new Promise(resolve => setTimeout(resolve, ANILIST_MIN_DELAY_MS));
+  }
+
+  return { requested: ids.length, hydrated, failed };
 }
 
 export interface AniListCatalogCrawlResult {
@@ -580,49 +795,13 @@ async function crawlCatalogSeason(season: string, seasonYear: number, maxPages: 
     pagesFetched++;
 
     for (const m of result.media ?? []) {
-      const title = m.title?.english || m.title?.romaji;
-      if (!title) continue;
-      const mean = typeof m.averageScore === 'number' ? m.averageScore / 10 : undefined;
-      // AniList genres are names only → synthetic id 0 (consumers key on name).
-      const genres = (m.genres ?? [])
-        .filter((g): g is string => !!g)
-        .map(name => ({ id: 0, name }));
-      // AniList studios carry AniList-namespace ids (see AniListMetaEntry.catalog caveat).
-      const studios = (m.studios?.nodes ?? [])
-        .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
-        .map(s => ({ id: s.id ?? 0, name: s.name as string }));
-      const cover = m.coverImage?.medium || m.coverImage?.large
-        ? { medium: m.coverImage?.medium ?? m.coverImage?.large ?? '', large: m.coverImage?.large ?? m.coverImage?.medium ?? '' }
-        : undefined;
-      const catalog: NonNullable<AniListMetaEntry['catalog']> = {
-        title,
-        titleRomaji: m.title?.romaji ?? undefined,
-        titleEnglish: m.title?.english ?? undefined,
-        mean,
-        genres,
-        studios,
-        coverImage: cover,
-        synopsis: stripHtml(m.description),
-        mediaType: mapFormat(m.format),
-        airingStatus: mapAiringStatus(m.status),
-        numEpisodes: typeof m.episodes === 'number' ? m.episodes : undefined,
-        startDate: mapStartDate(m.startDate),
-        startSeason: m.season && typeof m.seasonYear === 'number'
-          ? { year: m.seasonYear, season: m.season.toLowerCase() }
-          : undefined,
-        numListUsers: typeof m.popularity === 'number' ? m.popularity : undefined,
-      };
-      if (m.idMal) {
-        entries.push({ mal_id: m.idMal, anilist_id: m.id, catalog });
-        withMal++;
-      } else {
-        // No MAL id: still persist the catalog block, keyed off the `anilist`
-        // crosswalk alone — this is what lets an AniList-only title render a
-        // full row (docs/PROVIDER-FREE-CUTOVER.md Phase C). Previously this
-        // data was computed then discarded, only minting a bare canonical id.
-        entries.push({ anilist_id: m.id, catalog });
-        anilistOnly++;
-      }
+      const entry = toCatalogEntry(m);
+      if (!entry) continue;
+      entries.push(entry);
+      // No MAL id: the catalog block is still persisted, keyed off the `anilist`
+      // crosswalk alone — this is what lets an AniList-only title render a full
+      // row (docs/PROVIDER-FREE-CUTOVER.md Phase C).
+      if (entry.mal_id !== undefined) withMal++; else anilistOnly++;
     }
 
     if (logPages) appendLog('anilist-catalog-crawl', 'info', `AniList catalog: page ${page}/${maxPages} fetched`, { page, maxPages });
