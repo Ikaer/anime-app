@@ -1,6 +1,6 @@
 # `src/lib` — inventory and reorganization guide
 
-**Status:** Phases 1–4 applied (2026-07-21). Phase 5 still a proposal.
+**Status:** Phases 1–5 applied (2026-07-21). The plan is complete.
 **Measured:** 2026-07-21, at `326d74d` (36 modules, 10,132 lines).
 
 The inventory below still uses the **pre-move** filenames, since that is what
@@ -470,7 +470,7 @@ site changed: every importer already used `@/lib/store` or a leaf
 - CLAUDE.md's store paragraph was rewritten to name the four modules and both
   layering exceptions; `cachedAnime` no longer appears in it.
 
-### Phase 5 — Enforce the boundary (F1)
+### Phase 5 — Enforce the boundary (F1) ✅ DONE
 
 Add an ESLint `no-restricted-imports` zone forbidding `src/components/**` and
 `src/hooks/**` from importing any server-only path (`@/lib/store/**`,
@@ -480,6 +480,46 @@ Add an ESLint `no-restricted-imports` zone forbidding `src/components/**` and
 working.
 
 Cheap, and it is what makes the whole reorganization stick rather than decay.
+
+**Applied 2026-07-21.** One `overrides` block in [.eslintrc.json](../.eslintrc.json),
+so `npm run lint` (and `next build`, which lints) is the enforcement point. Notes:
+
+- **It had to be `@typescript-eslint/no-restricted-imports`, not the base rule** —
+  `allowTypeImports` is a TS-plugin option, and ESLint's built-in rule reports on
+  every `ImportDeclaration` regardless of `importKind`, which would have flagged
+  all ten legitimate `import type` uses. `eslint-plugin-import`'s
+  `no-restricted-paths` (already installed via `eslint-config-next`) has the same
+  blind spot. So `@typescript-eslint/eslint-plugin@6.21.0` was added as a
+  devDependency — pinned to the `@typescript-eslint/parser` version
+  `eslint-config-next` already ships, since plugin and parser must match.
+- **§F1's list of four type imports was stale — there are ten**, across six files:
+  `HistoricalCrawlStats` (mal/sync) in `CatalogRoleActions` + `useConnections`,
+  `AniListPersonalImportResult` + `AniListPushStats` in `PersonalRoleActions` +
+  `useConnections`, `ProviderStatus` (providers/status) in `ProviderCard` +
+  `ProviderAccountControl` + `useProviderStatuses`, `SimilarItem` (reco/similar)
+  in `MoreLikeThis`. All ten already used `import type`; none needed changing.
+- **The zone is wider than the brief in three places.** `@/lib/reco/similar` and
+  `@/lib/config/connectionLog` were missing from the phase's list but are
+  `fs`-bound (`similar.ts` imports `@/lib/store` directly — it is the very module
+  §F1 cites). Each pattern is also duplicated as `**/lib/…` so a relative
+  `../lib/store/record` cannot walk around the `@/` alias. And **`src/models/**`
+  joined `components`/`hooks` in the guarded set**: components import models as
+  *values*, so a stray `fs` import there would reach a client bundle just as
+  surely — CLAUDE.md already states models has no `fs` dependency, and this makes
+  that a compile-time fact rather than a convention. It is clean today.
+- **Verified the rule actually fires, not merely that lint is green.** A throwaway
+  probe component importing five server modules as values (including one via a
+  relative path) plus four client-safe ones raised exactly five errors and stayed
+  silent on `reco/weights`, `reco/scoring`, `domain/animeUtils` and a
+  `import type { SimilarItem }`. A restriction rule that never triggers is
+  indistinguishable from no rule at all, so this check is the deliverable.
+- **`src/pages/**` is deliberately NOT guarded.** Pages are the sanctioned seam —
+  `getServerSideProps` and API routes are exactly where these imports belong —
+  and Next strips server-only code from the page bundle. Guarding them would ban
+  the intended usage.
+- This closes the loop Phase 2 left open: `reco/scoring.ts` is client-safe and
+  still has no client importer, but nothing can now quietly re-`fs`-bind the
+  modules that are.
 
 ---
 
