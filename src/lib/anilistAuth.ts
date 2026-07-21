@@ -21,8 +21,8 @@
  */
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 
-const ANILIST_AUTH_FILE = dataFile('anilist_auth.json');
-const ANILIST_STATE_FILE = dataFile('anilist_oauth_state.json');
+const ANILIST_AUTH_FILE = dataFile('auth/anilist.json');
+const ANILIST_STATE_FILE = dataFile('auth/oauth_state_anilist.json');
 const STATE_TTL_MS = 10 * 60_000;
 
 export const ANILIST_ENDPOINT = 'https://graphql.anilist.co';

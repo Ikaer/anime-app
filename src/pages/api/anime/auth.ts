@@ -37,7 +37,7 @@ function generateCodeChallenge(verifier: string): string {
 }
 
 // Store code verifier in file system for persistence across server restarts
-const CODE_VERIFIER_FILE = dataFile('oauth_state.json');
+const CODE_VERIFIER_FILE = dataFile('auth/oauth_state_mal.json');
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 type VerifierStore = Record<string, { verifier: string; timestamp: number }>;

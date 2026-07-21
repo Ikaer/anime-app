@@ -36,7 +36,7 @@ function initials(name: string): string {
  * external round-trips every time it's opened), this auto-fetches on mount when
  * the title has no cached cast. It's a single cheap request that happens at most
  * ONCE per title in the app's lifetime — after that the entry is in
- * `animes_anilist_cast.json` and arrives with the server render. Cast is also
+ * `catalog/anilist_cast.json` and arrives with the server render. Cast is also
  * core detail-page content rather than an optional drill-down, so hiding it
  * behind a button would cost a click on every first view for no saving.
  *

@@ -52,7 +52,7 @@ export function isLocalProviderEnabled(): boolean {
  * The personal-state precedence actually in force: the default SIMKL > MAL >
  * AniList order, with `local` inserted (top/bottom) only when the local provider
  * is enabled. When disabled, `local` is absent entirely so a stray
- * `animes_local_personal.json` entry is never consulted. This is what
+ * `personal/local.json` entry is never consulted. This is what
  * `store.ts` threads into `toAnimeRecord` (and folds into its row-cache key).
  */
 export function getResolvedPersonalPrecedence(): ProvenanceSource[] {

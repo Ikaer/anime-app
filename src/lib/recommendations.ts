@@ -19,9 +19,9 @@ import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { MAL_ANIME_FIELDS } from '@/lib/mal';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
-const RECOMMENDATIONS_FILE = dataFile('recommendations.json');
-const DISMISSED_FILE = dataFile('recommendations_dismissed.json');
-const FEEDBACK_FILE = dataFile('recommendations_feedback.json');
+const RECOMMENDATIONS_FILE = dataFile('cache/recommendations.json');
+const DISMISSED_FILE = dataFile('user/reco_dismissed.json');
+const FEEDBACK_FILE = dataFile('user/reco_feedback.json');
 
 // ============================================================================
 // Tuning constants (all knobs live here — no scattered magic numbers)

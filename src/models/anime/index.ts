@@ -34,7 +34,7 @@ export interface MALAnime {
    * TRANSIENT / ingest-only. MAL's API ships the viewer's personal-list block
    * inline on every seasonal/single-title fetch, so it is part of the wire
    * shape — but it is NEVER persisted to the catalog file. `upsertAnime` strips
-   * it into the MAL personal slice (`animes_mal_personal.json`, see
+   * it into the MAL personal slice (`personal/mal.json`, see
    * `MALPersonalEntry`); a stored catalog `MALAnime` carries no `my_list_status`.
    * The boot guard in store.ts refuses to start if it finds one embedded (that
    * means the store predates the H1 split — run scripts/migrate-mal-personal.js).
@@ -103,7 +103,7 @@ export interface MALListStatus {
 /**
  * MAL's personal-list **stored** entry — the peer of `SimklPersonalEntry` /
  * `AniListPersonalEntry` / `LocalPersonalEntry`, living in its own slice file
- * (`animes_mal_personal.json`, keyed by canonical id) since the H1 split
+ * (`personal/mal.json`, keyed by canonical id) since the H1 split
  * (docs/PROVIDER-PARITY.md "H1"). It ended MAL's legacy asymmetry of embedding
  * personal state inside the catalog payload.
  *
@@ -118,7 +118,7 @@ export interface Studio {
   name: string;
 }
 
-// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in animes_simkl.json.
+// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in personal/simkl.json.
 export interface SimklPersonalEntry {
   simkl_id: number;          // kept for deletion reconciliation (diff on ids.simkl)
   mal_id: number;
@@ -133,7 +133,7 @@ export interface SimklPersonalEntry {
 /**
  * AniList personal-list data (read-only, anonymous public import by username —
  * docs/PROVIDER-FREE.md Phase 3 "P3b"). Keyed by MAL id in
- * animes_anilist_personal.json. It is the LOWEST personal-state fallback tier
+ * personal/anilist.json. It is the LOWEST personal-state fallback tier
  * (SIMKL > MAL > AniList) — see `getEffective*` in animeUtils.ts — so an
  * existing MAL/SIMKL user is unaffected, while an AniList-only user still gets
  * their state. Deliberately the locked 4-field shape (no `mal_id`): the store
@@ -149,8 +149,8 @@ export interface AniListPersonalEntry {
 /**
  * In-app **local** personal state (docs/localRating/) — the write target when no
  * external provider (MAL/SIMKL/…) is connected. Un-conflates local edits from
- * `animes_mal.json`'s `my_list_status`: local edits get their own slice
- * (`animes_local_personal.json`, keyed by canonical id) + its own extractor in
+ * `catalog/mal.json`'s `my_list_status`: local edits get their own slice
+ * (`personal/local.json`, keyed by canonical id) + its own extractor in
  * `personalState.ts` + precedence tier, like SIMKL and AniList already have.
  * Deliberately the locked shape (no `mal_id` — the store keys by canonical id
  * externally). Local edits ARE the authority, so `updated_at` is kept as a mtime.
@@ -210,7 +210,7 @@ export interface Discrepancy {
 }
 
 // AniList catalog metadata (read-only, public API). Keyed by MAL id in
-// animes_anilist_meta.json. The interface name still says "Tag" for historical
+// catalog/anilist.json. The interface name still says "Tag" for historical
 // reasons; the entry has held staff and banner art for a while now.
 export interface AniListTagEntry {
   name: string;
@@ -275,11 +275,11 @@ export interface AniListCharacterEntry {
 }
 
 /**
- * An anime's cast, stored in its OWN slice (`animes_anilist_cast.json`, keyed by
+ * An anime's cast, stored in its OWN slice (`catalog/anilist_cast.json`, keyed by
  * canonical id) rather than on `AniListMetaEntry` — deliberately.
  *
  * Cast is display-only (the detail page's Cast section); unlike `tags`/`staff`
- * it feeds no reco source. `animes_anilist_meta.json` is one of the six slices
+ * it feeds no reco source. `catalog/anilist.json` is one of the six slices
  * `getAnimeForDisplay()` parses on every cold row build, and cast is by far the
  * bulkiest AniList payload (~12 characters × 2 portraits × 2 names per title,
  * i.e. tens of MB catalog-wide). Living here keeps that cost off the hot path:

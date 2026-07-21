@@ -10,7 +10,7 @@ import styles from './PersonalStateEditor.module.css';
  * board only fetches already-statused titles, and the reco feed needs completed
  * + scored seeds. This is the one control that takes an *unstatused catalog
  * title* to statused + scored, which is what first writes
- * `animes_local_personal.json` for a local-only user.
+ * `personal/local.json` for a local-only user.
  *
  * All three controls go through the same `PUT …/mal-status` endpoint → the
  * `writePersonal` registry, so the edit fans out to whichever providers are

@@ -5,7 +5,7 @@
  * Kept OUT of `anilistSync.ts` on purpose. That module's syncs are catalog-wide
  * sweeps whose output feeds the hydration path and the reco sources; this is a
  * lazy, one-title-at-a-time fill of a display-only slice
- * (`animes_anilist_cast.json` — see `AniListCastEntry` for why it's its own
+ * (`catalog/anilist_cast.json` — see `AniListCastEntry` for why it's its own
  * file). A title is fetched the first time someone opens its detail page, and
  * then never again unless explicitly refreshed.
  */

@@ -92,7 +92,7 @@ function malIdOf(record?: AnimeRecord): number | undefined {
 }
 
 // ── MAL ──────────────────────────────────────────────────────────────────────
-// Writes to BOTH the local MAL personal slice (`animes_mal_personal.json`,
+// Writes to BOTH the local MAL personal slice (`personal/mal.json`,
 // authority — H1 split it out of the 39 MB catalog) and the MAL API.
 // isEnabled by token PRESENCE (not validity): an expired-but-refreshable token
 // still means "this is a MAL user", so we keep bumping the local slice as today.

@@ -57,10 +57,18 @@ if (!fs.existsSync(DATA_PATH)) {
   process.exit(1);
 }
 
-const CATALOG = 'animes_mal.json';
-const PERSONAL = 'animes_mal_personal.json';
+// Layout-aware: this script predates the folder layout (docs/DATA-LAYOUT.md) and
+// a pre-H1 store is by definition pre-layout, so the flat names are the normal
+// case. But the two migrations are independent scripts and can be run in either
+// order, so fall through to the new paths when the store has already moved.
+const FLAT = { catalog: 'animes_mal.json', personal: 'animes_mal_personal.json' };
+const NESTED = { catalog: 'catalog/mal.json', personal: 'personal/mal.json' };
+const layout = fs.existsSync(path.join(DATA_PATH, FLAT.catalog)) ? FLAT : NESTED;
+const CATALOG = layout.catalog;
+const PERSONAL = layout.personal;
 
 const file = name => path.join(DATA_PATH, name);
+const ensureDir = name => fs.mkdirSync(path.dirname(file(name)), { recursive: true });
 
 function readJson(name, fallback) {
   const p = file(name);
@@ -159,6 +167,7 @@ if (DRY_RUN) {
 
 // ── Write (verify) → rewrite catalog ──
 // 1. personal file first.
+ensureDir(PERSONAL);
 fs.writeFileSync(file(PERSONAL), JSON.stringify(mergedPersonal, null, 2), 'utf-8');
 
 // 2. verify it parses and the count matches before touching the catalog.

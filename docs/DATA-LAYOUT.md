@@ -3,9 +3,11 @@
 > A **proposal + migration plan** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `Todo`** — its prerequisite [PROVIDER-PARITY.md](PROVIDER-PARITY.md)
-> H1 is **`Done` (2026-07-21)**, so `personal/` now has its fourth file
-> (`animes_mal_personal.json`) and nothing blocks this (see [§2](#2-prerequisite-h1)).
+> **Status: `Done` (2026-07-21)** — shipped as described, with three deviations
+> recorded inline below: the `oauth_state` merge was **dropped** ([§3.1](#31-full-mapping)),
+> the refuse-to-start check is **lazy on first read** rather than at boot
+> ([§5.2](#52-runbook)), and the debug-pull refresh needed `/PURGE` rather than a
+> file list ([§5.3](#53-which-copies-of-the-store-get-migrated)).
 >
 > Scope: how the JSON store is laid out on disk. It changes **no data shapes and
 > no keys** — every file keeps its contents and its canonical-id keying. Only
@@ -92,7 +94,9 @@ doing it before H1 shrinks H1's reader count, so the natural order is
     mal.json
     simkl.json
     anilist.json
-    oauth_state.json             # transient CSRF state, all three providers
+    oauth_state_mal.json         # transient CSRF state, one file per provider
+    oauth_state_simkl.json
+    oauth_state_anilist.json
   sync/
     mal_seasons.json             # seasonal-crawl checkpoint
     simkl_checkpoint.json        # all-items watermark + lastRatedAt
@@ -142,18 +146,24 @@ appearing under `catalog/` and `personal/` is the point, not a collision.
 | `mal_auth.json` | `auth/mal.json` |
 | `simkl_auth.json` | `auth/simkl.json` |
 | `anilist_auth.json` | `auth/anilist.json` |
-| `oauth_state.json`, `simkl_oauth_state.json`, `anilist_oauth_state.json` | `auth/oauth_state.json` |
+| `oauth_state.json`, `simkl_oauth_state.json`, `anilist_oauth_state.json` | `auth/oauth_state_mal.json`, `auth/oauth_state_simkl.json`, `auth/oauth_state_anilist.json` |
 | `mal_season_checkpoint.json` | `sync/mal_seasons.json` |
 | `simkl_sync_checkpoint.json` | `sync/simkl_checkpoint.json` |
 | `anilist_personal_config.json` | `sync/anilist_import.json` |
 | `recommendations.json` | `cache/recommendations.json` |
 | `connection_log.json` | `logs/connection_log.json` (see [§3.2](#32-the-connection-log-is-app-data)) |
 
-Merging the three `oauth_state` files is the one contents change proposed here —
+Merging the three `oauth_state` files was the one contents change proposed here —
 they hold transient per-provider CSRF state, are written and consumed within a
 single OAuth round-trip, and a `{provider: state}` map is the same shape three
-times over. **Optional**; keep them separate if the merge feels like scope creep,
-in which case they become `auth/oauth_state_{mal,simkl,anilist}.json`.
+times over.
+
+**Shipped un-merged**, as `auth/oauth_state_{mal,simkl,anilist}.json`. The
+optional merge turned out to have a cost the proposal missed: three modules
+(`auth.ts`, `simkl.ts`, `anilistAuth.ts`) each read-modify-write their state file
+independently, so one shared file makes concurrent logins a clobber race — for no
+gain on data that expires in ten minutes. Separate files keep the write
+non-overlapping by construction.
 
 ### 3.2 The connection log is app data
 
@@ -181,10 +191,10 @@ Two consequences worth stating plainly:
   under a diagnostics path to justify the setting.
 - **`connectionLog.ts` gets simpler.** It stops resolving a second root and just
   uses `dataFile('logs/connection_log.json')`. Its existing `LEGACY_LOG_FILE`
-  fallback (which already reads the pre-`LOGS_PATH` location) is superseded by the
-  migration and can go — with the caveat in [§5.1](#51-code-changes) about installs
-  that set `LOGS_PATH` explicitly. The `LOGS_PATH` export moves to the settings
-  route, its only other reader.
+  fallback was **kept**, now pointed at `resolveLogsPath()` — the one expression
+  that covers both the pre-`LOGS_PATH` location and a configured one, which is the
+  case the script cannot reach ([§6](#6-risks)). Removable one release on. The
+  `LOGS_PATH` export moved to the settings route, its only other reader.
 
 ## 4. The orphan sweep
 
@@ -247,11 +257,12 @@ the layout change can ship without touching anything's contents.
 - **`dataFile()` is the single seam** ([jsonStore.ts:20](../src/lib/jsonStore.ts)) —
   `path.join(DATA_PATH, name)` already handles `'personal/mal.json'` on both
   platforms. Only the ~22 filename constants change.
-- **`ensureDataDirectory()` must create the file's parent, not just the root.**
-  `writeJsonFile` calls it before every write and it currently `mkdir`s
-  `DATA_PATH` only, so the first write to `personal/mal.json` would fail with
-  `ENOENT` on a fresh install. This is the one non-mechanical code change and it
-  is small: `mkdirSync(path.dirname(filePath), { recursive: true })`.
+- **`ensureDataDirectory()` creates the file's parent, not just the root.**
+  `writeJsonFile` calls it before every write and it used to `mkdir` `DATA_PATH`
+  only, so the first write to `personal/mal.json` would have failed with `ENOENT`
+  on a fresh install. This was the one non-mechanical code change and it is small:
+  it takes the target path and `mkdir -p`s `path.dirname(...)`. Verified against
+  an empty store: a hide and a thumbs-up created `user/` and both files.
 - **The parse cache keys on absolute path**, so moving a file naturally misses
   the old entry. No cache work needed.
 - **Docker needs no change** — `/app/data` is a single volume mount and
@@ -277,10 +288,23 @@ Steps 3 and 4 are ordered but not interlocked, which is the one sharp edge:
 old one.** A wrong order or a half-finished step 3 shows up as an app that boots
 onto an empty store — indistinguishable, at a glance, from data loss.
 
-So the new code should **refuse to start** when it finds a pre-layout store
-(flat `animes_*.json` present, no `catalog/`) and say so, rather than falling
-through to first-run onboarding on top of a full store. This is cheap: one
-existence check at boot, in the same place `resolveDataPath()` is already called.
+So the new code **refuses to run** when it finds a pre-layout store (flat
+`animes_*.json` present, no `catalog/`) and says so, rather than falling through
+to first-run onboarding on top of a full store.
+
+Two things about it differ from the sketch above, both found while building it:
+
+- **It is lazy, on the first read/write — not at import time.** `assertMigratedLayout`
+  lives in `jsonStore.ts` beside `resolveDataPath()` as planned, but running it at
+  module scope also runs it during `next build`'s page-data collection, which
+  fails the BUILD on any dev machine whose own store happens to be pre-layout.
+  Same reasoning, and now the same shape, as the H1 guard in `store.ts`.
+- **The "check once" flag latches only on success.** Setting it before the throw
+  makes just the *first* read of each bundle fail and every later one pass, which
+  is strictly worse than no check at all: the list API recovers, the onboarding
+  gate reads an empty registry, and the page renders first-run onboarding over a
+  full store — precisely the outcome being guarded against. Verified live, in
+  both directions.
 
 Because the app is down and the backup is minutes old, rollback is "restore the
 backup and redeploy the old image" — which is what makes deleting the orphans
@@ -305,9 +329,13 @@ Consequences for the migration:
 - **The debug copy is downstream, so do not migrate it** — re-pull it after
   production has moved. Migrating it separately just creates a second thing that
   can disagree.
-- **The refresh script copies files by name** and will need its file list updated
-  in the same change, or a post-migration pull silently repopulates the old flat
-  names next to the new folders.
+- **The refresh script needed `/PURGE`, not a file list.** It turned out to be a
+  `robocopy /E` mirror rather than a per-name copy, so the new folders come across
+  on their own — but without `/PURGE` the destination *keeps* its old flat
+  `animes_*.json` alongside them, and the layout guard then refuses to start on
+  what looks like a half-migrated store. Both `copy-data.ps1` and
+  `copy-data-salon.ps1` now purge; the destination is a pull of production, so
+  mirroring is the intended semantics.
 - **A dev machine can hold a pre-layout store and a post-layout one at the same
   time**, which is the second argument for the refuse-to-start check in
   [§5.2](#52-runbook): the app should name the layout it found rather than
@@ -343,6 +371,11 @@ handling, migration mechanism and log placement are answered in
 [§4](#4-the-orphan-sweep), [§5.2](#52-runbook) and
 [§3.2](#32-the-connection-log-is-app-data) respectively.
 
-One thing this does not decide: **merging the three `oauth_state` files**
-([§3.1](#31-full-mapping)) is still marked optional. It is the only proposed
-contents change and can be dropped without affecting anything else here.
+The one open question — **merging the three `oauth_state` files**
+([§3.1](#31-full-mapping)) — was decided against while implementing, for a reason
+recorded there. No contents changed anywhere in this migration; only paths.
+
+Shipped alongside: `scripts/migrate-layout.js` (the move + the opt-in orphan
+sweep), the `ensureDataDirectory` parent-creation fix, `connectionLog.ts` moving
+into the store, and `migrate-mal-personal.js` made layout-aware so the two
+migrations can run in either order.

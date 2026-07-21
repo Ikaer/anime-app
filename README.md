@@ -149,7 +149,7 @@ Configuration is two-tier. Only the **bootstrap paths** need to be environment v
 | Variable | Purpose |
 |---|---|
 | `DATA_PATH` | Root for JSON data files (default `/app/data`) |
-| `LOGS_PATH` | Logs directory |
+| `LOGS_PATH` | Diagnostics directory. No writer today — the connection log lives in the store at `DATA_PATH/logs/` (see docs/DATA-LAYOUT.md); the setting stays reserved for real debug output. |
 
 Provider credentials — set these *either* in the environment *or* on `/settings`:
 

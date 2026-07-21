@@ -2,7 +2,7 @@
  * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
  * taxonomy, the top staff credits, the banner art and the franchise relation
  * edges (docs/quickRate/) for anime already known
- * locally (via animes_mal.json) and persists them via store.ts. Read-only
+ * locally (via catalog/mal.json) and persists them via store.ts. Read-only
  * against AniList; no writes.
  */
 import { getAllAnime, getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry } from '@/lib/store';
@@ -395,7 +395,7 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 // ============================================================================
 //
 // Unlike the tags/staff sync above (which enriches titles ALREADY known via
-// `animes_mal.json`, one MAL id at a time), this browses AniList's OWN catalog
+// `catalog/mal.json`, one MAL id at a time), this browses AniList's OWN catalog
 // by season — the capability that lets AniList seed the registry
 // INDEPENDENTLY of MAL, verified unauthenticated in Phase 0 (see
 // docs/PROVIDER-FREE.md). Titles it finds WITH a MAL id enrich the existing

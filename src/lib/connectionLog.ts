@@ -1,19 +1,26 @@
 import fs from 'fs';
 import path from 'path';
-import { resolveDataPath, resolveLogsPath } from '@/lib/bootstrap';
-
-const DATA_PATH = resolveDataPath();
-// Exported so the settings page can show the log folder actually in use (frozen
-// at boot — a config change only takes effect on restart).
-export const LOGS_PATH = resolveLogsPath();
-const LOG_FILE = path.join(LOGS_PATH, 'connection_log.json');
+import { resolveLogsPath } from '@/lib/bootstrap';
+import { dataFile, ensureDataDirectory } from '@/lib/jsonStore';
 
 /**
- * The log used to live under `DATA_PATH`, before `LOGS_PATH` was wired up. Read
- * the old location once when the new one is still empty, so switching does not
- * silently blank the panel. The next `appendLog` rewrites to `LOG_FILE`.
+ * The connection log is **app data, not diagnostics** (docs/DATA-LAYOUT.md §3.2):
+ * it is the progress feed the Connections panel and the first-run onboarding
+ * poll — there is no SSE for meta-sync, the cast sweep or the catalog crawl, so
+ * this log *is* the transport. It therefore lives at a fixed path under
+ * `DATA_PATH`, not under `LOGS_PATH`, which stays reserved for real diagnostics.
  */
-const LEGACY_LOG_FILE = path.join(DATA_PATH, 'connection_log.json');
+const LOG_FILE = dataFile('logs/connection_log.json');
+
+/**
+ * Where the log used to live: under `LOGS_PATH` (which itself falls back to the
+ * data root, so pre-`LOGS_PATH` installs are covered by the same expression).
+ * Read once when the new location is still empty, so an install that set
+ * `LOGS_PATH` outside the data folder — beyond the migration script's reach —
+ * does not blank its panel on deploy. The next `appendLog` rewrites to
+ * `LOG_FILE`. Removable one release after the layout migration.
+ */
+const LEGACY_LOG_FILE = path.join(resolveLogsPath(), 'connection_log.json');
 
 const MAX_ENTRIES = 500;
 const DEFAULT_PAGE_SIZE = 200;
@@ -57,12 +64,6 @@ interface LogStore {
   entries: LogEntry[];
 }
 
-function ensureLogsDirectory(): void {
-  if (!fs.existsSync(LOGS_PATH)) {
-    fs.mkdirSync(LOGS_PATH, { recursive: true, mode: 0o755 });
-  }
-}
-
 function readStore(): LogStore {
   try {
     const file = fs.existsSync(LOG_FILE) ? LOG_FILE : LEGACY_LOG_FILE;
@@ -82,7 +83,7 @@ function readStore(): LogStore {
 }
 
 function writeStore(store: LogStore): void {
-  ensureLogsDirectory();
+  ensureDataDirectory(LOG_FILE);
   fs.writeFileSync(LOG_FILE, JSON.stringify(store, null, 2), 'utf-8');
 }
 

@@ -1,8 +1,8 @@
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSimklAppName, getSimklClientId } from '@/lib/settings';
 
-const SIMKL_AUTH_FILE = dataFile('simkl_auth.json');
-const SIMKL_STATE_FILE = dataFile('simkl_oauth_state.json');
+const SIMKL_AUTH_FILE = dataFile('auth/simkl.json');
+const SIMKL_STATE_FILE = dataFile('auth/oauth_state_simkl.json');
 const STATE_TTL_MS = 10 * 60_000;
 
 export interface SimklAuthData {
@@ -62,7 +62,7 @@ export function consumeOAuthState(state: string): boolean {
   return Date.now() - issuedAt <= STATE_TTL_MS;
 }
 
-const SIMKL_CHECKPOINT_FILE = dataFile('simkl_sync_checkpoint.json');
+const SIMKL_CHECKPOINT_FILE = dataFile('sync/simkl_checkpoint.json');
 const SIMKL_APP_VERSION = '1.0';
 // client_id / app-name resolve at request time via the settings store
 // (settings.json ?? env ?? default). See @/lib/settings.

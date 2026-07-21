@@ -21,14 +21,17 @@ import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
 import { getSeasonInfos, toAnimeRecord } from '@/lib/animeUtils';
 import { getResolvedPersonalPrecedence } from '@/lib/providers';
 
-const ANIME_MAL_FILE = dataFile('animes_mal.json');
-const ANIME_MAL_PERSONAL_FILE = dataFile('animes_mal_personal.json');
-const ANIME_HIDDEN_FILE = dataFile('animes_hidden.json');
-const ANIME_SIMKL_FILE = dataFile('animes_simkl.json');
-const ANIME_ANILIST_META_FILE = dataFile('animes_anilist_meta.json');
-const ANIME_ANILIST_CAST_FILE = dataFile('animes_anilist_cast.json');
-const ANIME_ANILIST_PERSONAL_FILE = dataFile('animes_anilist_personal.json');
-const ANIME_LOCAL_PERSONAL_FILE = dataFile('animes_local_personal.json');
+// Role folders, not filename prefixes (docs/DATA-LAYOUT.md). The same basename
+// under catalog/ and personal/ is the point: `catalog/mal.json` is the MAL
+// catalog slice, `personal/mal.json` its personal one.
+const ANIME_MAL_FILE = dataFile('catalog/mal.json');
+const ANIME_MAL_PERSONAL_FILE = dataFile('personal/mal.json');
+const ANIME_HIDDEN_FILE = dataFile('user/hidden.json');
+const ANIME_SIMKL_FILE = dataFile('personal/simkl.json');
+const ANIME_ANILIST_META_FILE = dataFile('catalog/anilist.json');
+const ANIME_ANILIST_CAST_FILE = dataFile('catalog/anilist_cast.json');
+const ANIME_ANILIST_PERSONAL_FILE = dataFile('personal/anilist.json');
+const ANIME_LOCAL_PERSONAL_FILE = dataFile('personal/local.json');
 
 // ============================================================================
 // H1 migration boot guard
@@ -49,7 +52,7 @@ function assertMigratedMalStore(animes?: Record<string, MALAnime>): void {
     if (anime && anime.my_list_status !== undefined) {
       throw new Error(
         'Un-migrated MAL store: `my_list_status` is still embedded in ' +
-          'animes_mal.json. Run `node scripts/migrate-mal-personal.js <dataPath>` ' +
+          'the MAL catalog slice. Run `node scripts/migrate-mal-personal.js <dataPath>` ' +
           'before starting this version (docs/PROVIDER-PARITY.md H1).'
       );
     }
@@ -132,7 +135,7 @@ export function upsertAnime(newAnime: MALAnime[]): void {
 // ============================================================================
 // MAL personal-list slice (docs/PROVIDER-PARITY.md H1), keyed by canonical id —
 // the peer of the SIMKL / AniList / local personal slices. Split out of
-// `animes_mal.json` so a rating write no longer rewrites the 39 MB catalog, and
+// `catalog/mal.json` so a rating write no longer rewrites the 39 MB catalog, and
 // so `MALAnime` is pure catalog. Filled by `upsertAnime` (split-on-ingest) and
 // by the personal-list sync (`updatePersonalStatusBatch`).
 // ============================================================================
@@ -350,7 +353,7 @@ export function replaceAnilistPersonalEntries(entriesByMalId: Record<string, Ani
  * will drop any entry the import doesn't also carry. Harmless in practice — a
  * logged-in user's push lands on AniList, so the next import reads it back — but
  * it does mean this slice is not a durable local-only store the way
- * `animes_local_personal.json` is.
+ * `personal/local.json` is.
  */
 export function upsertAnilistPersonalEntries(entriesByCanonicalId: Record<string, AniListPersonalEntry>): void {
   const keys = Object.keys(entriesByCanonicalId);
@@ -365,7 +368,7 @@ export function upsertAnilistPersonalEntries(entriesByCanonicalId: Record<string
 // Local personal-state slice (docs/localRating/), keyed DIRECTLY by canonical id
 // — unlike the external slices, a local edit has no provider crosswalk to resolve
 // from; the write path (phase 2) already holds the canonical id. This is the
-// write target that un-conflates local edits from `animes_mal.json`.
+// write target that un-conflates local edits from `catalog/mal.json`.
 // ============================================================================
 
 export function getAllLocalEntries(): Record<string, LocalPersonalEntry> {
@@ -410,7 +413,7 @@ export function removeLocalEntries(canonicalIds: string[]): void {
 // only for MAL API calls and the external MAL link.
 // ============================================================================
 
-const ANIME_REGISTRY_FILE = dataFile('animes_registry.json');
+const ANIME_REGISTRY_FILE = dataFile('registry.json');
 
 /** Shape check for the outward canonical id (`a_<n>`) — cheap validation for route params. */
 export function isCanonicalId(id: string): boolean {
@@ -765,8 +768,8 @@ export function getSyncMetadata(): SyncMetadata | null {
 
 // ============================================================================
 // Personal status writes — the MAL personal slice (docs/PROVIDER-PARITY.md H1).
-// Was a mutation of `animes_mal.json` (39 MB rewrite per call); now targets the
-// lean `animes_mal_personal.json`.
+// Was a mutation of `catalog/mal.json` (39 MB rewrite per call); now targets the
+// lean `personal/mal.json`.
 // ============================================================================
 
 interface PersonalStatusUpdateResult {

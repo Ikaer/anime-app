@@ -90,7 +90,7 @@ All under `/api/anime/`:
 
 ### Environment Variables
 - `DATA_PATH` — data directory root
-- `LOGS_PATH` — logs directory
+- `LOGS_PATH` — diagnostics directory (no writer today; the connection log lives in the store at `DATA_PATH/logs/`)
 - `MAL_CLIENT_ID` — MyAnimeList API client ID
 - `MAL_REDIRECT_URI` — OAuth redirect URI
 - `CRON_SECRET` — cron job auth token

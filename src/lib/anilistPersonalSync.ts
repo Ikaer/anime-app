@@ -5,7 +5,7 @@
  *
  * **Requires a token — there is no anonymous read.** That is an invariant other
  * code depends on, not just a limitation: because every entry in
- * `animes_anilist_personal.json` belongs to a connected account, AniList can
+ * `personal/anilist.json` belongs to a connected account, AniList can
  * participate in discrepancy detection without an actionability gate.
  *
  * `MediaListCollection` returns the WHOLE list in one response — it is not a
@@ -22,7 +22,7 @@ import { AniListPersonalEntry, UserAnimeStatus } from '@/models/anime';
 import { getAnilistAuthData, getAnilistAccessToken, fetchAnilistViewer } from '@/lib/anilistAuth';
 
 const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
-const CONFIG_FILE = dataFile('anilist_personal_config.json');
+const CONFIG_FILE = dataFile('sync/anilist_import.json');
 
 // AniList list-status vocabulary -> MAL vocabulary (docs/PROVIDER-FREE.md P3b).
 const STATUS_MAP: Record<string, UserAnimeStatus> = {

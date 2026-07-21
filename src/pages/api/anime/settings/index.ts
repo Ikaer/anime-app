@@ -22,9 +22,9 @@ import {
   readBootstrapConfig,
   writeBootstrapConfig,
   bootstrapConfigFile,
+  resolveLogsPath,
 } from '@/lib/bootstrap';
 import { DATA_PATH } from '@/lib/jsonStore';
-import { LOGS_PATH } from '@/lib/connectionLog';
 import { getMalRedirectUri, getSimklRedirectUri, getAnilistRedirectUri } from '@/lib/redirectUri';
 
 /**
@@ -84,7 +84,10 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
     },
     logsPath: {
       stored: bootStored.logsPath ?? '',
-      resolved: LOGS_PATH, // frozen at boot
+      // The only reader left: since the connection log moved into the store
+      // (docs/DATA-LAYOUT.md §3.2) nothing writes to LOGS_PATH, but the setting
+      // stays valid and displayed, reserved for real diagnostics.
+      resolved: resolveLogsPath(),
       fromEnv: !!process.env.LOGS_PATH,
     },
   };
