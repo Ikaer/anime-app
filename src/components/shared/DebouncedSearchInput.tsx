@@ -25,7 +25,7 @@ const DebouncedSearchInput: React.FC<DebouncedSearchInputProps> = ({
   debounceMs = 300,
 }) => {
   const [local, setLocal] = useState(value);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     setLocal(value);

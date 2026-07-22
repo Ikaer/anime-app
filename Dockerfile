@@ -1,4 +1,6 @@
-FROM node:18-alpine AS base
+# Next 16 requires Node 20.9+ (Node 18 is no longer supported); 22 is the
+# current LTS and matches the dev machines.
+FROM node:22-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
