@@ -217,11 +217,13 @@ export default function AnimePage() {
             </div>
           )}
           <AnimeListHeader
-            animeCount={animes.length}
-            sortBy={filters.sortBy}
-            sortDir={filters.sortDir}
-            onSortByChange={handleSortByChange}
-            onSortDirChange={handleSortDirChange}
+            count={t('stats.totalAnime', { count: animes.length })}
+            sort={{
+              sortBy: filters.sortBy,
+              sortDir: filters.sortDir,
+              onSortByChange: handleSortByChange,
+              onSortDirChange: handleSortDirChange,
+            }}
             cardsPerRow={display.cardsPerRow}
             onCardsPerRowChange={handleCardsPerRowChange}
           />

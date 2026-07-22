@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import { AnimePageLayout, AnimeCardView } from '@/components/anime';
+import { AnimePageLayout, AnimeListHeader, AnimeCardView } from '@/components/anime';
 import {
   RecommendationsSection,
   RecoFiltersSection,
   RecoWeightPresetsSection,
   RecoWeightsSection,
-  DisplaySection,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord } from '@/models/anime';
@@ -233,35 +232,30 @@ export default function RecommendationsPage() {
             </div>
           )}
 
-          <div className="reco-header">
-            <h1 className="reco-title">
-              {state.review === 'up' ? t('reco.goodPicks')
+          {/* The same header component `/` renders — no `sort`, because the
+              feed's order IS the affinity ranking. */}
+          <AnimeListHeader
+            title={
+              state.review === 'up' ? t('reco.goodPicks')
                 : state.review === 'down' ? t('reco.notForMe')
-                : t('nav.forYou')}
-            </h1>
-            {state.review ? (
-              <Button variant="secondary" size="xs" onClick={() => update({ review: null })}>
-                {t('reco.backToRecos')}
-              </Button>
-            ) : (
-              <span className="reco-count">{t('reco.countTitles', { count: animes.length })}</span>
-            )}
-            {/* Same split as `/`: the sidebar narrows the feed, the header
-                carries the controls that shape how it is laid out. No sort
-                here — the feed's order IS the affinity ranking. */}
-            <div className="reco-header-controls">
-              <DisplaySection
-                variant="inline"
-                cardsPerRow={state.cardsPerRow}
-                onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
-              />
-              <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
-                {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}
-              </Button>
-            </div>
-          </div>
+                  : t('nav.forYou')
+            }
+            count={state.review
+              ? (
+                <Button variant="secondary" size="xs" onClick={() => update({ review: null })}>
+                  {t('reco.backToRecos')}
+                </Button>
+              )
+              : t('reco.countTitles', { count: animes.length })}
+            cardsPerRow={state.cardsPerRow}
+            onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
+          >
+            <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
+              {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}
+            </Button>
+          </AnimeListHeader>
 
-          <div className="table-container">
+          <div className="cards-container">
             {!isReady || isLoading ? (
               <div className="loading-state">{t('common.loading')}</div>
             ) : (
@@ -280,12 +274,7 @@ export default function RecommendationsPage() {
       <style jsx>{`
         .reco-main-content { display: flex; flex-direction: column; gap: 1rem; }
         .error-banner { background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; }
-        .reco-header { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1rem; }
-        .reco-title { font-size: 1.5rem; margin: 0; color: var(--text-primary); }
-        .reco-count { color: var(--text-secondary); }
-        /* Pushed to the right edge on one row; wraps as a unit when narrow. */
-        .reco-header-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-left: auto; font-size: 0.9rem; }
-        .table-container { background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
+        .cards-container { background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
         .loading-state { text-align: center; padding: 3rem; color: var(--text-secondary); }
       `}</style>
     </>

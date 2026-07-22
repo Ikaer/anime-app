@@ -1,58 +1,86 @@
 import React from 'react';
 import { SortColumn, SortDirection } from '@/models/anime';
-import { useT } from '@/lib/i18n';
 import { SortOrderSection, DisplaySection } from './sidebar';
 import styles from './AnimeListHeader.module.css';
 
-interface AnimeListHeaderProps {
-  animeCount: number;
+/** The sort group, or `undefined` on a list whose order isn't the user's to pick. */
+export interface HeaderSortControls {
   sortBy: SortColumn;
   sortDir: SortDirection;
   onSortByChange: (c: SortColumn) => void;
   onSortDirChange: (d: SortDirection) => void;
+}
+
+interface AnimeListHeaderProps {
+  /** Page heading. `/` has none; `/recommendations` names the feed or review list. */
+  title?: React.ReactNode;
+  /** The result count — or whatever replaces it (`/recommendations` swaps in a back button). */
+  count?: React.ReactNode;
+  sort?: HeaderSortControls;
   cardsPerRow: number | null;
   onCardsPerRowChange: (value: number | null) => void;
+  /** Page-specific controls, appended after cards-per-row. */
+  children?: React.ReactNode;
 }
 
 /**
- * The card grid's own header bar: result count on the left, the controls that
- * shape the grid itself (sort, image size, cards per row) on the right.
+ * The bar above a card grid — the one header both `/` and `/recommendations`
+ * render, so the two pages look like the same app rather than two takes on it.
  *
- * These used to be three collapsible sections in `AnimeSidebar`, which left the
- * sidebar mixing two unrelated jobs — *which* anime to show (search, views,
- * filters) and *how* to lay them out. The layout controls belong next to what
- * they lay out, so the sidebar now only narrows the set.
+ * It exists because the sidebar used to mix two jobs: *which* anime to show
+ * (search, views, filters — still the sidebar's) and *how* to lay them out
+ * (this). Layout controls belong next to what they lay out.
  *
- * It renders `SortOrderSection`/`DisplaySection` unchanged rather than
- * reimplementing them inline — `DisplaySection` is still a sidebar section on
- * `/recommendations`, so there is one copy of each control, not two.
+ * Everything a page legitimately differs on is a slot: `/` has no `title` and
+ * passes `sort`; `/recommendations` has a title, no sort (its order IS the
+ * affinity ranking, so offering one would contradict the page) and appends its
+ * "show all explains" toggle as a child. The shell — panel, typography,
+ * spacing, divider — is not negotiable, which is the whole point.
+ *
+ * It renders `SortOrderSection`/`DisplaySection` with `variant="inline"` rather
+ * than reimplementing them, so the controls stay identical to their stacked
+ * sidebar form elsewhere.
+ *
+ * **Layout is one flat wrapping flex row**, not title/count plus a nested
+ * control block: nested, a narrow viewport drops the whole block onto its own
+ * line instead of breaking between the groups. `.spacer` is what right-aligns
+ * the controls, and it simply absorbs the slack when a row does wrap.
  */
 const AnimeListHeader: React.FC<AnimeListHeaderProps> = ({
-  animeCount,
-  sortBy, sortDir, onSortByChange, onSortDirChange,
-  cardsPerRow, onCardsPerRowChange,
-}) => {
-  const t = useT();
+  title,
+  count,
+  sort,
+  cardsPerRow,
+  onCardsPerRowChange,
+  children,
+}) => (
+  <div className={styles.header}>
+    {title && <h1 className={styles.title}>{title}</h1>}
+    {count && <span className={styles.count}>{count}</span>}
 
-  return (
-    <div className={styles.header}>
-      <span className={styles.count}>{t('stats.totalAnime', { count: animeCount })}</span>
+    <span className={styles.spacer} aria-hidden="true" />
 
-      <SortOrderSection
-        variant="inline"
-        sortBy={sortBy}
-        sortDir={sortDir}
-        onSortByChange={onSortByChange}
-        onSortDirChange={onSortDirChange}
-      />
-      <span className={styles.divider} aria-hidden="true" />
-      <DisplaySection
-        variant="inline"
-        cardsPerRow={cardsPerRow}
-        onCardsPerRowChange={onCardsPerRowChange}
-      />
-    </div>
-  );
-};
+    {sort && (
+      <>
+        <SortOrderSection
+          variant="inline"
+          sortBy={sort.sortBy}
+          sortDir={sort.sortDir}
+          onSortByChange={sort.onSortByChange}
+          onSortDirChange={sort.onSortDirChange}
+        />
+        <span className={styles.divider} aria-hidden="true" />
+      </>
+    )}
+
+    <DisplaySection
+      variant="inline"
+      cardsPerRow={cardsPerRow}
+      onCardsPerRowChange={onCardsPerRowChange}
+    />
+
+    {children}
+  </div>
+);
 
 export default AnimeListHeader;
