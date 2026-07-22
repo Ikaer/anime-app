@@ -3,6 +3,7 @@
  */
 
 export { default as AnimeCardView } from './AnimeCardView';
+export { default as AnimeListHeader } from './AnimeListHeader';
 export { default as AnimePageLayout } from './AnimePageLayout';
 export { default as AnimeSidebar } from './AnimeSidebar';
 export { default as ConnectionLogPanel } from './ConnectionLogPanel';

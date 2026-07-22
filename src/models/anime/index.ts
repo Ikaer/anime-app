@@ -652,28 +652,6 @@ export interface RecoMeta {
 // Display options
 export type ImageSize = 0 | 1 | 2 | 3;
 
-// Stats columns that can be shown/hidden
-export type StatsColumn =
-  | 'score'
-  | 'rank'
-  | 'popularity'
-  | 'users'
-  | 'scorers';
-
-export interface VisibleColumns {
-  score: boolean;
-  rank: boolean;
-  popularity: boolean;
-  users: boolean;
-  scorers: boolean;
-}
-
-export interface AnimeDisplayState {
-  imageSize: ImageSize;
-  visibleColumns: VisibleColumns;
-  sidebarExpanded: Record<string, boolean>;
-}
-
 // API response model for anime list endpoint
 export interface AnimeListResponse {
   animes: AnimeRecord[];

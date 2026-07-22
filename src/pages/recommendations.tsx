@@ -269,7 +269,6 @@ export default function RecommendationsPage() {
                 animes={animes}
                 imageSize={state.imageSize}
                 cardsPerRow={state.cardsPerRow}
-                visibleColumns={{ score: true, rank: false, popularity: false, users: false, scorers: false }}
                 onFeedback={handleFeedback}
                 onRemoveFeedback={handleRemoveFeedback}
                 feedbackMode={state.review ?? 'feed'}

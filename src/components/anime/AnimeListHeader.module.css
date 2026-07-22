@@ -1,0 +1,29 @@
+/* One flat wrapping row: count, sort group, divider, display group. Flat
+   rather than nested so a narrow viewport wraps *between* the groups instead
+   of dropping the whole control block onto its own line — the TV target is
+   4K at 300% zoom, i.e. ~1280 CSS px, which is not wide enough for one row. */
+.header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.25rem;
+  padding: 0.6rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+/* Pushes the controls to the right edge when everything fits on one row. */
+.count {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-right: auto;
+}
+
+.divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.5rem;
+  background: var(--border-color);
+}

@@ -20,6 +20,12 @@ interface SortOrderSectionProps {
   sortDir: SortDirection;
   onSortByChange: (column: SortColumn) => void;
   onSortDirChange: (direction: SortDirection) => void;
+  /**
+   * `stack` (default) is the sidebar's vertical group. `inline` is the same
+   * markup laid out as one row for `AnimeListHeader` — a CSS switch only, so
+   * there is no second copy of these controls to keep in sync.
+   */
+  variant?: 'stack' | 'inline';
 }
 
 const SortOrderSection: React.FC<SortOrderSectionProps> = ({
@@ -27,10 +33,11 @@ const SortOrderSection: React.FC<SortOrderSectionProps> = ({
   sortDir,
   onSortByChange,
   onSortDirChange,
+  variant = 'stack',
 }) => {
   const t = useT();
   return (
-    <div className={styles.sortOrderSection}>
+    <div className={`${styles.sortOrderSection} ${variant === 'inline' ? styles.inline : ''}`}>
       <label className={styles.label}>{t('sort.sortBy')}</label>
       <select
         value={sortBy}

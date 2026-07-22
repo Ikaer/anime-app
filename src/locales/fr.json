@@ -178,8 +178,6 @@
   "section.views": "Vues",
   "section.display": "Affichage",
   "section.filters": "Filtres",
-  "section.sortOrder": "Tri et ordre",
-  "section.stats": "Stats",
   "section.account": "Compte MAL",
   "section.simkl": "Compte SIMKL",
   "section.recommendations": "Recommandations",
@@ -357,7 +355,6 @@
   "sort.desc": "Décroiss.",
 
   "stats.totalAnime": "Total anime : {count}",
-  "stats.visibleColumns": "Colonnes visibles :",
 
   "filters.season": "Saison :",
   "filters.mediaType": "Type de média :",

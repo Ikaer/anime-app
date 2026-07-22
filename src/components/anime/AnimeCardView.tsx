@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeRecord, ImageSize, StatsColumn, VisibleColumns, RecoMeta, RecoVerdict } from '@/models/anime';
+import { AnimeRecord, ImageSize, RecoMeta, RecoVerdict } from '@/models/anime';
 import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
@@ -13,7 +13,6 @@ type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
 interface AnimeCardViewProps {
     animes: RecoCard[];
     imageSize: ImageSize;
-    visibleColumns: VisibleColumns;
     /** Forced number of cards per row; null/undefined = adaptive (auto-fill). */
     cardsPerRow?: number | null;
     onHideToggle?: (animeId: string, hide: boolean) => void;
@@ -39,7 +38,6 @@ function formatRecoHint(meta: RecoMeta, t: TFunction): string {
 export default function AnimeCardView({
     animes,
     imageSize,
-    visibleColumns,
     cardsPerRow,
     onHideToggle,
     onFeedback,
@@ -325,11 +323,9 @@ export default function AnimeCardView({
                                     <span className={styles.personalStatusText}>{t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}</span>
                                 </span>
                             )}
-                            {(visibleColumns?.score ?? true) && (
-                                <span className={`${styles.score} ${getScoreClass(anime.catalog.mean)}`}>
-                                    {anime.catalog.mean ? anime.catalog.mean.toFixed(2) : 'N/A'}
-                                </span>
-                            )}
+                            <span className={`${styles.score} ${getScoreClass(anime.catalog.mean)}`}>
+                                {anime.catalog.mean ? anime.catalog.mean.toFixed(2) : 'N/A'}
+                            </span>
                         </div>
                         {anime.recoMeta && formatRecoHint(anime.recoMeta, t) && (
                             <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta, t)}</div>

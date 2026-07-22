@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import { AnimePageLayout, AnimeSidebar, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
-import { AnimeRecord, UserAnimeStatus, StatsColumn } from '@/models/anime';
+import { AnimePageLayout, AnimeSidebar, AnimeListHeader, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
+import { AnimeRecord, UserAnimeStatus } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
 import { useT } from '@/lib/i18n';
 
@@ -142,11 +142,6 @@ export default function AnimePage() {
     updateDisplay({ cardsPerRow });
   };
 
-  const handleVisibleColumnsChange = (column: StatsColumn, isVisible: boolean) => {
-    const newVisibleColumns = { ...display.visibleColumns, [column]: isVisible };
-    updateDisplay({ visibleColumns: newVisibleColumns });
-  };
-
   const handleSidebarExpandedChange = (section: string, isExpanded: boolean) => {
     const newExpanded = { ...display.sidebarExpanded, [section]: isExpanded };
     updateDisplay({ sidebarExpanded: newExpanded });
@@ -170,10 +165,6 @@ export default function AnimePage() {
 
   const sidebar = (
     <AnimeSidebar
-      imageSize={display.imageSize}
-      onImageSizeChange={handleImageSizeChange}
-      cardsPerRow={display.cardsPerRow}
-      onCardsPerRowChange={handleCardsPerRowChange}
       statusFilters={filters.statusFilters}
       onStatusFilterChange={handleStatusFilterChange}
       seasons={filters.seasons}
@@ -190,15 +181,8 @@ export default function AnimePage() {
       onMaxScoreChange={handleMaxScoreChange}
       searchQuery={filters.searchQuery}
       onSearchChange={handleSearchChange}
-      animeCount={animes.length}
-      visibleColumns={display.visibleColumns}
-      onVisibleColumnsChange={handleVisibleColumnsChange}
       sidebarExpanded={display.sidebarExpanded}
       onSidebarExpandedChange={handleSidebarExpandedChange}
-      sortBy={filters.sortBy}
-      sortDir={filters.sortDir}
-      onSortByChange={handleSortByChange}
-      onSortDirChange={handleSortDirChange}
     />
   );
 
@@ -236,14 +220,24 @@ export default function AnimePage() {
               {error} <button onClick={() => setError('')}>×</button>
             </div>
           )}
-          <div className="table-container">
+          <AnimeListHeader
+            animeCount={animes.length}
+            sortBy={filters.sortBy}
+            sortDir={filters.sortDir}
+            onSortByChange={handleSortByChange}
+            onSortDirChange={handleSortDirChange}
+            imageSize={display.imageSize}
+            onImageSizeChange={handleImageSizeChange}
+            cardsPerRow={display.cardsPerRow}
+            onCardsPerRowChange={handleCardsPerRowChange}
+          />
+          <div className="cards-container">
             {!isReady || isLoading || storeEmpty === null ? (
               <div className="loading-state">{t('common.loading')}</div>
             ) : (
               <AnimeCardView
                 animes={animes}
                 imageSize={display.imageSize}
-                visibleColumns={display.visibleColumns}
                 cardsPerRow={display.cardsPerRow}
                 onHideToggle={handleHideToggle}
               />
@@ -254,7 +248,7 @@ export default function AnimePage() {
       <style jsx>{`
         .anime-main-content { display: flex; flex-direction: column; gap: 1rem; }
         .error-banner { background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; }
-        .table-container { background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
+        .cards-container { background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
         .loading-state { text-align: center; padding: 3rem; color: var(--text-secondary); }
       `}</style>
     </>

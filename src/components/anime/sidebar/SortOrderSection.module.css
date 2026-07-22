@@ -46,3 +46,22 @@
 .radioLabel input[type="radio"] {
   cursor: pointer;
 }
+
+/* Inline variant — same markup on one row, for AnimeListHeader. */
+.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.inline .label {
+  white-space: nowrap;
+}
+
+.inline .select {
+  padding: 5px 8px;
+}
+
+.inline .directionButtons {
+  gap: 0.6rem;
+}

@@ -1,24 +1,20 @@
 import React from 'react';
 import styles from './AnimeSidebar.module.css';
-import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection } from '@/models/anime';
+import { UserAnimeStatus } from '@/models/anime';
 import type { SeasonInfo } from '@/models/anime';
 import { CollapsibleSection, DebouncedSearchInput } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 import {
-  SortOrderSection,
   ViewsSection,
-  DisplaySection,
-  FiltersSection,
-  StatsSection
+  FiltersSection
 } from './sidebar';
 
+/**
+ * The sidebar narrows *which* anime are shown — search, views, filters. The
+ * controls that shape *how* the grid looks (sort, image size, cards per row)
+ * live in `AnimeListHeader`, above the cards they affect.
+ */
 interface AnimeSidebarProps {
-  // Display
-  imageSize: ImageSize;
-  onImageSizeChange: (size: ImageSize) => void;
-  cardsPerRow: number | null;
-  onCardsPerRowChange: (value: number | null) => void;
-
   // Filters
   statusFilters: (UserAnimeStatus | 'not_defined')[];
   onStatusFilterChange: (status: UserAnimeStatus | 'not_defined', isChecked: boolean) => void;
@@ -37,25 +33,12 @@ interface AnimeSidebarProps {
   maxScore: number | null;
   onMaxScoreChange: (v: number | null) => void;
 
-  // Stats
-  animeCount: number;
-  visibleColumns: VisibleColumns;
-  onVisibleColumnsChange: (column: StatsColumn, isVisible: boolean) => void;
-
   // Sidebar UI state
   sidebarExpanded: Record<string, boolean>;
   onSidebarExpandedChange: (section: string, isExpanded: boolean) => void;
-
-  // Sort
-  sortBy: SortColumn;
-  sortDir: SortDirection;
-  onSortByChange: (c: SortColumn) => void;
-  onSortDirChange: (d: SortDirection) => void;
 }
 
 const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
-  imageSize, onImageSizeChange,
-  cardsPerRow, onCardsPerRowChange,
   statusFilters, onStatusFilterChange,
   searchQuery, onSearchChange,
   seasons, onSeasonsChange,
@@ -64,10 +47,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   discrepanciesOnly, onDiscrepanciesOnlyChange,
   minScore, onMinScoreChange,
   maxScore, onMaxScoreChange,
-  animeCount,
-  visibleColumns, onVisibleColumnsChange,
   sidebarExpanded, onSidebarExpandedChange,
-  sortBy, sortDir, onSortByChange, onSortDirChange,
 }) => {
   const t = useT();
   // Section toggle now uses URL state
@@ -95,19 +75,6 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
       </CollapsibleSection>
 
       <CollapsibleSection
-        title={t('section.display')}
-        isExpanded={sidebarExpanded.display}
-        onToggle={() => toggle('display')}
-      >
-        <DisplaySection
-          imageSize={imageSize}
-          onImageSizeChange={onImageSizeChange}
-          cardsPerRow={cardsPerRow}
-          onCardsPerRowChange={onCardsPerRowChange}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection
         title={t('section.filters')}
         isExpanded={sidebarExpanded.filters}
         onToggle={() => toggle('filters')}
@@ -127,31 +94,6 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           onMinScoreChange={onMinScoreChange}
           maxScore={maxScore}
           onMaxScoreChange={onMaxScoreChange}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        title={t('section.sortOrder')}
-        isExpanded={sidebarExpanded.sort}
-        onToggle={() => toggle('sort')}
-      >
-        <SortOrderSection
-          sortBy={sortBy}
-          sortDir={sortDir}
-          onSortByChange={onSortByChange}
-          onSortDirChange={onSortDirChange}
-        />
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        title={t('section.stats')}
-        isExpanded={sidebarExpanded.stats}
-        onToggle={() => toggle('stats')}
-      >
-        <StatsSection
-          animeCount={animeCount}
-          visibleColumns={visibleColumns}
-          onVisibleColumnsChange={onVisibleColumnsChange}
         />
       </CollapsibleSection>
     </div>

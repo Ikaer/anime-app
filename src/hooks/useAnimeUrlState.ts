@@ -153,7 +153,6 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
   // Memoize display to prevent unnecessary re-renders
   const display: AnimeDisplayState = useMemo(() => ({
     imageSize: currentState.imageSize,
-    visibleColumns: currentState.visibleColumns,
     sidebarExpanded: currentState.sidebarExpanded,
     cardsPerRow: currentState.cardsPerRow,
   }), [currentState]);

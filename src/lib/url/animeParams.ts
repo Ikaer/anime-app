@@ -10,7 +10,6 @@ import {
   SortColumn,
   SortDirection,
   ImageSize,
-  VisibleColumns,
   SeasonName,
   SeasonInfo
 } from '@/models/anime';
@@ -36,7 +35,6 @@ export interface AnimeFiltersState {
 
 export interface AnimeDisplayState {
   imageSize: ImageSize;
-  visibleColumns: VisibleColumns;
   sidebarExpanded: Record<string, boolean>;
   /** Forced cards per row; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
@@ -99,18 +97,6 @@ const CODE_TO_SORT: Record<string, SortColumn> = Object.fromEntries(
 const DIR_TO_CODE: Record<SortDirection, string> = { asc: 'a', desc: 'd' };
 const CODE_TO_DIR: Record<string, SortDirection> = { a: 'asc', d: 'desc' };
 
-// Visible columns codes
-const COLUMN_TO_CODE: Record<keyof VisibleColumns, string> = {
-  score: 'sc',
-  rank: 'r',
-  popularity: 'p',
-  users: 'u',
-  scorers: 'sr',
-};
-const CODE_TO_COLUMN: Record<string, keyof VisibleColumns> = Object.fromEntries(
-  Object.entries(COLUMN_TO_CODE).map(([k, v]) => [v, k as keyof VisibleColumns])
-);
-
 // Sidebar section codes
 const SIDEBAR_TO_CODE: Record<string, string> = {
   account: 'a',
@@ -133,14 +119,6 @@ const CODE_TO_SIDEBAR: Record<string, string> = Object.fromEntries(
 const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
   'watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch', 'not_defined'
 ];
-
-const DEFAULT_VISIBLE_COLUMNS: VisibleColumns = {
-  score: true,
-  rank: false,
-  popularity: false,
-  users: false,
-  scorers: false,
-};
 
 const DEFAULT_SIDEBAR_EXPANDED: Record<string, boolean> = {
   account: true,
@@ -169,7 +147,6 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
 
 export const DEFAULT_DISPLAY: AnimeDisplayState = {
   imageSize: 3,
-  visibleColumns: DEFAULT_VISIBLE_COLUMNS,
   sidebarExpanded: DEFAULT_SIDEBAR_EXPANDED,
   cardsPerRow: null,
 };
@@ -203,7 +180,6 @@ const PARAM_KEYS = {
   direction: 'd',
   // Display
   imageSize: 'img',
-  columns: 'cols',
   sidebar: 'sb',
   cardsPerRow: 'cpr',
 } as const;
@@ -230,18 +206,6 @@ function encodeSeasons(seasons: SeasonInfo[]): string | null {
 function encodeMediaTypes(types: string[]): string | null {
   if (types.length === 0) return null;
   return types.join(',');
-}
-
-function encodeVisibleColumns(cols: VisibleColumns): string | null {
-  // Encode only visible columns; if all visible, omit
-  const visibleCodes = Object.entries(cols)
-    .filter(([, v]) => v)
-    .map(([k]) => COLUMN_TO_CODE[k as keyof VisibleColumns]);
-
-  if (visibleCodes.length === Object.keys(DEFAULT_VISIBLE_COLUMNS).length) {
-    return null; // All visible = default
-  }
-  return visibleCodes.join(',');
 }
 
 function encodeSidebarExpanded(expanded: Record<string, boolean>): string | null {
@@ -316,11 +280,6 @@ function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLSearchPa
     params.set(PARAM_KEYS.imageSize, display.imageSize.toString());
   }
 
-  if (display.visibleColumns !== undefined) {
-    const encoded = encodeVisibleColumns(display.visibleColumns);
-    if (encoded !== null) params.set(PARAM_KEYS.columns, encoded);
-  }
-
   if (display.sidebarExpanded !== undefined) {
     const encoded = encodeSidebarExpanded(display.sidebarExpanded);
     if (encoded !== null) params.set(PARAM_KEYS.sidebar, encoded);
@@ -385,28 +344,6 @@ function decodeMediaTypes(value: string | null): string[] {
   return value.split(',').filter(Boolean);
 }
 
-function decodeVisibleColumns(value: string | null): VisibleColumns {
-  if (!value) return { ...DEFAULT_VISIBLE_COLUMNS };
-
-  // Start with all false, then enable specified columns
-  const result: VisibleColumns = {
-    score: false,
-    rank: false,
-    popularity: false,
-    users: false,
-    scorers: false,
-  };
-
-  for (const code of value.split(',')) {
-    const column = CODE_TO_COLUMN[code];
-    if (column) {
-      result[column] = true;
-    }
-  }
-
-  return result;
-}
-
 function decodeSidebarExpanded(value: string | null): Record<string, boolean> {
   if (!value) return { ...DEFAULT_SIDEBAR_EXPANDED };
 
@@ -455,9 +392,6 @@ function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
 
   return {
     imageSize: imgSize ? (parseInt(imgSize, 10) as ImageSize) : DEFAULT_DISPLAY.imageSize,
-    visibleColumns: params.has(PARAM_KEYS.columns)
-      ? decodeVisibleColumns(params.get(PARAM_KEYS.columns))
-      : { ...DEFAULT_VISIBLE_COLUMNS },
     sidebarExpanded: params.has(PARAM_KEYS.sidebar)
       ? decodeSidebarExpanded(params.get(PARAM_KEYS.sidebar))
       : { ...DEFAULT_SIDEBAR_EXPANDED },
@@ -500,7 +434,6 @@ export const PERSISTENT_UI_KEYS: (keyof AnimeUrlState)[] = [
   'imageSize',
   'minScore',
   'maxScore',
-  'visibleColumns',
   'sidebarExpanded',
   'cardsPerRow'
 ];

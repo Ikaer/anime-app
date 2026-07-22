@@ -9,6 +9,12 @@ interface DisplaySectionProps {
   onImageSizeChange: (size: ImageSize) => void;
   cardsPerRow: number | null;
   onCardsPerRowChange: (value: number | null) => void;
+  /**
+   * `stack` (default) is the sidebar's vertical group — still how
+   * `/recommendations` and `/tier` render it. `inline` is the same markup laid
+   * out as one row for `AnimeListHeader`, a CSS switch only.
+   */
+  variant?: 'stack' | 'inline';
 }
 
 const DisplaySection: React.FC<DisplaySectionProps> = ({
@@ -16,6 +22,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
   onImageSizeChange,
   cardsPerRow,
   onCardsPerRowChange,
+  variant = 'stack',
 }) => {
   const t = useT();
   const handleCardsPerRowInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,7 +36,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
   };
 
   return (
-    <div className={styles.displaySection}>
+    <div className={`${styles.displaySection} ${variant === 'inline' ? styles.inline : ''}`}>
       <label className={styles.label}>{t('display.imageSize')}</label>
       <div className={styles.sizeButtons}>
         <Button
