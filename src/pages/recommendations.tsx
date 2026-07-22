@@ -216,17 +216,6 @@ export default function RecommendationsPage() {
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title={t('section.display')} isExpanded={expanded.display} onToggle={() => toggle('display')}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <DisplaySection
-            cardsPerRow={state.cardsPerRow}
-            onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
-          />
-          <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
-            {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}
-          </Button>
-        </div>
-      </CollapsibleSection>
     </div>
   );
 
@@ -257,6 +246,19 @@ export default function RecommendationsPage() {
             ) : (
               <span className="reco-count">{t('reco.countTitles', { count: animes.length })}</span>
             )}
+            {/* Same split as `/`: the sidebar narrows the feed, the header
+                carries the controls that shape how it is laid out. No sort
+                here — the feed's order IS the affinity ranking. */}
+            <div className="reco-header-controls">
+              <DisplaySection
+                variant="inline"
+                cardsPerRow={state.cardsPerRow}
+                onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
+              />
+              <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
+                {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}
+              </Button>
+            </div>
           </div>
 
           <div className="table-container">
@@ -278,9 +280,11 @@ export default function RecommendationsPage() {
       <style jsx>{`
         .reco-main-content { display: flex; flex-direction: column; gap: 1rem; }
         .error-banner { background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; }
-        .reco-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .reco-header { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem 1rem; }
         .reco-title { font-size: 1.5rem; margin: 0; color: var(--text-primary); }
         .reco-count { color: var(--text-secondary); }
+        /* Pushed to the right edge on one row; wraps as a unit when narrow. */
+        .reco-header-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-left: auto; font-size: 0.9rem; }
         .table-container { background: var(--bg-primary); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
         .loading-state { text-align: center; padding: 3rem; color: var(--text-secondary); }
       `}</style>
