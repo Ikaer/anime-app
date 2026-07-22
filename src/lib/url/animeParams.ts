@@ -9,7 +9,6 @@ import {
   UserAnimeStatus,
   SortColumn,
   SortDirection,
-  ImageSize,
   SeasonName,
   SeasonInfo
 } from '@/models/anime';
@@ -34,7 +33,6 @@ export interface AnimeFiltersState {
 }
 
 export interface AnimeDisplayState {
-  imageSize: ImageSize;
   sidebarExpanded: Record<string, boolean>;
   /** Forced cards per row; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
@@ -146,7 +144,6 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
 };
 
 export const DEFAULT_DISPLAY: AnimeDisplayState = {
-  imageSize: 3,
   sidebarExpanded: DEFAULT_SIDEBAR_EXPANDED,
   cardsPerRow: null,
 };
@@ -179,7 +176,6 @@ const PARAM_KEYS = {
   sort: 'so',
   direction: 'd',
   // Display
-  imageSize: 'img',
   sidebar: 'sb',
   cardsPerRow: 'cpr',
 } as const;
@@ -275,10 +271,6 @@ function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchPa
 
 function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLSearchParams {
   const params = new URLSearchParams();
-
-  if (display.imageSize !== undefined && display.imageSize !== DEFAULT_DISPLAY.imageSize) {
-    params.set(PARAM_KEYS.imageSize, display.imageSize.toString());
-  }
 
   if (display.sidebarExpanded !== undefined) {
     const encoded = encodeSidebarExpanded(display.sidebarExpanded);
@@ -386,12 +378,10 @@ function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
 }
 
 function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
-  const imgSize = params.get(PARAM_KEYS.imageSize);
   const cpr = params.get(PARAM_KEYS.cardsPerRow);
   const cprNum = cpr !== null ? parseInt(cpr, 10) : NaN;
 
   return {
-    imageSize: imgSize ? (parseInt(imgSize, 10) as ImageSize) : DEFAULT_DISPLAY.imageSize,
     sidebarExpanded: params.has(PARAM_KEYS.sidebar)
       ? decodeSidebarExpanded(params.get(PARAM_KEYS.sidebar))
       : { ...DEFAULT_SIDEBAR_EXPANDED },
@@ -431,7 +421,6 @@ export interface PresetConfig {
 }
 
 export const PERSISTENT_UI_KEYS: (keyof AnimeUrlState)[] = [
-  'imageSize',
   'minScore',
   'maxScore',
   'sidebarExpanded',

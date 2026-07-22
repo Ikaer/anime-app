@@ -650,6 +650,12 @@ export interface RecoMeta {
 }
 
 // Display options
+/**
+ * Thumbnail scale, S→XL. Used by `/tier`'s `thumbSize` and nothing else — the
+ * main list's "image size" buttons drove the deleted table's thumbnails; the
+ * card grid sizes itself from `cardsPerRow` (or `minmax(280px, 1fr)`), so the
+ * control was a no-op there and was removed rather than given a new meaning.
+ */
 export type ImageSize = 0 | 1 | 2 | 3;
 
 // API response model for anime list endpoint

@@ -9,7 +9,7 @@ import {
   DisplaySection,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
-import { AnimeRecord, ImageSize } from '@/models/anime';
+import { AnimeRecord } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
 import { encodeSourceWeights } from '@/lib/reco/weights';
@@ -219,8 +219,6 @@ export default function RecommendationsPage() {
       <CollapsibleSection title={t('section.display')} isExpanded={expanded.display} onToggle={() => toggle('display')}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <DisplaySection
-            imageSize={state.imageSize}
-            onImageSizeChange={(size: ImageSize) => update({ imageSize: size })}
             cardsPerRow={state.cardsPerRow}
             onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
           />
@@ -267,7 +265,6 @@ export default function RecommendationsPage() {
             ) : (
               <AnimeCardView
                 animes={animes}
-                imageSize={state.imageSize}
                 cardsPerRow={state.cardsPerRow}
                 onFeedback={handleFeedback}
                 onRemoveFeedback={handleRemoveFeedback}

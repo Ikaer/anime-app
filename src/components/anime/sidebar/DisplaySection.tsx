@@ -1,12 +1,19 @@
 import React from 'react';
 import styles from './DisplaySection.module.css';
-import { ImageSize } from '@/models/anime';
 import { Button } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 
+/**
+ * Card-grid display controls — cards per row, and nothing else.
+ *
+ * It used to carry an "image size" button row too. That only ever sized the
+ * table's thumbnails: `AnimeCardView` accepted the prop and never read it, its
+ * grid being `minmax(280px, 1fr)` or an explicit `cardsPerRow`. So the buttons
+ * went dead the moment the table was removed, and cards-per-row already answers
+ * "how big are the cards". `/tier`'s thumbnail-size buttons are a separate,
+ * genuinely wired control — they are not this.
+ */
 interface DisplaySectionProps {
-  imageSize: ImageSize;
-  onImageSizeChange: (size: ImageSize) => void;
   cardsPerRow: number | null;
   onCardsPerRowChange: (value: number | null) => void;
   /**
@@ -18,8 +25,6 @@ interface DisplaySectionProps {
 }
 
 const DisplaySection: React.FC<DisplaySectionProps> = ({
-  imageSize,
-  onImageSizeChange,
   cardsPerRow,
   onCardsPerRowChange,
   variant = 'stack',
@@ -37,42 +42,6 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
 
   return (
     <div className={`${styles.displaySection} ${variant === 'inline' ? styles.inline : ''}`}>
-      <label className={styles.label}>{t('display.imageSize')}</label>
-      <div className={styles.sizeButtons}>
-        <Button
-          variant="secondary"
-          size="xs"
-          className={`${styles.sizeButton} ${imageSize === 0 ? styles.activeSizeButton : ''}`}
-          onClick={() => onImageSizeChange(0)}
-        >
-          {t('display.original')}
-        </Button>
-        <Button
-          variant="secondary"
-          size="xs"
-          className={`${styles.sizeButton} ${imageSize === 1 ? styles.activeSizeButton : ''}`}
-          onClick={() => onImageSizeChange(1)}
-        >
-          x1
-        </Button>
-        <Button
-          variant="secondary"
-          size="xs"
-          className={`${styles.sizeButton} ${imageSize === 2 ? styles.activeSizeButton : ''}`}
-          onClick={() => onImageSizeChange(2)}
-        >
-          x2
-        </Button>
-        <Button
-          variant="secondary"
-          size="xs"
-          className={`${styles.sizeButton} ${imageSize === 3 ? styles.activeSizeButton : ''}`}
-          onClick={() => onImageSizeChange(3)}
-        >
-          x3
-        </Button>
-      </div>
-
       <label className={styles.label}>{t('display.cardsPerRow')}</label>
       <div className={styles.cardsPerRow}>
         <input

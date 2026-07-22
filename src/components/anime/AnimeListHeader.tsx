@@ -1,5 +1,5 @@
 import React from 'react';
-import { ImageSize, SortColumn, SortDirection } from '@/models/anime';
+import { SortColumn, SortDirection } from '@/models/anime';
 import { useT } from '@/lib/i18n';
 import { SortOrderSection, DisplaySection } from './sidebar';
 import styles from './AnimeListHeader.module.css';
@@ -10,8 +10,6 @@ interface AnimeListHeaderProps {
   sortDir: SortDirection;
   onSortByChange: (c: SortColumn) => void;
   onSortDirChange: (d: SortDirection) => void;
-  imageSize: ImageSize;
-  onImageSizeChange: (size: ImageSize) => void;
   cardsPerRow: number | null;
   onCardsPerRowChange: (value: number | null) => void;
 }
@@ -32,7 +30,6 @@ interface AnimeListHeaderProps {
 const AnimeListHeader: React.FC<AnimeListHeaderProps> = ({
   animeCount,
   sortBy, sortDir, onSortByChange, onSortDirChange,
-  imageSize, onImageSizeChange,
   cardsPerRow, onCardsPerRowChange,
 }) => {
   const t = useT();
@@ -51,8 +48,6 @@ const AnimeListHeader: React.FC<AnimeListHeaderProps> = ({
       <span className={styles.divider} aria-hidden="true" />
       <DisplaySection
         variant="inline"
-        imageSize={imageSize}
-        onImageSizeChange={onImageSizeChange}
         cardsPerRow={cardsPerRow}
         onCardsPerRowChange={onCardsPerRowChange}
       />

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeRecord, ImageSize, RecoMeta, RecoVerdict } from '@/models/anime';
+import { AnimeRecord, RecoMeta, RecoVerdict } from '@/models/anime';
 import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
@@ -12,7 +12,6 @@ type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
 
 interface AnimeCardViewProps {
     animes: RecoCard[];
-    imageSize: ImageSize;
     /** Forced number of cards per row; null/undefined = adaptive (auto-fill). */
     cardsPerRow?: number | null;
     onHideToggle?: (animeId: string, hide: boolean) => void;
@@ -37,7 +36,6 @@ function formatRecoHint(meta: RecoMeta, t: TFunction): string {
 
 export default function AnimeCardView({
     animes,
-    imageSize,
     cardsPerRow,
     onHideToggle,
     onFeedback,

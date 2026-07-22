@@ -10,25 +10,6 @@
   font-size: 0.9rem;
 }
 
-.sizeButtons {
-  display: flex;
-  gap: 8px;
-}
-
-.sizeButton {
-  flex: 1;
-}
-
-.sizeButton:hover {
-  border-color: var(--accent-primary);
-}
-
-.activeSizeButton {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
-}
-
 .cardsPerRow {
   display: flex;
   gap: 8px;
@@ -55,9 +36,9 @@
   flex-shrink: 0;
 }
 
-/* Inline variant — same markup on one row, for AnimeListHeader. The buttons
-   and input stop stretching (no `flex: 1` to fill a sidebar's width) and the
-   cards-per-row input takes a fixed, content-sized width. */
+/* Inline variant — same markup on one row, for AnimeListHeader. The input
+   stops stretching (no `flex: 1` to fill a sidebar's width) and takes a
+   fixed, content-sized width instead. */
 .inline {
   flex-direction: row;
   align-items: center;
@@ -66,10 +47,6 @@
 
 .inline .label {
   white-space: nowrap;
-}
-
-.inline .sizeButton {
-  flex: 0 0 auto;
 }
 
 .inline .cardsPerRowInput {

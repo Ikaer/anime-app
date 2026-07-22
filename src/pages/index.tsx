@@ -134,10 +134,6 @@ export default function AnimePage() {
   };
 
   // Display handlers - update URL
-  const handleImageSizeChange = (imageSize: typeof display.imageSize) => {
-    updateDisplay({ imageSize });
-  };
-
   const handleCardsPerRowChange = (cardsPerRow: number | null) => {
     updateDisplay({ cardsPerRow });
   };
@@ -226,8 +222,6 @@ export default function AnimePage() {
             sortDir={filters.sortDir}
             onSortByChange={handleSortByChange}
             onSortDirChange={handleSortDirChange}
-            imageSize={display.imageSize}
-            onImageSizeChange={handleImageSizeChange}
             cardsPerRow={display.cardsPerRow}
             onCardsPerRowChange={handleCardsPerRowChange}
           />
@@ -237,7 +231,6 @@ export default function AnimePage() {
             ) : (
               <AnimeCardView
                 animes={animes}
-                imageSize={display.imageSize}
                 cardsPerRow={display.cardsPerRow}
                 onHideToggle={handleHideToggle}
               />
