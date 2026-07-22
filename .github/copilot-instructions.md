@@ -22,14 +22,13 @@ src/
 │   ├── api/anime/        # Anime API endpoints
 │   └── index.tsx         # Main anime page
 ├── hooks/                # Custom hooks (useAnimeUrlState)
-├── lib/                  # Server-side data operations & utilities
-│   ├── jsonStore.ts      # DATA_PATH + JSON read/write primitives
-│   ├── store.ts          # The local record (server-side)
-│   ├── mal.ts            # MAL auth + API reads
-│   ├── malSync.ts        # MAL big-sync / historical crawl
-│   ├── animeUtils.ts     # Anime filtering & sorting logic
-│   ├── animeUrlParams.ts # URL state parsing
-│   └── searchLinks.ts    # Google/JustWatch search-link generators
+├── lib/                  # Data operations & utilities, split by owner
+│   ├── store/            # jsonStore (DATA_PATH primitives) + the local record
+│   ├── providers/        # capabilities/registry/status/writers + mal|simkl|anilist pipes
+│   ├── reco/             # recommendation engine, weights, credit similarity
+│   ├── domain/           # pure & client-safe: animeUtils, stats, ratingGrids, searchLinks
+│   ├── url/              # URL state encoding (animeParams.ts)
+│   └── config/           # settings.ts, connectionLog.ts
 └── styles/
     └── globals.css       # Global theme (CSS custom properties)
 ```
@@ -64,7 +63,7 @@ import { Button, CollapsibleSection } from '@/components/shared';
 
 ### Data Storage
 - JSON file-based storage in `/app/data/`
-- `lib/jsonStore.ts` owns `dataFile`/`readJsonFile`/`writeJsonFile`
+- `lib/store/jsonStore.ts` owns `dataFile`/`readJsonFile`/`writeJsonFile`; above it `store/` is `registry.ts` (canonical ids) → `slices.ts` (one block per JSON file) → `record.ts` (the join), behind an `index.ts` barrel
 - Automatic directory creation via `ensureDataDirectory()`
 
 ### API Routes
@@ -90,7 +89,7 @@ All under `/api/anime/`:
 
 ### Environment Variables
 - `DATA_PATH` — data directory root
-- `LOGS_PATH` — logs directory
+- `LOGS_PATH` — diagnostics directory (no writer today; the connection log lives in the store at `DATA_PATH/logs/`)
 - `MAL_CLIENT_ID` — MyAnimeList API client ID
 - `MAL_REDIRECT_URI` — OAuth redirect URI
 - `CRON_SECRET` — cron job auth token

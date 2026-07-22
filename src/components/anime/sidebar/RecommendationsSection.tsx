@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import styles from './RecommendationsSection.module.css';
-import { MALAuthState } from '@/models/anime';
 import { Button } from '@/components/shared';
-import { DIVERSITY_MAX, DIVERSITY_STEP } from '@/lib/recoWeights';
+import { DIVERSITY_MAX, DIVERSITY_STEP } from '@/lib/reco/weights';
 import { useT } from '@/lib/i18n';
 
 interface RecommendationsSectionProps {
-  authState: MALAuthState;
   isRefreshingRecos: boolean;
   recoProgress: string;
   recoLastRefresh: string | null;
@@ -25,7 +23,6 @@ interface RecommendationsSectionProps {
 const DEFAULT_THRESHOLD = 8;
 
 const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
-  authState,
   isRefreshingRecos,
   recoProgress,
   recoLastRefresh,
@@ -52,7 +49,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
     <div className={styles.recommendationsSection}>
       <Button
         onClick={onRefreshRecos}
-        disabled={!authState.isAuthenticated || isRefreshingRecos}
+        disabled={isRefreshingRecos}
         variant="primary"
       >
         {isRefreshingRecos ? t('reco.refreshing') : t('reco.refresh')}

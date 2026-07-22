@@ -41,7 +41,7 @@ All configuration is env-var only; there is **no settings store**. The 7 consume
 | Env var | Consumed in |
 |---|---|
 | `DATA_PATH` | [jsonStore.ts:12](../src/lib/jsonStore.ts), [connectionLog.ts:4](../src/lib/connectionLog.ts) |
-| `LOGS_PATH` | [connectionLog.ts:5](../src/lib/connectionLog.ts) |
+| `LOGS_PATH` | [settings/index.ts](../src/pages/api/anime/settings/index.ts) — display only. Its one real consumer, the connection log, moved into the store (`DATA_PATH/logs/`, docs/DATA-LAYOUT.md §3.2), so nothing writes there today. |
 | `MAL_CLIENT_ID`, `MAL_REDIRECT_URI` | [auth.ts:16](../src/pages/api/anime/auth.ts) |
 | `CRON_SECRET` | [cron-sync.ts:89](../src/pages/api/anime/cron-sync.ts) |
 | `SIMKL_CLIENT_ID`, `SIMKL_CLIENT_SECRET`, `SIMKL_APP_NAME`, `SIMKL_REDIRECT_URI` | [simkl/auth.ts:15](../src/pages/api/anime/simkl/auth.ts), [simkl.ts:65](../src/lib/simkl.ts) |

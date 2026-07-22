@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './ViewsSection.module.css';
-import { VIEW_PRESETS } from '@/lib/animeUrlParams';
+import { VIEW_PRESETS } from '@/lib/url/animeParams';
 import { useAnimeUrlState } from '@/hooks';
 import { Button } from '@/components/shared';
 import { useT, type TranslationKey } from '@/lib/i18n';

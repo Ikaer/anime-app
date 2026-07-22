@@ -3,6 +3,7 @@ declare const styles: {
   readonly "connected": string;
   readonly "dot": string;
   readonly "icon": string;
+  readonly "stale": string;
   readonly "textIcon": string;
 };
 export = styles;

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { MalConnectionBadge, SimklConnectionBadge, AnilistConnectionBadge } from '@/components/anime';
+import { ConnectionBadges } from '@/components/anime';
 import GlobalSearch from '@/components/GlobalSearch';
 import { useI18n, LANG_LABELS, type Lang } from '@/lib/i18n';
 
@@ -147,9 +147,7 @@ export default function Layout({ children }: LayoutProps) {
               </nav>
               <div className="connection-badges">
                 <LanguageToggle />
-                <MalConnectionBadge />
-                <SimklConnectionBadge />
-                <AnilistConnectionBadge />
+                <ConnectionBadges />
               </div>
             </div>
           </div>

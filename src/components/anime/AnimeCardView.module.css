@@ -432,8 +432,8 @@
     color: var(--text-secondary);
 }
 
-/* User MAL Status Labels */
-.malStatusLabel {
+/* Effective personal status labels (hydrated across providers, not MAL-only) */
+.personalStatusLabel {
     padding: 0.2rem 0.45rem;
     border-radius: 6px;
     font-size: 0.62rem;
@@ -447,12 +447,12 @@
     min-width: 0;
 }
 
-.malStatusIcon {
+.personalStatusIcon {
     font-size: 0.8rem;
     flex-shrink: 0;
 }
 
-.malStatusText {
+.personalStatusText {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

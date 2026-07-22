@@ -7,6 +7,7 @@ declare const styles: {
   readonly "epInput": string;
   readonly "error": string;
   readonly "label": string;
+  readonly "note": string;
   readonly "num": string;
   readonly "row": string;
   readonly "total": string;

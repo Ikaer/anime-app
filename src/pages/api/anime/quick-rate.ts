@@ -16,8 +16,8 @@ import {
   getEffectiveScore,
   getEffectiveStatus,
   getPrimaryTitle,
-} from '@/lib/animeUtils';
-import { groupIntoFranchises } from '@/lib/franchise';
+} from '@/lib/domain/animeUtils';
+import { groupIntoFranchises } from '@/lib/domain/franchise';
 import type { AnimeRecord } from '@/models/anime';
 
 // Grouping is O(catalog) and the catalog is ~25k rows, so cache the component

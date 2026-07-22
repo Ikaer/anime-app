@@ -5,7 +5,7 @@
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import crypto from 'crypto';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import {
   getAnilistAuthData,
   saveAnilistAuthData,
@@ -17,8 +17,8 @@ import {
   ANILIST_AUTHORIZE_URL,
   ANILIST_TOKEN_URL,
   AniListAuthData,
-} from '@/lib/anilistAuth';
-import { getAnilistClientId, getAnilistClientSecret } from '@/lib/settings';
+} from '@/lib/providers/anilist/auth';
+import { getAnilistClientId, getAnilistClientSecret } from '@/lib/config/settings';
 import { getAnilistRedirectUri } from '@/lib/redirectUri';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

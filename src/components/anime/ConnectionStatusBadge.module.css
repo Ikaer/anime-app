@@ -67,3 +67,9 @@
 .dot.connected {
   background-color: var(--score-9);
 }
+
+/* Linked but the token no longer works — a third state, because rendering it as
+   "not connected" is how an expired token gets mistaken for a missing one. */
+.dot.stale {
+  background-color: var(--score-5);
+}

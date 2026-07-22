@@ -34,13 +34,13 @@ declare const styles: {
   readonly "imageActions": string;
   readonly "imageContainer": string;
   readonly "infoRow": string;
-  readonly "malStatusIcon": string;
-  readonly "malStatusLabel": string;
-  readonly "malStatusText": string;
   readonly "noImage": string;
   readonly "notYetAired": string;
   readonly "onHold": string;
   readonly "overlay": string;
+  readonly "personalStatusIcon": string;
+  readonly "personalStatusLabel": string;
+  readonly "personalStatusText": string;
   readonly "planToWatch": string;
   readonly "pulse": string;
   readonly "pulsingDot": string;

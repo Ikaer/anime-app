@@ -3,7 +3,15 @@
 > A **gap inventory + ranked fixes** document.
 > Status vocabulary: `Todo` · `WIP` · `Done` · `Dropped` · `Blocked`
 >
-> **Status: `WIP`** — A1 and G1 `Done` (2026-07-20). Rest `Todo`.
+> **Status: `Done`** — A1, G1, C1 `Done` (2026-07-20); H1, B1, B2, B4, D2, A2, D1,
+> E1–E4, F1 `Done` (2026-07-21); B3 `Dropped` (assessed, deliberately deferred).
+> **Every item is now closed.** D2 landed the capability descriptor; A2 and D1 then
+> consumed it — neither as the one-line swap D2 had left ready (see both) — and
+> E1–E4 needed a runtime peer to it that the inventory never named (see
+> [E1–E4](#e1e4--what-shipped)). F1 closed it, and was the third item whose
+> *stated* gap ("three explicit calls") sat behind an unstated auth gate.
+> B4 was **not in the original inventory** — it came from asking whether the
+> keyless promise actually holds for the reco feed. It did not. See [B4](#b4--the-recommendation-feed-was-unreachable-without-a-mal-account--done-2026-07-21).
 > Companion to [PROVIDER-FREE.md](PROVIDER-FREE.md) (which delivered the shift
 > this document measures against) and [PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md)
 > (whose dropped registry is **not** what this proposes — see [§3](#3-the-unifying-fix)).
@@ -144,7 +152,7 @@ data grows past one account's list.
 **Size:** was "small, one function, no consumer changes" — actually a shared
 extractor module, a feature removal, and its UI/locale/API surface.
 
-#### A2 — `PRESENCE_ANCHORS = ['mal']`
+#### A2 — `PRESENCE_ANCHORS = ['mal']` — **`Done` 2026-07-21**
 
 **Evidence:** [discrepancy.ts:36](../src/lib/discrepancy.ts).
 
@@ -161,12 +169,72 @@ gap is the clearest argument for [§3](#3-the-unifying-fix).
 
 **Size:** small as a constant edit; correct as a capability read.
 
+**What shipped — and the one-line swap D2 left ready is NOT what shipped:**
+
+1. **`PRESENCE_ANCHORS = fullListProviders()` is wrong, measurably.** D2 declared
+   `listCoverage` (MAL and AniList `full`) and left the swap as a line. Measured
+   against the real store first, that line reports **430 of 671** tracked titles
+   as a presence split — every MAL entry the smaller, later-connected AniList
+   account (241 entries) happens not to hold. That is precisely the failure the
+   original asymmetry existed to prevent, re-created one level up: with two
+   mutual anchors, "absent from a reference list" degenerates into "the two lists
+   differ", which is most of the list.
+2. **The descriptor field was right; what it means was conflated.**
+   `listCoverage: 'full'` is an **API** claim — this provider's read returns the
+   account's entire list rather than a subset feed (AniList's
+   `MediaListCollection` genuinely does). It is *not* a claim that this account
+   IS the user's comprehensive record, which is what presence detection needs.
+   So the anchor is now **one** provider, not the set: `presenceAnchors()` takes
+   the first full-list provider **in the resolved personal precedence** — the
+   list where the app already states which provider it believes when they
+   conflict. MAL + anything → `['mal']` (today's behaviour, preserved); no MAL →
+   `['anilist']`, which is A2's stated symptom fixed; SIMKL-/local-only → `[]`,
+   nothing claims completeness so an absence is not news (previously a dangling
+   `['mal']`).
+3. **Presence detection had silently stopped firing altogether** — found while
+   wiring this, not from the inventory, and it is the larger half of what A2
+   actually fixed. The check reads `states[p] && !states[p].present`, so an anchor
+   can only be reported absent if it has a *state*. Pre-H1 MAL always had one: its
+   personal state rode on the catalog slice, which exists for every catalogued
+   title. **H1 split it out**, and `personal/mal.json` holds only *statused*
+   titles — so a title absent from the MAL list now produces no `mal` state and
+   there is nothing to test. Zero presence splits were reportable on any install.
+   Measured at HEAD on the real store: **0**, where the two titles below should
+   have flagged. (H1's writeup reports a 0-change before/after diff of every row's
+   `discrepancy` block, so this slipped through it; a diff cannot see a feature
+   that goes quiet, only one that changes its answer.) The anchor now always gets
+   a state — `present: false` when it holds nothing — which is the other reason
+   this could not be the constant edit D2 left ready.
+4. **The anchor rides on the state (`ProviderPersonalState.anchor`)** rather than
+   becoming a second argument to `computeDiscrepancy`. The comparison stays a
+   pure function of what it is handed, which the discrepancies page depends on:
+   it re-runs the same function client-side over a *filtered* subset of these
+   states, and unchecking the anchor provider there correctly removes the
+   anchoring with it.
+
+**Verified on the real store** — two production builds of the same tree, HEAD and
+this change, run against the same store on the same endpoint
+(`/api/anime/animes?discrepancies=true&limit=all`), 2026-07-21:
+
+| | rows | presence splits | status / score / progress disagreements |
+|---|---|---|---|
+| HEAD | 2 | **0** | 0 / 0 / 2 |
+| this | 4 | **2** | 0 / 0 / 2 |
+
+The 2 recovered rows are `a_22208` "Sayonara Lara" and `a_23793` "Star Wars:
+Visions Presents - The Ninth Jedi", both `present: [simkl, anilist], absent:
+[mal]` — and both exactly what a raw scan of the four personal slices reports as
+tracked-somewhere-but-absent-from-the-MAL-list (2, independently). Every row
+carries `anchor: true` on `mal` and on nothing else. The pre-existing progress
+disagreements are byte-identical, and the hydrated `personal` block is untouched
+(the anchor placeholder narrows to `{}` and cannot win a precedence merge).
+
 ### B. MAL as a mandatory join key
 
 These block the provider-free promise directly: the no-account path creates
 records that the rest of the system cannot process.
 
-#### B1 — AniList enrichment is queryable only by MAL id
+#### B1 — AniList enrichment is queryable only by MAL id — **`Done` 2026-07-21**
 
 **Evidence:** [anilistSync.ts:32](../src/lib/anilistSync.ts) — `media(idMal_in:
 $ids, type: ANIME)` in `TAGS_QUERY`; same at
@@ -192,7 +260,50 @@ explicit `null`, which AniList applies as a real filter.
 **Size:** medium. Touches the batch query shape and the id-selection logic, not
 the storage or hydration.
 
-#### B2 — Single-title refresh derives every source from the MAL id
+**What shipped:**
+
+1. **The query body is now built twice from one template**, `idMal_in` and
+   `id_in`. A batch is homogeneous by construction — the caveat this document
+   already cites (AniList applies a supplied-but-null argument as a real filter)
+   means a query carries exactly one id filter, so the id space is a parameter of
+   the *batch*, not of a title.
+2. **The bigger half was the feeder, not the query** — the same shape §1 warns
+   about. `performAnilistMetaSync` scanned `getAllAnime()`, the MAL catalog
+   slice, so it was structurally incapable of *naming* a title MAL doesn't know,
+   no matter which filter the query offered. It now scans the **registry** — the
+   identity spine every slice hangs off — and looks coverage up by canonical id
+   directly, which is what makes "every title we know of" mean every title.
+   MAL id wins when a title has both: it is the key the catalog is anchored on,
+   and a crosswalk's `anilist` can be a mirrored SIMKL value while `mal` is the
+   id the record was built from.
+3. **Relation edges stored both ids.** `AniListRelationEntry.idMal` was
+   required, and `parseRelations` dropped any edge whose target had no MAL id —
+   so the franchise graph would have kept losing exactly the titles this fix
+   reaches, *after* the query was fixed. Both ids are now optional-with-one-
+   present (`id` is always there — the edge came from AniList), and
+   `groupIntoFranchises` carries a second AniList→canonical index, MAL-first.
+4. **`fetchAnilistRecommendations` was deliberately left MAL-keyed.** Its only
+   consumer is the reco engine, which is MAL-keyed end to end (B3). An `id_in`
+   path there would return edges the engine has no key to store or rank; it moves
+   when B3 moves. Noted in the code at `RECS_QUERY`.
+
+**Verified.** *Live against AniList* (2026-07-21): three genuine AniList-only
+titles (`al:203275` Demons' Crest, `al:187990`, `al:213298` — no `idMal`) return
+**0 media** through the old `idMal_in` query and **3** through `id_in`, carrying
+tags, staff, banner and relations; the query stays under the complexity ceiling
+at the unchanged `perPage:50`. A title that *does* have a MAL id round-trips it
+through `id_in` (`al:1` → `idMal:1`), so the two paths agree where they overlap.
+*Against the real store*: it is **inert** — that install is MAL-anchored (0 of
+25,382 registry entries are AniList-only), and the registry scan queues the
+**identical** 6,085 ids as the old catalog scan, set-equal in both directions.
+The new capability activates only where the gap was: a keyless install.
+
+**One claim not reproduced:** the relation-edge widening measured **0 recovered
+edges** in a live 50-title sample (40 anime edges, all targets carrying a MAL
+id). MAL-less relation *targets* are rare in the popularity head. It is kept as
+cheap correctness insurance for the keyless catalog, not as a measured win.
+
+#### B2 — Single-title refresh derives every source from the MAL id — **`Done` 2026-07-21**
 
 **Evidence:** [refresh.ts:55-67](../src/pages/api/anime/animes/[id]/refresh.ts) —
 `getMalIdForCanonical(canonicalId)` gates the MAL refill *and*
@@ -207,7 +318,25 @@ through. Independently correct even before B1's batch path.
 
 **Size:** small, once B1 exists.
 
-#### B3 — The recommendation engine is MAL-keyed
+**What shipped:** exactly that — `refreshAnilistMetaForIds` takes the id space as
+a parameter, and the handler passes the MAL id when it has one, the AniList id
+otherwise. Two details the inventory did not name:
+
+- **The AniList id needed a second source.** `refresh.ts` read it from the meta
+  slice, which is filled *by the very sync this refresh triggers* — so on the
+  case B2 is about (a title enrichment has never reached) it could be absent
+  where the registry crosswalk has it. It now falls back to the registry, the
+  same resolve-order `getMalIdForCanonical` uses for MAL.
+- **`refreshAnilistMetaForIds` filtered its own results on `m.idMal`**, which
+  would have discarded every AniList-only title the new path fetched. Keyed on
+  `m.id` now. A one-word bug that would have made B2 look like it worked while
+  persisting nothing.
+
+Both MAL-less outcomes stay distinguishable in the response: `NO_MAL_ID` for the
+MAL refill, a separate "no MAL or AniList id" outcome for the metadata one — a
+title with neither is a SIMKL-only record AniList has no handle on.
+
+#### B3 — The recommendation engine is MAL-keyed — **`Dropped` 2026-07-21**
 
 **Evidence:** `computeFeed`/`computeSimilarTo` in
 [recommendations.ts](../src/lib/recommendations.ts) build an internal
@@ -227,9 +356,100 @@ resolve without a MAL id at all.
 
 **Size:** large. Recommend deferring.
 
+**Decision (2026-07-21):** deferred as recommended, and marked `Dropped` rather
+than left `Todo` so it stops reading as pending work — this entry is an
+*assessment*, not a fix awaiting a turn. Nothing was rewritten. Two things were
+done instead, both of which make the boundary legible rather than moving it:
+
+- `RECS_QUERY` in `anilistSync.ts` now states in code *why* it stays MAL-keyed
+  while its neighbour `TAGS_QUERY` gained an AniList-id path — the two sit ten
+  lines apart and the asymmetry would otherwise read as an oversight, which is
+  precisely the "silent instead of declared" shape §2.D warns about.
+- The revisit trigger stays as stated: AniList-only titles becoming a large share
+  of the catalog. On the current store that share is **0 of 25,382**, so the
+  benefit is still bounded by roughly nothing.
+
+#### B4 — The recommendation feed was unreachable without a MAL account — **`Done` 2026-07-21**
+
+**Not in the original inventory.** It surfaced from a reader's question that this
+document could not answer — *"does the reco engine work without MAL?"* — and the
+honest answer was no, for a reason B3 does not name. Worth recording as its own
+item because **B3 was the decoy**: the visible MAL-ness of the engine is its id
+keying, and that is the part which does *not* block a keyless install.
+
+**The distinction that matters: MAL *ids* ≠ MAL *auth*.**
+
+- MAL ids come free off AniList's own payload (`idMal`), no account, no key. So
+  the engine being MAL-*id*-keyed costs a keyless install almost nothing — on the
+  real store 0 of 25,382 titles lack a MAL id. That is B3, and it stays deferred.
+- MAL *authentication* was a hard gate on the one route that fills the cache.
+  That is this item, and it made the entire feature unreachable.
+
+**Evidence:** [refresh.ts:24](../src/pages/api/anime/recommendations/refresh.ts) —
+`requireMalAuth(res)`, a 401; `performRecommendationsRefresh(accessToken, …)`
+took the token as a required first argument; and the client gated too
+(`if (!authState.isAuthenticated) return`, plus a `disabled` refresh button).
+
+**Symptom:** on a keyless install the feed could never be populated, so it was
+permanently empty — while `similar/[id]` ("Plus comme ça"), which asks the same
+question about one title, worked fine with no account.
+
+**The precedent was already in the repo.** `similar/[id]` treats the MAL token as
+optional, runs the anonymous AniList crowd source regardless, and returns a
+per-source outcome. The feed refresh is that same shape with the graceful half
+missing — a *silent asymmetry* in the §2.D sense, one file away from its own
+correct precedent, exactly as D1 is.
+
+**What shipped:**
+
+1. **MAL became optional, per source.** `accessToken: string | null`; the two MAL
+   sources (crowd edges, personal suggestions) are skipped with a stated reason,
+   the AniList crowd source always runs, and the niche 2-hop follows the MAL
+   crowd source it rides on. A new `RecoRefreshSources` is returned and put on the
+   terminal SSE event, so a degraded run is *declared* rather than just thinner.
+2. **Hydration had to move too, and this was the load-bearing half.** A candidate
+   with no local record is dropped by `computeFeed` — there is no metadata to rank
+   it on — so hydration decides whether the feed has *content*, and it was
+   `fetchAnimeDetail`, MAL-only. Keyless runs now hydrate via
+   `fetchAnilistCatalogByMalIds`: candidates already carry MAL ids, AniList
+   queries by MAL id happily, and the result lands as a `catalog` block through
+   the same `upsertAnilistCatalogFields` the season crawler uses — 50 titles per
+   request instead of one. Without this the route would have returned 200 and
+   produced an empty feed, which is a worse failure than the 401 it replaced.
+3. **The client gates went with it**, including the now-dead MAL auth probe on
+   `/recommendations` (the page fetched auth status solely to disable a button).
+
+**Verified end-to-end on a synthetic keyless store** (2026-07-21): 10
+AniList-crawled titles, 4 in-app ratings as seeds, **no `auth/mal.json` at all**,
+run against a production build.
+
+- `POST …/refresh` → **200** (was 401).
+- Terminal SSE event: `malCrowd` and `malSuggestions` both
+  `{ok:false, skipped:true, reason:"No MAL account connected"}`, `anilistCrowd`
+  `{ok:true}`, `hydration` `{ok:true, via:"anilist"}`.
+- Feed went 0 → **53 ranked items**, correctly ordered by affinity (Samurai
+  Champloo / Trigun / Space Dandy off the Cowboy Bebop seed; Re:ZERO / ERASED off
+  Steins;Gate), each with a real breakdown (`anilistCrowd` + `popularity` +
+  `genre`).
+- Registry grew 10 → 67, `catalog/anilist.json` to 67 entries, and
+  **`catalog/mal.json` stayed at 0** — no MAL write path was touched. Every
+  hydrated title's catalog provenance reads `anilist` across all 14 fields.
+
+**Not verified:** the MAL-connected path is unchanged *by construction* (the
+original body now sits under `if (accessToken)`) but was not re-run live — that
+needs a real MAL token.
+
+**Known gap left open:** the per-source outcomes are returned and streamed but
+**not rendered**. The complete-event message names the degraded mode, and the
+client clears it on completion. Surfacing "MAL skipped" durably in the sidebar is
+UI work that belongs with E1–E4's uniform provider cards, not bolted on here.
+
+**Size:** medium — small at the gate, medium once hydration had to gain a second
+provider.
+
 ### C. Personal state still displayed MAL-only
 
-#### C1 — List views bypass the effective-value seam
+#### C1 — List views bypass the effective-value seam — **`Done` 2026-07-20**
 
 **Evidence:**
 [AnimeCardView.tsx:102](../src/components/anime/AnimeCardView.tsx) —
@@ -257,14 +477,62 @@ discrepancy badge, which is where it belongs.
 (`updates?.status ?? …`). Reading effective while writing MAL-shaped needs the
 optimistic overlay reconciled, or an edit will appear to revert.
 
-**Size:** small to medium — small for the read, medium with the optimistic path.
+**What shipped:**
+
+1. **Both views route through `getEffective*`.** `AnimeCardView`'s status badge
+   and `AnimeTable`'s three "Moi" reads (status / score / progress). The staged
+   per-row `pendingUpdates` overlay is unchanged and still wins; only its
+   *fallback* moved off `sources.mal`. `getEffectiveScore` maps unrated to
+   `undefined` (via `toAnimePersonal`), so the score select keeps `?? 0` to stay
+   on its "no score" option.
+
+2. **The caveat was real, and worse than stated.** The overlay didn't merely need
+   reconciling — it was guarded by `a.sources.mal &&`, so on a title with *no MAL
+   slice* (exactly the SIMKL-only case C1 exists to fix) it was skipped entirely
+   and the committed edit reverted on the spot. The overlay now patches
+   `record.personal`, which is what the views read. Normalization matches
+   hydration: `status: ''` and `score: 0` become `undefined`, not stored zeros.
+
+3. **The MAL-shaped naming went with it.** The endpoint has been provider-agnostic
+   since it became a `writePersonal` wrapper, so `onUpdateMALStatus` →
+   `onUpdatePersonalState`, `MALStatusUpdate` → `PersonalStateUpdate`,
+   `getMALStatusClass/Icon` → `getStatusClass/Icon`, and the CSS classes
+   `malStatus`/`malScore`/`malEpisodes`/`malStatusLabel…` → `personal*`. Locale
+   key `table.updateMalStatus` → `table.updatePersonalState` ("Mettre à jour mon
+   statut"). The wire field `num_episodes_watched` **stays** — it is the
+   endpoint's contract, not a display concern. Leaving `mal*` names on a
+   now-effective value would re-plant the exact confusion this fixed.
+
+**Verified against the real store:** the change is inert for a MAL-connected user
+— across 25,382 rows, **0** score-value changes and **0** progress-value changes;
+it newly fills 2 status rows and 1 score row, all SIMKL-only titles that rendered
+blank before. Live-checked on a production build (`next dev` does not hydrate):
+`a_22208` "Sayonara Lara" — no MAL slice — now shows `watching` + `1/12` from
+SIMKL in both layouts, with correct status styling and no hydration warning. The
+commit path was exercised with a stubbed `fetch` (no write left the browser): one
+`{"score":8}` request, pending map cleared, value **held** at 8 afterwards — the
+revert the caveat predicted, confirmed fixed.
+
+**Dead CSS swept in the same pass:** the rename exposed `.malStatusCell` /
+`.malScoreCell` / `.malEpisodesCell` as unreferenced — leftovers from an earlier
+table layout, never rendered (a CSS Module class with no TSX reference cannot
+apply to anything, since the class names are hashed). Auditing the sibling `*Cell`
+rules while there found `.genresCell` dead as well, including its `max-width`
+override in the ≤1600px media query — genres have moved inside the title cell
+(`.genresInTitle`). All four deleted; `.episodesCell` / `.seasonCell` are live and
+were kept.
+
+**Size:** was "small to medium" — accurate, with the optimistic path the larger half.
+
+**Unblocks:** H1, which noted C1 first "removes three of its readers" — it does;
+`sources.mal.my_list_status` now has three fewer consumers.
 
 ### D. Silent asymmetries
 
 The category that motivates the capability descriptor: in each case a provider
 cannot do something, and the absence is invisible rather than stated.
 
-#### D1 — SIMKL reports success for writes it discards
+#### D1 — SIMKL reports success for writes it discards — **`Done` 2026-07-21**
 
 **Evidence:** [personalWriters.ts:147](../src/lib/personalWriters.ts) —
 `if (patch.score === undefined) return { ok: true, matched: false };`
@@ -285,7 +553,50 @@ a capability read (below), but correctable standalone.
 
 **Size:** small.
 
-#### D2 — No capability descriptor; enablement logic duplicated
+**What shipped:**
+
+1. **The patch is narrowed once, in the registry, from the descriptor.**
+   `writePersonal` intersects the patch's dimensions with `supportedDimensions(id)`
+   before either pass, so a writer no longer needs to know its own capabilities —
+   SIMKL's two hand-rolled `if (patch.score === undefined)` guards are what D1
+   *was*. A provider that can take part of the patch takes that part; one that
+   can take none is never called, locally or remotely.
+2. **The discard is now in the outcome**: `unsupported: PersonalDimension[]`, plus
+   `skipped` when the whole patch was inapplicable. `ok` stays **true** — nothing
+   failed, and conflating "declined a dimension it never claimed" with "the push
+   didn't land" would just move the lie. That distinction is the item: the
+   outcomes map went from two states to three (*applied* / *partial* / *failed*).
+3. **The UI reads the third state.** `PersonalStateEditor` renders unsupported
+   dimensions as a **muted note** naming them, separate from the red failure list
+   it already had. It is the only surface that can produce one — the tier board
+   writes score-only and quick-rate always includes a score, so SIMKL applies
+   something in both; a status-only edit from the detail page is the case that
+   used to report a bare success.
+4. **Clearing a status was deliberately left as it was** (`ok: false` with a
+   reason). It is not the same shape: `status` is a dimension MAL and AniList both
+   *do* claim, and clearing is a shape of it they refuse — an explicit refusal was
+   already the good precedent this item was measured against. Both codepaths are
+   now named in `personalWriters.ts` so the two are not confused later.
+
+**Verified on a synthetic store** (production build, 2026-07-21) — synthetic
+because the test needs SIMKL *enabled* while contacting no real service: one
+title with MAL + SIMKL personal entries and a fabricated SIMKL token.
+
+- **Wholly unsupported.** `PUT …/mal-status {"status":"completed"}` → `simkl:
+  {ok:true, matched:false, skipped:true, unsupported:["status"]}`, where it used
+  to answer a bare `{ok:true, matched:false}`. `personal/simkl.json` is byte-
+  identical afterwards and no SIMKL request is attempted — the skip happens
+  before either pass.
+- **Partial.** `{"status":"completed","score":9,"num_episodes_watched":26}` →
+  `{ok:false, error:"Not authenticated with SIMKL", unsupported:["status","progress"]}`,
+  and the local SIMKL entry took the **score only** (status/progress unchanged at
+  `watching` / 3). Run with the synthetic token aged past expiry on purpose: token
+  *presence* keeps SIMKL enabled while `isSimklTokenValid` short-circuits the push
+  offline, so the partial-merge path is exercised with no outbound call. It also
+  shows the two signals composing rather than competing — a real failure and a
+  declared discard on the same outcome.
+
+#### D2 — No capability descriptor; enablement logic duplicated — **`Done` 2026-07-21**
 
 **Evidence:** [providers.ts:31](../src/lib/providers.ts) — `hasWritableExternal()`
 hand-reads three auth files. [personalWriters.ts](../src/lib/personalWriters.ts) —
@@ -300,7 +611,73 @@ re-derives it, which is the mechanism behind A2, D1, and all of E.
 
 **Size:** medium. This is [§3](#3-the-unifying-fix).
 
-### E. Connections UI: three bespoke shapes, one absent peer
+**What shipped:**
+
+1. **Two modules, split on client-safety, not on subject.** The declarative half
+   is the new [providerCapabilities.ts](../src/lib/providerCapabilities.ts) —
+   static data, no fs, no auth reads — so the connections UI (E) can import a
+   provider's shape directly. The runtime half ("is it connected *right now*?")
+   stays in [providers.ts](../src/lib/providers.ts), server-only, and is where
+   the two compose. Every question of the form *"who can do X?"* is answered
+   there and nowhere else.
+2. **Roles are keys, and each role carries its OWN auth kind.** §3 below listed
+   *auth kind* as one field per provider. That is wrong for AniList, and
+   discovering it was the useful part of this item: AniList's **catalog** role is
+   `anonymous` (the tags/staff sync and the bulk season crawl need no account and
+   no key — it is the whole keyless promise) while its **personal** role is
+   `oauth+secret`. A single per-provider auth field would have encoded "AniList
+   requires OAuth", which is exactly E4's mistake — filing an unauthenticated
+   catalog action under an account section — frozen into the descriptor that is
+   supposed to fix it. So a provider holds `catalog?` and/or `personal?`, role
+   presence is key presence, and auth is per role.
+3. **The duplication is gone by removal, not by indirection.** Writers no longer
+   carry `isEnabled` at all; the registry filters on
+   `isPersonalProviderEnabled(w.id)` — one predicate, which `hasWritableExternal`
+   is now also a query over. A writer can no longer disagree with it. And because
+   descriptors are a `Record<ProvenanceSource, …>`, registering a writer without
+   a descriptor row is a compile error rather than something to remember.
+4. **One consumer moved to the descriptor, as a demonstration that it is load-
+   bearing.** The detail page's `canClearStatus` was `!hasWritableExternal()` —
+   the right answer from the wrong question, since it assumed no external
+   provider could *ever* clear a status instead of reading whether one declares
+   it. It is now `canClearStatus()`: every **enabled** provider declares
+   `personal.clearStatus`. Same answer on every configuration that exists today.
+
+**Deliberately NOT wired — these are A2 and D1, and both are behaviour changes:**
+
+- `listCoverage: 'full' | 'subset'` is declared (MAL and AniList `full`; SIMKL
+  and local `subset`) and `fullListProviders()` exists, but `PRESENCE_ANCHORS`
+  still reads `['mal']`. Swapping it makes AniList a presence anchor — a real
+  change in what the discrepancies page reports, which A2 owns and should verify
+  against the store.
+- `supportedDimensions()` / `supportsDimension()` are declared (SIMKL: `['score']`),
+  but `simklWriter.writeRemote` still returns a bare `{ ok: true, matched: false }`
+  for a status or progress patch. Refusing it explicitly is D1.
+
+Doing either here would have made this item's diff a behaviour change wearing a
+refactor's clothes. The data they need now exists; the swaps are a line each.
+
+**Verified live on both branches** (production build, 2026-07-21) — the point
+being that the two configurations differ in exactly the predicate that was
+rewritten:
+
+- *Real store, MAL + SIMKL + AniList all connected:* `/api/anime/settings`
+  reports `hasWritableExternal: true`, `local` disabled, precedence
+  `[simkl, mal, anilist]` — unchanged. The detail page (`a_23695`) renders the
+  status row with **no** clear chip.
+- *Synthetic keyless store (same data, `auth/` emptied):* `hasWritableExternal:
+  false`, `local` enabled, precedence `[local, simkl, mal, anilist]`, and the
+  same page renders the status-clear chip. `canClearStatus()` flips exactly where
+  `!hasWritableExternal()` used to.
+
+**Unblocks:** A2, D1, and E1–E4, which were all waiting on "what is this
+provider, and what can it do?" having one answer.
+
+### E. Connections UI: three bespoke shapes, one absent peer — **`Done` 2026-07-21**
+
+E1–E4 shipped as one change, because they are one change: the four symptoms are
+four consequences of the page having no notion of "a provider" at all. See
+[the shared writeup](#e1e4--what-shipped) after E4.
 
 #### E1 — Three provider-named sections with no shared shape
 
@@ -354,9 +731,98 @@ rather than missing.
 
 **Size:** medium-large, and the largest visible payoff. Depends on D2.
 
+#### E1–E4 — what shipped
+
+The fix is the one the inventory names, and it landed as stated. Four things it
+did **not** say, in decreasing order of how much they mattered:
+
+1. **The missing piece was a uniform status *read*, not a uniform card.** D2
+   supplied "what is this provider and what can it do", which is half of what a
+   card needs; the other half — "is it connected, whose account, holding how
+   much" — existed only as three bespoke auth endpoints answering three
+   different payload shapes (`user.name` / `user.user.name` / `user.name` +
+   `isConfigured`), each with its own client caller. That is why E2's three badge
+   components were *stateful* duplicates over an already-shared presenter: they
+   were not duplicating rendering, they were duplicating the shape-flattening.
+   So this pass adds the runtime peer of `providerCapabilities.ts`:
+   [providerStatus.ts](../src/lib/providerStatus.ts) + `GET /api/anime/providers`,
+   one row per provider, and [useProviderStatuses](../src/hooks/useProviderStatuses.ts)
+   as its single client reader. The per-provider `auth` endpoints stay exactly as
+   they are — they own the OAuth *flows*, which genuinely differ. The read is
+   what was duplicated; the flows were not.
+2. **A card is a (provider, role) pair, not a provider.** E4 asks for the page to
+   be split by role, which sounds like a grouping change; it is really a change
+   to what a card *is*. MAL and AniList each render twice, and the auth kind is
+   read from the role, so AniList's catalog card says "no account required" while
+   its list card asks for OAuth. That is the whole of E4 and it costs nothing at
+   the call site — both groups come from `providersWithRole()`. Two details that
+   only appear once you build it: a dual-role provider must not grow two
+   disconnect buttons (the account control renders in the personal group only;
+   the catalog card states the requirement and points at it), and MAL's one
+   `syncError` string had to split by role too, since a list-sync failure and a
+   catalog-crawl failure now render on different cards.
+3. **`connected` is token *presence*, and "expired" became a third state.** The
+   old MAL badge showed a token that had lapsed as **not connected** — the same
+   conflation D1 is about, in the opposite direction: an actionable state
+   ("re-authenticate") rendered as a different one ("connect an account"). The
+   status row reports `connected` (presence, the same predicate
+   `isPersonalProviderEnabled` uses, so the badge cannot disagree with the write
+   path) *and* `tokenValid`, and both the badge dot and the card carry an amber
+   "session expirée" state between them.
+4. **E3 is smaller than it looks and E1 pays for it.** `local` needed no new
+   plumbing at all — one descriptor row it already had, plus not filtering it out.
+   It now gets a card (active/inactive, entry count, precedence rank, why `auto`
+   turned it off, a link to the switch) and a header badge **when enabled**, which
+   is the honest rule: an off local provider is not a connection, and a
+   connection badge for a thing with no account would otherwise be a permanent
+   grey dot.
+
+**Deleted, not left behind:** `MalConnectionBadge` / `SimklConnectionBadge` /
+`AnilistConnectionBadge`, and `AccountSection` / `SimklSection` /
+`AnilistAuthSection` / `DataSyncSection` with their CSS modules. The last is the
+important one — `DataSyncSection` was a 24-prop component holding MAL's seasonal
+crawl, SIMKL's delta, AniList's metadata sweep and AniList's list import behind a
+single "Synchro" heading, i.e. the page organized by *when things were added*.
+Its contents are now four role-filed action blocks. The blocks stay separate
+components rather than one generic loop, per
+[PROVIDER-ABSTRACTION.md](PROVIDER-ABSTRACTION.md): only the card around them is
+uniform.
+
+**Verified on two production builds against real data** (2026-07-21), which is
+the point — the whole item is about configurations rendering differently:
+
+| | MAL | AniList | SIMKL | local |
+|---|---|---|---|---|
+| *Real store* (3 accounts) | connecté Ikaer, 669 entries, préc. n°2 | connecté Ikaer, 241, n°3 | connecté Xavier Lefebvre, 652, n°1 | **inactif**, 0 entries, no rank |
+| *Keyless* (same store, `auth/` emptied) | non connecté | non connecté | non connecté | **actif**, 3 entries, **préc. n°1** |
+
+Header badges follow: 3 badges on the real store (local hidden, correctly), 4 in
+the keyless one with local the only green dot — E3's exact symptom, "on the
+default no-account configuration the only active provider is the one with no UI",
+inverted. The AniList catalog card stays fully actionable in both, with no
+account anywhere in the store (E4). A third run with a deliberately expired MAL
+token (fabricated, never sent anywhere — `isMALTokenValid` short-circuits offline)
+renders amber "Session expirée" on both MAL cards and the badge.
+
+**Not verified:** no screenshot — the browser pane's screenshot action timed out
+repeatedly on this page, while page text, the accessibility tree and in-page JS
+all read fine. Everything above is a DOM read, not a visual check, so the layout
+itself is unconfirmed beyond structure.
+
+**Known gap left open:** a disconnected provider still shows a precedence rank
+(it is in the resolved precedence, and its stale slice really would still be
+consulted, so the number is true) — but "Précédence n°3" on a card reading "Non
+connecté" is at best confusing. Also still unrendered: **B4's per-source refresh
+outcomes**, which that item deferred to "E1–E4's uniform provider cards". The
+cards now exist, but they live on `/connections` while the degraded-run signal
+belongs on `/recommendations`; wiring it is a separate, smaller job.
+
+**Size:** medium-large, as ranked — and the ratio held: ~half the diff is the
+status endpoint and its hook, which the inventory did not mention at all.
+
 ### F. Orchestration
 
-#### F1 — cron-sync is MAL-only
+#### F1 — cron-sync is MAL-only — **`Done` 2026-07-21**
 
 **Evidence:** [cron-sync.ts:2-4](../src/pages/api/anime/cron-sync.ts) imports
 `getMALAuthData`, `isMALTokenValid`, `performHistoricalCrawl`, plus
@@ -374,6 +840,90 @@ different operations. The fix is three explicit calls, each guarded by its own
 enablement check, not one abstracted one.
 
 **Size:** small per provider.
+
+**What shipped — the three explicit calls the inventory asked for, plus one
+thing it named as the symptom and one it did not name at all:**
+
+1. **The MAL-only-ness was a *gate*, not just missing calls.** The handler
+   returned **400 for the whole run** when the MAL token was missing or expired,
+   before reaching anything else. So the fix is not only "add SIMKL and AniList
+   next to MAL" — it is that no provider gates the run. MAL is now one skippable
+   step among five, guarded by the same `isPersonalProviderEnabled('mal')` every
+   other personal step uses. This is B4's shape one layer up, and it had the same
+   consequence: a feature that already worked for a keyless install was
+   unreachable because of an auth check on the route in front of it.
+2. **The recommendations refresh was the collateral damage.** It sat *inside* the
+   MAL-token branch and took `token.access_token`. B4 had already made
+   `performRecommendationsRefresh` take `string | null` and run on the anonymous
+   AniList crowd source alone — but on a keyless install cron never got that far,
+   so the one scheduled consumer of B4's work never exercised it. It now runs on
+   every tick with `null` when there is no valid MAL token.
+3. **The AniList *metadata* sync is deliberately ungated** — the catalog role's
+   auth kind is `anonymous`, so it runs on an install with no account of any
+   kind. Gating it on the AniList *account* would be E4's exact mistake (filing an
+   unauthenticated catalog action under an account) transplanted into
+   orchestration. It stays fire-and-forget, as its own route is: it is incremental
+   but unbounded, and awaiting a multi-minute sweep here would put the *next*
+   tick's SIMKL delta behind it. That made a small addition necessary —
+   `isAnilistMetaSyncRunning()`, exported alongside the existing
+   `isRecommendationsRefreshRunning` — because a step that does not await has no
+   other way to tell "started" from "one was already going".
+4. **Reporting is per step, and 200 is the only status.** Each step returns a
+   `CronStepOutcome` (`skipped: true` = no account, so not applicable; `ok: false`
+   = should have run and didn't) and the handler echoes the map — the same
+   "declare the degraded mode" shape as `RecoRefreshSources`. A step that throws
+   is caught and reported, never fatal to the others. The handler answers **200
+   even when a step failed**, because a non-2xx tells the NAS cron job "nothing
+   ran", which is the conflation this item removes. The old response's
+   `historicalCrawl` key is gone; the only caller is a `curl` in
+   docker-compose.yml that discards the body.
+5. **Order is load-bearing, and the measurement below shows it.** Data pulls
+   first, then the reco refresh (so it ranks over what just landed), then the
+   AniList sweep last — both it and the reco refresh throttle against the same
+   AniList rate limit, and the sweep is the one that can run for minutes.
+6. **"Connected but expired" is its own outcome**, not a skip: `ok: false` with
+   *"MAL token expired — re-authenticate"*. Same distinction E1–E4 drew for the
+   badges — token *presence* is enablement, validity is a separate, actionable
+   state.
+
+**MAL's list sync was deliberately not added as a fourth call.** `mal/sync`
+exists, but MAL's seasonal payload carries `my_list_status` inline and
+`upsertAnime` splits it into the personal slice on ingest (H1), so big-sync
+already refreshes MAL personal state for every season it touches. A separate call
+would be a second path to the same data.
+
+**Verified on three synthetic stores against a production build** (2026-07-21),
+each a 10-title catalog with 4 in-app ratings, differing *only* in `auth/` — which
+is the point, since the whole item is about which configurations get a tick. The
+SIMKL and AniList tokens are the real ones (both steps are read-only pulls); the
+expired MAL token is fabricated and never sent anywhere (`isMALTokenValid`
+short-circuits offline).
+
+| store | HEAD | this change |
+|---|---|---|
+| **keyless** (no `auth/` at all) | **400**, nothing ran | **200** — all three personal steps `skipped`, reco refresh ran (4 seeds, 51 candidates hydrated via AniList), metadata sync started |
+| **SIMKL + AniList, no MAL** | **400**, nothing ran | **200** — SIMKL `initial` pull **659** entries, AniList import **671**, reco refresh **274 seeds**, metadata sync started on 1,608 titles |
+| **MAL token expired** | **400**, nothing ran | **200** — `malCatalog {ok:false, reason:"MAL token expired"}`, the other four steps unaffected |
+
+Two details worth keeping: the **274 vs 4** seed counts are the same store before
+and after the personal imports landed in the same tick — direct evidence that
+ordering the reco refresh after the pulls matters, not just tidiness. And a
+**second consecutive tick** on the SIMKL+AniList store returned SIMKL `phase:
+"noop"` (the watermark held) and `anilistCatalog {skipped: true, reason: "A
+metadata sync is already running"}` — the run lock reported honestly through a
+fire-and-forget step, which is what item 3 above needed.
+
+**Not verified live:** the MAL-connected path. `startBigSync` +
+`performHistoricalCrawl` are unchanged code moved under a guard, and exercising
+them means an 8-year seasonal crawl against the real MAL API. The *guard* is
+verified in both directions (skipped with no token, `ok: false` with an expired
+one); the body it guards is not.
+
+**Known gap left open:** the per-step outcomes are returned in the response and
+written to the `cron-sync` log channel, but nothing renders them — the same gap
+B4 and E1–E4 both left. A cron tick has no user watching, so the log panel on
+`/connections` is the natural home; it already polls that channel, it just shows
+the messages rather than the structured `steps` map.
 
 ### G. Documentation drift
 
@@ -395,7 +945,7 @@ rather than one branch of a dual-mode function. CLAUDE.md now documents it, and
 
 ### H. Structural asymmetry: MAL conflates catalog and personal
 
-#### H1 — MAL's personal state lives inside its catalog payload
+#### H1 — MAL's personal state lives inside its catalog payload — **`Done` 2026-07-21**
 
 **Evidence:** every other provider stores personal state in its own slice file
 with its own entry type — `SimklPersonalEntry` / `animes_simkl.json`,
@@ -431,30 +981,80 @@ provider that predates the convention. **The asymmetry is legacy, not design.**
 **Fix:** extract `my_list_status` into `animes_mal_personal.json` keyed by
 canonical id, with `MALPersonalEntry` joining the other three. `MALAnime` becomes
 pure catalog. One migration script; the write path, `malSync`'s
-`updatePersonalStatusBatch`, and the ~12 files reading `my_list_status` follow.
-Note **C1 overlaps**: three of those readers are the list views that should be
-going through `getEffective*` anyway, so doing C1 first shrinks this.
+`updatePersonalStatusBatch`, and the readers of `my_list_status` follow.
+**C1 already shrank this**: three of those readers were the list views, and they
+now go through `getEffective*` (done 2026-07-20).
 
-**Size:** medium, and touches shipped data — needs a migration with a backup,
-like the canonical-id cutover had. The 39 MB write is the strongest argument for
-scheduling it rather than filing it.
+**What shipped — and one claim above that did NOT survive contact:**
 
-**Also a prerequisite elsewhere:** [DATA-LAYOUT.md](DATA-LAYOUT.md) organizes the
-store into folders, with `personal/` holding *one file per `ProvenanceSource`*.
-That rule yields three of four until H1 creates MAL's, so the layout work is
-blocked on this and would otherwise bake the anomaly in.
+1. **`MALPersonalEntry` = a type alias of the wire shape `MALListStatus`**
+   (verbatim MAL field names). One shape, two roles: `MALListStatus` stays on
+   `MALAnime.my_list_status` (the API still ships it inline); `MALPersonalEntry`
+   is the stored slice entry. No field rename rode on the data migration.
+2. **Split on ingest.** `upsertAnime` strips `my_list_status` off every incoming
+   MAL record and routes it into the personal slice (clearing the entry when a
+   fetch returns the title *without* a status — mirroring the old full-overwrite
+   exactly, so a title removed from the MAL list still clears). The catalog file
+   is pure catalog; the personal slice is the only thing a rating write touches.
+3. **The presence carve-out did NOT evaporate.** This section predicted "split
+   the file and the exception evaporates". It does not: split-on-ingest can still
+   seed a `{ status: '' }` entry, so `providerStateFromMal` still keys presence on
+   `!!status`, and `personalState.ts`'s `hasPersonalData` carve-out (MAL excepted)
+   stays. What the split *did* remove are the two costs that were real — the 39 MB
+   rating write, and `MALAnime` being untypeable as catalog. The claim is
+   corrected here rather than the carve-out forced.
+4. **Refuse-to-start guard.** There is no process-boot hook, so it is a one-time
+   lazy guard on the first catalog read: post-split code never writes
+   `my_list_status` into the catalog, so finding one embedded throws with the name
+   of the migration script. Live-verified — an un-migrated store 500s every list
+   request with the named error; the migrated store serves normally.
+5. **A per-provider-total fix shipped alongside** (out of H1's literal scope, but
+   the split exposed it). The fully-watched reconciliation borrowed
+   `mal.num_episodes` as *every* provider's episode total — hardcoding MAL as the
+   catalog authority in the one spot the provider-free direction says is AniList's.
+   Now each provider is judged against its OWN catalog's count (MAL vs MAL's,
+   AniList/local vs AniList's, SIMKL vs its own). That surfaced a latent weakness:
+   AniList's catalog episode count is often unknown, and an unknown total
+   resurfaced a raw progress difference between two *completed* entries as a
+   phantom disagreement — so the exception now treats **`status === 'completed'`
+   as fully-watched whatever the count**. Verified inert on the real store:
+   before/after diff of every row's `discrepancy` block = **0 changes** across
+   25,382 rows, and the hydrated `personal` block = 0 changes (the total never
+   feeds hydration).
 
-## 3. The unifying fix
+**Verified on the real store (2026-07-21):** 25,382 catalog rows, 670 embedded
+`my_list_status` → 669 statused entries extracted (1 empty-status artifact
+dropped); catalog rewritten with 0 remaining; migration idempotent (a second run
+is a no-op). A tier-drag write now touches only the ~100 KB personal file, not
+the 39 MB catalog (verified by construction — `saveAnime`'s only remaining caller
+is catalog ingest).
+
+**Size:** medium, touched shipped data — a migration script
+(`scripts/migrate-mal-personal.js`, modeled on `migrate-canonical.js`) run
+against a stopped app before deploy, backed by the refuse-to-start guard.
+
+**Unblocked elsewhere:** [DATA-LAYOUT.md](DATA-LAYOUT.md) organizes the store into
+folders, with `personal/` holding *one file per `ProvenanceSource`*. That rule
+yielded three of four until H1; `animes_mal_personal.json` is now the fourth, so
+the layout work is no longer blocked on this.
+
+## 3. The unifying fix — **shipped as D2, 2026-07-21**
 
 **A capability descriptor per provider**, declaring:
 
 - **role** — `catalog` and/or `personal` (AniList holds both; MAL holds both;
   SIMKL and local are personal-only)
-- **auth kind** — `oauth` · `oauth+secret` · `anonymous` · `none`
+- **auth kind** — `oauth` · `oauth+secret` · `anonymous` · `none`, **per role,
+  not per provider** (as-built correction: AniList's catalog role is anonymous
+  while its personal role is OAuth'd — see [D2](#d2--no-capability-descriptor-enablement-logic-duplicated--done-2026-07-21))
 - **read capabilities** — catalog fields, personal list, full-list vs subset
   feed, crowd recommendations
 - **write capabilities** — which of status/score/progress, and whether a status
   can be cleared
+
+As built: [providerCapabilities.ts](../src/lib/providerCapabilities.ts) (the
+declarative half, client-safe) + [providers.ts](../src/lib/providers.ts) (the
+runtime half — connection status — server-only).
 
 ### Why this is not the registry PROVIDER-ABSTRACTION.md dropped
 
@@ -472,28 +1072,40 @@ gaps actually demand rather than by what a fourth provider might.
 
 ### What it buys, per gap
 
-- **A2** — `PRESENCE_ANCHORS` becomes "providers declaring a full list",
-  correct on any install rather than only a MAL one.
+- **A2** — `PRESENCE_ANCHORS` becomes a capability read, correct on any install
+  rather than only a MAL one. *(Done — though **not** as "providers declaring a
+  full list": that set is two providers and reports 430 of 671 titles as a
+  presence split. It is the first full-list provider **in precedence**, i.e. one
+  reference list. See [A2](#a2--presence_anchors--mal--done-2026-07-21).)*
 - **D1** — a write against an undeclared dimension is refused explicitly instead
-  of returning a bare success.
+  of returning a bare success. *(Done — the patch is narrowed from the descriptor
+  in `writePersonal`, so the writers no longer carry their own capability checks
+  either; the outcome gained `unsupported`/`skipped`.)*
 - **D2** — one source of truth; `hasWritableExternal` becomes a query over
-  declared write capability rather than three hand-read auth files.
+  declared write capability rather than three hand-read auth files. *(Done — and
+  the per-writer `isEnabled` went with it: enablement is now the single
+  `isPersonalProviderEnabled`.)*
 - **E1–E4** — one uniform card renders from the descriptor; capability
   differences appear as stated, disabled slots rather than as absence. Role
-  splits the page the way the user thinks about it.
+  splits the page the way the user thinks about it. *(Done — but the descriptor
+  was only half of what a card needs. The other half, live status in one shape,
+  did not exist and is the new [providerStatus.ts](../src/lib/providerStatus.ts)
+  + `GET /api/anime/providers`. See [E1–E4](#e1e4--what-shipped).)*
 
 ### What it does not touch
 
 A1, B1, B2, C1 and F1 are **independent** and should not wait on it. A1 and C1
-in particular are small, high-symptom, and blocked on nothing.
+in particular are small, high-symptom, and blocked on nothing. *(As built, F1
+used it anyway — not for capability but for the single enablement predicate
+`isPersonalProviderEnabled`, which is D2's other half. "Independent of" turned out
+to mean "not blocked by", not "does not benefit from".)*
 
 ## 4. Suggested order
 
 Nothing here is a committed plan — it is the ranking implied by the inventory.
 
-1. ~~**A1**~~ **Done 2026-07-20**, together with ~~**G1**~~. **C1** remains and
-   is now the top item — it is the one that makes the app look empty to a
-   non-MAL user.
+1. ~~**A1**~~, ~~**G1**~~, ~~**C1**~~ — all **Done 2026-07-20**. The main list no
+   longer looks empty to a non-MAL user. **B1** is now the top item.
 
    > A1 came in larger than ranked, and the lesson generalizes to the rest of
    > this document: the gaps are stated as "generic core, hardcoded feeder", but
@@ -501,14 +1113,97 @@ Nothing here is a committed plan — it is the ranking implied by the inventory.
    > Look for the duplicate before adding the branch. And check whether a
    > blocking asymmetry can be **removed** rather than conditionalized — A2 and
    > D1 both describe asymmetries that may not need to exist.
-2. **B1, then B2** — unblocks the keyless onboarding path end to end. The
-   highest-value fix, and the one most aligned with the provider-free direction.
-3. **D2** — the capability descriptor, once the standalone defects are cleared.
-4. **A2, D1** — fall out of D2 cheaply.
-5. **E1–E4** — the connections rework, on top of D2. Largest visible payoff.
-6. **F1** — independent; slot in whenever cron matters.
-7. **H1** — the MAL catalog/personal split. Independent of everything above, but
-   do **C1** first (it removes three of its readers), and note
-   [DATA-LAYOUT.md](DATA-LAYOUT.md) is blocked on it. The 39 MB rewrite per
-   rating is the reason not to leave it filed forever.
-8. **B3** — recommend deferring indefinitely. Documented as deliberate.
+2. ~~**B1, then B2**~~ — both **Done 2026-07-21**. The keyless onboarding path is
+   unblocked end to end: a title the AniList catalog crawl mints can now receive
+   tags, staff, banner and relations from AniList, in bulk and on demand.
+   **D2** is now the top item.
+
+   > B1 confirmed the lesson A1 left: the query filter was the *stated* gap, but
+   > the sweep would still have reached nothing, because its id list came from
+   > the MAL catalog slice. When a core looks starved, check what feeds it names
+   > before changing what it accepts. The same pass caught two more instances of
+   > the identical mistake one layer down — a result filter on `m.idMal`, and a
+   > relation edge that stored only a MAL id.
+2b. ~~**B4**~~ — **Done 2026-07-21**, and it is the one that actually delivered
+   the headline: the recommendation feed now works with no MAL account at all,
+   on the AniList crowd source with AniList-hydrated candidates.
+
+   > The lesson is about this document rather than the code. B3 named the
+   > *visible* MAL-ness of the reco engine (its id keying) and correctly judged
+   > it low-value — but having an entry there made the area look inventoried,
+   > and the real blocker one layer up (an auth gate on the refresh route) was
+   > never written down. **A ranked inventory can hide a gap by adjacency.**
+   > Worth re-asking of the other sections: for each subsystem, does the keyless
+   > path actually run end to end, or is it merely un-flagged?
+3. ~~**D2**~~ — the capability descriptor. **Done 2026-07-21.** Two modules
+   (declarative + client-safe, runtime + server-only); the per-writer `isEnabled`
+   is gone. **A2 and D1 are now the top items**, one line each.
+
+   > The lesson is the inverse of B1's. There the *stated* gap was too narrow;
+   > here the stated **shape** was — §3 asked for one auth kind per provider,
+   > which cannot describe AniList (anonymous catalog, OAuth'd list) and would
+   > have baked E4's own bug into E4's fix. When a descriptor is written to
+   > replace scattered derivations, check it against the provider that is least
+   > like the others *before* the derivations are deleted.
+4. ~~**A2, D1**~~ — both **Done 2026-07-21**. Presence detection works on any
+   install (and works *at all* again — see below); a write SIMKL discards now
+   says so. **E1–E4 is now the top item.**
+
+   > Two lessons, and the second is the sharper one.
+   >
+   > **The declared data was right and the swap using it was not.** D2 left both
+   > items as "a line each" and named the line. For A2 that line —
+   > `PRESENCE_ANCHORS = fullListProviders()` — was measurably wrong (430 of 671
+   > titles flagged), because `listCoverage: 'full'` answers *"does this
+   > provider's read return the whole account?"* while presence detection asks
+   > *"is this account the user's reference record?"*. A descriptor field can be
+   > correct and still not be the predicate a consumer needs; **check the swap
+   > against the store, not against the field name.**
+   >
+   > **Wiring A2 is what revealed presence detection had been dead since H1.**
+   > The check needs the anchor to *have a state*, and H1 moved MAL's personal
+   > data out of the catalog slice (one row per catalogued title) into one that
+   > holds only statused titles — so from that day no install could report a
+   > presence split, MAL-connected or not. Nothing surfaced it, including H1's own
+   > verification, which diffed the `discrepancy` block over 25,382 rows and read
+   > 0 changes. **A feature going quiet looks exactly like a feature with nothing
+   > to say** — the two titles it should have flagged are 2 rows in 25,382, and a
+   > row count that drops to zero reads as "no discrepancies today". Same shape as
+   > B4's "a ranked inventory can hide a gap by adjacency", one level down: verify
+   > that a path still *fires*, not only that its output did not change.
+5. ~~**E1–E4**~~ — the connections rework. **Done 2026-07-21.** The page is two
+   role groups of one uniform card, seven bespoke components are deleted, and
+   `local` has a card and a badge. **F1 is now the only item left.**
+
+   > The lesson is D2's, one turn later and from the other side. There the
+   > descriptor's *shape* was too narrow; here the descriptor was right and
+   > simply **not the whole input**. A card needs "what is this provider" (D2,
+   > static) *and* "what is it doing right now" (nowhere, until this pass) — and
+   > because the second half was missing, every consumer had invented its own,
+   > which is precisely why E2 read as three duplicated components rather than as
+   > three missing readers of an absent endpoint. **When a UI gap looks like
+   > duplication, check whether the thing being duplicated is a missing seam.**
+   > Same shape as B1's "check what feeds it before changing what it accepts",
+   > applied to a read model instead of a query.
+6. ~~**F1**~~ — cron-sync across every provider. **Done 2026-07-21.** Scheduled
+   sync now runs for a SIMKL-only, AniList-only or entirely keyless install, and
+   no provider can abort the run. **This closes the inventory.**
+
+   > The lesson is B4's, and the fact that it recurs *is* the lesson. F1's
+   > evidence line named three missing imports, so the item read as "add three
+   > calls" — but the reason those calls were missing is that a `400` on the MAL
+   > token sat in front of them, and the inventory never wrote that down. Same
+   > with B4 (a `401` in front of a feed that worked keyless) and A2 (a check
+   > that had silently stopped firing). **Three of the last four items were
+   > larger than their evidence line, always in the same direction: the stated
+   > gap was a missing capability, the real gap was a guard in front of a
+   > capability that already existed.** Worth carrying into whatever inventory
+   > comes next — for each entry, ask what refuses the request before the code
+   > you are looking at runs.
+7. ~~**H1**~~ — the MAL catalog/personal split. **Done 2026-07-21.** The 39 MB
+   rewrite per rating is gone, `MALAnime` is pure catalog, and
+   [DATA-LAYOUT.md](DATA-LAYOUT.md)'s `personal/` folder is unblocked (its fourth
+   file now exists). A per-provider-total fix rode along (see H1's writeup).
+8. ~~**B3**~~ — **`Dropped` 2026-07-21.** Assessed and deferred indefinitely, as
+   recommended; the MAL-keying is now stated in code at `RECS_QUERY` rather than
+   left to be re-derived. Revisit only on the stated trigger.

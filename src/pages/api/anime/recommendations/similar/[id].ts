@@ -1,8 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getValidMalToken } from '@/lib/mal';
+import { getValidMalToken } from '@/lib/providers/mal/client';
 import { getMalIdForCanonical, isCanonicalId } from '@/lib/store';
-import { computeSimilarTo, fetchRecoEdges, SIMILAR_LIMIT, type AniListEdgeInput, type RecoEdge } from '@/lib/recommendations';
-import { fetchAnilistRecommendations } from '@/lib/anilistSync';
+import { computeSimilarTo, SIMILAR_LIMIT, type AniListEdgeInput } from '@/lib/reco/similar';
+import { fetchRecoEdges } from '@/lib/reco/refresh';
+import type { RecoEdge } from '@/lib/reco/data';
+import { fetchAnilistRecommendations } from '@/lib/providers/anilist/sync';
 
 /**
  * "Plus comme ça" — crowd recommendations anchored on ONE anime, ranked with the

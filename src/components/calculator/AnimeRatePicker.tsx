@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import type { AnimeRecord } from '@/models/anime';
-import { getPrimaryTitle } from '@/lib/animeUtils';
+import { getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { useT } from '@/lib/i18n';
 import styles from './AnimeRatePicker.module.css';
 

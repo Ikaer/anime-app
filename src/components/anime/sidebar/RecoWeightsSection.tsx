@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { SourceWeights } from '@/models/anime';
-import { SOURCE_META } from '@/lib/recoWeights';
+import { SOURCE_META } from '@/lib/reco/weights';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './RecoWeightsSection.module.css';
 

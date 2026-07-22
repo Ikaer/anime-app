@@ -172,7 +172,17 @@ export default function AnimePage() {
     }
   };
 
-  const handleUpdateMALStatus = async (animeId: string, updates: any) => {
+  /**
+   * Commit one staged edit from the table's "Moi" column.
+   *
+   * The endpoint fans out over `writePersonal`, so the write is not MAL-only —
+   * and the table now READS the hydrated `personal` block via `getEffective*`.
+   * The optimistic overlay therefore patches `personal` rather than
+   * `sources.mal.my_list_status`: patching the MAL slice would be invisible to
+   * the new read (and a lie on an install with no MAL). `personal.score` uses
+   * undefined for "unrated", matching `toAnimePersonal`.
+   */
+  const handleUpdatePersonalState = async (animeId: string, updates: any) => {
     try {
       const response = await fetch(`/api/anime/animes/${animeId}/mal-status`, {
         method: 'PUT',
@@ -180,13 +190,16 @@ export default function AnimePage() {
         body: JSON.stringify(updates),
       });
       if (response.ok) {
-        setAnimes(prev => prev.map(a =>
-          a.id === animeId && a.sources.mal
-            ? { ...a, sources: { ...a.sources, mal: { ...a.sources.mal, my_list_status: { ...a.sources.mal.my_list_status, ...updates } } } }
-            : a
-        ));
+        setAnimes(prev => prev.map(a => {
+          if (a.id !== animeId) return a;
+          const personal = { ...a.personal };
+          if (updates.status !== undefined) personal.status = updates.status || undefined;
+          if (updates.score !== undefined) personal.score = updates.score > 0 ? updates.score : undefined;
+          if (updates.num_episodes_watched !== undefined) personal.progress = updates.num_episodes_watched;
+          return { ...a, personal };
+        }));
       } else {
-        throw new Error('Failed to update MAL status');
+        throw new Error('Failed to update personal state');
       }
     } catch (error) {
       setError(t('index.updateStatusFailed'));
@@ -282,7 +295,7 @@ export default function AnimePage() {
                 visibleColumns={display.visibleColumns}
                 sortColumn={filters.sortBy}
                 sortDirection={filters.sortDir}
-                onUpdateMALStatus={handleUpdateMALStatus}
+                onUpdatePersonalState={handleUpdatePersonalState}
                 onHideToggle={handleHideToggle}
               />
             )}

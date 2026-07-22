@@ -1,11 +1,128 @@
 import Head from 'next/head';
-import { AccountSection, SimklSection, AnilistAuthSection, DataSyncSection, ConnectionLogPanel } from '@/components/anime';
+import { ConnectionLogPanel } from '@/components/anime';
+import {
+  ProviderCard,
+  ProviderAccountControl,
+  MalCatalogActions,
+  AnilistCatalogActions,
+  MalListActions,
+  SimklListActions,
+  AnilistListActions,
+  LocalListActions,
+} from '@/components/anime/connections';
 import { useConnections } from '@/hooks';
+import {
+  providersWithRole,
+  isExternalPersonalProvider,
+  isWritableProvider,
+} from '@/lib/providers/capabilities';
 import { useT } from '@/lib/i18n';
 
+/**
+ * Connections (docs/PROVIDER-PARITY.md E1–E4).
+ *
+ * **Split by role, not by provider.** The page used to be four hardcoded
+ * sections — `<h2>MyAnimeList</h2>`, `<h2>SIMKL</h2>`, `<h2>AniList</h2>`, then a
+ * catch-all "Synchro" — which filed AniList's *anonymous* metadata sync under an
+ * account heading and MAL's catalog crawl under a shared one. The axis the user
+ * actually thinks on is: what is my catalog, and which lists am I syncing? Both
+ * groups come from `providersWithRole`, so a provider joins one by declaring the
+ * role in `PROVIDER_CAPABILITIES` and nothing here changes.
+ *
+ * MAL and AniList appear in both groups on purpose — they hold both roles, with
+ * different auth per role. The account control renders in the personal group
+ * only; the catalog card states the requirement and points at it, so a
+ * dual-role provider does not grow two disconnect buttons.
+ */
 export default function ConnectionsPage() {
   const t = useT();
-  const { mal, simkl, anilist } = useConnections();
+  const { statuses, isStatusLoading, anyBusy, mal, simkl, anilist } = useConnections();
+
+  const hasWritableExternal = Object.values(statuses).some(
+    s => s && isExternalPersonalProvider(s.id) && isWritableProvider(s.id) && s.connected
+  );
+
+  const accountControl = (id: 'mal' | 'simkl' | 'anilist') => {
+    const status = statuses[id];
+    if (!status) return null;
+    const group = id === 'mal' ? mal : id === 'simkl' ? simkl : anilist;
+    return (
+      <ProviderAccountControl
+        status={status}
+        isLoading={isStatusLoading}
+        error={group.authError}
+        onConnect={group.onConnect}
+        onDisconnect={group.onDisconnect}
+      />
+    );
+  };
+
+  const catalogActions: Partial<Record<string, React.ReactNode>> = {
+    mal: (
+      <MalCatalogActions
+        connected={!!statuses.mal?.connected}
+        isBigSyncing={mal.isBigSyncing}
+        isHistoricalCrawling={mal.isHistoricalCrawling}
+        historicalStats={mal.historicalStats}
+        error={mal.catalogSyncError}
+        busy={anyBusy}
+        onBigSync={mal.onBigSync}
+        onHistoricalCrawl={mal.onHistoricalCrawl}
+      />
+    ),
+    anilist: (
+      <AnilistCatalogActions
+        isMetaSyncing={anilist.isMetaSyncing}
+        metaSyncMessage={anilist.metaSyncMessage}
+        metaStats={anilist.metaStats}
+        isCatalogCrawling={anilist.isCatalogCrawling}
+        catalogCrawlMessage={anilist.catalogCrawlMessage}
+        catalogStats={anilist.catalogStats}
+        busy={anyBusy}
+        onMetaSync={anilist.onMetaSync}
+        onCatalogCrawl={anilist.onCatalogCrawl}
+      />
+    ),
+  };
+
+  const personalActions: Partial<Record<string, React.ReactNode>> = {
+    mal: (
+      <MalListActions
+        connected={!!statuses.mal?.connected}
+        isSyncing={mal.isSyncing}
+        error={mal.listSyncError}
+        busy={anyBusy}
+        onSync={mal.onSync}
+      />
+    ),
+    simkl: (
+      <SimklListActions
+        connected={!!statuses.simkl?.connected}
+        isSyncing={simkl.isSyncing}
+        message={simkl.syncMessage}
+        busy={anyBusy}
+        onSync={simkl.onSync}
+      />
+    ),
+    anilist: (
+      <AnilistListActions
+        connected={!!statuses.anilist?.connected}
+        isImporting={anilist.isImporting}
+        importResult={anilist.importResult}
+        importStoredCount={anilist.importStoredCount}
+        pushStats={anilist.pushStats}
+        busy={anyBusy}
+        onImport={anilist.onPersonalImport}
+        onPush={anilist.onPush}
+      />
+    ),
+    local: (
+      <LocalListActions
+        enabled={!!statuses.local?.enabled}
+        hasWritableExternal={hasWritableExternal}
+      />
+    ),
+  };
 
   return (
     <>
@@ -16,71 +133,38 @@ export default function ConnectionsPage() {
       </Head>
       <div className="connections-page">
         <div className="connections-col">
-          <section className="connections-section">
-            <h2>MyAnimeList</h2>
-            <AccountSection
-              authState={mal.authState}
-              isAuthLoading={mal.isAuthLoading}
-              authError={mal.authError}
-              onConnect={mal.onConnect}
-              onDisconnect={mal.onDisconnect}
-            />
+          <section className="connections-group">
+            <h2>{t('conn.catalogRole')}</h2>
+            <p className="group-hint">{t('conn.catalogRoleHint')}</p>
+            {providersWithRole('catalog').map(id => (
+              <ProviderCard
+                key={`catalog-${id}`}
+                status={statuses[id]}
+                role="catalog"
+                note={statuses[id]?.catalog?.auth === 'oauth' || statuses[id]?.catalog?.auth === 'oauth+secret'
+                  ? t('conn.accountManagedBelow')
+                  : undefined}
+              >
+                {catalogActions[id]}
+              </ProviderCard>
+            ))}
           </section>
-          <section className="connections-section">
-            <h2>SIMKL</h2>
-            <SimklSection
-              isConnected={simkl.isConnected}
-              userName={simkl.userName}
-              isAuthLoading={simkl.isAuthLoading}
-              authError={simkl.authError}
-              onConnect={simkl.onConnect}
-              onDisconnect={simkl.onDisconnect}
-            />
-          </section>
-          <section className="connections-section">
-            <h2>AniList</h2>
-            <AnilistAuthSection
-              isConnected={anilist.isConnected}
-              userName={anilist.userName}
-              isConfigured={anilist.isConfigured}
-              isAuthLoading={anilist.isAuthLoading}
-              authError={anilist.authError}
-              onConnect={anilist.onConnect}
-              onDisconnect={anilist.onDisconnect}
-              pushStats={anilist.pushStats}
-              onPush={anilist.onPush}
-            />
-          </section>
-          <section className="connections-section">
-            <h2>{t('conn.sync')}</h2>
-            <DataSyncSection
-              authState={mal.authState}
-              isSyncing={mal.isSyncing}
-              isBigSyncing={mal.isBigSyncing}
-              isHistoricalCrawling={mal.isHistoricalCrawling}
-              syncError={mal.syncError}
-              historicalStats={mal.historicalStats}
-              onSync={mal.onSync}
-              onBigSync={mal.onBigSync}
-              onHistoricalCrawl={mal.onHistoricalCrawl}
-              isAnilistMetaSyncing={anilist.isSyncing}
-              anilistMetaSyncMessage={anilist.syncMessage}
-              anilistMetaStats={anilist.tagStats}
-              onAnilistMetaSync={anilist.onSync}
-              isAnilistCatalogCrawling={anilist.isCatalogCrawling}
-              anilistCatalogCrawlMessage={anilist.catalogCrawlMessage}
-              anilistCatalogStats={anilist.catalogStats}
-              onAnilistCatalogCrawl={anilist.onCatalogCrawl}
-              anilistConnected={anilist.isConnected}
-              isAnilistImporting={anilist.isImporting}
-              anilistImportResult={anilist.importResult}
-              anilistImportStoredCount={anilist.importStoredCount}
-              onAnilistPersonalImport={anilist.onPersonalImport}
-              simklConnected={simkl.isConnected}
-              isSimklSyncing={simkl.isSyncing}
-              simklSyncMessage={simkl.syncMessage}
-              onSimklSync={simkl.onSync}
-            />
+
+          <section className="connections-group">
+            <h2>{t('conn.personalRole')}</h2>
+            <p className="group-hint">{t('conn.personalRoleHint')}</p>
+            {providersWithRole('personal').map(id => (
+              <ProviderCard
+                key={`personal-${id}`}
+                status={statuses[id]}
+                role="personal"
+                authControl={
+                  id === 'mal' || id === 'simkl' || id === 'anilist' ? accountControl(id) : undefined
+                }
+              >
+                {personalActions[id]}
+              </ProviderCard>
+            ))}
           </section>
         </div>
         <div className="connections-log">
@@ -88,11 +172,12 @@ export default function ConnectionsPage() {
         </div>
       </div>
       <style jsx>{`
-        .connections-page { display: grid; grid-template-columns: minmax(340px, 440px) 1fr; gap: 1.5rem; align-items: stretch; height: calc(100vh - 144px); min-height: 500px; }
+        .connections-page { display: grid; grid-template-columns: minmax(340px, 480px) 1fr; gap: 1.5rem; align-items: stretch; height: calc(100vh - 144px); min-height: 500px; }
         .connections-col { display: flex; flex-direction: column; gap: 1.5rem; min-width: 0; overflow-y: auto; }
         .connections-log { display: flex; min-width: 0; min-height: 0; }
-        .connections-section { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; }
-        .connections-section h2 { margin: 0 0 0.75rem; font-size: 1.1rem; color: var(--text-primary); }
+        .connections-group { display: flex; flex-direction: column; gap: 0.75rem; }
+        .connections-group h2 { margin: 0; font-size: 1.1rem; color: var(--text-primary); }
+        .group-hint { margin: -0.5rem 0 0; font-size: 0.85rem; color: var(--text-muted); }
         @media (max-width: 800px) {
           .connections-page { grid-template-columns: 1fr; height: auto; min-height: 0; }
           .connections-col { overflow-y: visible; }

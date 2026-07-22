@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { RATING_GRIDS, DEFAULT_GRID_ID, getGrid, expandGrid, RatingGrid, RatingTarget, CriteriaSection } from '@/lib/ratingGrids';
+import { RATING_GRIDS, DEFAULT_GRID_ID, getGrid, expandGrid, RatingGrid, RatingTarget, CriteriaSection } from '@/lib/domain/ratingGrids';
 import { useT } from '@/lib/i18n';
 import styles from './AnimeRatingCalculator.module.css';
 

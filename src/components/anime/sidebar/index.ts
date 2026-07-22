@@ -1,7 +1,4 @@
 export { default as SortOrderSection } from './SortOrderSection';
-export { default as AccountSection } from './AccountSection';
-export { default as DataSyncSection } from './DataSyncSection';
-export { default as SimklSection } from './SimklSection';
 export { default as ViewsSection } from './ViewsSection';
 export { default as RecommendationsSection } from './RecommendationsSection';
 export { default as RecoFiltersSection } from './RecoFiltersSection';

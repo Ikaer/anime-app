@@ -100,7 +100,7 @@ The comparison is N-provider rather than pairwise, so adding a provider costs a 
 - **🧮 Rating calculator** — a guided rubric at `/rate` for scoring a title consistently.
 - **🔎 Global search** — one box in the header spanning titles, studios, and staff.
 - **⚙️ In-app configuration** — a `/settings` page for data/log paths and provider credentials, so nothing but the bootstrap paths *has* to live in environment variables. Secrets are write-only and OAuth redirect URIs are derived, not typed.
-- **⏰ Cron-friendly** — an authenticated `cron-sync` endpoint for scheduled background syncs on the NAS.
+- **⏰ Cron-friendly** — an authenticated `cron-sync` endpoint for scheduled background syncs on the NAS, covering every connected provider (and the account-free AniList catalog sync on an install with none).
 
 ---
 
@@ -149,7 +149,7 @@ Configuration is two-tier. Only the **bootstrap paths** need to be environment v
 | Variable | Purpose |
 |---|---|
 | `DATA_PATH` | Root for JSON data files (default `/app/data`) |
-| `LOGS_PATH` | Logs directory |
+| `LOGS_PATH` | Diagnostics directory. No writer today — the connection log lives in the store at `DATA_PATH/logs/` (see docs/DATA-LAYOUT.md); the setting stays reserved for real debug output. |
 
 Provider credentials — set these *either* in the environment *or* on `/settings`:
 

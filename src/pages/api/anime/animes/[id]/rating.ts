@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { isCanonicalId } from '@/lib/store';
-import { writePersonal } from '@/lib/personalWriters';
+import { writePersonal } from '@/lib/providers/writers';
 
 /**
  * Set the user's personal score for one anime. Thin wrapper over the personal

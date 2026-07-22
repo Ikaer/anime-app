@@ -16,7 +16,7 @@ import Link from 'next/link';
 import { Button } from '@/components/shared';
 import { useStatsUrlState } from '@/hooks';
 import { useT, TranslationKey } from '@/lib/i18n';
-import { STATS_DIMENSIONS, type StatEntry, type StatsDimension } from '@/lib/stats';
+import { STATS_DIMENSIONS, type StatEntry, type StatsDimension } from '@/lib/domain/stats';
 import type { StatsApiResponse } from '@/pages/api/anime/stats';
 
 // Same five statuses the rest of the app knows. Unlike the tier board,

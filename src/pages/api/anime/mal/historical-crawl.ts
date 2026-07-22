@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { requireMalAuth } from '@/lib/mal';
-import { getHistoricalCrawlStats, performHistoricalCrawl } from '@/lib/malSync';
+import { requireMalAuth } from '@/lib/providers/mal/client';
+import { getHistoricalCrawlStats, performHistoricalCrawl } from '@/lib/providers/mal/sync';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

@@ -45,7 +45,7 @@ export default function FirstRunOnboarding({ onCatalogLoaded }: FirstRunOnboardi
   const [titlesLoaded, setTitlesLoaded] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   // Log entries strictly after this id belong to OUR crawl — guards against a
-  // stale success/error from an earlier crawl (LOGS_PATH survives a data reset).
+  // stale success/error from an earlier crawl of this same store.
   const baselineIdRef = useRef(0);
 
   // Resolved data path for the "your data will be saved here" line.

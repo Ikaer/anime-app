@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import crypto from 'crypto';
 import {
   getSimklAuthData,
@@ -10,8 +10,8 @@ import {
   consumeOAuthState,
   SimklAuthData,
   SimklUser,
-} from '@/lib/simkl';
-import { getSimklClientId, getSimklClientSecret, getSimklAppName } from '@/lib/settings';
+} from '@/lib/providers/simkl/client';
+import { getSimklClientId, getSimklClientSecret, getSimklAppName } from '@/lib/config/settings';
 import { getSimklRedirectUri } from '@/lib/redirectUri';
 
 // SIMKL credentials resolve at request time via the settings store

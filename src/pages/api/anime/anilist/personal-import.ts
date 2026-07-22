@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { importAnilistPersonalList, getAnilistPersonalConfig } from '@/lib/anilistPersonalSync';
+import { importAnilistPersonalList, getAnilistPersonalConfig } from '@/lib/providers/anilist/personalSync';
 import { getAnilistPersonalCount } from '@/lib/store';
-import { getAnilistAccessToken } from '@/lib/anilistAuth';
+import { getAnilistAccessToken } from '@/lib/providers/anilist/auth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

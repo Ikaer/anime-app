@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { isCanonicalId } from '@/lib/store';
-import { writePersonal, PersonalPatch } from '@/lib/personalWriters';
+import { writePersonal, PersonalPatch } from '@/lib/providers/writers';
 import { UserAnimeStatus } from '@/models/anime';
 
 /**

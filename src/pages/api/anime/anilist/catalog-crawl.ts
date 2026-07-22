@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { performAnilistCatalogCrawl, performAnilistBulkCatalogCrawl, getAnilistCatalogCrawlStats } from '@/lib/anilistSync';
+import { performAnilistCatalogCrawl, performAnilistBulkCatalogCrawl, getAnilistCatalogCrawlStats } from '@/lib/providers/anilist/sync';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {

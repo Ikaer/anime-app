@@ -2,8 +2,8 @@ import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByIdForDisplay } from '@/lib/store';
-import { getPrimaryTitle } from '@/lib/animeUtils';
-import type { RatingTarget } from '@/lib/ratingGrids';
+import { getPrimaryTitle } from '@/lib/domain/animeUtils';
+import type { RatingTarget } from '@/lib/domain/ratingGrids';
 import { useT } from '@/lib/i18n';
 
 const AnimeRatingCalculator = dynamic(

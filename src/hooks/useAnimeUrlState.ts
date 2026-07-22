@@ -20,7 +20,7 @@ import {
   DEFAULT_FILTERS,
   DEFAULT_DISPLAY,
   PERSISTENT_UI_KEYS,
-} from '@/lib/animeUrlParams';
+} from '@/lib/url/animeParams';
 
 export interface UseAnimeUrlStateReturn {
   filters: AnimeFiltersState;

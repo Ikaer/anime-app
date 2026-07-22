@@ -9,7 +9,7 @@
  */
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/stats';
+import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 
 export interface StatsUrlState {
   /** Effective (SIMKL-first) personal status — OR semantics, empty = every statused title. */

@@ -1,3 +1,59 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "overrides": [
+    {
+      "files": [
+        "src/components/**/*.{ts,tsx}",
+        "src/hooks/**/*.{ts,tsx}",
+        "src/models/**/*.{ts,tsx}"
+      ],
+      "parser": "@typescript-eslint/parser",
+      "plugins": ["@typescript-eslint"],
+      "rules": {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/lib/store",
+                  "@/lib/store/**",
+                  "@/lib/config/settings",
+                  "@/lib/config/connectionLog",
+                  "@/lib/providers/registry",
+                  "@/lib/providers/status",
+                  "@/lib/providers/writers",
+                  "@/lib/providers/mal/**",
+                  "@/lib/providers/simkl/**",
+                  "@/lib/providers/anilist/**",
+                  "@/lib/reco/data",
+                  "@/lib/reco/feed",
+                  "@/lib/reco/feedback",
+                  "@/lib/reco/refresh",
+                  "@/lib/reco/similar",
+                  "**/lib/store",
+                  "**/lib/store/**",
+                  "**/lib/config/settings",
+                  "**/lib/config/connectionLog",
+                  "**/lib/providers/registry",
+                  "**/lib/providers/status",
+                  "**/lib/providers/writers",
+                  "**/lib/providers/mal/**",
+                  "**/lib/providers/simkl/**",
+                  "**/lib/providers/anilist/**",
+                  "**/lib/reco/data",
+                  "**/lib/reco/feed",
+                  "**/lib/reco/feedback",
+                  "**/lib/reco/refresh",
+                  "**/lib/reco/similar"
+                ],
+                "allowTypeImports": true,
+                "message": "Server-only module (transitively reaches fs) — components and hooks must not bundle it. Types are fine: use `import type`. Values belong in a page, getServerSideProps or an API route; the client-safe helpers are @/lib/domain/**, @/lib/url/**, @/lib/i18n, @/lib/reco/{weights,scoring,byCredits} and @/lib/providers/{capabilities,personalState,discrepancy}."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

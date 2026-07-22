@@ -19,11 +19,17 @@
    import is authenticated-only. That closed the AniList discrepancy exclusion for free — no token
    gate needed, since an entry in the slice now always belongs to a connected account. The state
    extractors moved from store.ts to src/lib/personalState.ts, shared with hydration.
+[X] MAL catalog/personal split (PROVIDER-PARITY H1) SHIPPED 2026-07-21, migrated in production.
+   MAL's personal state left animes_mal.json for its own slice animes_mal_personal.json
+   (MALPersonalEntry, keyed by canonical id), so a rating write no longer rewrites the 39 MB
+   catalog and MALAnime is pure catalog. Migration: scripts/migrate-mal-personal.js (idempotent,
+   backed by a refuse-to-start boot guard). A per-provider-total fix rode along — each provider's
+   fully-watched check now uses its OWN catalog's episode count, and status==='completed' counts
+   as fully-watched whatever the count.
 [] Data-store layout — folders instead of filename prefixes, plus sweeping 4 orphan files
    (ratings.json, rating_criteria.json, animes_extensions.json, user_preferences.json) and 2
-   stale .bak files. Spec: docs/DATA-LAYOUT.md. Sequenced behind PROVIDER-PARITY H1 (personal/
-   holds one file per ProvenanceSource, which is 3 of 4 until MAL's personal state leaves the
-   catalog file), so the natural order is C1 -> H1 -> this.
+   stale .bak files. Spec: docs/DATA-LAYOUT.md. UNBLOCKED — H1 is done, so personal/ now holds
+   one file per ProvenanceSource (4 of 4). This is the natural next step.
 [] Entry DELETION across providers — removing a status is a distinct Delete action on the list
    entry in BOTH AniList and MAL (not a status value), so today every remote writer refuses
    `status: null` with a reason. Fix belongs in the registry, not per-provider: add an optional

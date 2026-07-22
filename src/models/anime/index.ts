@@ -30,6 +30,15 @@ export interface MALAnime {
   updated_at?: string;
   media_type?: string;
   status?: string; // 'finished_airing' | 'currently_airing' | 'not_yet_aired'
+  /**
+   * TRANSIENT / ingest-only. MAL's API ships the viewer's personal-list block
+   * inline on every seasonal/single-title fetch, so it is part of the wire
+   * shape — but it is NEVER persisted to the catalog file. `upsertAnime` strips
+   * it into the MAL personal slice (`personal/mal.json`, see
+   * `MALPersonalEntry`); a stored catalog `MALAnime` carries no `my_list_status`.
+   * The boot guard in store.ts refuses to start if it finds one embedded (that
+   * means the store predates the H1 split — run scripts/migrate-mal-personal.js).
+   */
   my_list_status?: MALListStatus;
   num_episodes?: number;
   start_season?: {
@@ -75,18 +84,13 @@ export interface RelatedAnime {
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
 
 /**
- * MAL's personal-list block — the counterpart to `SimklPersonalEntry` /
- * `AniListPersonalEntry` / `LocalPersonalEntry`, except it lives INSIDE
- * `MALAnime` rather than in its own slice file. `animes_mal.json` is stored as
- * raw MAL JSON, so the API-shaped field names here are load-bearing: renaming
- * them to the app's vocabulary would break the stored payload.
+ * MAL's personal-list block. This is the API **wire** shape — MAL ships it
+ * inline on `MALAnime.my_list_status` on every fetch. The API-shaped field names
+ * are load-bearing.
  *
  * `status` is a bare `string`, not `UserAnimeStatus`: it is whatever MAL sent,
  * including the empty string the local write path seeds before a score-only
  * patch. Read it through `personalState.ts`, never directly.
- *
- * The embedding is a legacy asymmetry, not a design choice — see
- * docs/PROVIDER-PARITY.md "H1".
  */
 export interface MALListStatus {
   status: string; // 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch'
@@ -96,12 +100,25 @@ export interface MALListStatus {
   updated_at: string;
 }
 
+/**
+ * MAL's personal-list **stored** entry — the peer of `SimklPersonalEntry` /
+ * `AniListPersonalEntry` / `LocalPersonalEntry`, living in its own slice file
+ * (`personal/mal.json`, keyed by canonical id) since the H1 split
+ * (docs/PROVIDER-PARITY.md "H1"). It ended MAL's legacy asymmetry of embedding
+ * personal state inside the catalog payload.
+ *
+ * Structurally identical to the wire shape `MALListStatus` (verbatim MAL field
+ * names — no vocabulary rename rode on the data migration), so it is a type
+ * alias rather than a second maintained shape.
+ */
+export type MALPersonalEntry = MALListStatus;
+
 export interface Studio {
   id: number;
   name: string;
 }
 
-// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in animes_simkl.json.
+// SIMKL personal data (read-only, one-way sync). Keyed by MAL id in personal/simkl.json.
 export interface SimklPersonalEntry {
   simkl_id: number;          // kept for deletion reconciliation (diff on ids.simkl)
   mal_id: number;
@@ -116,7 +133,7 @@ export interface SimklPersonalEntry {
 /**
  * AniList personal-list data (read-only, anonymous public import by username —
  * docs/PROVIDER-FREE.md Phase 3 "P3b"). Keyed by MAL id in
- * animes_anilist_personal.json. It is the LOWEST personal-state fallback tier
+ * personal/anilist.json. It is the LOWEST personal-state fallback tier
  * (SIMKL > MAL > AniList) — see `getEffective*` in animeUtils.ts — so an
  * existing MAL/SIMKL user is unaffected, while an AniList-only user still gets
  * their state. Deliberately the locked 4-field shape (no `mal_id`): the store
@@ -132,8 +149,8 @@ export interface AniListPersonalEntry {
 /**
  * In-app **local** personal state (docs/localRating/) — the write target when no
  * external provider (MAL/SIMKL/…) is connected. Un-conflates local edits from
- * `animes_mal.json`'s `my_list_status`: local edits get their own slice
- * (`animes_local_personal.json`, keyed by canonical id) + its own extractor in
+ * `catalog/mal.json`'s `my_list_status`: local edits get their own slice
+ * (`personal/local.json`, keyed by canonical id) + its own extractor in
  * `personalState.ts` + precedence tier, like SIMKL and AniList already have.
  * Deliberately the locked shape (no `mal_id` — the store keys by canonical id
  * externally). Local edits ARE the authority, so `updated_at` is kept as a mtime.
@@ -176,6 +193,19 @@ export interface ProviderPersonalState {
   progress?: number | null;
   total?: number | null;
   present: boolean; // does this provider have an entry for the title at all?
+  /**
+   * Is this the **reference list** absence is judged against (`presenceAnchors`)?
+   * Set by `buildProviderStates`, which is the only place the resolved precedence
+   * — and therefore the anchor — is known. It rides on the state rather than
+   * being a second argument to `computeDiscrepancy` so that the comparison stays
+   * a pure function of what it is handed: the discrepancies page re-runs it
+   * client-side over a filtered subset of these very states, and excluding the
+   * anchor provider there correctly removes the anchoring with it.
+   *
+   * An anchor is the one provider that may appear with `present: false` and no
+   * slice entry at all — see `buildProviderStates`.
+   */
+  anchor?: boolean;
 }
 
 /**
@@ -193,7 +223,7 @@ export interface Discrepancy {
 }
 
 // AniList catalog metadata (read-only, public API). Keyed by MAL id in
-// animes_anilist_meta.json. The interface name still says "Tag" for historical
+// catalog/anilist.json. The interface name still says "Tag" for historical
 // reasons; the entry has held staff and banner art for a while now.
 export interface AniListTagEntry {
   name: string;
@@ -208,11 +238,18 @@ export interface AniListStaffEntry {
   role: string;
 }
 /**
- * One AniList relation edge, flattened to the MAL join key. `relationType` is
- * AniList's vocabulary (`SEQUEL`, `PREQUEL`, `SIDE_STORY`, `PARENT`,
- * `ALTERNATIVE`, `ADAPTATION`…) — stored verbatim so the franchise rules can
- * change without a re-sync. Only ANIME targets are kept: an `ADAPTATION` edge's
- * `idMal` is the *manga's* id and would collide with an unrelated anime.
+ * One AniList relation edge. `relationType` is AniList's vocabulary (`SEQUEL`,
+ * `PREQUEL`, `SIDE_STORY`, `PARENT`, `ALTERNATIVE`, `ADAPTATION`…) — stored
+ * verbatim so the franchise rules can change without a re-sync. Only ANIME
+ * targets are kept: an `ADAPTATION` edge's `idMal` is the *manga's* id and would
+ * collide with an unrelated anime.
+ *
+ * **Both ids are optional, and at least one is always present.** The edge used
+ * to be flattened onto the MAL join key alone, which silently dropped every edge
+ * whose target has no MAL id — i.e. exactly the AniList-only titles the keyless
+ * catalog crawl mints (PROVIDER-PARITY.md B1). `id` is the target's AniList id,
+ * always available since the edge came from AniList; `idMal` is kept as the
+ * primary join key because the catalog is overwhelmingly MAL-anchored.
  *
  * This exists because MAL's `related_anime` is a **detail-only** field — its
  * list/seasonal endpoints omit it, so the crawled catalog has relations for
@@ -221,7 +258,9 @@ export interface AniListStaffEntry {
  * affordable at all (see `docs/quickRate/`).
  */
 export interface AniListRelationEntry {
-  idMal: number;
+  idMal?: number;
+  /** Target's AniList id. Absent only on entries written before B1 shipped. */
+  id?: number;
   relationType: string;
 }
 
@@ -258,11 +297,11 @@ export interface AniListCharacterEntry {
 }
 
 /**
- * An anime's cast, stored in its OWN slice (`animes_anilist_cast.json`, keyed by
+ * An anime's cast, stored in its OWN slice (`catalog/anilist_cast.json`, keyed by
  * canonical id) rather than on `AniListMetaEntry` — deliberately.
  *
  * Cast is display-only (the detail page's Cast section); unlike `tags`/`staff`
- * it feeds no reco source. `animes_anilist_meta.json` is one of the six slices
+ * it feeds no reco source. `catalog/anilist.json` is one of the six slices
  * `getAnimeForDisplay()` parses on every cold row build, and cast is by far the
  * bulkiest AniList payload (~12 characters × 2 portraits × 2 names per title,
  * i.e. tens of MB catalog-wide). Living here keeps that cost off the hot path:
@@ -464,7 +503,11 @@ export interface AnimePersonal {
  * effective — see CLAUDE.md "Local cache authority").
  */
 export interface AnimeSources {
+  /** Raw MAL catalog slice. Post-H1 it carries NO `my_list_status` — MAL's
+   *  personal state lives in `malPersonal` (see `MALPersonalEntry`). */
   mal?: MALAnime;
+  /** MAL's personal-list entry, split out of the catalog payload (H1). */
+  malPersonal?: MALPersonalEntry;
   simkl?: SimklPersonalEntry;
   anilist?: AniListMetaEntry;
   anilistPersonal?: AniListPersonalEntry;

@@ -14,4 +14,5 @@ export { useStatsUrlState, STATS_DEFAULTS } from './useStatsUrlState';
 export type { StatsUrlState, UseStatsUrlStateReturn } from './useStatsUrlState';
 
 export { useConnections } from './useConnections';
+export { useProviderStatuses } from './useProviderStatuses';
 

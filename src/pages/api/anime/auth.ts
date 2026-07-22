@@ -1,11 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getMALAuthData, saveMALAuthData, clearMALAuthData, isMALTokenValid } from '@/lib/mal';
+import { getMALAuthData, saveMALAuthData, clearMALAuthData, isMALTokenValid } from '@/lib/providers/mal/client';
 import { MALAuthData, MALUser } from '@/models/anime';
-import { appendLog } from '@/lib/connectionLog';
+import { appendLog } from '@/lib/config/connectionLog';
 import crypto from 'crypto';
 import fs from 'fs';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/jsonStore';
-import { getMalClientId } from '@/lib/settings';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
+import { getMalClientId } from '@/lib/config/settings';
 import { getMalRedirectUri } from '@/lib/redirectUri';
 
 /**
@@ -37,7 +37,7 @@ function generateCodeChallenge(verifier: string): string {
 }
 
 // Store code verifier in file system for persistence across server restarts
-const CODE_VERIFIER_FILE = dataFile('oauth_state.json');
+const CODE_VERIFIER_FILE = dataFile('auth/oauth_state_mal.json');
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 type VerifierStore = Record<string, { verifier: string; timestamp: number }>;
