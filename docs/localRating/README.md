@@ -1,119 +1,106 @@
 # Local Rating provider
 
-Add a **local personal-data provider** — an in-app store of status/score/progress that
-needs no external service — so the app is fully usable (rating + recommendation seeds)
-with no MAL/SIMKL account, and so the write path generalizes cleanly for the upcoming
-**Betaseries** provider and a future **AniList writer**.
+> Shipped. The in-app personal-data provider (`local`) plus the generic write
+> registry it forced into existence. This keeps the design decisions; the
+> four phase specs are in git history.
 
-This is a four-phase feature. It finishes the job the provider-free cutover started:
-that work made provider **reads** generic (the hydration engine); this makes provider
-**writes** and **comparison** generic, and drops in "local" as the trivial always-available
-instance of the new write abstraction.
+## Why it exists
 
----
+An in-app store of status/score/progress that needs **no external service**, so
+the app is fully usable (rating + recommendation seeds) with no MAL/SIMKL
+account — and so the **write** path generalizes the way the read path already
+had.
 
-## The backbone: local edits currently have no home of their own
+The provider-free cutover made provider *reads* generic (the hydration engine).
+This made provider *writes* and *comparison* generic, and dropped in `local` as
+the trivial always-available instance of the new write abstraction.
 
-Today `rating.ts` and `mal-status.ts` write personal state **into `animes_mal.json`'s
-`my_list_status`** (`getAllAnime()` → mutate → `saveAnime()`). So "a local edit" and
-"MAL's mirror" are literally the same bytes.
+## The backbone: local edits had no home of their own
 
-- For a **MAL user** this is harmless: the remote write round-trips the value back, and the
-  MAL slice staying authoritative is fine.
-- For a **local-only user** (the friend, Betaseries-only) it is **broken**: there is no MAL
-  slice to write into, so the endpoint 404s, and even if it didn't, a value stashed in a
-  "MAL mirror" file is conceptually wrong and a MAL big-sync would clobber it.
+`rating.ts` and `mal-status.ts` used to write personal state **into the MAL
+catalog slice's `my_list_status`**, so "a local edit" and "MAL's mirror" were
+literally the same bytes.
 
-**The local provider is the fix for that conflation.** Local edits get their own slice
-(`animes_local_personal.json`, keyed by canonical id), their own extractor
-(`personalFromLocal`), and their own precedence tier — exactly like SIMKL and AniList
-already have. `animes_mal.json` goes back to being a pure MAL mirror.
+- For a **MAL user** that was harmless — the remote write round-trips the value
+  back.
+- For a **local-only user** it was broken: there is no MAL slice to write into, so
+  the endpoint 404'd; and even if it hadn't, a value stashed in a MAL mirror is
+  conceptually wrong and a MAL big-sync would clobber it.
+
+Local edits now get their own slice (`personal/local.json`, keyed by canonical
+id), their own extractor (`personalFromLocal`), and their own precedence tier —
+exactly like SIMKL and AniList.
 
 ## The single predicate that ties three decisions together
 
-Toggle-default, precedence-`auto`, and write-fan-out all collapse into **one** question:
+Toggle-default, precedence-`auto`, and write fan-out all collapse into one
+question:
 
-> **Is a writable external personal provider connected?** (MAL, SIMKL, or — later —
-> AniList/Betaseries with a registered writer.)
+> **Is a writable external personal provider connected?**
 
 | Situation | Local enabled? | Writers on a rating edit | Local in precedence |
 |---|---|---|---|
-| **You** (MAL + SIMKL) | **OFF** (default) | MAL + SIMKL (today's `rating.ts`, unchanged) | not a source |
-| **Friend** (no external) | **ON** (default) | local only → `animes_local_personal.json` | top (only source) |
-| Manual: local enabled *alongside* externals | ON (explicit) | local + externals | `localTop` / `localBottom` decides |
+| MAL + SIMKL connected | **OFF** (default) | MAL + SIMKL | not a source |
+| No external | **ON** (default) | local only | top (only source) |
+| Manual: local *alongside* externals | ON (explicit) | local + externals | `localTop` / `localBottom` decides |
 
 Consequences, all deliberate:
 
-- **Zero regression for the existing setup.** With no external writable provider, local is
-  simply off; the current MAL+SIMKL write path is preserved byte-for-byte. Local is
-  **purely additive**.
-- **Precedence model B ("write-through, no shadowing") falls out for free.** For a MAL user,
-  local isn't even a precedence source, so it can't shadow an external edit. The
-  "stale/redundant local value" problem never arises.
-- **`localTop`/`localBottom` earn their keep in exactly one place** — the manual edge case of
-  running local next to externals. This is *not* a decision every user makes; `auto` is the
-  default and resolves correctly on its own.
+- **Zero regression for an existing setup.** With an external writable provider,
+  local is simply off and absent from the precedence list entirely — a stray
+  slice entry is never consulted. Local is purely additive.
+- **"Write-through, no shadowing" falls out for free.** For a MAL user local
+  isn't a precedence source at all, so it cannot shadow an external edit. The
+  stale-local-value problem never arises.
+- **`localTop`/`localBottom` earn their keep in exactly one place** — running
+  local next to externals manually. `auto` is the default and resolves on its own.
 
-## The four decisions (settled in design)
+## The four decisions
 
-1. **Enablement** — a `settings.json` toggle, defaulting to `auto` = "on iff no writable
-   external provider". Not an OAuth-style "connect an account" flow (nothing to connect).
-2. **Rating surfaces** — the **detail-page status + score control** is a core phase (phase 3):
-   it's the only surface that can create local state from nothing (the tier board only shows
-   *already-statused* titles, so it's empty for a fresh local user). **No inline card rating**
-   (clutters the dense 4K view). The franchise-bulk **quick-rate page** is a *separable*
-   enhancement — spec'd in **[docs/quickRate/](../quickRate/README.md)**, depends on this
-   feature but isn't part of it.
-3. **Precedence** — a `precedenceMode: 'auto' | 'localTop' | 'localBottom'` enum. `auto` is
-   the default and resolves via the predicate above. **No `custom` ordered list** — deferred
-   until a real need appears (frozen arrays go stale when a provider is added; the only DOF
-   anyone wants is where *local* sits). Adding `custom` later is a non-breaking enum
-   extension.
-4. **Discrepancy** — generalize the pairwise MAL-vs-SIMKL model to a **per-provider map** so
-   it scales to N providers, rendered in the grouped long format (one row per provider under
-   each anime).
+1. **Enablement** — a `settings.json` toggle defaulting to `auto` ("on iff no
+   writable external provider"). Not an OAuth-style "connect an account" flow;
+   there is nothing to connect.
+2. **Rating surfaces** — the **detail-page status + score control**
+   (`PersonalStateEditor`) is core, because it is the only surface that can create
+   local state from nothing: the tier board only shows *already-statused* titles,
+   so it is empty for a fresh local user. **No inline card rating** (clutters the
+   dense 4K view). The franchise-bulk page is a separable enhancement —
+   [docs/quickRate/](../quickRate/README.md).
+3. **Precedence** — a `localPrecedenceMode: 'auto' | 'localTop' | 'localBottom'`
+   enum. **No `custom` ordered list**: frozen arrays go stale when a provider is
+   added, and the only degree of freedom anyone wants is where *local* sits.
+   Adding `custom` later is a non-breaking enum extension.
+4. **Discrepancy** — generalize the pairwise MAL-vs-SIMKL model to a
+   **per-provider map**, rendered in the grouped long format (one sub-row per
+   provider under each anime) so a new provider costs a row, not a column.
 
-## Build order
+## The write registry
 
-Each phase leans on the previous, so build in order:
+A provider is writable **iff it registers a writer** — capability, not identity.
+That is what let AniList join the fan-out the day its OAuth shipped, with no
+endpoint change, and what makes Betaseries "write an extractor + a writer +
+register both".
 
-1. **[01 — Local provider](01-local-provider.md)** — new slice + extractor + settings toggle
-   + `auto` precedence resolver. Un-conflates local edits from the MAL slice. *Reads work
-   end-to-end after this; nothing writes to local yet.*
-2. **[02 — Write registry](02-write-registry.md)** — replace the hardcoded MAL+SIMKL
-   fan-out with a per-provider writer registry keyed on a **capability** (so AniList/Betaseries
-   slot in later for free). Local is its first pure-local writer. Must **create, not just edit**
-   (a local-only title has no MAL slice to mutate).
-3. **[03 — Rating UI](03-rating-ui.md)** — the detail-page status + score control, the bootstrap
-   surface that first writes local state (without it a local-only user can enter nothing).
-4. **[04 — Multi-provider discrepancy](04-discrepancy-multiprovider.md)** — `computeDiscrepancy`
-   pairwise → per-provider map, and every consumer of it.
+`writePersonal(canonicalId, patch)` in
+[providers/writers.ts](../../src/lib/providers/writers.ts) runs **every**
+local-authority write before **any** remote push — structurally encoding
+local-cache-authority — then fans the remotes out serially. It returns
+`{ found, outcomes }`, and both `rating.ts` and `mal-status.ts` are collapsed
+onto it.
 
-**Separable enhancement (not a phase):** [docs/quickRate/](../quickRate/README.md) — the
-franchise-bulk quick-rate page. Depends on phase 2's `writePersonal`, but nothing here depends
-on it.
+The local writer must **create, not just edit**: a local-only title has no MAL
+slice to mutate. Its `writeRemote` is a no-op that always reports `ok`.
 
-## Betaseries / AniList-writer readiness
+See [PROVIDER-PARITY.md](../PROVIDER-PARITY.md) D1/D2 for the capability
+narrowing and enablement predicate that later moved *out* of the writers.
 
-This feature is scoped so the *next* provider is a plugin, not a fork:
+## Known limit — don't oversell
 
-- Phase 2's registry keys off a **writer capability**, not provider identity — AniList flips
-  from no-writer to writer the day its OAuth is wired, with no structural change; Betaseries
-  is "write a `betaseriesFromX` extractor + a `writeBetaseries` writer + register both".
-- Phase 4's per-provider discrepancy map is N-provider by construction.
+Local scores do seed the reco feed (`getSeeds` reads effective `personal.*`).
+**But crowd expansion is MAL-keyed**: the internal candidate map keys on
+`crosswalk.mal`, and MAL/AniList crowd edges arrive as MAL ids.
 
-## Known limit to state up front (don't oversell)
-
-The user's motivation includes "make the recommendation page work by giving it seeds." Seeds
-themselves work for a local user — `getSeeds` reads effective `personal.*`
-([recommendations.ts:311](../../src/lib/recommendations.ts)), which local scores feed. **But
-crowd expansion is MAL-keyed**: the internal candidate map is keyed on `crosswalk.mal`
-([recommendations.ts:453](../../src/lib/recommendations.ts)) and MAL/AniList crowd edges
-arrive as MAL ids.
-
-- AniList-catalog-crawled titles carry `idMal` → `crosswalk.mal`, so a friend whose catalog
-  came from the onboarding AniList crawl **does** pull crowd recos. The reco page works.
-- A title with **no MAL crosswalk at all** (a hypothetical pure-Betaseries entry) can be a
-  seed but won't pull crowd edges — only the taste-profile sources (genre/tag/studio/staff)
-  re-rank it. Spec this honestly in the relevant phase; don't promise full crowd recos for
-  crosswalk-less titles.
+- AniList-catalog-crawled titles carry `idMal` → `crosswalk.mal`, so a keyless
+  install whose catalog came from the onboarding crawl **does** pull crowd recos.
+- A title with **no MAL crosswalk at all** can be a seed but pulls no crowd
+  edges — only the taste-profile sources re-rank it.

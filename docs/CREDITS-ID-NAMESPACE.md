@@ -1,273 +1,154 @@
 # Credits id namespace — studios, staff, and the provider-id problem
 
-**Status: open question, nothing decided, nothing implemented.** This document
-exists to capture the problem and every case that has to be answered before a
-line of code moves. Written 2026-07-19, off the back of the `/stats` page adding
-the first internal links to studio/staff credits.
+> **Open question. Nothing decided, nothing implemented.** This captures the
+> problem and the cases that have to be answered before a line of code moves.
 
----
-
-## 1. The problem in one paragraph
+## The problem
 
 Anime have a synthetic canonical id (`a_<n>`, minted by the registry). **Nothing
 else does.** Studios, staff, characters and seiyuu are stored with their raw
-provider id, and the credits route `/credits/studio/<id>` takes that raw id with
-no indication of whose namespace it belongs to. Today that is unambiguous by
-accident — every studio in the store came from MAL. It stops being unambiguous
-the moment AniList starts contributing `catalog.studios`, at which point MAL
-studio 4 and AniList studio 4 are two different companies competing for the same
-URL, and several scoring systems that key on studio id silently fragment.
+provider id, and `/credits/studio/<id>` takes that raw id with no indication of
+whose namespace it belongs to.
 
-## 2. Current state, measured
+Today that is unambiguous **by accident** — every studio in the store came from
+MAL. It stops being unambiguous the moment AniList contributes
+`catalog.studios`, at which point MAL studio 4 and AniList studio 4 are two
+different companies competing for the same URL.
 
-Measured against the real store (`E:/Workspace/local/AnimeTracker/data`), 2026-07-19:
+## Current state
 
-| | count |
-|---|---|
-| canonical ids | 25,370 |
-| MAL records with `studios` | 17,418 |
-| AniList meta entries | 15,019 |
-| — with `tags` | 12,795 |
-| — with `staff` | 13,041 |
-| — **with a `.catalog` block** | **0** |
-| titles with no studios from any source | 7,952 |
+`catalog.studios` is **100% MAL-namespace**: `AniListMetaEntry.catalog` is
+written only by the AniList **catalog crawl**, which has never run on the real
+store — only the per-title enrichment sync (tags / staff / banner / relations).
+The collision is **latent, not active**.
 
-The decisive row is the bolded one. `AniListMetaEntry.catalog` is written only by
-the AniList **catalog crawl**, which has never been run on this dataset — only
-the per-MAL-id enrichment sync (tags / staff / banner / relations). So:
+Worth stating because the intuition runs the other way: "most of our data comes
+from AniList now" is true of the *enrichment* layer (tags, staff, cast,
+producers, relations) and false of the *catalog spine* (titles, studios, genres,
+scores), which is entirely MAL.
 
-- `catalog.studios` is **100% MAL-namespace today**. The collision is latent, not active.
-- The intuition "most of our data comes from AniList now" is true of the
-  *enrichment* layer (tags, staff, cast, producers, relations) and false of the
-  *catalog spine* (titles, studios, genres, scores), which is entirely MAL.
+Where the two overlap they mostly agree (~92% identical studio names on a
+sample); the disagreements are AniList reporting no main studio, or a naming
+variant (`khara` vs `Studio khara`).
 
-Agreement sample, over the 212 titles the cast sweep had reached at time of writing:
+## The trigger
 
-```
-MAL has studios     : 212 | names identical to AniList's main studio: 194  (~92%)
-MAL missing studios : 0   | AniList could fill: 0
-disagreements: AniList reports no main studio (Studio Pierrot, Toei Animation),
-               or a naming variant (`khara` vs `Studio khara`, ×4)
-```
+**The decision point is the catalog crawl, not the credits route** — the route is
+just where the breakage becomes visible. The day any path writes
+`AniListMetaEntry.catalog.studios` on this store, `catalog.studios` becomes
+mixed-namespace. The model already carries a comment saying so; nothing enforces
+it.
 
-So re-keying studios to AniList *today* would gain zero coverage and lose ~8% to
-name/absence mismatch. That option is measured-dead, not merely unattractive.
+## What breaks, beyond the route
 
-## 3. The trigger
+Studio id is a silent join key in several scoring systems, all of which degrade
+without erroring: the reco `studio` taste source and the MMR diversity signature
+(`reco/feed.ts`, `reco/scoring.ts`), "Dans le même studio / staff"
+(`reco/byCredits.ts`), the global search credit index (`domain/globalSearch.ts`),
+the credits page lookup (`domain/creditsCatalog.ts`), and `/stats`
+(`domain/stats.ts`).
 
-The day `performAnilistBulkCatalogCrawl` (or any path writing
-`AniListMetaEntry.catalog.studios`) runs on this store, `catalog.studios` becomes
-mixed-namespace: MAL ids for MAL-linked titles, AniList ids for AniList-only ones.
-This is already flagged in the model, at `AniListMetaEntry.catalog.studios`:
+**Fragmentation mode:** one real studio splits into two id buckets, halving its
+document frequency. Because these are **IDF-weighted, a split studio looks
+*rarer* than it is and its weight goes UP** — the failure is a confidently wrong
+recommendation, not a missing one. That is the worst shape of failure, and the
+main reason to solve this before the crawl rather than after.
 
-> *"would fragment studio affinity. Not a problem today (MAL wins for MAL-linked
-> titles; AniList-only titles have no MAL studio profile anyway)."*
+## Options
 
-Nothing enforces that comment. **The decision point is the catalog crawl, not the
-credits route** — the route is just where the breakage becomes visible.
+**A. Status quo — raw MAL ids, unqualified.** Zero work. Correct exactly as long
+as catalog precedence stays MAL-first *and* the AniList catalog crawl never runs.
+Fails silently the moment either changes.
 
-## 4. What breaks, beyond the route
+**B. Re-key studios to AniList ids.** Measured dead: zero coverage gain, ~8%
+regression, plus a migration. Revisit only after a crawl has populated
+`.catalog`.
 
-The credits page is the *visible* consumer. Studio id is also a silent join key in
-three scoring systems, all of which degrade without erroring:
+**C. Key credits by name.** Namespace-free by construction — the problem
+evaporates rather than being managed, and MAL "Bones" and AniList "Bones" collapse
+into one page. But identity by string: `khara` vs `Studio khara`, `A-1 Pictures`
+vs `A1 Pictures` stay split without a normalization pass that will be wrong in
+both directions — and **over-merging is worse than under-merging here**. Also does
+not rescue producers, and the IDF consumers would have to move to name-keys too or
+the route and the scoring disagree about what a studio is.
 
-| Consumer | File | Keys on |
-|---|---|---|
-| Reco `studio` taste source (IDF profile) | `recommendations.ts` `FIELD_EXTRACTORS.studio` | `s.id` |
-| MMR diversity signature | `recommendations.ts` (`s:${st.id}`) | `s.id` |
-| "Dans le même studio / staff" | `similarByCredits.ts` `studioIdf` | `s.id` |
-| Global search credit index | `globalSearch.ts` | `s.id` + name |
-| Credits page lookup | `creditsCatalog.ts` `listAnimeByStudio` | `s.id` |
-| `/stats` studio rows + links | `stats.ts`, `stats.tsx` | `s.id` |
+**D. Source-qualify the id in the route.** `/credits/studio/mal/4` vs
+`/credits/studio/anilist/4`. The id becomes self-describing, so the collision
+cannot occur by construction. **The provenance needed to emit the right link is
+already in the model** (`record.provenance.catalog.studios`), at array-level
+granularity — which is correct, since hydration takes `studios` wholesale from one
+winning provider and never merges element-wise. Extends to a fifth provider as a
+new segment rather than a migration, and unlocks internal producer pages. But it
+splits one real studio into two pages where both namespaces have it, and means two
+lookup paths per credit type forever.
 
-Fragmentation mode: one real studio splits into two id buckets, halving its
-document frequency. Because these are **IDF-weighted**, a split studio looks
-*rarer* than it is and its weight goes **up** — the failure is a confidently
-wrong recommendation, not a missing one. That is the worst shape of failure and
-the main reason this is worth solving before the crawl rather than after.
+**E. Mint canonical ids for studios/staff, like anime.** The "correct" answer by
+symmetry: a studios registry, resolve-before-mint on a name + provider-id
+crosswalk, `s_<n>` outward. **Deferred, not rejected** — a second identity spine
+with its own reconciliation rules and a migration of six consumers, for a problem
+that currently affects zero rows. Revisit if credits become a first-class surface
+rather than a navigation aid.
 
-## 5. Options
+## Cases to answer
 
-### A. Status quo — keep raw MAL ids, unqualified
+**Route shape.** `/credits/studio/mal/<id>` over `/mal/credits/studio/<id>` — the
+source qualifies the **id**, not the page, and a root-level `/mal/*` claims a lot
+of top-level URL space for a qualifier.
 
-Zero work. Correct exactly as long as catalog precedence stays MAL-first *and*
-the AniList catalog crawl never runs. Both are true today. Fails silently the
-moment either changes, which is the objection.
+**Is the qualifier redundant for staff?** `listAnimeByStaff` scans
+`sources.anilist.staff`; staff is AniList-only and has no other possible source.
+Either accept a redundant segment for shape consistency, or qualify only the
+genuinely multi-source types (today: studios alone) and accept that the route
+shape differs per type.
 
-### B. Re-key studios to AniList ids
+**The duplicate-page problem — the central trade.** Once AniList contributes
+catalog studios, Bones plausibly has both ids, and two pages each list a *partial*
+filmography with no cross-link and no knowledge of each other. Is a merge layer
+wanted (that is option E creeping in)? If not, should each page at least link
+"also known in AniList as …"? And do the IDF consumers follow the route's identity
+rule, or keep their own — route and scoring disagreeing is defensible, but must be
+deliberate.
 
-Measured-dead (§2): zero coverage gain, ~8% regression, plus a migration.
-Revisit only after an AniList catalog crawl has actually populated `.catalog`.
+**Producers have no internal home at all**, and are the strongest argument for
+source-qualifying. They exist **only** on `AniListCastEntry.studios` with
+`isMain: false`, and that slice is deliberately outside the hot-path join, so a
+producer page needs a catalog-wide scan of a path kept cold on purpose (`/stats`
+already does this, consciously). Worse, **coverage is asymmetric**: the cast slice
+is lazily filled over the statused list and never the ~25k catalog, so an
+AniList-keyed studio page would list a handful of titles where the MAL page lists
+everything — same route, same chrome, wildly different completeness. If it ships,
+the page must say so. Also: is "Producteurs" even the right label? AniList's
+`isMain: false` bucket mixes animation co-producers with distributors and
+licensors.
 
-### C. Key credits by **name** instead of id
+**Seiyuu stay external.** They link out to AniList because `/credits/staff/<id>`
+scans *production* credits, which never contain voice actors. Source-qualifying
+does not change that; an internal seiyuu page would need its own lookup over the
+cast slice and inherit the coverage asymmetry above.
 
-Namespace-free by construction — one page per studio regardless of source, and
-the mixed-namespace problem evaporates rather than being managed.
+**Legacy URLs** must redirect, not 404 — to `…/studio/mal/<id>` and
+`…/staff/anilist/<id>`, correct for 100% of existing rows. Same pattern as the
+legacy MAL-numeric anime URLs `resolveByMalId()` already redirects.
 
-- **Pro:** collapses MAL "Bones" and AniList "Bones" into one page automatically.
-  Also the only option where a producer and a studio of the same name unify.
-- **Con:** identity by string. `khara` vs `Studio khara` (measured, ×4) stay
-  split; `A-1 Pictures` vs `A1 Pictures` likewise. Needs a normalization pass
-  (casefold, strip `Studio`/`Inc.`/punctuation) that will be wrong sometimes in
-  both directions — over-merging is worse than under-merging here.
-- **Con:** does **not** rescue producers (§6.4) — distributors like Funimation
-  aren't in MAL's studio list under any name, so a name-keyed page for them is
-  still empty unless the lookup also indexes the cast slice.
-- **Con:** the three IDF consumers would need to move to name-keys too, or the
-  route and the scoring disagree about what a studio is.
+**Every call site that emits a credit link** must learn to pass the source: the
+detail page's studio chips and staff rows, `/stats`' `linkFor`, and the global
+search dropdown. None has to reach for it — each already holds the record.
+`globalSearch.ts` additionally builds a credit index **keyed by id**, so it must
+either qualify its hits or merge by name.
 
-### D. Source-qualify the id in the route
+**`/stats` aggregation buckets** count distinct anime per studio id, so mixed
+namespaces split a studio into two rows — visible, unlike the silent IDF
+fragmentation, but still wrong. Whatever unification rule lands has to apply here
+too.
 
-`/credits/studio/mal/4` and `/credits/studio/anilist/4` are different pages. The
-id becomes self-describing, so the collision cannot occur by construction.
+**Ordering relative to the catalog crawl.** *Fix first* means nothing ever
+fragments, but the fix ships against a dataset where it is unobservable and cannot
+be validated end to end. *Crawl first* means the fix is testable against real
+mixed data, at the cost of a window where recommendations are quietly skewed.
 
-The provenance needed to emit the right link is **already in the model**:
-
-```ts
-export type CatalogProvenance = Partial<Record<keyof AnimeCatalog, ProvenanceSource>>;
-// record.provenance.catalog.studios → 'mal' | 'anilist' | 'simkl' | 'local'
-```
-
-Granularity is array-level, not element-level — which is correct, because the
-hydration engine takes `studios` wholesale from one winning provider and never
-merges element-wise. Every link producer already holds the record.
-
-- **Pro:** honest, and extends to a fifth provider as a new segment rather than a migration.
-- **Pro:** unlocks internal producer pages (§6.4) — the real prize.
-- **Con:** splits one real-world studio into two pages when both namespaces have
-  it (§6.3). This is the mirror image of C's weakness and the core trade.
-- **Con:** two lookup paths per credit type, forever.
-
-### E. Mint canonical ids for studios/staff, like anime
-
-The "correct" answer by symmetry with the anime registry: a
-`studios_registry.json`, resolve-before-mint on a name+provider-id crosswalk,
-`s_<n>` outward. Deferred, not rejected — it is a large build (a second identity
-spine, its own reconciliation rules, a migration of six consumers) for a problem
-that currently affects zero rows. Worth revisiting if credits become a
-first-class surface rather than a navigation aid.
-
-## 6. Cases to think about
-
-### 6.1 Route shape
-
-`/credits/studio/mal/<id>` vs `/mal/credits/studio/<id>`. Preference for the
-former: the source qualifies the **id**, not the page — `/credits` is one concept
-whichever namespace the id belongs to. A root-level `/mal/*` segment also claims
-a lot of top-level URL space for what is a qualifier. File would move from
-`credits/[type]/[id].tsx` to `credits/[type]/[source]/[id].tsx`.
-
-### 6.2 Is the qualifier redundant for staff?
-
-`listAnimeByStaff` scans `sources.anilist.staff` — staff is AniList-only and has
-no other possible source. `/credits/staff/anilist/456` is therefore always
-`anilist`. Uniformity vs noise: either accept the redundant segment for shape
-consistency, or qualify only the types that can actually be multi-source (today:
-studios alone). Qualifying only studios means the route shape differs per type,
-which is its own kind of surprise.
-
-### 6.3 The duplicate-page problem — the central trade
-
-Source-qualifying makes ids unambiguous but **splits one real studio into two
-pages**. Once AniList contributes catalog studios, Bones plausibly has both a MAL
-id and an AniList id; `/credits/studio/mal/4` and `/credits/studio/anilist/43`
-would each list a *partial* filmography with no cross-link, and neither page
-knows the other exists.
-
-Sub-questions:
-- Is a merge layer wanted (a hand-maintained or name-derived alias map that makes
-  one canonical page and redirects the other)? That is option E creeping in.
-- If not merged, should each page at least link "also known in AniList as …"?
-- Does the same split apply to the three IDF consumers, or do they keep a
-  separate (e.g. name-based) unification? Route and scoring disagreeing about
-  studio identity is defensible but must be deliberate.
-
-### 6.4 Producers have no internal home at all
-
-Producers exist **only** on `AniListCastEntry.studios` with `isMain: false`, from
-the single-title cast query. They are the strongest argument for source-qualifying,
-and they carry their own problems:
-
-- The cast slice is **deliberately outside** the six-slice join in
-  `getAnimeForDisplay()` (bulk; display-only; would tax every row build). A
-  producer credits page needs a catalog-wide scan of that slice. Precedent exists
-  — `/stats` already calls `getAllAnilistCast()` per request — but it is a
-  conscious re-entry onto a path kept cold on purpose.
-- **Coverage asymmetry.** The slice is lazily filled: 212 of ~665 statused titles
-  at time of writing, and never the ~25k catalog by design. So
-  `/credits/studio/anilist/<id>` for Bones lists a handful of titles where the MAL
-  page lists everything — same route, same chrome, wildly different completeness.
-  If this ships, those pages must say so on the page, not just in this doc.
-- Is "Producteurs" even the right label? AniList's `isMain: false` bucket mixes
-  animation co-producers with distributors and licensors (Funimation, Aniplex),
-  which is arguably a different concept than the UI implies.
-
-### 6.5 Seiyuu stay external — confirm that holds
-
-Seiyuu currently link out to `anilist.co/staff/<id>` because
-`/credits/staff/<id>` scans *production* credits, which never contain voice
-actors. Source-qualifying does not change this. A future internal seiyuu page
-would need its own lookup over the cast slice, inheriting §6.4's coverage
-asymmetry. Worth deciding whether that is on the roadmap before designing the
-route, since `/credits/seiyuu/anilist/<id>` would be a third type.
-
-### 6.6 Legacy URLs
-
-`/credits/studio/123` and `/credits/staff/456` exist in the wild (bookmarks, and
-the app's own history entries). They should redirect rather than 404 — to
-`…/studio/mal/123` and `…/staff/anilist/456`, which is correct for 100% of
-existing rows per §2. Same pattern as the legacy MAL-numeric anime URLs that
-`resolveByMalId()` already redirects.
-
-### 6.7 Call sites that emit credit links
-
-All must learn to pass the source. None currently has to reach for it — every one
-already holds the record or a row derived from it.
-
-| Site | File |
-|---|---|
-| Detail page studio chips | `pages/anime/[id].tsx:224` |
-| Detail page staff rows | `pages/anime/[id].tsx:398` |
-| `/stats` `linkFor` | `pages/stats.tsx:300-301` |
-| Global search dropdown | `components/GlobalSearch.tsx:37,38,160,176` |
-
-`globalSearch.ts` additionally builds a **credit index keyed by id**; with two
-namespaces it either qualifies its hits or merges by name, which is §6.3 again in
-a second place.
-
-### 6.8 `/stats` aggregation buckets
-
-`stats.ts` counts distinct anime per studio id. Mixed namespaces split a studio
-into two rows in the top-50 — visible, unlike the silent IDF fragmentation, but
-still wrong. Whatever unification rule §6.3 lands on has to apply here too, or
-the stats page and the credits pages disagree about what a studio is.
-
-### 6.9 Ordering relative to the catalog crawl
-
-The crawl is what makes this real. Two sequences:
-
-- **Fix first, then crawl** — nothing ever fragments; the fix ships against a
-  dataset where it is unobservable, so it cannot be validated end-to-end until
-  after the crawl.
-- **Crawl first, then fix** — the fix is testable against real mixed data, at the
-  cost of a window where recommendations are quietly skewed by split studios.
-
-A third option: run the crawl into a **scratch copy** of the store, measure the
-actual MAL/AniList studio-id overlap on real rows, then decide. That is the only
-path that answers §6.3 with data instead of guesswork, and it is cheap — the
-`/stats` work already established the scratchpad-copy pattern.
-
-## 7. Open questions
-
-1. Split-vs-merge (§6.3) — is one real studio allowed to be two pages?
-2. Do the IDF consumers follow the route's identity rule, or keep their own?
-3. Are producers in scope, and if so is a cast-slice-backed lookup acceptable?
-4. Qualify all credit types, or only genuinely multi-source ones (§6.2)?
-5. Sequence relative to the catalog crawl (§6.9).
-
-## 8. Non-goals
+## Non-goals
 
 - Canonical ids for studios/staff (option E) — deferred, not rejected.
-- An internal seiyuu credits page (§6.5).
-- Any change to anime canonical ids, the registry, or catalog precedence. This
-  document is strictly about **secondary entity** identity.
+- An internal seiyuu credits page.
+- Any change to anime canonical ids, the registry, or catalog precedence. This is
+  strictly about **secondary entity** identity.
