@@ -88,7 +88,6 @@
   "index.loadFailed": "Échec du chargement de la liste d'animes",
   "index.hideFailed": "Échec du masquage de l'anime.",
   "index.unhideFailed": "Échec de l'affichage de l'anime.",
-  "index.updateStatusFailed": "Échec de la mise à jour du statut MAL.",
 
   "airing.currently_airing": "En diffusion",
   "airing.finished_airing": "Diffusion terminée",
@@ -175,11 +174,6 @@
   "display.original": "Originale",
   "display.cardsPerRow": "Cartes par ligne :",
   "display.auto": "Auto",
-  "display.tableView": "Vue tableau",
-  "display.cardView": "Vue cartes",
-
-  "layout.table": "Tableau",
-  "layout.card": "Cartes",
 
   "section.views": "Vues",
   "section.display": "Affichage",

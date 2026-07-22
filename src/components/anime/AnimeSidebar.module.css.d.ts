@@ -16,8 +16,6 @@ declare const styles: {
   readonly "evolutionSelector": string;
   readonly "filterGroup": string;
   readonly "imageSizeButtons": string;
-  readonly "layoutBtn": string;
-  readonly "layoutSelector": string;
   readonly "rangeSeparator": string;
   readonly "scoreInput": string;
   readonly "scoreRangeInputs": string;

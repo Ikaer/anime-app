@@ -3,6 +3,13 @@ import styles from './StatsSection.module.css';
 import { VisibleColumns, StatsColumn } from '@/models/anime';
 import { useT } from '@/lib/i18n';
 
+/**
+ * `VisibleColumns` still carries the five MAL stat fields (the URL `cols` param
+ * and `recommendations.tsx` both pass the full shape), but the card view — the
+ * only list layout left since the table was removed — reads `score` alone. The
+ * other four toggled nothing, so they are no longer offered here.
+ */
+
 interface StatsSectionProps {
   animeCount: number;
   visibleColumns: VisibleColumns;
@@ -29,38 +36,6 @@ const StatsSection: React.FC<StatsSectionProps> = ({
               onChange={(e) => onVisibleColumnsChange('score', e.target.checked)}
             />
             {t('field.score')}
-          </label>
-          <label className={styles.checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={visibleColumns?.rank ?? true}
-              onChange={(e) => onVisibleColumnsChange('rank', e.target.checked)}
-            />
-            {t('field.rank')}
-          </label>
-          <label className={styles.checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={visibleColumns?.popularity ?? true}
-              onChange={(e) => onVisibleColumnsChange('popularity', e.target.checked)}
-            />
-            {t('field.popularity')}
-          </label>
-          <label className={styles.checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={visibleColumns?.users ?? true}
-              onChange={(e) => onVisibleColumnsChange('users', e.target.checked)}
-            />
-            {t('field.users')}
-          </label>
-          <label className={styles.checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={visibleColumns?.scorers ?? true}
-              onChange={(e) => onVisibleColumnsChange('scorers', e.target.checked)}
-            />
-            {t('field.scorers')}
           </label>
         </div>
       </div>

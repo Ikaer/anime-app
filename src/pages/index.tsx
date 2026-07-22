@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import { AnimePageLayout, AnimeSidebar, AnimeTable, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
+import { AnimePageLayout, AnimeSidebar, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
 import { AnimeRecord, UserAnimeStatus, StatsColumn } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
 import { useT } from '@/lib/i18n';
@@ -133,10 +133,6 @@ export default function AnimePage() {
     updateFilters({ sortDir });
   };
 
-  const handleLayoutChange = (layout: typeof display.layout) => {
-    updateDisplay({ layout });
-  };
-
   // Display handlers - update URL
   const handleImageSizeChange = (imageSize: typeof display.imageSize) => {
     updateDisplay({ imageSize });
@@ -172,41 +168,6 @@ export default function AnimePage() {
     }
   };
 
-  /**
-   * Commit one staged edit from the table's "Moi" column.
-   *
-   * The endpoint fans out over `writePersonal`, so the write is not MAL-only —
-   * and the table now READS the hydrated `personal` block via `getEffective*`.
-   * The optimistic overlay therefore patches `personal` rather than
-   * `sources.mal.my_list_status`: patching the MAL slice would be invisible to
-   * the new read (and a lie on an install with no MAL). `personal.score` uses
-   * undefined for "unrated", matching `toAnimePersonal`.
-   */
-  const handleUpdatePersonalState = async (animeId: string, updates: any) => {
-    try {
-      const response = await fetch(`/api/anime/animes/${animeId}/mal-status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      if (response.ok) {
-        setAnimes(prev => prev.map(a => {
-          if (a.id !== animeId) return a;
-          const personal = { ...a.personal };
-          if (updates.status !== undefined) personal.status = updates.status || undefined;
-          if (updates.score !== undefined) personal.score = updates.score > 0 ? updates.score : undefined;
-          if (updates.num_episodes_watched !== undefined) personal.progress = updates.num_episodes_watched;
-          return { ...a, personal };
-        }));
-      } else {
-        throw new Error('Failed to update personal state');
-      }
-    } catch (error) {
-      setError(t('index.updateStatusFailed'));
-      throw error;
-    }
-  };
-
   const sidebar = (
     <AnimeSidebar
       imageSize={display.imageSize}
@@ -238,8 +199,6 @@ export default function AnimePage() {
       sortDir={filters.sortDir}
       onSortByChange={handleSortByChange}
       onSortDirChange={handleSortDirChange}
-      layout={display.layout}
-      onLayoutChange={handleLayoutChange}
     />
   );
 
@@ -280,22 +239,12 @@ export default function AnimePage() {
           <div className="table-container">
             {!isReady || isLoading || storeEmpty === null ? (
               <div className="loading-state">{t('common.loading')}</div>
-            ) : display.layout === 'card' ? (
+            ) : (
               <AnimeCardView
                 animes={animes}
                 imageSize={display.imageSize}
                 visibleColumns={display.visibleColumns}
                 cardsPerRow={display.cardsPerRow}
-                onHideToggle={handleHideToggle}
-              />
-            ) : (
-              <AnimeTable
-                animes={animes}
-                imageSize={display.imageSize}
-                visibleColumns={display.visibleColumns}
-                sortColumn={filters.sortBy}
-                sortDirection={filters.sortDir}
-                onUpdatePersonalState={handleUpdatePersonalState}
                 onHideToggle={handleHideToggle}
               />
             )}

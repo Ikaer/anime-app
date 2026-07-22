@@ -25,18 +25,6 @@
   box-sizing: border-box;
 }
 
-.layoutSelector {
-  display: flex;
-  gap:0.5rem;
-}
-
-.layoutBtn {
-  flex:1;
-}
-
-
-
-
 .searchInput:focus {
   outline: none;
   border-color: var(--accent-primary);

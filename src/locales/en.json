@@ -88,7 +88,6 @@
   "index.loadFailed": "Failed to load anime list",
   "index.hideFailed": "Failed to hide anime.",
   "index.unhideFailed": "Failed to unhide anime.",
-  "index.updateStatusFailed": "Failed to update MAL status.",
 
   "airing.currently_airing": "Currently Airing",
   "airing.finished_airing": "Finished Airing",
@@ -175,11 +174,6 @@
   "display.original": "Original",
   "display.cardsPerRow": "Cards per row:",
   "display.auto": "Auto",
-  "display.tableView": "Table View",
-  "display.cardView": "Card View",
-
-  "layout.table": "Table",
-  "layout.card": "Card",
 
   "section.views": "Views",
   "section.display": "Display",

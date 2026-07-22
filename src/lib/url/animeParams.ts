@@ -38,8 +38,7 @@ export interface AnimeDisplayState {
   imageSize: ImageSize;
   visibleColumns: VisibleColumns;
   sidebarExpanded: Record<string, boolean>;
-  layout: 'table' | 'card';
-  /** Forced cards per row in card layout; null = adaptive (auto-fill). */
+  /** Forced cards per row; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
 }
 
@@ -172,7 +171,6 @@ export const DEFAULT_DISPLAY: AnimeDisplayState = {
   imageSize: 3,
   visibleColumns: DEFAULT_VISIBLE_COLUMNS,
   sidebarExpanded: DEFAULT_SIDEBAR_EXPANDED,
-  layout: 'card',
   cardsPerRow: null,
 };
 
@@ -207,7 +205,6 @@ const PARAM_KEYS = {
   imageSize: 'img',
   columns: 'cols',
   sidebar: 'sb',
-  layout: 'lt',
   cardsPerRow: 'cpr',
 } as const;
 
@@ -327,10 +324,6 @@ function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLSearchPa
   if (display.sidebarExpanded !== undefined) {
     const encoded = encodeSidebarExpanded(display.sidebarExpanded);
     if (encoded !== null) params.set(PARAM_KEYS.sidebar, encoded);
-  }
-
-  if (display.layout !== undefined && display.layout !== DEFAULT_DISPLAY.layout) {
-    params.set(PARAM_KEYS.layout, display.layout);
   }
 
   if (display.cardsPerRow !== null && display.cardsPerRow !== undefined) {
@@ -468,7 +461,6 @@ function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
     sidebarExpanded: params.has(PARAM_KEYS.sidebar)
       ? decodeSidebarExpanded(params.get(PARAM_KEYS.sidebar))
       : { ...DEFAULT_SIDEBAR_EXPANDED },
-    layout: (params.get(PARAM_KEYS.layout) as any) || DEFAULT_DISPLAY.layout,
     cardsPerRow: Number.isFinite(cprNum) && cprNum > 0 ? cprNum : DEFAULT_DISPLAY.cardsPerRow,
   };
 }

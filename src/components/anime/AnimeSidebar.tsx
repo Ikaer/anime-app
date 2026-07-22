@@ -1,8 +1,8 @@
 import React from 'react';
 import styles from './AnimeSidebar.module.css';
-import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection, AnimeLayoutType } from '@/models/anime';
+import { UserAnimeStatus, ImageSize, VisibleColumns, StatsColumn, SortColumn, SortDirection } from '@/models/anime';
 import type { SeasonInfo } from '@/models/anime';
-import { Button, CollapsibleSection, DebouncedSearchInput } from '@/components/shared';
+import { CollapsibleSection, DebouncedSearchInput } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 import {
   SortOrderSection,
@@ -51,10 +51,6 @@ interface AnimeSidebarProps {
   sortDir: SortDirection;
   onSortByChange: (c: SortColumn) => void;
   onSortDirChange: (d: SortDirection) => void;
-
-  // Layout
-  layout: AnimeLayoutType;
-  onLayoutChange: (l: AnimeLayoutType) => void;
 }
 
 const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
@@ -72,7 +68,6 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   visibleColumns, onVisibleColumnsChange,
   sidebarExpanded, onSidebarExpandedChange,
   sortBy, sortDir, onSortByChange, onSortDirChange,
-  layout, onLayoutChange,
 }) => {
   const t = useT();
   // Section toggle now uses URL state
@@ -89,24 +84,6 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           onChange={onSearchChange}
           className={styles.searchInput}
         />
-        <div className={styles.layoutSelector}>
-          <Button
-            className={`${styles.layoutBtn}`}
-            onClick={() => onLayoutChange('table')}
-            title={t('display.tableView')}
-            variant={layout === 'table' ? 'primary' : 'secondary'}
-          >
-            {t('layout.table')}
-          </Button>
-          <Button
-            className={`${styles.layoutBtn}`}
-            onClick={() => onLayoutChange('card')}
-            title={t('display.cardView')}
-            variant={layout === 'card' ? 'primary' : 'secondary'}
-          >
-            {t('layout.card')}
-          </Button>
-        </div>
       </div>
 
       <CollapsibleSection

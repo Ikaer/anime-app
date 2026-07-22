@@ -56,7 +56,7 @@ src/
 
 ### Import Patterns
 ```typescript
-import { AnimeTable } from '@/components/anime';
+import { AnimeCardView } from '@/components/anime';
 import { AnimeForDisplay } from '@/models/anime';
 import { Button, CollapsibleSection } from '@/components/shared';
 ```

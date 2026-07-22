@@ -595,9 +595,6 @@ export type SortDirection = 'asc' | 'desc';
 export type SeasonName = 'winter' | 'spring' | 'summer' | 'fall';
 export interface SeasonInfo { year: number; season: SeasonName }
 
-// View types
-export type AnimeLayoutType = 'table' | 'card';
-
 // ---------------------------------------------------------------------------
 // Recommendations ("Pour toi") scoring model
 // ---------------------------------------------------------------------------
@@ -675,7 +672,6 @@ export interface AnimeDisplayState {
   imageSize: ImageSize;
   visibleColumns: VisibleColumns;
   sidebarExpanded: Record<string, boolean>;
-  layout: AnimeLayoutType;
 }
 
 // API response model for anime list endpoint
