@@ -189,7 +189,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // but the pre-Phase-C strip targeted raw top-level MAL fields
     // (synopsis/studios/etc); those moved under `.catalog` in Phase C and this
     // branch was never updated to match, so compact mode has been a no-op ever
-    // since (docs/PROVIDER-FREE.md Phase 2 "de-bloat API payloads", still open).
+    // since. De-bloating the payload properly is still open.
     const useFull = typeof full === 'string' && full.toLowerCase() === 'true';
 
     // Return the filtered and sorted (and limited) list

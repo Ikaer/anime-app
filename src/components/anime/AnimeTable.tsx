@@ -37,7 +37,7 @@ const getImageDimensions = (size: ImageSize) => {
  * One pending edit, in the wire shape `PUT …/animes/[id]/mal-status` takes
  * (`num_episodes_watched` is MAL's field name, kept as the endpoint's contract).
  * The endpoint itself is provider-agnostic — it fans out over `writePersonal` —
- * so this is no longer a MAL-only patch.
+ * so despite the field name this is not a MAL-only patch.
  */
 interface PersonalStateUpdate {
   status?: string;

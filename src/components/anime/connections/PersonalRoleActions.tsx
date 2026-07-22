@@ -7,10 +7,9 @@ import type { AniListPushStats } from '@/lib/providers/anilist/push';
 import { useT } from '@/lib/i18n';
 
 /**
- * Personal-list-role actions, one block per provider
- * (docs/PROVIDER-PARITY.md E4) — "which lists am I syncing?", as opposed to
- * `CatalogRoleActions`' "what is my catalog?". MAL's list sync sat next to its
- * seasonal crawl purely because both were MAL.
+ * Personal-list-role actions — "which lists am I syncing?", as opposed to
+ * `CatalogRoleActions`' "what is my catalog?". One block per provider; the same
+ * per-provider rule as its sibling applies.
  */
 
 interface MalListActionsProps {
@@ -146,10 +145,9 @@ interface LocalListActionsProps {
 }
 
 /**
- * `local` has no sync — it *is* the store. What it needs on this page (E3) is to
- * exist at all: to say that it is on (or why it is off), and where the switch
- * is. On the default keyless configuration it is the only active personal
- * provider, and it previously appeared nowhere but a settings key.
+ * `local` has no sync — it *is* the store. What it needs on this page is simply
+ * to exist: to say that it is on (or why it is off), and where the switch is. On
+ * the default keyless configuration it is the only active personal provider.
  */
 export const LocalListActions: React.FC<LocalListActionsProps> = ({ enabled, hasWritableExternal }) => {
   const t = useT();

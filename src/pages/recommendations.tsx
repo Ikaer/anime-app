@@ -42,7 +42,7 @@ export default function RecommendationsPage() {
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   // No MAL auth probe on mount: nothing on this page is gated on it any more.
-  // The refresh route decides per source what it can run (PROVIDER-PARITY.md B4).
+  // The refresh route decides per source what it can run.
 
   const loadFeed = useCallback(async () => {
     try {
@@ -94,7 +94,7 @@ export default function RecommendationsPage() {
 
   // No MAL gate: the refresh runs on whatever sources are available, falling
   // back to the anonymous AniList crowd source when there is no MAL account
-  // (PROVIDER-PARITY.md B4). The route reports which pipes it skipped.
+  // The route reports which pipes it skipped.
   const handleRefreshRecos = async () => {
     setIsRefreshingRecos(true);
     setRecoError('');

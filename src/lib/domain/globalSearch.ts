@@ -11,7 +11,7 @@ import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
 
 export interface AnimeSearchHit {
-  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  /** Canonical id — the detail-page route key. */
   id: string;
   title: string;            // primary (English-first)
   secondary?: string;       // original title, only when it differs from the primary

@@ -6,7 +6,7 @@
  * be recomputed live on every feed visit without touching MAL or AniList.
  *
  * **Stays MAL-id-keyed internally by design** — the crowd-edge math is MAL-keyed
- * (docs/PROVIDER-FREE-CUTOVER.md "Risks"), unlike every other file in the store.
+ * unlike every other file in the store.
  *
  * Server-only (uses `fs` via `jsonStore`).
  */

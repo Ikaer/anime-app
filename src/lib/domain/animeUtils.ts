@@ -176,7 +176,7 @@ export function getSeasonInfos(): SeasonInfos {
 //
 // The user notes anime in SIMKL (SIMKL → MAL one-way), so SIMKL is the
 // authority for PERSONAL fields; MAL is the fallback; an anonymously-imported
-// AniList list (docs/PROVIDER-FREE.md P3b) is the LOWEST fallback tier, so an
+// The AniList list is the LOWEST fallback tier, so an
 // AniList-only user still gets their state while existing MAL/SIMKL users are
 // unaffected (their higher tiers win). Precedence: SIMKL > MAL > AniList. Every
 // personal read used for filtering, seeding, or exclusion goes through these
@@ -184,10 +184,10 @@ export function getSeasonInfos(): SeasonInfos {
 // (mean, genres, studios…) stay MAL — these helpers are personal-only.
 
 /**
- * Effective personal watch status (SIMKL-first, then MAL, then AniList). Thin
- * read of the hydration engine's `personal` projection (docs/PROVIDER-FREE-CUTOVER.md
- * Phase C) — `toAnimeRecord` already applies this exact precedence via
- * `DEFAULT_PERSONAL_PRECEDENCE`, so there is one implementation, not two.
+ * Effective personal watch status (SIMKL-first, then MAL, then AniList). A thin
+ * read of the hydration engine's `personal` projection — `toAnimeRecord` already
+ * applied this precedence via `DEFAULT_PERSONAL_PRECEDENCE`, so there is one
+ * implementation, not two.
  */
 export function getEffectiveStatus(anime: AnimeRecord): string | undefined {
   return anime.personal.status;
@@ -209,7 +209,7 @@ export function formatUserStatus(status?: string) {
 }
 
 // ============================================================================
-// Hydration engine (docs/PROVIDER-FREE-CUTOVER.md Phase C)
+// Hydration engine
 // ============================================================================
 //
 // One generic mechanism for both `catalog` and `personal`: each provider
@@ -237,11 +237,11 @@ export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 's
  */
 export const DEFAULT_PERSONAL_PRECEDENCE: ProvenanceSource[] = ['simkl', 'mal', 'anilist'];
 
-/** How the local tier sits relative to the external providers (docs/localRating/). */
+/** How the local tier sits relative to the external providers. */
 export type LocalPrecedenceMode = 'auto' | 'localTop' | 'localBottom';
 
 /**
- * Insert `local` into a base personal-precedence array (docs/localRating/ Phase 1).
+ * Insert `local` into a base personal-precedence array.
  * Pure and client-safe so the settings page can preview the resolved order.
  *
  * - `localTop`    → local wins over every external source.
@@ -373,7 +373,7 @@ function catalogFromLocal(): Partial<AnimeCatalog> {
  * The raw per-provider slices `toAnimeRecord` hydrates from — exactly what
  * `getAnimeRecord` gathers per canonical id before any merging happens.
  * `mal` is optional: a canonical id anchored only by AniList (no MAL slice)
- * still produces a full record, per the Phase C checkpoint.
+ * still produces a full record.
  */
 export interface RawAnimeSlices {
   mal?: MALAnime;

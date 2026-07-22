@@ -212,8 +212,8 @@ const SEQUEL_TITLE_REGEX =
  * If relations exist and every prequel is seen, the candidate is kept even if
  * its title matches the pattern (the user is caught up).
  *
- * `byId` is MAL-id-keyed, like every other id map in the reco engine
- * (docs/PROVIDER-FREE-CUTOVER.md Phase D/Risks) — relation targets are MAL ids.
+ * `byId` is MAL-id-keyed, like every other id map in the reco engine — relation
+ * targets are MAL ids.
  */
 export function isPrematureSequel(anime: AnimeRecord, byId: Map<number, AnimeRecord>): boolean {
   const prequels = (anime.catalog.relatedAnime || []).filter(r => r.relation_type === 'prequel');

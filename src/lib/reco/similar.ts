@@ -71,7 +71,7 @@ export interface AniListEdgeInput {
  * anchor, and the detail page only needs enough to render a poster card.
  */
 export interface SimilarItem {
-  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  /** Canonical id — the detail-page route key. */
   id: string;
   title: string;
   poster?: string;
@@ -100,8 +100,8 @@ export function computeSimilarTo(
 ): SimilarItem[] {
   const t = makeT(lang);
   const all = getAnimeForDisplay();
-  // MAL-keyed, same reasoning as `computeFeed`'s `byId` — `targetId`/edge ids
-  // arrive as MAL ids (docs/PROVIDER-FREE-CUTOVER.md Phase D/Risks).
+  // MAL-keyed, same reasoning as `computeFeed`'s `byId` — `targetId` and edge
+  // ids arrive as MAL ids.
   const byId = new Map<number, AnimeRecord>();
   for (const a of all) {
     const malId = toNum(a.crosswalk.mal);

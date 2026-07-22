@@ -1,22 +1,15 @@
 /**
- * Personal-state **writer registry** (server-only, docs/localRating/ phase 2).
+ * Personal-state **writer registry** (server-only). The write-side mirror of the
+ * read-side per-provider extractors in [personalState.ts](personalState.ts): a
+ * rating/status/progress edit fans out to every enabled writable provider and
+ * returns a per-provider outcome map.
  *
- * The write-side mirror of the read-side per-provider *extractors* in
- * [personalState.ts](personalState.ts). A rating/status/progress edit
- * fans out to every enabled writable provider — MAL, SIMKL, and the in-app
- * `local` slice — and returns a per-provider outcome map. Adding a writable
- * provider (Betaseries, a future AniList OAuth) is a one-line registry entry:
- * the endpoints never change.
- *
- * Two-phase by design (keyed on **capability, not identity**):
- *   1. **Local-cache authority writes** run FIRST, for every enabled writer —
- *      these bump whichever local slice feeds `getEffective*` under the current
- *      precedence (local MAL `my_list_status`, local SIMKL entry, the local
- *      slice). So a subsequent read (or a hung/failed remote) already reflects
- *      the edit. This is why the MAL user, with the local provider OFF, still
- *      gets their local MAL + local SIMKL slices bumped exactly as before.
- *   2. **Remote fan-out** runs second, serial (SIMKL's 20s per-user write-lock
- *      + 1 req/s POST cap), collecting a `WriteOutcome` per provider.
+ * Two phases, in this order:
+ *   1. **Local-cache authority writes**, for every enabled writer. These bump
+ *      whichever local slice feeds `getEffective*` under the current precedence,
+ *      so a subsequent read — or a hung/failed remote — already reflects the edit.
+ *   2. **Remote fan-out**, serial (SIMKL holds a 20s per-user write-lock and caps
+ *      POSTs at 1 req/s), collecting a `WriteOutcome` per provider.
  */
 import type {
   AnimeRecord,
@@ -45,12 +38,14 @@ import { supportsDimension, type PersonalDimension } from '@/lib/providers/capab
 
 /**
  * The provider-neutral edit. `score` 0 clears the rating; `status: null` clears
- * the status. Clearing a status has **no remote equivalent** — MAL models it as
- * a list DELETE (which would also drop the score) and SIMKL is score-only — so
- * the remote writers refuse it explicitly (`ok: false` with a reason — distinct
- * from `WriteOutcome.unsupported`, which is a dimension never claimed at all,
- * whereas clearing is a *shape* of the `status` dimension both do claim). The
- * detail-page control therefore only offers "clear" to a local-only user (see
+ * the status.
+ *
+ * Clearing a status has **no remote equivalent** — MAL models it as a list DELETE
+ * (which would also drop the score) and SIMKL is score-only — so the remote
+ * writers refuse it explicitly with `ok: false` and a reason. That is distinct
+ * from `WriteOutcome.unsupported`: clearing is a *shape* of the `status`
+ * dimension both providers do claim, not a dimension they never claimed. The
+ * detail-page control only offers "clear" to a local-only user (see
  * `hasWritableExternal`), where there is no remote to diverge from.
  */
 export interface PersonalPatch {
@@ -65,15 +60,12 @@ export interface WriteOutcome {
   matched?: boolean;
   /**
    * Dimensions of the patch this provider does not implement, and therefore did
-   * NOT apply — read off the capability descriptor, never re-derived per writer
-   * (D1). SIMKL is the case: score-only by design, so a status or progress patch
-   * is discarded. It used to be discarded *inside* the writer and reported as a
-   * bare `{ ok: true }`, which the tier board and `PersonalStateEditor` — both
-   * looking for `ok === false` — rendered as a success.
+   * NOT apply — read off the capability descriptor, never re-derived per writer.
+   * SIMKL is the case: score-only, so a status or progress patch is discarded.
    *
-   * `ok` stays true: nothing failed. A provider declining a dimension it never
-   * claimed is not an error, it is a **partial** write, and the distinction the
-   * UI has to make is *failed* vs *not applicable*.
+   * `ok` stays true, because nothing failed: declining a dimension it never
+   * claimed is a **partial** write, and the distinction the UI has to make is
+   * *failed* vs *not applicable*.
    */
   unsupported?: PersonalDimension[];
   /** No dimension of the patch applied at all — the write never reached this
@@ -85,16 +77,14 @@ export interface WriteOutcome {
 interface WriteContext {
   canonicalId: string;
   /** The assembled record — `undefined` for a title that has no assemblable
-   *  row (a true local-only title with no crosswalk.mal; phase 3/quickRate). */
+   *  row (a true local-only title with no `crosswalk.mal`). */
   record?: AnimeRecord;
 }
 
 /**
  * A writer carries no enablement of its own: "is this provider usable right
- * now?" is `isPersonalProviderEnabled` (providers.ts), one predicate over the
- * capability descriptors + auth files. Each writer used to repeat its own token
- * check, which `hasWritableExternal` then repeated a second time — the
- * duplication D2 removed.
+ * now?" is `isPersonalProviderEnabled` in [registry.ts](registry.ts), the single
+ * predicate over the capability descriptors + auth files.
  */
 interface PersonalWriter {
   id: ProvenanceSource;
@@ -113,8 +103,8 @@ function malIdOf(record?: AnimeRecord): number | undefined {
 }
 
 // ── MAL ──────────────────────────────────────────────────────────────────────
-// Writes to BOTH the local MAL personal slice (`personal/mal.json`,
-// authority — H1 split it out of the 39 MB catalog) and the MAL API.
+// Writes to BOTH the local MAL personal slice (`personal/mal.json`, the
+// authority) and the MAL API.
 const malWriter: PersonalWriter = {
   id: 'mal',
   writeLocal({ canonicalId }, patch) {
@@ -151,12 +141,11 @@ const malWriter: PersonalWriter = {
 };
 
 // ── SIMKL ────────────────────────────────────────────────────────────────────
-// Score-only (the one narrow write carve-out — see CLAUDE.md). That is DECLARED
-// (`write: ['score']`) rather than enforced here: `writePersonal` narrows the
-// patch to the dimensions the descriptor admits, so a status/progress patch never
-// reaches these functions and is reported as `unsupported` instead of silently
-// dropped (D1). Bumps the LOCAL SIMKL entry (score) when one exists — SIMKL-first
-// `getEffectiveScore` needs it — then pushes to SIMKL.
+// Score-only, and that is DECLARED (`write: ['score']`) rather than enforced
+// here: `writePersonal` narrows the patch to the dimensions the descriptor
+// admits, so a status/progress patch never reaches these functions and is
+// reported as `unsupported` instead of silently dropped. Bumps the local SIMKL
+// entry first — SIMKL-first `getEffectiveScore` needs it — then pushes.
 const simklWriter: PersonalWriter = {
   id: 'simkl',
   writeLocal({ canonicalId }, patch) {
@@ -180,10 +169,9 @@ const simklWriter: PersonalWriter = {
 };
 
 // ── AniList ──────────────────────────────────────────────────────────────────
-// Full status/score/progress writer (docs/ANILIST-OAUTH.md) — unlike SIMKL's
-// score-only carve-out, `SaveMediaListEntry` is an upsert over all three. Keys
-// off the ANILIST media id, not the MAL id (see anilistWrite.ts), and falls back
-// to a live idMal lookup when the crosswalk has no AniList id yet.
+// Full status/score/progress writer — `SaveMediaListEntry` is an upsert over all
+// three. Keys off the ANILIST media id, not the MAL id (see anilist/write.ts),
+// and falls back to a live idMal lookup when the crosswalk has no AniList id.
 const anilistWriter: PersonalWriter = {
   id: 'anilist',
   writeLocal({ canonicalId, record }, patch) {
@@ -250,8 +238,8 @@ function patchDimensions(patch: PersonalPatch): PersonalDimension[] {
 
 /**
  * The slice of a patch one provider will actually apply, per its declared
- * `write` dimensions (D1). Narrowing here — once, from the descriptor — is what
- * keeps a writer from having to know its own capabilities, and what makes the
+ * `write` dimensions. Narrowing here — once, from the descriptor — is what keeps
+ * a writer from having to know its own capabilities, and what makes the
  * discarded remainder *reportable* instead of vanishing inside the writer.
  */
 function narrowPatch(id: ProvenanceSource, patch: PersonalPatch): {
@@ -296,8 +284,8 @@ export async function writePersonal(canonicalId: string, patch: PersonalPatch): 
   const outcomes: Partial<Record<ProvenanceSource, WriteOutcome>> = {};
   for (const w of active) {
     const { applied, unsupported } = narrowed.get(w.id)!;
-    // Wholly inapplicable: reported, never attempted. This is the case D1 is
-    // about — a status-only edit against score-only SIMKL.
+    // Wholly inapplicable: reported, never attempted — e.g. a status-only edit
+    // against score-only SIMKL.
     if (Object.keys(applied).length === 0) {
       outcomes[w.id] = { ok: true, matched: false, skipped: true, unsupported };
       continue;

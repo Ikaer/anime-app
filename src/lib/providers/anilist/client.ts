@@ -1,21 +1,16 @@
 /**
  * The ONE AniList GraphQL transport: endpoint, throttle, 429 retry, optional
- * Bearer header (docs/LIB-REORG.md F4).
+ * Bearer header.
  *
- * Before this module the transport was implemented four times — the three
- * sweeps stacked in `sync.ts`, plus `cast.ts`, `personalSync.ts` and the
- * authenticated helper in `auth.ts` — each carrying its own copy of the
- * endpoint, the ~2.1s delay and the `Retry-After` retry. That is not merely
- * duplication: **four independent throttles cannot cooperate**, so a meta sync
- * and a cast sweep running at the same time each respected 28 req/min while
- * together exceeding AniList's degraded 30 req/min ceiling. The throttle here is
- * a single module-level slot allocator, so every AniList request in the process
- * queues on the same clock no matter which sweep issued it.
+ * **Every AniList request in the process must go through here**, because the
+ * throttle is a single module-level slot allocator. Independent throttles cannot
+ * cooperate: a meta sync and a cast sweep each pacing themselves at 28 req/min
+ * together exceed AniList's degraded 30 req/min ceiling.
  *
- * **The queries stay with their callers.** CLAUDE.md documents hard-won
- * per-query constraints (`Page.media` vs an aliased `Media`, exactly one id
- * filter per query, complexity ceilings); this module knows nothing about them.
- * It moves bytes, not meaning.
+ * **The queries stay with their callers.** The per-query constraints
+ * (`Page.media` vs an aliased `Media`, exactly one id filter per query,
+ * complexity ceilings) are documented where those queries live; this module
+ * knows nothing about them. It moves bytes, not meaning.
  *
  * Three entry points, because the callers genuinely disagree about what an error
  * is: `anilistQuery` (strict — any HTTP or GraphQL error throws), `anilistFetch`
@@ -30,7 +25,7 @@ export const ANILIST_ENDPOINT = 'https://graphql.anilist.co';
 /**
  * Conservative spacing between AniList requests (~28 req/min), safely under the
  * documented degraded limit of 30/min (normally 90/min). One value for the whole
- * process — the sweeps used to each define their own copy of it.
+ * process.
  */
 export const ANILIST_MIN_DELAY_MS = 2100;
 

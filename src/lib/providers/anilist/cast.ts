@@ -129,12 +129,12 @@ class AniListCastError extends Error {}
  * on every single page view; the caller instead persists an empty cast.
  */
 async function fetchCast(ids: { malId?: number; anilistId?: number }): Promise<RawCastMedia | null> {
-  // Only the id we actually have is sent. Passing the other one as an explicit
-  // `null` is NOT equivalent to omitting it: AniList applies a supplied-but-null
-  // argument as a real filter (`id = null`), which matches nothing and answers
-  // 404 — and since `fetchCast` reads a 404 as "AniList has no cast", that
-  // silently persisted an empty cast for EVERY title. Verified live 2026-07-19:
-  // `{malId: 16498, anilistId: null}` → 404, `{malId: 16498}` → 200.
+  // Send ONLY the id we have. Passing the other as an explicit `null` is NOT
+  // equivalent to omitting it: AniList applies a supplied-but-null argument as a
+  // real filter (`id = null`), matching nothing and answering 404 —
+  // `{malId: 16498, anilistId: null}` → 404, `{malId: 16498}` → 200. Since a 404
+  // reads as "AniList has no cast", that persists an empty cast for EVERY title,
+  // permanently, because empties short-circuit.
   const variables: Record<string, number> = {};
   if (ids.malId !== undefined) variables.malId = ids.malId;
   if (ids.anilistId !== undefined) variables.anilistId = ids.anilistId;
@@ -292,8 +292,7 @@ export interface AniListCastSweepResult {
  * safe.** Each title is persisted as it lands and `needsCastFetch` re-queues
  * only what is still missing, so a run cut short — process restart, redeploy,
  * or (in `next dev`) a recompile abandoning the promise — loses nothing but the
- * title in flight. Pressing the button again picks up where it stopped;
- * verified live 2026-07-19 (interrupted at 69/665, restart queued 596).
+ * title in flight. Pressing the button again picks up where it stopped.
  */
 export async function performAnilistCastSweep(): Promise<AniListCastSweepResult> {
   if (isCastSweepRunning) {

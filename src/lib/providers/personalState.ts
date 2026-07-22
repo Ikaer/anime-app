@@ -52,7 +52,7 @@ const ABSENT: ProviderPersonalState = { present: false, score: null, progress: n
 export interface RawPersonalSlices {
   /** MAL catalog slice — consulted ONLY for `num_episodes` (MAL's own total). */
   mal?: MALAnime;
-  /** MAL personal-list entry (H1 split — was `mal.my_list_status`). */
+  /** MAL personal-list entry. */
   malPersonal?: MALPersonalEntry;
   simkl?: SimklPersonalEntry;
   anilist?: AniListPersonalEntry;
@@ -84,10 +84,9 @@ function hasPersonalData(
 }
 
 /**
- * MAL's personal-list entry (H1: its own slice, was `mal.my_list_status`).
- * Takes MAL's own catalog episode count separately — post-split the total is a
- * catalog field, so MAL now borrows it like AniList/local do (see
- * `buildProviderStates`), rather than reading it off the same object.
+ * MAL's personal-list entry. Takes MAL's own catalog episode count separately —
+ * the total is a catalog field, so MAL borrows it the way AniList and `local` do
+ * (see `buildProviderStates`) rather than reading it off the same object.
  *
  * Note an EMPTY status string is normalized to `undefined`: the write path
  * initializes the entry with `status: ''` before applying a score-only patch,
@@ -141,7 +140,7 @@ export function providerStateFromAnilist(
   };
 }
 
-/** The in-app local slice (docs/localRating/). Borrows the catalog's total. */
+/** The in-app local slice. Borrows the catalog's total. */
 export function providerStateFromLocal(
   entry?: LocalPersonalEntry,
   catalogEpisodes?: number
@@ -181,13 +180,12 @@ export function toAnimePersonal(state?: ProviderPersonalState): Partial<AnimePer
  * Deliberately RAW per-provider reads, never the effective/merged value — the
  * point of the comparison downstream is to detect mismatches *between* sources.
  *
- * **The anchor is the one provider that appears without a slice entry** (A2). A
- * missing entry is exactly what a presence split is about, so it cannot be
- * represented by omission: post-H1, MAL's personal slice holds only statused
- * titles, so a title absent from the MAL list produced no `mal` state at all and
- * the presence check — which asks `states[p] && !states[p].present` — had nothing
- * to test. Presence detection had silently stopped firing entirely. The anchor
- * therefore always gets a state, `present: false` when it holds nothing.
+ * **The anchor is the one provider that gets a state even with no slice entry.**
+ * A missing entry is exactly what a presence split is about, so it cannot be
+ * represented by omission — the presence check asks
+ * `states[p] && !states[p].present`, which silently tests nothing when the
+ * anchor is absent. A personal slice holds only statused titles, so this is the
+ * common case, not an edge one. Hence `present: false` rather than no state.
  */
 export function buildProviderStates(
   slices: RawPersonalSlices,

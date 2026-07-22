@@ -4,7 +4,7 @@ import { resolveLogsPath } from '@/lib/store/bootstrap';
 import { dataFile, ensureDataDirectory } from '@/lib/store/jsonStore';
 
 /**
- * The connection log is **app data, not diagnostics** (docs/DATA-LAYOUT.md §3.2):
+ * The connection log is **app data, not diagnostics**:
  * it is the progress feed the Connections panel and the first-run onboarding
  * poll — there is no SSE for meta-sync, the cast sweep or the catalog crawl, so
  * this log *is* the transport. It therefore lives at a fixed path under
@@ -13,12 +13,11 @@ import { dataFile, ensureDataDirectory } from '@/lib/store/jsonStore';
 const LOG_FILE = dataFile('logs/connection_log.json');
 
 /**
- * Where the log used to live: under `LOGS_PATH` (which itself falls back to the
- * data root, so pre-`LOGS_PATH` installs are covered by the same expression).
- * Read once when the new location is still empty, so an install that set
- * `LOGS_PATH` outside the data folder — beyond the migration script's reach —
- * does not blank its panel on deploy. The next `appendLog` rewrites to
- * `LOG_FILE`. Removable one release after the layout migration.
+ * The pre-layout location, under `LOGS_PATH` (which itself falls back to the
+ * data root, so older installs resolve through the same expression). Read once
+ * when the current location is still empty, so an install that set `LOGS_PATH`
+ * outside the data folder — beyond the migration script's reach — does not blank
+ * its panel on deploy. The next `appendLog` rewrites to `LOG_FILE`.
  */
 const LEGACY_LOG_FILE = path.join(resolveLogsPath(), 'connection_log.json');
 

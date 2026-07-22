@@ -21,7 +21,7 @@ interface Props {
    *  (see `AniListCastEntry`). */
   cast: AniListCharacterEntry[] | null;
   /** No writable external provider connected — gates the status "clear"
-   *  affordance (docs/localRating/ phase 3; see `PersonalPatch`). */
+   *  affordance (see `PersonalPatch`). */
   canClearStatus: boolean;
 }
 
@@ -73,7 +73,7 @@ function statusLabel(status: string | null | undefined, t: TFunction): string {
 
 /**
  * "MAL 7 · SIMKL 8 · Local 8" — one dimension of a discrepancy, rendered across
- * however many providers hold the title (docs/localRating/ phase 4).
+ * however many providers hold the title.
  */
 function discLine(
   disc: Discrepancy,
@@ -289,7 +289,7 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
         <section className="section">
           <h2>{t('detail.personalState')}</h2>
           {/* The bootstrap surface — the only place an unstatused catalog title can
-              become statused + scored (docs/localRating/ phase 3). */}
+              become statused + scored. */}
           <PersonalStateEditor
             animeId={anime.id}
             status={effStatus}
@@ -301,7 +301,7 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
           />
           {/* One row per provider, not a MAL/SIMKL column pair — the same long
               format the /discrepancies page uses, so a fourth provider costs a
-              row rather than a column (docs/localRating/ phase 4). */}
+              row rather than a column. */}
           <table className="reco-table">
             <thead>
               <tr>
@@ -661,7 +661,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const raw = String(ctx.params?.id);
 
   // Legacy MAL-id URLs (bookmarks predating the canonical-id flip) resolve and
-  // redirect — docs/PROVIDER-FREE-CUTOVER.md Phase D.
+  // redirect.
   if (/^\d+$/.test(raw)) {
     const canonicalId = resolveByMalId(parseInt(raw, 10));
     if (!canonicalId) return { notFound: true };

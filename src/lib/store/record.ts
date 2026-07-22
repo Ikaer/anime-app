@@ -51,8 +51,8 @@ function assembleCrosswalk(
  * Assemble one `AnimeRecord` row for a canonical id from the already-read
  * slices. Shared by `getAnimeForDisplay` (loops every canonical id) and
  * `getAnimeByCanonicalId` (looks up one, bypassing the cache). Returns
- * undefined when no MAL id is resolvable anywhere (true AniList-only, no
- * `idMal` — out of scope per docs/PROVIDER-FREE-CUTOVER.md "Deferred").
+ * undefined when no MAL id is resolvable anywhere (a true AniList-only title
+ * with no `idMal`, which is out of scope for the row set).
  */
 function assembleDisplayRow(
   canonicalId: string,
@@ -95,7 +95,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   // invariant guarantee it). The row set is the UNION of every slice's keys —
   // not just the MAL slice — so an AniList-only canonical id (no MAL slice,
   // seeded by the AniList catalog crawler) still produces a row, with
-  // `sources.mal` left undefined (docs/PROVIDER-FREE-CUTOVER.md Phase C).
+  // `sources.mal` left undefined.
   const malAnime = getAllAnime();
   const malPersonalByCanonical = getAllMalPersonal();
   const hiddenIdList = getHiddenAnimeIds();
@@ -104,9 +104,9 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
   const localByCanonical = getAllLocalEntries();
   const registry = getRegistry();
-  // Resolved once per call (docs/localRating/ 1d): folded into the cache key as a
-  // stable string so flipping a settings toggle — or a MAL/SIMKL token appearing
-  // or lapsing — rebuilds the rows even though no *slice file* changed.
+  // Resolved once per call and folded into the cache key as a stable string, so
+  // flipping a settings toggle — or a MAL/SIMKL token appearing or lapsing —
+  // rebuilds the rows even though no *slice file* changed.
   const personalPrecedence = getResolvedPersonalPrecedence();
 
   // The assembled rows are cached against the IDENTITY of the parsed slices
@@ -154,8 +154,8 @@ export function getAnimeForDisplay(): AnimeRecord[] {
  * mtime — but the direct read is kept: it's cheap (six stat calls + one row
  * assembly against cached parses) and stays trivially immune by construction.
  *
- * `canonicalId` is the outward id (docs/PROVIDER-FREE-CUTOVER.md Phase D) —
- * the route param IS the slice key, so no resolve step is needed.
+ * `canonicalId` is the outward id, so the route param IS the slice key and no
+ * resolve step is needed.
  */
 export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefined {
   return assembleDisplayRow(

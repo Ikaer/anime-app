@@ -5,15 +5,11 @@ import type { HistoricalCrawlStats } from '@/lib/providers/mal/sync';
 import { useT } from '@/lib/i18n';
 
 /**
- * Catalog-role actions, one block per provider
- * (docs/PROVIDER-PARITY.md E4). These used to live in `DataSyncSection`, a
- * single component that mixed MAL's seasonal crawl, SIMKL's personal delta and
- * AniList's metadata sweep behind one "Synchro" heading — so the page was
- * organized by *when things were added* rather than by what they do.
+ * Catalog-role actions — "what is my catalog?" — one block per provider.
  *
- * They are separate components rather than one generic loop on purpose: the
- * operations are genuinely different (PROVIDER-ABSTRACTION.md), and only the
- * card *around* them is uniform.
+ * Separate components rather than one generic loop, on purpose: MAL's seasonal
+ * crawl, SIMKL's delta and AniList's GraphQL batch are genuinely different
+ * operations. Only the card *around* them is uniform.
  */
 
 interface MalCatalogActionsProps {

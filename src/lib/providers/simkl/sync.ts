@@ -1,7 +1,7 @@
 /**
  * SIMKL two-phase, read-only sync orchestration. Pulls the user's personal
- * anime library, normalizes it to MAL-keyed SimklPersonalEntry records, and
- * persists via anime.ts. See docs/simkl/apirules.md for the protocol.
+ * anime library, normalizes it to `SimklPersonalEntry` records and persists them
+ * through the store. See docs/simkl/apirules.md for the protocol.
  */
 import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/providers/simkl/client';
 import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/store';
@@ -68,9 +68,9 @@ function normalizeAll(raw: RawAllItems): { entries: SimklPersonalEntry[]; orphan
 }
 
 async function fetchAllItems(token: string, dateFrom?: string): Promise<RawAllItems> {
-  // Plain call (no extended=ids_only): returns per-item status/rating/progress
-  // AND the full ids object (incl. mal). extended=ids_only would strip the
-  // personal fields — verified against a live account 2026-07-04.
+  // Plain call (NOT extended=ids_only): returns per-item status/rating/progress
+  // AND the full ids object incl. mal. `extended=ids_only` strips the personal
+  // fields, which is the whole point of this call.
   let path = '/sync/all-items/anime';
   if (dateFrom) path += `?date_from=${encodeURIComponent(dateFrom)}`;
   const res = await simklFetch(path, token);

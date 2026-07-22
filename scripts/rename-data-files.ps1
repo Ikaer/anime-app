@@ -1,4 +1,5 @@
-# One-time §3 data-file rename (see docs/CLEANUP.md).
+# One-time data-file rename. SUPERSEDED by scripts/migrate-layout.js, which moved
+# the whole store into role folders (see docs/DATA-LAYOUT.md). Kept for reference only.
 #
 # Renames the four mis-named JSON data files in place, in a coordinated cutover
 # while the app is stopped. Old code reads the old names, new code reads the new

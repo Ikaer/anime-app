@@ -1,8 +1,8 @@
 /**
  * AniList personal-list **push** — the one-shot backfill that brings a
- * pre-existing SIMKL/MAL list up to AniList (docs/ANILIST-OAUTH.md).
+ * pre-existing SIMKL/MAL list up to AniList.
  *
- * Why this exists at all: the per-title writer in `personalWriters.ts` already
+ * Why this exists at all: the per-title writer in `writers.ts` already
  * pushes every NEW edit to AniList once OAuth'd, from all three write surfaces.
  * What it cannot do is close the gap that predates the connection — the titles
  * rated in SIMKL months before an AniList token existed. Nothing iterates the
@@ -60,9 +60,9 @@ interface DesiredState {
  * we've never seen (`undefined`) always needs the push.
  *
  * Progress is deliberately NOT compared: AniList auto-fills it to the episode
- * count on COMPLETED (live-verified 2026-07-18), so its value is provider-derived
- * there rather than ours, and treating a difference as a disagreement would
- * re-push most of a completed list on every run for no change.
+ * count on COMPLETED, so its value there is provider-derived rather than ours,
+ * and treating a difference as a disagreement would re-push most of a completed
+ * list on every run for no change.
  */
 function agrees(remote: AniListRemoteEntry | undefined, desired: DesiredState): boolean {
   if (!remote) return false;

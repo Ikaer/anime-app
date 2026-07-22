@@ -8,7 +8,7 @@
  * powers the on-demand "Pourquoi ?" explain.
  *
  * The internal candidate map is MAL-id-keyed by design — edges, candidates and
- * suggestions all arrive as MAL ids (docs/PROVIDER-FREE-CUTOVER.md "Risks").
+ * suggestions all arrive as MAL ids.
  * Only the outward edges (each item's `.id`, the hidden/feedback exclusions) are
  * canonical.
  *
@@ -164,10 +164,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const threshold = options.threshold ?? data.seedThreshold ?? TUNING.DEFAULT_SEED_THRESHOLD;
 
   const all = getAnimeForDisplay();
-  // The reco engine's internal crowd-edge math stays MAL-keyed by design
-  // (docs/PROVIDER-FREE-CUTOVER.md Phase D/Risks) — edges/candidates/suggestions
-  // all arrive as MAL ids from MAL/AniList, so `byId` is keyed off `crosswalk.mal`,
-  // not the record's own (now-canonical) `.id`.
+  // The engine's internal crowd-edge math is MAL-keyed by design: edges,
+  // candidates and suggestions all arrive as MAL ids from MAL/AniList, so `byId`
+  // keys off `crosswalk.mal` rather than the record's own canonical `.id`.
   const byId = new Map<number, AnimeRecord>();
   for (const a of all) {
     const malId = toNum(a.crosswalk.mal);

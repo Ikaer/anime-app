@@ -20,19 +20,17 @@ import { getCronSecret } from '@/lib/config/settings';
  * Simplified version of the big-sync trigger: no SSE, since nothing is
  * listening.
  *
- * **Not a generic loop** (docs/PROVIDER-PARITY.md F1, and
- * PROVIDER-ABSTRACTION.md's verdict): MAL's seasonal crawl, SIMKL's two-phase
- * delta and AniList's GraphQL batch are genuinely different operations. What is
+ * **Not a generic loop**: MAL's seasonal crawl, SIMKL's two-phase delta and
+ * AniList's GraphQL batch are genuinely different operations. What is
  * uniform is *enablement* and *reporting* — each block is guarded by the one
  * enablement predicate (`isPersonalProviderEnabled`) or by its role's auth
  * requirement, and each returns a `CronStepOutcome`. Every block is isolated and
  * non-fatal: one provider failing must not cost the others their tick.
  *
- * **No provider gates the run.** Until F1 the handler returned 400 when the MAL
- * token was missing or expired, so a SIMKL-only, AniList-only or keyless install
- * got nothing at all from cron — including the recommendations refresh, which
- * B4 had already made MAL-optional. That gate is gone; MAL is one skippable step
- * among several.
+ * **No provider gates the run.** Do not put an auth check in front of the
+ * handler: a MAL-token gate costs a SIMKL-only, AniList-only or keyless install
+ * its entire tick, including the recommendations refresh, which needs no MAL
+ * account. MAL is one skippable step among several.
  */
 
 /**

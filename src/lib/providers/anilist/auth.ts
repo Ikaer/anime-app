@@ -1,11 +1,10 @@
 /**
- * AniList OAuth token store (docs/ANILIST-OAUTH.md). The login tier above
- * `personalSync.ts`'s anonymous reads: a viewer token unlocks private-list reads
- * and — the point of this module — `SaveMediaListEntry` writes (see write.ts).
+ * AniList OAuth token store. A viewer token unlocks private-list reads and —
+ * the point of this module — `SaveMediaListEntry` writes (see write.ts).
  * The transport itself lives in `client.ts`; this module only supplies the token.
  *
- * Shaped after `simkl.ts`, with three deliberate differences forced by AniList's
- * OAuth2 implementation (verified against docs.anilist.co/guide/auth/):
+ * Shaped after `simkl/client.ts`, with three differences forced by AniList's
+ * OAuth2 implementation:
  *
  *  1. **No scopes.** A token carries (almost) full access to the user's data.
  *  2. **No refresh tokens.** Tokens are long-lived — valid ONE YEAR from issue —

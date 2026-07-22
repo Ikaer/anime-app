@@ -1,14 +1,9 @@
 /**
  * Franchise grouping — connected components over the MAL relation graph
- * (docs/quickRate/).
  *
  * Pure and client-safe (no `fs`), though today only the `/api/anime/quick-rate`
  * handler uses it: grouping runs server-side because the input is the whole
  * catalog (~25k records) and only the grouped, lean projection crosses the wire.
- *
- * NOTE: the spec said to reuse the connections page's traversal — there isn't
- * one. `connections.tsx` is the MAL/SIMKL *account* page and touches no relation
- * graph, so this is written from scratch.
  */
 import type { AnimeRecord } from '@/models/anime';
 
@@ -69,9 +64,8 @@ function toProviderId(v: number | string | undefined): number | undefined {
  * An edge pointing at a title the catalog doesn't have is simply dropped.
  *
  * Two indices, not one: MAL edges only ever carry a MAL id, but an AniList edge
- * may point at an AniList-only title, which has no MAL id on either end
- * (PROVIDER-PARITY.md B1). Resolving those was impossible while the edge itself
- * stored a MAL id alone.
+ * may point at an AniList-only title, which has no MAL id at either end. Keying
+ * on MAL alone silently drops every such edge.
  */
 export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
   const byCanonical = new Map<string, AnimeRecord>();

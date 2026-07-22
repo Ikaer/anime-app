@@ -3,13 +3,11 @@ import type { ProvenanceSource } from '@/models/anime';
 import type { ProviderStatus } from '@/lib/providers/status';
 
 /**
- * The one client-side reader of `/api/anime/providers`
- * (docs/PROVIDER-PARITY.md E1–E4). Both consumers — the header badges and the
- * connections page — go through it, so "how do I ask whether a provider is
- * connected?" has a single answer. It used to have four: three bespoke badge
- * components with a fetch each, plus `useConnections`.
+ * The one client-side reader of `/api/anime/providers`. Both consumers — the
+ * header badges and the connections page — go through it, so "how do I ask
+ * whether a provider is connected?" has a single answer.
  *
- * `import type` only: `providerStatus.ts` is server-only (it reads the auth
+ * `import type` only: `providers/status.ts` is server-only (it reads the auth
  * files and the personal slices) and the type is erased at compile time.
  */
 export function useProviderStatuses() {

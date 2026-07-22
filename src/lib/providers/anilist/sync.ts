@@ -1,9 +1,8 @@
 /**
  * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
  * taxonomy, the top staff credits, the banner art and the franchise relation
- * edges (docs/quickRate/) for every anime the **registry** knows of — by MAL id
- * where there is one, by AniList id otherwise (PROVIDER-PARITY.md B1) — and
- * persists them via store.ts. Read-only against AniList; no writes.
+ * edges for every anime the **registry** knows of — by MAL id where there is
+ * one, by AniList id otherwise. Read-only against AniList; no writes.
  */
 import { getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry, toNum } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
@@ -16,22 +15,19 @@ const BATCH_SIZE = 50;
 // creative roles (director, character design, music…) without bloating storage.
 const STAFF_PER_ANIME = 15;
 
-// Tags, staff AND relations in one query per batch (verified live 2026-07-18:
-// perPage:50 with nested staff(perPage:15) + the relations connection still
-// stays under AniList's query-complexity ceiling — 48 media, 269 relation edges,
-// no error). Staff is nested inside Page.media — NOT an aliased Media (which
-// null-bombs on any miss). `relations.node.type` is fetched because an
-// ADAPTATION edge's `idMal` is the MANGA's id and would otherwise be read as an
-// unrelated anime.
+// Tags, staff AND relations in one query per batch. `perPage:50` with nested
+// `staff(perPage:15)` plus the relations connection stays under AniList's
+// query-complexity ceiling; adding to it may not.
 //
-// Two id filters, one query body (PROVIDER-PARITY.md B1). The enrichment used to
-// accept ONLY `idMal_in`, so the titles minted by the keyless AniList catalog
-// crawl — which have an AniList id and no MAL id — could never receive tags,
-// staff, relations or banner art *from AniList, using an AniList id the record
-// already held*. `id_in` is the same filter over AniList's own id space. Which
-// one a batch uses is chosen per title by `selectMetaTargets`, never mixed
-// within a batch: AniList applies a supplied-but-null argument as a real filter
-// (the caveat `anilistCast.ts` documents), so a query carries exactly one.
+// Staff must stay nested inside `Page.media` — an aliased `Media` null-bombs on
+// any miss. `relations.node.type` is fetched because an ADAPTATION edge's
+// `idMal` is the MANGA's id and would otherwise be read as an unrelated anime.
+//
+// The body is built with `idMal_in` OR `id_in` — the same filter over each id
+// space, so a title with no MAL id is still reachable by its AniList id.
+// `selectMetaTargets` picks per title, and a batch is never mixed: AniList
+// applies a supplied-but-null argument as a real filter (see cast.ts), so a
+// query carries exactly one id filter.
 type MetaIdField = 'idMal_in' | 'id_in';
 /** Which provider's id space a batch of enrichment ids lives in. */
 export type MetaIdSpace = 'mal' | 'anilist';
@@ -112,10 +108,10 @@ function toEntry(m: RawMedia, fetchedAt: string): AniListMetaEntry {
  * dropped: an ADAPTATION edge points at the source manga, whose `idMal` lives in
  * a different id space and would otherwise be matched against an anime.
  *
- * The edge used to be kept only when the target had a MAL id, which dropped
- * every edge into an AniList-only title — silently costing the franchise graph
- * exactly the titles B1 is about. The AniList id is always present here (the
- * edge came from AniList), so an edge is now dropped only for not being an anime.
+ * Keeping both keys matters — requiring `idMal` would drop every edge into an
+ * AniList-only title, silently costing the franchise graph. The AniList id is
+ * always present (the edge came from AniList), so the only reason to drop an
+ * edge is that its target is not an anime.
  */
 function parseRelations(media: RawMedia): AniListRelationEntry[] {
   return (media.relations?.edges ?? [])
@@ -163,10 +159,9 @@ async function fetchTagsBatch(ids: number[], by: MetaIdSpace): Promise<RawMedia[
 // straight back onto our MAL join key, so no crosswalk is needed.
 //
 // This query stays MAL-keyed on purpose, unlike the enrichment one above: its
-// only consumer is the reco engine, which is deliberately MAL-keyed end to end
-// (PROVIDER-PARITY.md B3 — seeds, crowd edges and cache/recommendations.json
-// are all MAL ids). Giving it an `id_in` path would return edges the engine has
-// no key to store or rank. It moves when B3 moves, not before.
+// only consumer is the reco engine, which is MAL-keyed end to end (seeds, crowd
+// edges and cache/recommendations.json are all MAL ids). An `id_in` path here
+// would return edges the engine has no key to store or rank.
 const RECS_PER_ANIME = 15;
 const RECS_QUERY = `
 query ($ids: [Int]) {
@@ -268,19 +263,18 @@ export function isAnilistMetaSyncRunning(): boolean {
 
 /**
  * Which titles still need enrichment, split by the id space they can be queried
- * in (PROVIDER-PARITY.md B1).
+ * in.
  *
- * The scan source is the **registry**, not the MAL catalog slice. It used to be
- * the latter, which made the sweep structurally incapable of reaching a title
- * MAL doesn't know — so `performAnilistBulkCatalogCrawl`, the onboarding path
- * for a keyless install, minted records its own enrichment could never enrich.
- * The registry is the identity spine every slice hangs off, so iterating it is
- * what makes "every title we know of" mean every title.
+ * **The scan source must be the registry, not the MAL catalog slice** — the
+ * latter cannot even name a title MAL doesn't know, which would leave every
+ * record minted by the keyless AniList crawl permanently un-enrichable. The
+ * registry is the identity spine every slice hangs off, so iterating it is what
+ * makes "every title we know of" mean every title.
  *
- * A title is queued when it has no AniList entry yet, OR an entry predating
- * staff / banner / relations support (field === `undefined`) so those backfill
- * onto already-tagged titles. Absent values are stored as `null`/`[]` rather
- * than left undefined, so a title AniList genuinely lacks never re-queues.
+ * A title is queued when it has no AniList entry yet, OR an entry missing
+ * staff / banner / relations (field === `undefined`) so those backfill onto
+ * already-tagged titles. Absent values are stored as `null`/`[]` rather than
+ * left undefined, so a title AniList genuinely lacks never re-queues.
  *
  * MAL id wins when a title has both: it is the join key the catalog is anchored
  * on, and the crosswalk's `anilist` id can be a mirrored SIMKL value, whereas
@@ -302,7 +296,7 @@ function selectMetaTargets(): { malIds: number[]; anilistIds: number[] } {
     }
     const anilistId = toNum(crosswalk.anilist);
     if (anilistId !== undefined) anilistIds.push(anilistId);
-    // Neither id: a SIMKL-only title AniList has no handle on. Skipped, as before.
+    // Neither id: a SIMKL-only title AniList has no handle on.
   }
 
   return { malIds, anilistIds };
@@ -311,13 +305,12 @@ function selectMetaTargets(): { malIds: number[]; anilistIds: number[] } {
 /**
  * Force-refresh AniList tags + staff + banner + relations for specific ids,
  * bypassing the "missing only" filter that `performAnilistMetaSync` uses. Powers
- * the per-anime refresh on the detail page (PROVIDER-PARITY.md B2). One batch,
- * no throttle loop (caller passes few ids). Returns how many ids AniList
- * actually had (it silently skips ones it doesn't know).
+ * the per-anime refresh on the detail page. One batch, no throttle loop (the
+ * caller passes few ids). Returns how many ids AniList actually had — it
+ * silently skips ones it doesn't know.
  *
- * `by` selects the id space, since the caller may only hold one of the two: a
- * title with no MAL id is refreshed by its AniList id, which is precisely what
- * made the RefreshButton a no-op on a keyless install's own catalog.
+ * `by` selects the id space, since the caller may hold only one of the two: a
+ * title with no MAL id is refreshed by its AniList id.
  */
 export async function refreshAnilistMetaForIds(
   ids: number[],
@@ -438,22 +431,21 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 }
 
 // ============================================================================
-// AniList catalog crawler (docs/PROVIDER-FREE.md Phase 3)
+// AniList catalog crawler
 // ============================================================================
 //
-// Unlike the tags/staff sync above (which enriches titles ALREADY known via
-// `catalog/mal.json`, one MAL id at a time), this browses AniList's OWN catalog
-// by season — the capability that lets AniList seed the registry
-// INDEPENDENTLY of MAL, verified unauthenticated in Phase 0 (see
-// docs/PROVIDER-FREE.md). Titles it finds WITH a MAL id enrich the existing
-// per-MAL-id AniList meta entry (`catalog` block, merged not overwritten —
-// see `upsertAnilistCatalogFields`); titles it finds WITHOUT one (AniList-only,
-// no `idMal`) still get their `catalog` block persisted, keyed off the
-// `anilist` crosswalk alone. `getAnimeForDisplay` (docs/PROVIDER-FREE-CUTOVER.md
-// Phase C) unions in every canonical id anchored this way, so an AniList-only
-// title with an `idMal` renders a full row via `catalog`/provenance hydration;
-// a title with genuinely no `idMal` anywhere stays out of scope (see that
-// doc's "Deferred" note) and is skipped at the row-set level, not here.
+// Unlike the tags/staff sync above (which enriches titles already known via
+// `catalog/mal.json`), this browses AniList's OWN catalog by season — the
+// capability that lets AniList seed the registry INDEPENDENTLY of MAL, with no
+// account and no key.
+//
+// Titles found WITH a MAL id enrich the existing AniList meta entry (`catalog`
+// block, merged not overwritten — see `upsertAnilistCatalogFields`). Titles
+// found WITHOUT one still get their `catalog` block persisted, keyed off the
+// `anilist` crosswalk alone. `getAnimeForDisplay` unions in every canonical id
+// anchored this way, so an AniList-only title carrying an `idMal` renders a full
+// row through provenance hydration; a title with no `idMal` anywhere is skipped
+// at the row-set level, not here.
 
 // The catalog field set, shared by the season crawler and the by-MAL-id
 // hydration path below so the two can never drift into producing differently
@@ -630,12 +622,11 @@ async function fetchCatalogPage(season: string, seasonYear: number, page: number
  * **keyless hydration path** for recommendation candidates.
  *
  * `performRecommendationsRefresh` hydrates candidate titles missing from the
- * local catalog so the feed has something to rank. That was MAL-only
- * (`fetchAnimeDetail`, authenticated), which meant a user with no MAL account
- * could accumulate AniList crowd edges and then render none of them. This is the
- * same job done against the public API: candidates arrive as MAL ids (the reco
- * engine's join key — PROVIDER-PARITY.md B3), and AniList queries by MAL id
- * happily, so no crosswalk is involved.
+ * local catalog so the feed has something to rank. This is the keyless path for
+ * that: candidates arrive as MAL ids (the reco engine's join key) and AniList
+ * queries by MAL id happily, so no crosswalk is involved and no MAL account is
+ * needed. Without it a user with no MAL account accumulates AniList crowd edges
+ * and renders none of them.
  *
  * Persists through `upsertAnilistCatalogFields`, so a hydrated title lands as a
  * `catalog` block on the AniList meta slice and renders through the normal
@@ -722,8 +713,7 @@ async function crawlCatalogSeason(season: string, seasonYear: number, maxPages: 
       if (!entry) continue;
       entries.push(entry);
       // No MAL id: the catalog block is still persisted, keyed off the `anilist`
-      // crosswalk alone — this is what lets an AniList-only title render a full
-      // row (docs/PROVIDER-FREE-CUTOVER.md Phase C).
+      // crosswalk alone — this is what lets an AniList-only title render a row.
       if (entry.mal_id !== undefined) withMal++; else anilistOnly++;
     }
 

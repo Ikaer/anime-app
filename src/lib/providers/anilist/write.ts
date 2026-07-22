@@ -1,7 +1,6 @@
 /**
  * AniList write-back — the `SaveMediaListEntry` mutation behind the personal
- * writer registry (docs/ANILIST-OAUTH.md). The AniList sibling of `malWrite.ts`
- * / `simklWrite.ts`.
+ * writer registry. The AniList sibling of `mal/write.ts` and `simkl/write.ts`.
  *
  * Two things that are NOT obvious:
  *

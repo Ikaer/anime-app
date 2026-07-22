@@ -24,7 +24,7 @@ import { anilistFetch, httpErrorMessage } from '@/lib/providers/anilist/client';
 
 const CONFIG_FILE = dataFile('sync/anilist_import.json');
 
-// AniList list-status vocabulary -> MAL vocabulary (docs/PROVIDER-FREE.md P3b).
+// AniList list-status vocabulary -> MAL vocabulary.
 const STATUS_MAP: Record<string, UserAnimeStatus> = {
   CURRENT: 'watching',
   PLANNING: 'plan_to_watch',

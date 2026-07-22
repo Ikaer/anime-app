@@ -1,15 +1,12 @@
 /**
  * **One status row per provider** — capability (declarative) + connection
  * (runtime) + how much data the provider actually holds, assembled once so every
- * surface that draws a provider reads the same shape
- * (docs/PROVIDER-PARITY.md E1–E4).
+ * surface that draws a provider reads the same shape.
  *
- * Before this, "is X connected?" was answered by three bespoke auth endpoints
- * with three different payload shapes (`user.name` / `user.user.name` /
- * `user.name` + `isConfigured`), and the header badges re-derived it a fourth
- * time — three near-identical components, one fetch each. `local` was in none of
- * them, which is E3: on a keyless install the only *active* personal provider was
- * the one with no UI at all.
+ * This is the uniform *read*. The per-provider `auth` endpoints keep owning the
+ * OAuth *flows*, which genuinely differ; it is only the status question that was
+ * worth collapsing, and `local` has to be in it — on a keyless install it is the
+ * only active personal provider.
  *
  * Server-only: composes [providers.ts](providers.ts) (auth files) with the
  * personal slices in [store.ts](store.ts). Client components may `import type`

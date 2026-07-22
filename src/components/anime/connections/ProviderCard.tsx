@@ -30,17 +30,15 @@ const AUTH_KEYS: Record<ProviderAuthKind, TranslationKey> = {
 };
 
 /**
- * **One card shape for every provider** (docs/PROVIDER-PARITY.md E1), rendered
- * from `PROVIDER_CAPABILITIES` + live status. It replaces `AccountSection` /
- * `SimklSection` / `AnilistAuthSection` — three components, three prop shapes,
- * three layouts for one concept — and gives `local` a presence it never had (E3).
+ * **One card shape for every provider**, rendered from `PROVIDER_CAPABILITIES`
+ * plus live status — `local` included.
  *
- * A card is a **(provider, role)** pair, not a provider (E4): MAL and AniList
- * each render twice, once under catalog and once under personal, because that is
- * what they are. The auth kind is read per role, which is the whole point —
- * AniList's catalog card says "no account required" while its list card asks for
- * OAuth, and filing the two together is exactly how the metadata sync ended up
- * looking like it needed a login.
+ * A card is a **(provider, role)** pair, not a provider: MAL and AniList each
+ * render twice, once under catalog and once under personal, because that is what
+ * they are. The auth kind is read per role, which is the whole point — AniList's
+ * catalog card says "no account required" while its list card asks for OAuth.
+ * Filing the two together is what makes an unauthenticated sync look like it
+ * needs a login.
  *
  * What is uniform: identity, the auth slot, capability chips, status. What is
  * not, and is passed in as `children`: the actions. MAL's seasonal crawl,

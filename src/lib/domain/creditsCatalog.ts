@@ -9,7 +9,7 @@ import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
 
 export interface CreditedAnime {
-  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  /** Canonical id — the detail-page route key. */
   id: string;
   title: string;
   poster?: string;
@@ -27,8 +27,7 @@ export interface CreditsResult {
 
 // Studio/staff credits and MAL score are catalog-only fields, so this reads
 // exclusively from `AnimeRecord.catalog`/`sources.anilist` — no personal
-// state involved. `id` is the outward canonical id (docs/PROVIDER-FREE-
-// CUTOVER.md Phase D) — the detail-page route key.
+// state involved. `id` is the outward canonical id — the detail-page route key.
 function toCredited(a: AnimeRecord, role?: string): CreditedAnime {
   return {
     id: a.id,

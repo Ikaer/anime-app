@@ -101,15 +101,13 @@ async function fetchAnimeDetail(animeId: number, accessToken: string): Promise<M
  * hydrate missing titles. Persists edges incrementally so an interruption does
  * not restart from zero. Holds a module-level lock (409 via the route).
  *
- * **`accessToken` is optional — `null` means "no MAL account".** This used to be
- * a required argument behind a `requireMalAuth` 401, which made the feed
- * unreachable on a keyless install even though the engine needs no MAL *account*
- * to work: it is MAL-*id*-keyed, and those ids come free off AniList's own
- * payload. Without a token the two MAL sources (crowd edges, personal
- * suggestions) are skipped and the anonymous AniList crowd source carries the
- * feed alone; candidate hydration falls back to AniList's catalog. Every source
- * reports its own outcome, so a thin feed is explained rather than mysterious —
- * the same shape `similar/[id]` has always had.
+ * **`accessToken` is optional — `null` means "no MAL account".** The engine
+ * needs MAL *ids*, which come free off AniList's own payload, not a MAL
+ * *session*; do not put an auth gate in front of it. Without a token the two MAL
+ * sources (crowd edges, personal suggestions) are skipped and the anonymous
+ * AniList crowd source carries the feed alone, with candidate hydration falling
+ * back to AniList's catalog. Every source reports its own outcome, so a thin
+ * feed is explained rather than mysterious.
  */
 export async function performRecommendationsRefresh(
   accessToken: string | null,
@@ -139,11 +137,9 @@ export async function performRecommendationsRefresh(
     const seenSeed = new Set(malSeeds.map(s => s.id));
     const upSeeds = getFeedbackAnime('up').filter(a => !seenSeed.has(a.id));
     const seedRecords = [...malSeeds, ...upSeeds];
-    // `data.seeds`/`data.anilistSeeds` stay MAL-id-keyed by design (the reco
-    // engine's internal math is MAL-keyed — docs/PROVIDER-FREE-CUTOVER.md
-    // Phase D/Risks), so seeds are reduced to their MAL id here. Every stored
-    // record has a resolvable MAL id (assembleDisplayRow's invariant), but the
-    // filter guards rather than assumes.
+    // `data.seeds`/`data.anilistSeeds` are MAL-id-keyed like the rest of the
+    // engine, so seeds are reduced to their MAL id here. Every stored record has
+    // a resolvable MAL id, but the filter guards rather than assumes.
     const seeds = seedRecords
       .map(record => toNum(record.crosswalk.mal))
       .filter((id): id is number => id !== undefined);

@@ -4,7 +4,7 @@ import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './PersonalStateEditor.module.css';
 
 /**
- * The **bootstrap surface** for personal state (docs/localRating/ phase 3).
+ * The **bootstrap surface** for personal state.
  *
  * Every other rating surface assumes personal state already exists — the tier
  * board only fetches already-statused titles, and the reco feed needs completed
@@ -25,7 +25,7 @@ const SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 interface WriteOutcome {
   ok: boolean;
   matched?: boolean;
-  /** Dimensions the provider never claimed and therefore did not apply (D1). */
+  /** Dimensions the provider never claimed and therefore did not apply. */
   unsupported?: ('status' | 'score' | 'progress')[];
   skipped?: boolean;
   error?: string;
@@ -91,8 +91,8 @@ export default function PersonalStateEditor({
   // landed — so a failed provider means "didn't reach the service", not "lost".
   const failed = Object.entries(outcomes || {}).filter(([, o]) => o.ok === false);
   // Distinct from failure: a provider that never claimed the dimension (SIMKL is
-  // score-only). It used to report a bare `ok: true` and render as a success —
-  // gap D1. Shown muted, and only when something was actually discarded.
+  // score-only), so nothing went wrong. Shown muted, and only when something was
+  // actually discarded.
   const partial = Object.entries(outcomes || {}).filter(
     ([, o]) => o.ok !== false && (o.unsupported?.length ?? 0) > 0
   );

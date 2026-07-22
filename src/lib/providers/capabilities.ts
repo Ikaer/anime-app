@@ -1,25 +1,23 @@
 /**
  * **What each provider IS, and what it CAN DO** — the declarative half of
- * provider identity (docs/PROVIDER-PARITY.md §3, gap D2).
+ * provider identity.
  *
  * Client-safe: static data only, no fs, no auth reads. The *runtime* half —
- * "is this provider connected right now?" — lives in
- * [providers.ts](providers.ts), which is server-only because it reads the auth
- * files. Keep that split: a React component may import this module to render a
- * provider; it may never import `providers.ts`.
+ * "is this provider connected right now?" — lives in [registry.ts](registry.ts),
+ * which is server-only because it reads the auth files. Keep that split: a React
+ * component may import this module to render a provider; it may never import
+ * `registry.ts`.
  *
- * This is deliberately NOT the sync-orchestration registry
- * [PROVIDER-ABSTRACTION.md](../../docs/PROVIDER-ABSTRACTION.md) dropped. It
- * abstracts strictly **identity, capability and status** — the three things that
- * really are uniform across providers — and nothing that executes a sync. MAL's
- * seasonal crawl, SIMKL's `activities` delta and AniList's GraphQL batching stay
- * three explicit, different operations.
+ * Scope is strictly **identity, capability and status** — the things that really
+ * are uniform across providers — and nothing that executes a sync. MAL's seasonal
+ * crawl, SIMKL's `activities` delta and AniList's GraphQL batching stay three
+ * explicit, different operations.
  *
  * **Roles are keys, not flags.** A provider holds the `catalog` role, the
- * `personal` role, or both, and each role carries its OWN auth kind — which is
- * the point: AniList's catalog reads are anonymous while its list reads need
- * OAuth, so "AniList requires OAuth" is only half true and filing its metadata
- * sync under an account section is the mistake this shape prevents (E4).
+ * `personal` role, or both, and each role carries its OWN auth kind. That
+ * granularity is required, not cosmetic: AniList's catalog reads are anonymous
+ * while its list reads need OAuth, so a single per-provider auth field would
+ * wrongly file its metadata sync as needing an account.
  */
 import type { ProvenanceSource } from '@/models/anime';
 
@@ -52,20 +50,19 @@ export interface CatalogCapability {
 export interface PersonalCapability {
   auth: ProviderAuthKind;
   /**
-   * How much of the user's watching history this provider claims to hold.
-   * - `full` — the comprehensive list; a title missing from it is news.
+   * How much of the user's watching history this provider's read returns.
+   * - `full` — the whole account list; a title missing from it is news.
    * - `subset` — a feed of only what the user happened to track there.
    *
-   * This is what presence detection is really asking (A2): `PRESENCE_ANCHORS`
-   * hardcodes `['mal']` today, which is this field frozen as a constant back
-   * when MAL was the only full list.
+   * This is an **API** claim, not a claim that the account is the user's
+   * comprehensive record. `presenceAnchors` narrows it to one anchor for exactly
+   * that reason — see its own note.
    */
   listCoverage: 'full' | 'subset';
   /**
    * The dimensions a write can actually carry. `[]` = read-only (sync in, never
-   * out). SIMKL is the interesting one: score-only by design, so a status or
-   * progress patch is *discarded*, and D1 is that the discard is currently
-   * reported as a success.
+   * out). SIMKL is score-only, so `writePersonal` narrows a status or progress
+   * patch away and reports it as `unsupported`.
    *
    * For `local` this describes the slice itself rather than a remote push —
    * there is no remote, and the slice can express all three.
@@ -86,8 +83,7 @@ export interface ProviderCapabilities {
   label: string;
   /**
    * Brand asset under `public/`, when we ship one. Identity, so it belongs with
-   * the label rather than being re-picked by every surface that draws a
-   * provider — which is what the three copies of the connection badge did (E2).
+   * the label rather than being re-picked by every surface that draws a provider.
    */
   iconSrc?: string;
   /** Text glyph used when there is no `iconSrc`. Two or three characters. */
@@ -173,10 +169,9 @@ export const PROVIDER_IDS = Object.keys(PROVIDER_CAPABILITIES) as ProvenanceSour
 
 /**
  * Providers holding `role`, in display order. **This is the axis the connections
- * page is split on** (E4): filing AniList's anonymous metadata sync under an
- * "AniList account" heading is what made an unauthenticated catalog action look
- * like it needed a login. Role presence is key presence, so a provider joins a
- * group by declaring the role and nothing else.
+ * page is split on**, so that an anonymous catalog action (AniList's metadata
+ * sync) never renders under an account heading. Role presence is key presence: a
+ * provider joins a group by declaring the role and nothing else.
  */
 export function providersWithRole(role: ProviderRole): ProvenanceSource[] {
   return PROVIDER_IDS.filter(id => PROVIDER_CAPABILITIES[id][role] !== undefined);
@@ -198,8 +193,8 @@ export function isWritableProvider(id: ProvenanceSource): boolean {
 }
 
 /**
- * Which dimensions of a patch this provider will actually apply. The complement
- * is what it would silently discard — the shape D1 is about.
+ * Which dimensions of a patch this provider will actually apply. `writePersonal`
+ * narrows against this and reports the complement as `unsupported`.
  */
 export function supportedDimensions(id: ProvenanceSource): readonly PersonalDimension[] {
   return PROVIDER_CAPABILITIES[id].personal?.write ?? [];
@@ -219,43 +214,34 @@ export function supportsStatusClear(id: ProvenanceSource): boolean {
 }
 
 /**
- * Providers claiming to hold the user's COMPLETE list.
+ * Providers whose read returns the user's COMPLETE list.
  *
- * This is what `PRESENCE_ANCHORS` in [discrepancy.ts](discrepancy.ts) used to
- * freeze as `['mal']`, back when MAL was the only full list. Prefer
- * `presenceAnchors` below over calling this directly — the *set* is not the
- * answer presence detection wants.
+ * Prefer `presenceAnchors` below over calling this directly — the *set* is not
+ * the answer presence detection wants.
  */
 export function fullListProviders(): ProvenanceSource[] {
   return PROVIDER_IDS.filter(id => PROVIDER_CAPABILITIES[id].personal?.listCoverage === 'full');
 }
 
 /**
- * The **reference list** a title's absence is judged against (A2) — at most one,
- * chosen as the first full-list provider in the resolved personal precedence, so
- * a provider that is not enabled (absent from the precedence) never anchors.
+ * The **reference list** a title's absence is judged against — at most one,
+ * the first full-list provider in the resolved personal precedence. A provider
+ * that is not enabled is absent from the precedence and so never anchors.
  *
- * **Why one and not the full set.** The obvious reading of A2 is
- * `PRESENCE_ANCHORS = fullListProviders()`, i.e. `['mal', 'anilist']`. Measured
- * against the real store that reports **430 of 671** tracked titles as a presence
- * split — every MAL entry the (smaller, later-connected) AniList account happens
- * not to hold. That is the exact failure the original asymmetry existed to avoid,
- * re-created one level up: with two mutual anchors, "absent from a reference
- * list" degenerates into "the two lists differ", which is the whole list.
+ * **It must be one, not every full-list provider.** Anchoring on the whole set
+ * flags 430 of 671 tracked titles on a real store — every entry the smaller,
+ * later-connected account happens not to hold. With two mutual anchors, "absent
+ * from the reference list" degenerates into "the two lists differ", which is
+ * most of the list.
  *
- * `listCoverage: 'full'` is an **API** claim — this provider's read returns the
- * account's entire list rather than a subset feed. It is not a claim that the
- * account IS the user's comprehensive record. Presence detection needs the
- * latter, and precedence is where the app already states which provider it
- * believes: the winner of a conflict is the reference the others are compared to.
+ * `listCoverage: 'full'` only claims that a provider's read returns the whole
+ * account, not that the account IS the user's comprehensive record. Presence
+ * detection needs the latter, and precedence is where the app already states
+ * which provider it believes when they conflict.
  *
- * Consequences, all intended:
- * - MAL + anything → `['mal']`, today's behaviour, preserved.
- * - No MAL (the keyless / AniList-only install) → `['anilist']`, which is A2's
- *   stated symptom: previously there was no anchor at all and no presence split
- *   could ever be reported.
- * - SIMKL-only or local-only → `[]`. Nothing claims completeness, so an absence
- *   is not news — correct, and previously expressed as a dangling `['mal']`.
+ * So: MAL + anything → `['mal']`. No MAL → `['anilist']`. SIMKL-only or
+ * local-only → `[]`, because nothing claims completeness and an absence is
+ * therefore not news.
  */
 export function presenceAnchors(precedence: ProvenanceSource[]): ProvenanceSource[] {
   const anchor = precedence.find(

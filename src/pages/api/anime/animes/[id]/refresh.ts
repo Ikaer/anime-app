@@ -14,9 +14,8 @@ import { appendLog } from '@/lib/config/connectionLog';
  * - MAL: GET /v2/anime/{id} (single-title catalog + personal status), merged
  *   over the existing local record so unreturned fields are preserved.
  * - AniList: force-refetch tags + staff + banner + relations, by MAL id when
- *   there is one and by AniList id otherwise (PROVIDER-PARITY.md B2 — this used
- *   to be gated on the MAL id, making the button a no-op for AniList-only
- *   titles even though their AniList id was resolved right here).
+ *   there is one and by AniList id otherwise, so the button still works on a
+ *   title MAL has never heard of.
  * - SIMKL: the standard incremental library delta (SIMKL has no per-id read; the
  *   user accepted the incremental sync for the refresh).
  */

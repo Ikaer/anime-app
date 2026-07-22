@@ -1,16 +1,14 @@
 /**
  * Provider **status** — the runtime half of provider identity: "is this provider
  * connected / enabled right now?". The declarative half — what each provider is
- * and what it can do — is [providerCapabilities.ts](providerCapabilities.ts),
- * which is client-safe. Every question of the form "who can do X?" is answered
- * by composing the two here, in ONE place (docs/PROVIDER-PARITY.md D2).
+ * and what it can do — is [capabilities.ts](capabilities.ts), which is
+ * client-safe. Every question of the form "who can do X?" is answered by
+ * composing the two here, in ONE place.
  *
- * Before D2 this module hand-read three auth files and the writer registry
- * repeated the same per-provider check for its own provider, with the two kept
- * in agreement by hand. Now `isPersonalProviderEnabled` is the single
- * enablement predicate: `personalWriters.ts` calls it instead of carrying an
- * `isEnabled` per writer, so a registered writer cannot disagree with
- * `hasWritableExternal` about whether its provider is on.
+ * `isPersonalProviderEnabled` is the single enablement predicate. `writers.ts`
+ * calls it rather than carrying an `isEnabled` per writer, so a registered
+ * writer cannot disagree with `hasWritableExternal` about whether its provider
+ * is on.
  *
  * Kept in its own module rather than in `settings.ts` because it must read the
  * MAL/SIMKL auth files, and `simkl.ts` already imports `settings.ts` (importing

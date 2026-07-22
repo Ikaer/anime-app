@@ -19,15 +19,14 @@ import {
 import { useT } from '@/lib/i18n';
 
 /**
- * Connections (docs/PROVIDER-PARITY.md E1–E4).
+ * Connections.
  *
- * **Split by role, not by provider.** The page used to be four hardcoded
- * sections — `<h2>MyAnimeList</h2>`, `<h2>SIMKL</h2>`, `<h2>AniList</h2>`, then a
- * catch-all "Synchro" — which filed AniList's *anonymous* metadata sync under an
- * account heading and MAL's catalog crawl under a shared one. The axis the user
- * actually thinks on is: what is my catalog, and which lists am I syncing? Both
- * groups come from `providersWithRole`, so a provider joins one by declaring the
- * role in `PROVIDER_CAPABILITIES` and nothing here changes.
+ * **Split by role, not by provider.** The axis the user thinks on is: what is my
+ * catalog, and which lists am I syncing? Filing by provider instead puts
+ * AniList's *anonymous* metadata sync under an account heading, which makes it
+ * look like it needs a login. Both groups come from `providersWithRole`, so a
+ * provider joins one by declaring the role in `PROVIDER_CAPABILITIES` and
+ * nothing here changes.
  *
  * MAL and AniList appear in both groups on purpose — they hold both roles, with
  * different auth per role. The account control renders in the personal group

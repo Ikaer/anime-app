@@ -6,7 +6,7 @@ import { providersWithRole } from '@/lib/providers/capabilities';
 import { useT } from '@/lib/i18n';
 
 /**
- * The header's provider badges (docs/PROVIDER-PARITY.md E2). One component over
+ * The header's provider badges. One component over
  * one fetch, rendering a badge per personal-list provider from the descriptor —
  * replacing `MalConnectionBadge` / `SimklConnectionBadge` /
  * `AnilistConnectionBadge`, three near-identical stateful wrappers that each hit
@@ -14,9 +14,9 @@ import { useT } from '@/lib/i18n';
  * `ConnectionStatusBadge` (the presenter) was already shared; the duplication was
  * entirely in the state.
  *
- * **`local` gets a badge too, when it is on** (E3): on a keyless install it is
- * the only active personal provider, and it previously had no presence anywhere
- * in the UI. Off, it is simply not a connection, so it is not listed.
+ * **`local` gets a badge too, when it is on**: on a keyless install it is the
+ * only active personal provider. Off, it is not a connection, so it is not
+ * listed — a permanent grey dot would be worse than nothing.
  */
 const ConnectionBadges: React.FC = () => {
   const router = useRouter();

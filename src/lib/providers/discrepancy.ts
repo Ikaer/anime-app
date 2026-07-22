@@ -33,12 +33,11 @@ export function mapSimklStatus(raw: string | undefined | null): UserAnimeStatus 
  * is news and the inverse is not. A symmetric rule would flag every title the
  * reference holds and a smaller list does not — i.e. most of the list.
  *
- * WHICH provider anchors was `['mal']` frozen as a constant (A2) and is now a
- * capability read: `presenceAnchors` in
- * [providerCapabilities.ts](providerCapabilities.ts) picks it from the resolved
- * precedence, and `buildProviderStates` marks the chosen state `anchor: true`.
- * This module only compares what it is handed — including on the discrepancies
- * page, which re-runs it client-side over a filtered subset of the same states.
+ * WHICH provider anchors is a capability read: `presenceAnchors` in
+ * [capabilities.ts](capabilities.ts) picks it from the resolved precedence, and
+ * `buildProviderStates` marks the chosen state `anchor: true`. This module only
+ * compares what it is handed, which is what lets the discrepancies page re-run
+ * it client-side over a filtered subset of the same states.
  */
 
 /** Distinct defined values across the present providers, in provider order. */
@@ -72,9 +71,9 @@ export function computeDiscrepancy(
   //
   // A provider counts as fully-watched if EITHER:
   //  - its status is `completed` — a completed title is watched in full whatever
-  //    its episode count. This is load-bearing now that each provider borrows
-  //    its OWN catalog's episode total (H1): AniList's catalog count is often
-  //    unknown, and without this clause an unknown total would resurface a raw
+  //    its episode count. This is load-bearing because each provider is judged
+  //    against its OWN catalog's episode total: AniList's count is often
+  //    unknown, and without this clause an unknown total resurfaces a raw
   //    progress difference between two *completed* entries (MAL 1/1 vs AniList
   //    24/?) as a phantom disagreement.
   //  - it watched `>= total`. `>=`, not `===`: watching past the total (a

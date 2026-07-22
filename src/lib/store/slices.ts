@@ -24,9 +24,9 @@ import { getRegistry, resolveByMalId, resolveCanonicalIds, toNum } from '@/lib/s
 import { invalidateRecordCache } from '@/lib/store/recordCache';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
 
-// Role folders, not filename prefixes (docs/DATA-LAYOUT.md). The same basename
-// under catalog/ and personal/ is the point: `catalog/mal.json` is the MAL
-// catalog slice, `personal/mal.json` its personal one.
+// Role folders, not filename prefixes. The same basename under catalog/ and
+// personal/ is the point: `catalog/mal.json` is the MAL catalog slice,
+// `personal/mal.json` its personal one.
 const ANIME_MAL_FILE = dataFile('catalog/mal.json');
 const ANIME_MAL_PERSONAL_FILE = dataFile('personal/mal.json');
 const ANIME_HIDDEN_FILE = dataFile('user/hidden.json');
@@ -37,13 +37,13 @@ const ANIME_ANILIST_PERSONAL_FILE = dataFile('personal/anilist.json');
 const ANIME_LOCAL_PERSONAL_FILE = dataFile('personal/local.json');
 
 // ============================================================================
-// H1 migration boot guard
+// Un-migrated-store guard
 // ============================================================================
 //
 // There is no central process-boot hook (no instrumentation.ts), so "refuse to
 // start on an un-migrated store" is a one-time lazy guard on the first catalog
-// read. Post-H1 code NEVER writes `my_list_status` into the catalog file, so
-// finding one embedded is an unambiguous "this store predates the split" signal.
+// read. Nothing here ever writes `my_list_status` into the catalog file, so
+// finding one embedded unambiguously means the store predates the split.
 // Runs once per process (the check is cheap but not free on 25k rows).
 
 let malStoreChecked = false;
@@ -56,7 +56,7 @@ function assertMigratedMalStore(animes?: Record<string, MALAnime>): void {
       throw new Error(
         'Un-migrated MAL store: `my_list_status` is still embedded in ' +
           'the MAL catalog slice. Run `node scripts/migrate-mal-personal.js <dataPath>` ' +
-          'before starting this version (docs/PROVIDER-PARITY.md H1).'
+          'before starting this version.'
       );
     }
   }
@@ -67,7 +67,7 @@ function assertMigratedMalStore(animes?: Record<string, MALAnime>): void {
 // Hidden anime ids
 // ============================================================================
 
-/** Canonical ids (docs/PROVIDER-FREE-CUTOVER.md Phase D — re-keyed from MAL id). */
+/** Canonical ids. */
 export function getHiddenAnimeIds(): string[] {
   return readJsonFile<string[]>(ANIME_HIDDEN_FILE, []);
 }
@@ -105,13 +105,13 @@ export function saveAnime(animeData: Record<string, MALAnime>): void {
 }
 
 /**
- * Ingest incoming MAL API records (docs/PROVIDER-PARITY.md H1: **split on
- * ingest**). MAL ships the viewer's `my_list_status` inline on every fetch; the
- * catalog file must stay pure catalog, so we strip it off each record and route
- * it into the MAL personal slice.
+ * Ingest incoming MAL API records, **splitting on ingest**. MAL ships the
+ * viewer's `my_list_status` inline on every fetch; the catalog file must stay
+ * pure catalog, so it is stripped off each record and routed into the MAL
+ * personal slice.
  *
- * Mirrors the previous full-object-replace semantics exactly, scoped to the
- * batch: a record WITH a status upserts the personal entry; a record WITHOUT one
+ * Full-object-replace semantics, scoped to the batch: a record WITH a status
+ * upserts the personal entry; a record WITHOUT one
  * clears any existing entry (a title removed from the MAL list stops being
  * statused). Every caller is an authenticated MAL fetch that carries the
  * viewer's status inline, so this never wipes a still-listed title.
@@ -155,11 +155,10 @@ export function getMalIdForCanonical(canonicalId: string): number | undefined {
 }
 
 // ============================================================================
-// MAL personal-list slice (docs/PROVIDER-PARITY.md H1), keyed by canonical id —
-// the peer of the SIMKL / AniList / local personal slices. Split out of
-// `catalog/mal.json` so a rating write no longer rewrites the 39 MB catalog, and
-// so `MALAnime` is pure catalog. Filled by `upsertAnime` (split-on-ingest) and
-// by the personal-list sync (`updatePersonalStatusBatch`).
+// MAL personal-list slice, keyed by canonical id — the peer of the SIMKL /
+// AniList / local personal slices. Kept out of `catalog/mal.json` so a rating
+// write does not rewrite the 39 MB catalog, and so `MALAnime` is pure catalog.
+// Filled by `upsertAnime` (split-on-ingest) and by `updatePersonalStatusBatch`.
 // ============================================================================
 
 export function getAllMalPersonal(): Record<string, MALPersonalEntry> {
@@ -330,11 +329,11 @@ export function upsertAnilistCast(canonicalId: string, entry: AniListCastEntry):
 }
 
 // ============================================================================
-// AniList personal-list slice (keyed by MAL id, as string) — docs/PROVIDER-FREE.md
-// P3b. Anonymously imported from a public AniList username; lowest personal-state
-// fallback tier (see getEffective* in animeUtils.ts). A username import is always
-// a FULL pull, so the mutator REPLACES the whole file — removals from the AniList
-// list drop out for free, no delta/reconcile needed (unlike SIMKL).
+// AniList personal-list slice. Imported from the OAuth'd viewer's own list;
+// lowest personal-state fallback tier (see getEffective* in animeUtils.ts). The
+// import is always a FULL pull, so the mutator REPLACES the whole file —
+// removals from the AniList list drop out for free, with no delta or reconcile
+// step (unlike SIMKL).
 // ============================================================================
 
 export function getAllAnilistPersonalEntries(): Record<string, AniListPersonalEntry> {
@@ -387,17 +386,16 @@ export function upsertAnilistPersonalEntries(entriesByCanonicalId: Record<string
 }
 
 // ============================================================================
-// Local personal-state slice (docs/localRating/), keyed DIRECTLY by canonical id
-// — unlike the external slices, a local edit has no provider crosswalk to resolve
-// from; the write path (phase 2) already holds the canonical id. This is the
-// write target that un-conflates local edits from `catalog/mal.json`.
+// Local personal-state slice, keyed DIRECTLY by canonical id — unlike the
+// external slices, a local edit has no provider crosswalk to resolve from, and
+// the write path already holds the canonical id.
 // ============================================================================
 
 export function getAllLocalEntries(): Record<string, LocalPersonalEntry> {
   return readJsonFile<Record<string, LocalPersonalEntry>>(ANIME_LOCAL_PERSONAL_FILE, {});
 }
 
-/** Merge canonical-id-keyed local entries onto the store (phase 2's writer). */
+/** Merge canonical-id-keyed local entries onto the store. */
 export function upsertLocalEntries(entriesByCanonicalId: Record<string, LocalPersonalEntry>): void {
   const keys = Object.keys(entriesByCanonicalId);
   if (keys.length === 0) return;
@@ -453,9 +451,8 @@ export function getSyncMetadata(): SyncMetadata | null {
 }
 
 // ============================================================================
-// Personal status writes — the MAL personal slice (docs/PROVIDER-PARITY.md H1).
-// Was a mutation of `catalog/mal.json` (39 MB rewrite per call); now targets the
-// lean `personal/mal.json`.
+// Personal status writes — the MAL personal slice. Deliberately NOT the catalog
+// slice, which would be a 39 MB rewrite per call.
 // ============================================================================
 
 interface PersonalStatusUpdateResult {

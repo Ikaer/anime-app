@@ -31,7 +31,7 @@ import { getMalRedirectUri, getSimklRedirectUri, getAnilistRedirectUri } from '@
  * Redacted settings API. GET never returns a secret's value (only `{ set }`);
  * POST leaves a stored secret untouched when its field arrives blank. The one
  * genuinely new attack surface over env config is this browser endpoint, so the
- * redaction rules live here. See docs/SETUP-AND-CONFIG.md § Security posture.
+ * redaction rules live here.
  */
 
 interface FieldStatus {
@@ -85,7 +85,7 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
     logsPath: {
       stored: bootStored.logsPath ?? '',
       // The only reader left: since the connection log moved into the store
-      // (docs/DATA-LAYOUT.md §3.2) nothing writes to LOGS_PATH, but the setting
+      // Nothing writes to LOGS_PATH today, but the setting
       // stays valid and displayed, reserved for real diagnostics.
       resolved: resolveLogsPath(),
       fromEnv: !!process.env.LOGS_PATH,
@@ -95,7 +95,7 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
   res.json({
     fields,
     bootstrap,
-    // Non-secret local-provider preferences (docs/localRating/) — stored modes
+    // Non-secret local-provider preferences — stored modes
     // plus the server-resolved facts so the UI can show "Auto — currently: …".
     preferences: {
       localProviderEnabled: getLocalProviderEnabledMode(),
@@ -136,7 +136,7 @@ function handlePost(req: NextApiRequest, res: NextApiResponse) {
       else next[field] = value;
     }
   }
-  // Non-secret preference enums (docs/localRating/): an unrecognized value clears
+  // Non-secret preference enums: an unrecognized value clears
   // the field → it falls back to the `auto` default. saveSettings only persists
   // recognized non-default values, so the store stays sparse.
   for (const field of PREFERENCE_FIELDS) {

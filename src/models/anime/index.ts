@@ -36,8 +36,8 @@ export interface MALAnime {
    * shape — but it is NEVER persisted to the catalog file. `upsertAnime` strips
    * it into the MAL personal slice (`personal/mal.json`, see
    * `MALPersonalEntry`); a stored catalog `MALAnime` carries no `my_list_status`.
-   * The boot guard in store.ts refuses to start if it finds one embedded (that
-   * means the store predates the H1 split — run scripts/migrate-mal-personal.js).
+   * The boot guard in `slices.ts` refuses to start if it finds one embedded —
+   * that means an un-migrated store; run scripts/migrate-mal-personal.js.
    */
   my_list_status?: MALListStatus;
   num_episodes?: number;
@@ -103,13 +103,11 @@ export interface MALListStatus {
 /**
  * MAL's personal-list **stored** entry — the peer of `SimklPersonalEntry` /
  * `AniListPersonalEntry` / `LocalPersonalEntry`, living in its own slice file
- * (`personal/mal.json`, keyed by canonical id) since the H1 split
- * (docs/PROVIDER-PARITY.md "H1"). It ended MAL's legacy asymmetry of embedding
- * personal state inside the catalog payload.
+ * (`personal/mal.json`, keyed by canonical id) rather than inside the catalog
+ * payload.
  *
  * Structurally identical to the wire shape `MALListStatus` (verbatim MAL field
- * names — no vocabulary rename rode on the data migration), so it is a type
- * alias rather than a second maintained shape.
+ * names), so it is a type alias rather than a second maintained shape.
  */
 export type MALPersonalEntry = MALListStatus;
 
@@ -131,13 +129,12 @@ export interface SimklPersonalEntry {
 }
 
 /**
- * AniList personal-list data (read-only, anonymous public import by username —
- * docs/PROVIDER-FREE.md Phase 3 "P3b"). Keyed by MAL id in
- * personal/anilist.json. It is the LOWEST personal-state fallback tier
- * (SIMKL > MAL > AniList) — see `getEffective*` in animeUtils.ts — so an
- * existing MAL/SIMKL user is unaffected, while an AniList-only user still gets
- * their state. Deliberately the locked 4-field shape (no `mal_id`): the store
- * keys the record by MAL id externally, so the entry itself stays source-pure.
+ * AniList personal-list data, imported from the OAuth'd viewer's own list into
+ * `personal/anilist.json`. It is the LOWEST personal-state fallback tier
+ * (SIMKL > MAL > AniList) — see `getEffective*` in animeUtils.ts — so a
+ * MAL/SIMKL user is unaffected while an AniList-only user still gets their
+ * state. Deliberately the locked 4-field shape (no `mal_id`): the store keys
+ * the record externally, so the entry itself stays source-pure.
  */
 export interface AniListPersonalEntry {
   status?: UserAnimeStatus;  // normalized to MAL vocabulary at import time
@@ -147,11 +144,11 @@ export interface AniListPersonalEntry {
 }
 
 /**
- * In-app **local** personal state (docs/localRating/) — the write target when no
- * external provider (MAL/SIMKL/…) is connected. Un-conflates local edits from
- * `catalog/mal.json`'s `my_list_status`: local edits get their own slice
- * (`personal/local.json`, keyed by canonical id) + its own extractor in
- * `personalState.ts` + precedence tier, like SIMKL and AniList already have.
+ * In-app **local** personal state — the write target when no external provider
+ * is connected. It has its own slice (`personal/local.json`, keyed by canonical
+ * id), its own extractor in `personalState.ts` and its own precedence tier,
+ * exactly like SIMKL and AniList, so a local edit is never conflated with a
+ * provider's mirror of it.
  * Deliberately the locked shape (no `mal_id` — the store keys by canonical id
  * externally). Local edits ARE the authority, so `updated_at` is kept as a mtime.
  */
@@ -244,22 +241,20 @@ export interface AniListStaffEntry {
  * targets are kept: an `ADAPTATION` edge's `idMal` is the *manga's* id and would
  * collide with an unrelated anime.
  *
- * **Both ids are optional, and at least one is always present.** The edge used
- * to be flattened onto the MAL join key alone, which silently dropped every edge
- * whose target has no MAL id — i.e. exactly the AniList-only titles the keyless
- * catalog crawl mints (PROVIDER-PARITY.md B1). `id` is the target's AniList id,
- * always available since the edge came from AniList; `idMal` is kept as the
- * primary join key because the catalog is overwhelmingly MAL-anchored.
+ * **Both ids are optional, and at least one is always present.** Flattening onto
+ * the MAL join key alone drops every edge whose target has no MAL id — i.e. the
+ * AniList-only titles the keyless catalog crawl mints. `id` is the target's
+ * AniList id, always available since the edge came from AniList; `idMal` is the
+ * preferred join key because the catalog is overwhelmingly MAL-anchored.
  *
- * This exists because MAL's `related_anime` is a **detail-only** field — its
- * list/seasonal endpoints omit it, so the crawled catalog has relations for
- * almost nothing (46 of 25,370 titles when this was added). AniList returns
- * them 50 titles per query, which is what makes a catalog-wide relation graph
- * affordable at all (see `docs/quickRate/`).
+ * AniList is the source because MAL's `related_anime` is a **detail-only**
+ * field: its list and seasonal endpoints omit it, so a crawled catalog has
+ * relations for almost nothing. AniList returns them 50 titles per query, which
+ * is what makes a catalog-wide relation graph affordable at all.
  */
 export interface AniListRelationEntry {
   idMal?: number;
-  /** Target's AniList id. Absent only on entries written before B1 shipped. */
+  /** Target's AniList id. Absent only on entries written before it was stored. */
   id?: number;
   relationType: string;
 }
@@ -368,7 +363,7 @@ export interface AniListMetaEntry {
    */
   relations?: AniListRelationEntry[];
   /**
-   * AniList's OWN catalog view of this title (docs/PROVIDER-FREE.md Phase 3),
+   * AniList's OWN catalog view of this title,
    * populated by the season/popularity crawler in anilistSync.ts — distinct
    * from `tags`/`staff`/`banner_image`, which come from the per-MAL-id
    * enrichment sync. Optional as a whole: `undefined` means "never crawled",
@@ -420,8 +415,7 @@ export interface AniListMetaEntry {
 }
 
 // ============================================================================
-// AnimeRecord — the provider-neutral local record (docs/PROVIDER-FREE.md Phase 2,
-// collapsed to the sole record shape in docs/PROVIDER-FREE-CUTOVER.md Phase E)
+// AnimeRecord — the provider-neutral local record
 // ============================================================================
 //
 // NO `extends MALAnime`: every catalog/personal field is read via
@@ -431,7 +425,7 @@ export interface AniListMetaEntry {
 // merged/effective one) can still reach it — see `AnimeSources`'s doc comment.
 
 /**
- * Per-field catalog authority order (docs/PROVIDER-FREE-CUTOVER.md Phase C).
+ * Per-field catalog authority order.
  * Reuses `ProvenanceSource` — any provider the hydration engine knows about can
  * appear in a precedence list, including `simkl` (a no-op catalog contributor
  * today, wired uniformly so a future SIMKL catalog field needs no type change).
@@ -516,7 +510,7 @@ export interface AnimeSources {
 
 /**
  * The providers the hydration engine can pull a field from. `local` is a
- * personal-only source (docs/localRating/) — it contributes no catalog fields
+ * personal-only source — it contributes no catalog fields
  * (`catalogFromLocal` is a no-op and it's absent from `DEFAULT_CATALOG_PRECEDENCE`),
  * but it's part of the union so `CatalogSource = ProvenanceSource` and the
  * per-provider provenance maps type it uniformly with the others.
@@ -530,9 +524,9 @@ export type CatalogProvenance = Partial<Record<keyof AnimeCatalog, ProvenanceSou
 export type PersonalProvenance = Partial<Record<keyof AnimePersonal, ProvenanceSource>>;
 
 /**
- * Per-field origin map produced by the hydration engine (docs/PROVIDER-FREE-CUTOVER.md
- * Phase C) alongside `catalog`/`personal`. A field absent from the map means no
- * source had a value for it (stayed `undefined`/default).
+ * Per-field origin map produced by the hydration engine alongside
+ * `catalog`/`personal`. A field absent from the map means no source had a value
+ * for it (stayed `undefined`/default).
  */
 export interface RecordProvenance {
   catalog: CatalogProvenance;
@@ -540,10 +534,10 @@ export interface RecordProvenance {
 }
 
 /**
- * The provider-neutral local record (docs/PROVIDER-FREE.md target model).
+ * The provider-neutral local record.
  * `id` is the SYNTHETIC canonical id minted by the Phase 1 registry — tied to
  * no provider. It is also the OUTWARD id (URLs, API route params, React keys,
- * hidden/feedback keys — docs/PROVIDER-FREE-CUTOVER.md Phase D). A provider's
+ * hidden/feedback keys). A provider's
  * own id, when genuinely needed (a MAL/AniList/SIMKL API call, an external
  * link), is reachable via `crosswalk.mal` / `sources.mal.id` etc.
  */

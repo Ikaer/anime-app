@@ -6,10 +6,10 @@ export type { LocalPrecedenceMode };
 export type LocalProviderEnabled = 'auto' | 'on' | 'off';
 
 /**
- * Tier 1 — runtime app settings. Everything that used to be an env var *except*
- * the data/log folders (those are Tier 0, see bootstrap.ts). Stored in a sparse
- * `settings.json` next to `mal_auth.json` under `DATA_PATH`. See
- * docs/SETUP-AND-CONFIG.md.
+ * Tier 1 — runtime app settings: every configurable value *except* the data/log
+ * folders, which are Tier 0 (see bootstrap.ts) because the store's location
+ * cannot live inside the store. Held in a sparse `settings.json` under
+ * `DATA_PATH`.
  *
  * Precedence is per-field, with NO seeding from env: `settings.json[field] ??
  * process.env[ENV] ?? default`. Sparse-on-purpose — a Docker/env deploy never
@@ -27,7 +27,7 @@ export interface AppSettings {
   anilistClientId?: string;
   anilistClientSecret?: string;
   cronSecret?: string;
-  // ── Non-secret preferences (docs/localRating/): enum toggles, NOT secrets and
+  // ── Non-secret preferences: enum toggles, NOT secrets and
   //    with NO env backing, so they're kept out of SETTINGS_ENV_MAP/SECRET_FIELDS
   //    (echoed plainly, never redacted) and persisted via PREFERENCE_FIELDS. ──
   /** Enable the in-app local personal-data provider. `auto` = on iff no writable external provider. */
@@ -78,7 +78,7 @@ export const SECRET_FIELDS: ReadonlyArray<EnvBackedField> = ['simklClientSecret'
 export const SETTINGS_FIELDS = Object.keys(SETTINGS_ENV_MAP) as EnvBackedField[];
 
 /**
- * Non-secret preference fields (docs/localRating/) — enum toggles with no env
+ * Non-secret preference fields — enum toggles with no env
  * backing. Persisted alongside the secret fields in `settings.json`, but handled
  * separately (own valid-value validation, echoed plainly, never redacted).
  */
@@ -147,8 +147,8 @@ export function isSettingSet(field: EnvBackedField): boolean {
   return resolveSetting(field) !== undefined;
 }
 
-// ── Typed getters used by the consumers (bake in the same defaults the env
-//    consumers used to carry, so `?? env ?? default` lives in one place) ──
+// ── Typed getters used by the consumers. They bake in the defaults, so
+//    `?? env ?? default` lives in one place rather than at each call site ──
 
 export function getMalClientId(): string | undefined {
   return resolveSetting('malClientId');
@@ -178,7 +178,7 @@ export function getCronSecret(): string | undefined {
   return resolveSetting('cronSecret');
 }
 
-// ── Non-secret preference getters (docs/localRating/). No env fallback; an
+// ── Non-secret preference getters. No env fallback; an
 //    unrecognized/absent stored value resolves to the `auto` default. ──
 
 function readPreference<T extends string>(field: PreferenceField): T {

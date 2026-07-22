@@ -1,5 +1,5 @@
 /**
- * GET /api/anime/quick-rate — franchise-grouped, lean rating rows (docs/quickRate/).
+ * GET /api/anime/quick-rate — franchise-grouped, lean rating rows.
  *
  * Why its own endpoint rather than `/api/anime/animes?limit=all`: this page's
  * scope is the **whole catalog**, unstatused titles included (that's the one hard

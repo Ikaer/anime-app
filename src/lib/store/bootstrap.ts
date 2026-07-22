@@ -5,7 +5,7 @@ import path from 'path';
 /**
  * Tier 0 — the bootstrap resolver. It answers the one question that cannot live
  * inside `DATA_PATH`: *where is `DATA_PATH`?* (You can't store the location of the
- * data folder inside the data folder.) See docs/SETUP-AND-CONFIG.md.
+ * data folder inside the data folder.)
  *
  * Resolution order, per field: `env var → OS-config bootstrap file → default`.
  *
@@ -68,7 +68,7 @@ export function resolveDataPath(): string {
  *
  * **Currently has no writer.** The connection log — its only ever consumer —
  * moved into the store as `logs/connection_log.json` under `DATA_PATH`, because
- * it is a feature's data rather than diagnostics (docs/DATA-LAYOUT.md §3.2).
+ * it is a feature's data rather than diagnostics.
  * The setting stays valid, resolved and displayed, reserved for real debug/error
  * output; `connectionLog.ts` still reads this location once as a migration
  * fallback. Deliberate, not an oversight.

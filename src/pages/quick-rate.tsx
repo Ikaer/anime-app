@@ -1,5 +1,5 @@
 /**
- * /quick-rate — franchise-bulk rating (docs/quickRate/).
+ * /quick-rate — franchise-bulk rating.
  *
  * Solves the two rating-at-scale pains neither the tier board nor the detail
  * page covers: rating a whole **franchise** in one action, and "just put a

@@ -13,10 +13,9 @@ interface ProviderAccountControlProps {
 }
 
 /**
- * The connect / disconnect control, once for every OAuth'd provider
- * (docs/PROVIDER-PARITY.md E1). The three sections it replaces each had their
- * own copy of this button pair with a provider name baked into the label; the
- * name now comes from the descriptor, so a fourth provider needs no fourth copy.
+ * The connect / disconnect control, once for every OAuth'd provider. The label's
+ * provider name comes from the descriptor, so a new provider needs no new copy
+ * of this component.
  *
  * `configured: false` (no client id in settings) disables connecting and says
  * so — a stated blocker rather than a button that fails on click.

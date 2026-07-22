@@ -1,5 +1,5 @@
 /**
- * URL state for the "/quick-rate" franchise-bulk rating page (docs/quickRate/).
+ * URL state for the "/quick-rate" franchise-bulk rating page.
  *
  * Mirrors useTierUrlState — its own small shape rather than a slice of
  * AnimeFiltersState, because this page's state isn't a view of the main list.

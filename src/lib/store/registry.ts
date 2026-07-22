@@ -3,13 +3,13 @@
  *
  * Every slice file under `DATA_PATH` is keyed by a canonical id (`a_<n>`) minted
  * or resolved here, and the canonical id is also the OUTWARD id (URLs, API route
- * params, hidden/feedback keys — docs/PROVIDER-FREE-CUTOVER.md Phase D). Each
- * provider's own id survives only in the crosswalk, for API calls and links out.
+ * params, hidden/feedback keys). Each provider's own id survives only in the
+ * crosswalk, for API calls and links out.
  *
- * The Phase A invariant lives in this file and nowhere else: **resolve before
- * mint**. A title the registry already anchors under ANY provider id is never
- * re-minted, so durable user data keyed by canonical id cannot silently reattach
- * to the wrong title on a rebuild.
+ * The app's central identity invariant lives in this file and nowhere else:
+ * **resolve before mint**. A title the registry already anchors under ANY
+ * provider id is never re-minted, so durable user data keyed by canonical id
+ * cannot silently reattach to the wrong title on a rebuild.
  *
  * Deliberately depends on nothing but `jsonStore` — it is the bottom of the
  * store's dependency graph, so `slices.ts` can resolve ids at write time without
@@ -98,8 +98,8 @@ export function toNum(v: number | string | undefined): number | undefined {
 }
 
 /**
- * The identity resolver (docs/PROVIDER-FREE-CUTOVER.md — the Phase A invariant).
- * Mint-or-resolve a canonical id for a batch of provider-id crosswalks:
+ * The identity resolver. Mint-or-resolve a canonical id for a batch of
+ * provider-id crosswalks:
  *
  *   1. look up the registry by mal → anilist → simkl (first hit wins)
  *   2. found   → merge any new provider ids into that entry's crosswalk

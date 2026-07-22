@@ -10,7 +10,7 @@ import { resolveDataPath } from '@/lib/store/bootstrap';
  *
  * `DATA_PATH` comes from the Tier-0 bootstrap resolver (env → OS-config file →
  * out-of-checkout default), resolved once here at import time — so changing the
- * data folder at runtime requires a restart. See bootstrap.ts / docs/SETUP-AND-CONFIG.md.
+ * data folder at runtime requires a restart. See bootstrap.ts.
  *
  * Server-only: this module uses `fs` and must never reach the client bundle.
  */
@@ -18,8 +18,7 @@ export const DATA_PATH = resolveDataPath();
 
 /**
  * Absolute path of a data file, e.g. `dataFile('catalog/mal.json')`. Names are
- * role-folder-relative since the layout migration (docs/DATA-LAYOUT.md);
- * `path.join` handles the separator on both platforms.
+ * role-folder-relative; `path.join` handles the separator on both platforms.
  */
 export function dataFile(name: string): string {
   return path.join(DATA_PATH, name);
@@ -38,20 +37,17 @@ export function ensureDataDirectory(filePath?: string): void {
 }
 
 /**
- * Refuse to run on a pre-layout store (docs/DATA-LAYOUT.md §5.2). The migration
- * script and the deploy are ordered but not interlocked, so a store that still
- * has flat `animes_*.json` and no `catalog/` means step 3 was skipped or died
- * half-way. Falling through would render first-run onboarding on top of a full
- * store — indistinguishable, at a glance, from data loss. So: throw, and name
- * what was found.
+ * Refuse to run on a pre-layout store. The migration script and the deploy are
+ * ordered but not interlocked, so a store that still has flat `animes_*.json`
+ * and no `catalog/` means the migration was skipped or died half-way. Falling
+ * through would render first-run onboarding on top of a full store —
+ * indistinguishable, at a glance, from data loss. So: throw, and name what was
+ * found. A genuinely empty store has neither and passes.
  *
- * A genuinely empty store has neither, and passes.
- *
- * Lazy, on the first read/write rather than at import — same reasoning as the H1
- * guard in store.ts: there is no central process-boot hook, and a check at import
- * time would run during `next build`'s page-data collection, failing the BUILD on
- * a dev machine whose own store happens to be pre-layout. The check is a single
- * `readdir` and runs once per process.
+ * **Lazy, on the first read/write rather than at import.** There is no central
+ * process-boot hook, and a check at import time also runs during `next build`'s
+ * page-data collection, failing the BUILD on any dev machine whose own store is
+ * pre-layout. The check is a single `readdir`, once per process.
  */
 // Latched only once the check PASSES — never before the throw. A one-shot flag
 // set upfront would make just the first read of each bundle fail and every later

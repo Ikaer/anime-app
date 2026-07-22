@@ -10,18 +10,17 @@ interface UseConnectionsOptions {
 }
 
 /**
- * Connections-page state (docs/PROVIDER-PARITY.md E1–E4).
+ * Connections-page state.
  *
- * **Connection status is no longer part of it.** It comes from
+ * **Connection status is deliberately NOT here.** It comes from
  * `useProviderStatuses` — one `/api/anime/providers` read covering every
- * provider, including `local`, in one shape — where this hook used to carry
- * three independent status checks answering three different payload shapes.
- * What is left here is what genuinely differs per provider: the OAuth
- * redirect/logout calls and the sync actions.
+ * provider, including `local`, in one shape. What this hook holds is what
+ * genuinely differs per provider: the OAuth redirect/logout calls and the sync
+ * actions.
  *
  * The sync error is split by **role** rather than kept as one MAL-wide string:
  * a list-sync failure and a catalog-crawl failure now render on their own cards,
- * which is the same split the page itself is organized on (E4).
+ * which is the same split the page itself is organized on.
  */
 export function useConnections(options: UseConnectionsOptions = {}) {
   const { onDataChanged } = options;

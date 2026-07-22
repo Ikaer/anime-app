@@ -24,7 +24,7 @@ export interface SharedStaffCredit {
 }
 
 export interface SimilarByCredits {
-  /** Canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D) — the detail-page route key. */
+  /** Canonical id — the detail-page route key. */
   id: string;
   title: string;
   poster?: string;

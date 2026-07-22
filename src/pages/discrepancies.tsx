@@ -12,7 +12,7 @@ const fmtStatus = (s: string | null | undefined, t: TFunction): string =>
   s ? t(`statusShort.${s}` as TranslationKey) : '—';
 
 /**
- * Grouped LONG format (docs/localRating/ phase 4): one sub-row per provider under
+ * Grouped LONG format: one sub-row per provider under
  * each anime, rather than a MAL/SIMKL column pair. This is what lets a fourth
  * provider land without blowing the table out sideways on the 4K screen.
  */

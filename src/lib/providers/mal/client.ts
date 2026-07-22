@@ -99,9 +99,8 @@ const MAX_429_RETRIES = 4;
  * The one MAL GET. Retries on 429, honouring `Retry-After` when MAL sends one
  * and backing off linearly otherwise.
  *
- * The retry used to exist only in the reco engine's private copy of this
- * function, so the seasonal crawl and the personal-list read — the two calls
- * that paginate hardest — were the ones without it.
+ * Every MAL read goes through here, which is what gives the seasonal crawl and
+ * the personal-list read — the two that paginate hardest — the same retry.
  */
 async function malGet(accessToken: string, url: string): Promise<any> {
   for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {

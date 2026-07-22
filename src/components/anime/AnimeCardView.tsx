@@ -100,8 +100,8 @@ export default function AnimeCardView({
     };
 
     // Effective (hydrated) personal status, NOT MAL's raw slice — a SIMKL-only,
-    // AniList-only or local-only user has no `sources.mal` and used to see an
-    // empty badge here. Per-provider detail stays on the DiscrepancyBadge.
+    // AniList-only or local-only user has no `sources.mal` and would render an
+    // empty badge. Per-provider detail stays on the DiscrepancyBadge.
     const getDisplayStatus = (anime: AnimeRecord) => getEffectiveStatus(anime) ?? '';
 
     const getScoreClass = (score?: number) => {

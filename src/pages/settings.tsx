@@ -4,9 +4,10 @@ import { useT, type TranslationKey } from '@/lib/i18n';
 
 /**
  * Runtime settings page. Enters the data/log folders (Tier 0, → config.json) and
- * the provider app credentials (Tier 1, → settings.json) that used to be env
- * vars. Secrets are write-only: the GET never hands their value back, and leaving
- * a secret field blank keeps the stored one untouched. See docs/SETUP-AND-CONFIG.md.
+ * the provider app credentials (Tier 1, → settings.json), each of which also
+ * has an env fallback. Secrets are write-only: the GET never hands their value
+ * back, and leaving
+ * a secret field blank keeps the stored one untouched.
  */
 
 type FieldName =
@@ -160,8 +161,8 @@ export default function SettingsPage() {
     }
   }, []);
 
-  // The derived redirect URI (what to register with the provider) is shown next
-  // to each client-id field — it's no longer a setting the user fills in.
+  // The redirect URI is derived from the request host, not stored: it is shown
+  // next to each client-id field as the value to register with the provider.
   const redirectKeyFor = (f: FieldName): 'mal' | 'simkl' | 'anilist' | null =>
     f === 'malClientId' ? 'mal' : f === 'simklClientId' ? 'simkl' : f === 'anilistClientId' ? 'anilist' : null;
 

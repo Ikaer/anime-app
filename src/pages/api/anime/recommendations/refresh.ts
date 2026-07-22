@@ -21,11 +21,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 async function handleStartRefresh(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // MAL is OPTIONAL here, deliberately. This route used to `requireMalAuth`
-    // and 401, which made the whole feed unreachable without a MAL account —
-    // even though the engine only needs MAL *ids* (which AniList supplies for
-    // free), not a MAL *session*. With no token the refresh runs on the
-    // anonymous AniList crowd source alone and reports which pipes it skipped.
+    // MAL is OPTIONAL here, deliberately — do NOT add a `requireMalAuth` gate.
+    // The engine needs MAL *ids* (which AniList supplies for free), not a MAL
+    // *session*, so a 401 here would make the whole feed unreachable without a
+    // MAL account. With no token the refresh runs on the anonymous AniList crowd
+    // source alone and reports which pipes it skipped.
     const token = getValidMalToken();
 
     // Spec §7.2: reject concurrent refreshes with 409.

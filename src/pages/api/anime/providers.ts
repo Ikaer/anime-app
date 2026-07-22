@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getProviderStatuses } from '@/lib/providers/status';
 
 /**
- * **The** provider status read (docs/PROVIDER-PARITY.md E1–E4): one row per
+ * **The** provider status read: one row per
  * provider — what it is, what it can do, whether it is connected, and how many
  * entries it holds.
  *

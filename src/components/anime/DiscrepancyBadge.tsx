@@ -5,7 +5,7 @@ import { useT, type TranslationKey, type TFunction } from '@/lib/i18n';
 
 /**
  * Card/table badge summarizing a cross-provider personal-state mismatch
- * (docs/localRating/ phase 4). Provider-neutral: it walks whatever providers the
+ * Provider-neutral: it walks whatever providers the
  * discrepancy carries — MAL, SIMKL, local, later Betaseries — instead of the
  * fixed MAL-vs-SIMKL glyph it started as.
  */

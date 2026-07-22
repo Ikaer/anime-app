@@ -17,7 +17,7 @@ import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 const FEEDBACK_FILE = dataFile('user/reco_feedback.json');
 const DISMISSED_FILE = dataFile('user/reco_dismissed.json');
 
-/** Keyed by canonical id (docs/PROVIDER-FREE-CUTOVER.md Phase D — re-keyed from MAL id). */
+/** Keyed by canonical id. */
 export type FeedbackMap = Record<string, RecoVerdict>;
 
 export function getFeedback(): FeedbackMap {
