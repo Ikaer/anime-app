@@ -3,7 +3,7 @@ import { getValidMalToken } from '@/lib/providers/mal/client';
 import { performHistoricalCrawl } from '@/lib/providers/mal/sync';
 import { performSimklSync } from '@/lib/providers/simkl/sync';
 import { importAnilistPersonalList } from '@/lib/providers/anilist/personalSync';
-import { isAnilistMetaSyncRunning, performAnilistMetaSync } from '@/lib/providers/anilist/sync';
+import { isAnilistMetaSyncRunning, performAnilistMetaSync, isAnilistCatalogSweepRunning, performAnilistCatalogSweep } from '@/lib/providers/anilist/sync';
 import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
 import { getRecommendationsData } from '@/lib/reco/data';
@@ -47,7 +47,7 @@ interface CronStepOutcome {
 }
 
 type CronSteps = Record<
-  'malCatalog' | 'simklPersonal' | 'anilistPersonal' | 'anilistCatalog' | 'recommendations',
+  'malCatalog' | 'simklPersonal' | 'anilistPersonal' | 'anilistCatalog' | 'anilistCatalogFields' | 'recommendations',
   CronStepOutcome
 >;
 
@@ -177,6 +177,24 @@ function syncAnilistCatalog(): CronStepOutcome {
 }
 
 /**
+ * AniList's **catalog** role, second half — the `catalog` block sweep (title,
+ * synopsis, mean, genres, studios, …) that backfills already-known titles by
+ * their AniList id. Same shape as the metadata sync above: ungated (anonymous
+ * auth kind), fire-and-forget, its own running flag. Kept a SEPARATE step from
+ * the tags/staff sync because it is a different query against a different id
+ * space, and its coverage is what unblocks catalog precedence
+ * (docs/FULL Precedence/).
+ */
+function syncAnilistCatalogFields(): CronStepOutcome {
+  if (isAnilistCatalogSweepRunning()) {
+    return { ok: true, skipped: true, reason: 'A catalog sweep is already running' };
+  }
+  performAnilistCatalogSweep();
+  appendLog('cron-sync', 'info', 'Cron sync started AniList catalog sweep');
+  return { ok: true, detail: { started: true } };
+}
+
+/**
  * Recompute the recommendations feed. No SSE — fire-and-forget like the rest of
  * cron-sync; just log start/result. Reuses the last-known nicheMode/threshold
  * (no user present to supply request params) and yields to a manual refresh
@@ -249,8 +267,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Started LAST, after the reco refresh has finished with AniList: both throttle
   // against the same per-IP rate limit, and the metadata sweep is the one that
-  // can run for minutes.
+  // can run for minutes. The two AniList catalog sweeps (tags/staff and the
+  // catalog-block backfill) are fire-and-forget and share the client.ts throttle,
+  // so starting both just interleaves their requests on the one clock.
   steps.anilistCatalog = await step('anilist-catalog', async () => syncAnilistCatalog());
+  steps.anilistCatalogFields = await step('anilist-catalog-fields', async () => syncAnilistCatalogFields());
 
   const failed = Object.entries(steps).filter(([, s]) => !s.ok).map(([name]) => name);
   appendLog(

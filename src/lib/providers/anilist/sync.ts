@@ -484,6 +484,19 @@ query ($ids: [Int]) {
   }
 }`;
 
+// The catalog sweep's query — same fields, filtered by AniList's OWN id. This is
+// the id-space policy in code: a title whose AniList id we already hold is
+// enriched THROUGH that id, never bridged back through MAL's. Sibling of
+// CATALOG_BY_MAL_QUERY, which stays for the keyless reco-hydration path (whose
+// candidates arrive as MAL ids with no crosswalk entry yet).
+const CATALOG_BY_ANILIST_QUERY = `
+query ($ids: [Int]) {
+  Page(page: 1, perPage: ${BATCH_SIZE}) {
+    media(id_in: $ids, type: ANIME) {${CATALOG_FIELDS}
+    }
+  }
+}`;
+
 interface RawCatalogMedia {
   id: number;
   idMal?: number | null;
@@ -923,4 +936,163 @@ export function getAnilistCatalogCrawlStats(): { totalCanonicalIds: number; anil
   const entries = Object.values(registry);
   const anilistOnlyIds = entries.filter(ids => ids.mal === undefined && ids.anilist !== undefined).length;
   return { totalCanonicalIds: entries.length, anilistOnlyIds, crawlRunning: isAnilistCatalogCrawlRunning };
+}
+
+// ============================================================================
+// AniList catalog SWEEP — backfill the `catalog` block on already-known titles
+// ============================================================================
+//
+// The season crawler above browses AniList's OWN catalog to DISCOVER titles; the
+// SWEEP instead enriches titles the registry ALREADY knows, filling the one
+// AniList slice a MAL-seeded store never populated — the `catalog` block (title,
+// synopsis, mean, genres, studios, …). Until it runs, catalog precedence has no
+// AniList value to weigh against MAL's, so every field falls through to MAL for
+// lack of an alternative (the whole reason the sweep is the "spine" of
+// docs/FULL Precedence/).
+//
+// **Queries AniList by ITS OWN id**, read from the crosswalk — the id-space
+// policy in code. A title with no AniList id is simply not swept; coverage there
+// is the season crawl's job, never a MAL-id bridge's. That is why this does NOT
+// reuse the MAL-keyed `fetchAnilistCatalogByMalIds` (kept for the keyless reco
+// hydration path, whose candidates arrive as bare MAL ids).
+
+let catalogSweepRunning = false;
+
+/**
+ * Is a catalog sweep in flight? Mirrors `isAnilistMetaSyncRunning` — the sweep is
+ * fire-and-forget, so a non-awaiting caller (the cron step, the endpoint) needs a
+ * way to tell "started" from "one was already going".
+ */
+export function isAnilistCatalogSweepRunning(): boolean {
+  return catalogSweepRunning;
+}
+
+/**
+ * AniList ids of titles still missing a `catalog` block. Backfill signal is
+ * `catalog === undefined` (no entry at all counts too). The scan source is the
+ * **registry**, not the MAL slice, for the same reason `selectMetaTargets` uses
+ * it — a title MAL doesn't know can still have an AniList id worth sweeping.
+ *
+ * A title with no AniList id in the crosswalk is skipped, not bridged through a
+ * MAL id: that is the id-space policy, and it is why this selector is separate
+ * from `selectMetaTargets` (which still routes by MAL id, its own open item E-line).
+ */
+function selectCatalogSweepTargets(): number[] {
+  const meta = getAllAnilistMeta();
+  const anilistIds: number[] = [];
+  for (const [canonicalId, crosswalk] of Object.entries(getRegistry())) {
+    const e = meta[canonicalId];
+    if (e && e.catalog !== undefined) continue; // already swept
+    const anilistId = toNum(crosswalk.anilist);
+    if (anilistId !== undefined) anilistIds.push(anilistId);
+  }
+  return anilistIds;
+}
+
+export interface AniListCatalogSweepResult {
+  ok: boolean;
+  alreadyRunning: boolean;
+  totalMissing: number;
+  processed: number;
+  hydrated: number;
+  failed: number;
+  error?: string;
+}
+
+/**
+ * Backfill the AniList `catalog` block for every registry title that holds an
+ * AniList id but no catalog data yet. Fire-and-forget, throttled by `client.ts`,
+ * **resumable by construction**: each batch persists as it lands
+ * (`upsertAnilistCatalogFields`) and only un-swept titles re-queue, so an
+ * interrupted ~15-20 min run loses nothing. Progress goes to the
+ * `anilist-catalog-sweep` log channel, polled by the connections panel.
+ */
+export async function performAnilistCatalogSweep(): Promise<AniListCatalogSweepResult> {
+  if (catalogSweepRunning) {
+    appendLog('anilist-catalog-sweep', 'info', 'AniList catalog sweep skipped: already running');
+    return { ok: false, alreadyRunning: true, totalMissing: 0, processed: 0, hydrated: 0, failed: 0 };
+  }
+
+  catalogSweepRunning = true;
+  try {
+    const targets = selectCatalogSweepTargets();
+    const totalMissing = targets.length;
+
+    if (totalMissing === 0) {
+      appendLog('anilist-catalog-sweep', 'success', 'AniList catalog sweep: nothing to do, every known title already has a catalog block');
+      return { ok: true, alreadyRunning: false, totalMissing: 0, processed: 0, hydrated: 0, failed: 0 };
+    }
+
+    appendLog('anilist-catalog-sweep', 'info', `AniList catalog sweep started: ${totalMissing} titles to enrich by AniList id`, { totalMissing });
+
+    const batches = chunk(targets, BATCH_SIZE);
+    let processed = 0;
+    let hydrated = 0;
+    let failed = 0;
+
+    for (const [batchIndex, batch] of batches.entries()) {
+      try {
+        const data = await anilistQuery<{ Page?: { media?: RawCatalogMedia[] } }>(
+          CATALOG_BY_ANILIST_QUERY,
+          { ids: batch }
+        );
+        const entries = (data?.Page?.media ?? [])
+          .map(toCatalogEntry)
+          .filter((e): e is AniListCatalogEntry => e !== null);
+        if (entries.length > 0) {
+          // Register the crosswalk (idempotent — the id already resolves), then
+          // persist THIS batch so the run is resumable mid-sweep.
+          resolveCanonicalIds(entries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id })));
+          upsertAnilistCatalogFields(entries);
+          hydrated += entries.length;
+        }
+      } catch (error) {
+        failed += batch.length;
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        appendLog(
+          'anilist-catalog-sweep',
+          'error',
+          `AniList catalog sweep batch ${batchIndex + 1}/${batches.length} failed, continuing: ${message}`,
+          { batchIndex: batchIndex + 1, batchCount: batches.length, error: message }
+        );
+      }
+      processed += batch.length;
+      // Every 10th batch (and the last) — ~386 batches would otherwise flood the
+      // 500-entry log. The panel polls the newest entry, so coarse is fine.
+      if ((batchIndex + 1) % 10 === 0 || batchIndex === batches.length - 1) {
+        appendLog('anilist-catalog-sweep', 'info', `AniList catalog sweep: ${processed}/${totalMissing} processed`, {
+          processed,
+          totalMissing,
+          hydrated,
+        });
+      }
+    }
+
+    appendLog('anilist-catalog-sweep', 'success', `AniList catalog sweep complete: ${hydrated} enriched, ${failed} failed`, {
+      processed,
+      hydrated,
+      failed,
+    });
+    return { ok: true, alreadyRunning: false, totalMissing, processed, hydrated, failed };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('AniList catalog sweep error:', error);
+    appendLog('anilist-catalog-sweep', 'error', 'AniList catalog sweep failed', { error: message });
+    return { ok: false, alreadyRunning: false, totalMissing: 0, processed: 0, hydrated: 0, failed: 0, error: message };
+  } finally {
+    catalogSweepRunning = false;
+  }
+}
+
+/**
+ * Coverage stat for the connections-page sweep button: how many known titles
+ * carry a catalog block vs. the total, plus whether a sweep is in flight.
+ */
+export function getAnilistCatalogSweepStats(): { totalEntries: number; catalogCount: number; sweepRunning: boolean } {
+  const meta = getAllAnilistMeta();
+  let catalogCount = 0;
+  for (const entry of Object.values(meta)) {
+    if (entry.catalog !== undefined) catalogCount++;
+  }
+  return { totalEntries: Object.keys(meta).length, catalogCount, sweepRunning: catalogSweepRunning };
 }

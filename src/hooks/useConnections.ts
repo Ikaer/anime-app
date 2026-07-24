@@ -51,6 +51,9 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [isAnilistCatalogCrawling, setIsAnilistCatalogCrawling] = useState(false);
   const [anilistCatalogCrawlMessage, setAnilistCatalogCrawlMessage] = useState('');
   const [anilistCatalogStats, setAnilistCatalogStats] = useState<{ totalCanonicalIds: number; anilistOnlyIds: number } | null>(null);
+  const [isAnilistCatalogSweeping, setIsAnilistCatalogSweeping] = useState(false);
+  const [anilistCatalogSweepMessage, setAnilistCatalogSweepMessage] = useState('');
+  const [anilistSweepStats, setAnilistSweepStats] = useState<{ totalEntries: number; catalogCount: number } | null>(null);
 
   // AniList personal-role state (the OAuth'd viewer's own list)
   const [isAnilistImporting, setIsAnilistImporting] = useState(false);
@@ -89,6 +92,15 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const fetchAnilistSweepStats = async () => {
+    try {
+      const res = await fetch('/api/anime/anilist/catalog-sweep');
+      if (res.ok) setAnilistSweepStats(await res.json());
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
   const fetchAnilistImportConfig = async () => {
     try {
       const res = await fetch('/api/anime/anilist/personal-import');
@@ -117,6 +129,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     fetchHistoricalStats();
     fetchAnilistMetaStats();
     fetchAnilistCatalogStats();
+    fetchAnilistSweepStats();
     fetchAnilistImportConfig();
   }, []);
 
@@ -345,6 +358,22 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const handleAnilistCatalogSweep = async () => {
+    setIsAnilistCatalogSweeping(true);
+    setAnilistCatalogSweepMessage('');
+    try {
+      const response = await fetch('/api/anime/anilist/catalog-sweep', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AniList catalog sweep failed');
+      setAnilistCatalogSweepMessage('Sweep started — see the log below for progress.');
+      fetchAnilistSweepStats();
+    } catch (error) {
+      setAnilistCatalogSweepMessage(error instanceof Error ? error.message : 'Failed to start AniList catalog sweep.');
+    } finally {
+      setIsAnilistCatalogSweeping(false);
+    }
+  };
+
   const handleAnilistPersonalImport = async () => {
     setIsAnilistImporting(true);
     setAnilistImportResult(null);
@@ -376,7 +405,8 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   };
 
   const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling
-    || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistImporting || isSimklSyncing;
+    || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistCatalogSweeping
+    || isAnilistImporting || isSimklSyncing;
 
   // Status (uniform, per provider) is kept separate from actions (per provider,
   // genuinely different) — the same split the descriptor makes.
@@ -420,6 +450,10 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       catalogCrawlMessage: anilistCatalogCrawlMessage,
       catalogStats: anilistCatalogStats,
       onCatalogCrawl: handleAnilistCatalogCrawl,
+      isCatalogSweeping: isAnilistCatalogSweeping,
+      catalogSweepMessage: anilistCatalogSweepMessage,
+      sweepStats: anilistSweepStats,
+      onCatalogSweep: handleAnilistCatalogSweep,
       isImporting: isAnilistImporting,
       importResult: anilistImportResult,
       importStoredCount: anilistImportStoredCount,

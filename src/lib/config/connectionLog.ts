@@ -39,6 +39,7 @@ export type LogSource =
   | 'anilist-auth'
   | 'anilist-meta-sync'
   | 'anilist-catalog-crawl'
+  | 'anilist-catalog-sweep'
   | 'anilist-cast'
   | 'anilist-cast-sweep'
   | 'anilist-personal-import'

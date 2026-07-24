@@ -63,9 +63,13 @@ interface AnilistCatalogActionsProps {
   isCatalogCrawling: boolean;
   catalogCrawlMessage: string;
   catalogStats: { totalCanonicalIds: number; anilistOnlyIds: number } | null;
+  isCatalogSweeping: boolean;
+  catalogSweepMessage: string;
+  sweepStats: { totalEntries: number; catalogCount: number } | null;
   busy: boolean;
   onMetaSync: () => void;
   onCatalogCrawl: () => void;
+  onCatalogSweep: () => void;
 }
 
 /**
@@ -76,7 +80,8 @@ interface AnilistCatalogActionsProps {
 export const AnilistCatalogActions: React.FC<AnilistCatalogActionsProps> = ({
   isMetaSyncing, metaSyncMessage, metaStats,
   isCatalogCrawling, catalogCrawlMessage, catalogStats,
-  busy, onMetaSync, onCatalogCrawl,
+  isCatalogSweeping, catalogSweepMessage, sweepStats,
+  busy, onMetaSync, onCatalogCrawl, onCatalogSweep,
 }) => {
   const t = useT();
   return (
@@ -87,6 +92,9 @@ export const AnilistCatalogActions: React.FC<AnilistCatalogActionsProps> = ({
         </Button>
         <Button onClick={onCatalogCrawl} disabled={busy} variant="secondary">
           {isCatalogCrawling ? t('dataSync.starting') : t('dataSync.crawlAnilistCatalog')}
+        </Button>
+        <Button onClick={onCatalogSweep} disabled={busy} variant="secondary">
+          {isCatalogSweeping ? t('dataSync.starting') : t('dataSync.sweepAnilistCatalog')}
         </Button>
       </div>
       {metaStats !== null && (
@@ -101,6 +109,12 @@ export const AnilistCatalogActions: React.FC<AnilistCatalogActionsProps> = ({
         </div>
       )}
       {catalogCrawlMessage && <div className={styles.stats}>{catalogCrawlMessage}</div>}
+      {sweepStats !== null && (
+        <div className={styles.stats}>
+          {t('dataSync.anilistCatalogSwept', { covered: sweepStats.catalogCount, total: sweepStats.totalEntries })}
+        </div>
+      )}
+      {catalogSweepMessage && <div className={styles.stats}>{catalogSweepMessage}</div>}
     </>
   );
 };
