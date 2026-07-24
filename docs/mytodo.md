@@ -28,3 +28,5 @@
    will be noisy once more providers land:
    - provider checkboxes to filter rows out (URL state, like the rest of the app)
    - one-way "fully sync provider A => provider B" jobs, to clear a whole class at once
+[] Work on the tier view to take provider rating instead of mine.
+   - maybe some versus view, to see how my rating compares to the provider's
