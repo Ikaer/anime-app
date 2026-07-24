@@ -140,7 +140,7 @@ The architecture moved from "MAL-authoritative" to **local-cache-authority**: th
 
 ### Local personal-data provider (in-app rating, no external account)
 
-A fourth personal source — the app's own — so the whole thing is usable with no MAL/SIMKL account, and so the write path generalizes to future providers (Betaseries, an AniList writer). Specs: `docs/localRating/`.
+A fourth personal source — the app's own — so the whole thing is usable with no MAL/SIMKL account, and so the write path generalizes to future providers (an AniList writer). Specs: `docs/localRating/`.
 
 - **Provider identity is two modules, split on client-safety** (PROVIDER-PARITY.md D2). [src/lib/providers/capabilities.ts](src/lib/providers/capabilities.ts) is the **declarative** half — `PROVIDER_CAPABILITIES`, a `Record<ProvenanceSource, …>` (so a missing row is a compile error) declaring what each provider *is and can do*. **Roles are keys** (`catalog?` / `personal?`) and **each role carries its own auth kind**: AniList's catalog role is `anonymous` — the tags/staff sync and bulk crawl need no account — while its personal role is `oauth+secret`. One auth kind per *provider* cannot say that, which is why it is per role. Static data only, no fs: React components may import it, and the Connections page renders from it (see below). [src/lib/providers/registry.ts](src/lib/providers/registry.ts) is the **runtime** half (server-only — it reads the auth files) and the only place the two compose. A third module, [src/lib/providers/status.ts](src/lib/providers/status.ts), joins the two plus the personal slices into **one status row per provider** behind `GET /api/anime/providers` — the uniform *read* the UI needs; the per-provider `auth` endpoints keep owning the OAuth *flows*, which genuinely differ.
 - **One enablement predicate**: `isPersonalProviderEnabled(id)` in `providers/registry.ts` — token **presence, not validity** for an external provider, the settings for `local`. `hasWritableExternal()` and `canClearStatus()` are queries over it + the descriptors, never hand-read auth files, and **writers carry no `isEnabled` of their own**. The local provider is enabled by default iff `hasWritableExternal()` is false, so an existing MAL/SIMKL user is unaffected (`local` is then absent from the precedence list entirely and a stray slice entry is never consulted). Settings expose `localProviderEnabled` / `localPrecedenceMode` (`auto` | `localTop` | `localBottom`); the pure math is `resolveLocalPrecedence` in `domain/animeUtils.ts`. `providers/registry.ts` is its own module to dodge the settings↔simkl import cycle.
@@ -258,8 +258,9 @@ progress (`SaveMediaListEntry` is an upsert). Note **AniList auto-fills
 `progress` to the episode count when status becomes COMPLETED** (live-verified) —
 so the app's own progress value is redundant on that path, not authoritative.
 Clearing a status is refused (`ok: false` with a reason, never a silent drop),
-same carve-out as MAL's writer. AniList still sits **last** in personal
-precedence even when OAuth'd — an open item in the doc.
+same carve-out as MAL's writer. AniList sits **last** in personal precedence
+even when OAuth'd — deliberate: it is first on *catalog* precedence but an
+absent-tolerant refill pipe for *personal* state.
 
 **The read half** is [src/lib/providers/anilist/personalSync.ts](src/lib/providers/anilist/personalSync.ts):
 `importAnilistPersonalList()` pulls the OAuth'd viewer's OWN list by `userId`,

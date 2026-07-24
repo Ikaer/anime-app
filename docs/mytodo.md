@@ -24,9 +24,6 @@
 [] Retire user/reco_dismissed.json + getDismissedIds — the legacy read-only pre-👎 store.
    Deleting it resurrects every dismissed title into the feed, so this is a data decision,
    not a code one. (Was the last open item in the now-deleted docs/CLEANUP.md.)
-[] Betaseries provider — the second writable external. Same shape: sync + a PersonalWriter.
-   Note it's a full list (not a subset feed like SIMKL), so it likely becomes a presence
-   anchor candidate in src/lib/providers/capabilities.ts.
 [] Discrepancy page utilities — SIMKL auto-syncs from MAL but the others don't, so the page
    will be noisy once more providers land:
    - provider checkboxes to filter rows out (URL state, like the rest of the app)

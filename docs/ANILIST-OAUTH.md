@@ -102,9 +102,6 @@ one-shot; after it runs it is a no-op.
   takes the **list entry** id, not the media id — and
   `DELETE /v2/anime/{id}/my_list_status` for MAL. SIMKL has no equivalent. Until
   it exists, the UI correctly only offers "clear" to a local-only user.
-- **Precedence when logged in.** AniList still sits last in
-  `DEFAULT_PERSONAL_PRECEDENCE` (`simkl > mal > anilist`) even when OAuth'd. A
-  user who treats AniList as their primary source may want it higher.
 - **Ship enabled-by-default, or self-host opt-in?** Registering the OAuth app is
   a deployer cost. (Product/deployment call.)
 

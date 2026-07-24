@@ -208,7 +208,7 @@ export interface ProviderPersonalState {
 /**
  * A detected mismatch between two or more personal providers for one title.
  * Generalized from the original pairwise MAL-vs-SIMKL shape to a per-provider
- * map so `local` (and later Betaseries/AniList) participate for free.
+ * map so `local` (and later providers) participate for free.
  */
 export interface Discrepancy {
   /** Every provider that has an entry, plus any anchor provider that lacks one. */

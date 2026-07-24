@@ -80,7 +80,6 @@ sync module.
 | **Kitsu** | none for reads | ✅ | ✅ | via OAuth | Public JSON:API. `kitsu` id already in the crosswalk. |
 | **Shikimori** | none for reads | ✅ | ✅ public | via OAuth | MAL-like; public reads, OAuth for writes. |
 | **AniDB** | client registration | ✅ (authoritative) | ✅ | limited | Strong catalog authority, restrictive API + registration. |
-| **Betaseries** | OAuth | — | ✅ | ✅ | The next writable external. A **full** list, not a subset feed. |
 | **Trakt / TMDB** | key | partial (TV/movie-centric) | ✅ (Trakt) | ✅ (Trakt) | Weak anime coverage; ids kept for cross-linking. |
 
 **Jikan verdict: kept, but demoted — never the default.** For a design whose

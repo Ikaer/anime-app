@@ -78,8 +78,8 @@ Consequences, all deliberate:
 
 A provider is writable **iff it registers a writer** — capability, not identity.
 That is what let AniList join the fan-out the day its OAuth shipped, with no
-endpoint change, and what makes Betaseries "write an extractor + a writer +
-register both".
+endpoint change, and what makes adding a new writable provider "write an
+extractor + a writer + register both".
 
 `writePersonal(canonicalId, patch)` in
 [providers/writers.ts](../../src/lib/providers/writers.ts) runs **every**
