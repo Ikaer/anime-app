@@ -185,6 +185,23 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   }, [router.isReady, router.query, router, refreshStatuses]);
 
   // ── Auth handlers. One per provider because the endpoints differ. ──
+
+  /**
+   * Logout POST. **The `Content-Type` is load-bearing**: without it `fetch` labels
+   * a string body `text/plain`, Next's body parser hands the route the raw string
+   * instead of an object, `{ action }` destructures to `undefined` and every
+   * logout answers `400 Invalid action`. And the failure was invisible, because
+   * nothing here read `response.ok` — hence the throw.
+   */
+  const postLogout = async (endpoint: string) => {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    });
+    if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
+  };
+
   const handleConnect = async () => {
     try {
       setAuthError('');
@@ -201,7 +218,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const handleDisconnect = async () => {
     try {
       setAuthError('');
-      await fetch('/api/anime/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
+      await postLogout('/api/anime/auth');
       await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from MAL:', error);
@@ -225,7 +242,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const handleSimklDisconnect = async () => {
     try {
       setSimklAuthError('');
-      await fetch('/api/anime/simkl/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
+      await postLogout('/api/anime/simkl/auth');
       await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from SIMKL:', error);
@@ -249,7 +266,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const handleAnilistDisconnect = async () => {
     try {
       setAnilistAuthError('');
-      await fetch('/api/anime/anilist/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
+      await postLogout('/api/anime/anilist/auth');
       await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from AniList:', error);

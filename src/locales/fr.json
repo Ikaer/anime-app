@@ -370,6 +370,7 @@
 
   "account.disconnect": "Se déconnecter",
   "account.connectProvider": "Se connecter à {provider}",
+  "account.reconnectProvider": "Se reconnecter à {provider}",
   "account.notConfigured": "Renseignez l’identifiant client {provider} dans les réglages.",
   "provider.auth.none": "Fourni par l’app",
   "provider.auth.anonymous": "Aucun compte requis",

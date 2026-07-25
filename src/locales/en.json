@@ -370,6 +370,7 @@
 
   "account.disconnect": "Disconnect",
   "account.connectProvider": "Connect to {provider}",
+  "account.reconnectProvider": "Reconnect to {provider}",
   "account.notConfigured": "Set the {provider} client ID in settings.",
   "provider.auth.none": "Built into the app",
   "provider.auth.anonymous": "No account required",
