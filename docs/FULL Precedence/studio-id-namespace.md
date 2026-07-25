@@ -69,8 +69,15 @@ Complete this inventory during implementation; verified so far:
 
 ## Hazard 2 — AniList `studios` folds in producers
 
-**This one is not documented anywhere yet.** The two AniList queries disagree about
-what a "studio" is:
+> ⚠️ **Now LIVE in the store, not hypothetical.** The catalog sweep (E2, shipped
+> 2026-07-25) ran with the `nodes` query below and wrote AniList `studios` — with
+> producers folded in — onto **14,430** both-present titles plus **1,900**
+> AniList-only ones. So `catalog/anilist.json` already carries contaminated studio
+> lists. This must be re-fetched with the `isMain` fix **before** `studios` is
+> flipped to AniList, and the 1,900 AniList-only titles already surface producers
+> as studios under the *existing* fall-through (MAL has no studio for them).
+
+The two AniList queries disagree about what a "studio" is:
 
 ```graphql
 # catalog crawl — CATALOG_FIELDS (anilist/sync.ts)

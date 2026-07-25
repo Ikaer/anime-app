@@ -61,8 +61,8 @@ at ingest satisfies both. The affected items are reclassified below.
 
 ## Measured starting point (2026-07-24, live store)
 
-These numbers are *why* the naive "flip the array" fix has always been a dead end.
-Re-measure before implementing; do not re-derive.
+These numbers are *why* the naive "flip the array" fix was a dead end **before the
+sweep shipped**. Kept as the historical baseline; the post-sweep numbers are below.
 
 | Fact | Value |
 |---|---|
@@ -73,11 +73,38 @@ Re-measure before implementing; do not re-derive.
 | Distinct MAL genre names | 78 |
 | AniList genre names (`GenreCollection`) | 19 |
 
-**Consequence:** flipping `DEFAULT_CATALOG_PRECEDENCE` to `['anilist','mal']`
-today is a **literal no-op**. `catalogFromAnilist()` reads `entry.catalog`, which
-does not exist on a single title, so it returns `{}` and MAL wins every field by
-fall-through — under either ordering. The precedence work is blocked on **data**,
-not on the merge.
+**Consequence, then:** flipping `DEFAULT_CATALOG_PRECEDENCE` to `['anilist','mal']`
+was a **literal no-op**. `catalogFromAnilist()` reads `entry.catalog`, which did
+not exist on a single title, so it returned `{}` and MAL won every field by
+fall-through. The precedence work was blocked on **data**, not on the merge.
+
+## After the sweep (2026-07-25, E2 shipped)
+
+The [catalog sweep](anilist-catalog-sync.md) ran on production and closed the data
+gap. Precedence is no longer a no-op — every overlapping field now has a real
+both-present population where it was zero.
+
+| Fact | Value |
+|---|---|
+| AniList entries carrying a **`catalog`** block | **19,293** (was 0) |
+| Titles present in **both** MAL + AniList catalog | 19,293 |
+
+**Both-present coverage per overlapping field** (the population precedence order
+actually decides):
+
+| Field | Both present | MAL only | AniList only |
+|---|---|---|---|
+| `mean` | 15,649 | 1,051 | 95 |
+| `genres` | 17,127 | 2,129 | 21 |
+| `studios` | 14,430 | 961 | **1,900** |
+| `synopsis` | 17,809 | 588 | 486 |
+| `numEpisodes` | 18,771 | 522 | 0 |
+
+`studios`' 1,900 AniList-only titles are a genuine coverage gain — and mean the
+producer-contamination hazard ([studio-id-namespace.md](studio-id-namespace.md) §2)
+is now **live in the store**, not hypothetical: the sweep used the `nodes` query
+without the `isMain` filter. The genre and studio decisions are now measurable
+against real both-present data.
 
 ## MAL-legacy inventory
 
@@ -90,7 +117,7 @@ each already has a rationale in `CLAUDE.md`.
 | # | Item | Where | Notes |
 |---|---|---|---|
 | E1 | Catalog precedence is a single global array; per-field is inexpressible | `mergeWithProvenance`, `DEFAULT_CATALOG_PRECEDENCE` | The structural blocker for everything the user actually wants |
-| E2 | AniList `catalog` blocks unpopulated for MAL-linked titles | `catalog/anilist.json` | → [anilist-catalog-sync.md](anilist-catalog-sync.md) |
+| ~~E2~~ | ~~AniList `catalog` blocks unpopulated for MAL-linked titles~~ | `catalog/anilist.json` | ✅ **SHIPPED 2026-07-25** — catalog sweep, 0 → 19,293 → [anilist-catalog-sync.md](anilist-catalog-sync.md) |
 | E3 | `genres` sourced from MAL | `catalogFromMal` | Target: AniList → [genre-vocabulary.md](genre-vocabulary.md) |
 | E4 | `studios` sourced from MAL | `catalogFromMal` | Target: AniList → [studio-id-namespace.md](studio-id-namespace.md) |
 | E5 | Precedence is a source-code constant, not user-configurable | `animeUtils.ts` | Goal 2 |
@@ -178,7 +205,7 @@ Order is load-bearing; two of these are no-ops if run early.
 
 MAL legacy is **closed** when all of these hold:
 
-- [ ] Every AniList entry for a MAL-linked title carries a `catalog` block (E2)
+- [x] Every AniList entry for a MAL-linked title carries a `catalog` block (E2) — **shipped 2026-07-25, 19,293 blocks**
 - [ ] Catalog precedence is per-field, with a global default (E1)
 - [ ] Precedence is user-configurable in `/settings` (E5)
 - [ ] The inspector page shows per-field winner + ordering + all raw values (E6)

@@ -252,15 +252,19 @@ AniList id, so they are never queued at all. Their coverage becomes the season
 crawl's responsibility, which is where it belongs. **No "looked, found nothing"
 sentinel is needed** — absence from the crosswalk already carries that meaning.
 
-## Acceptance test
+## Acceptance test — ✅ PASSED (2026-07-25, production)
 
-1. Run the sweep on the live store.
-2. Re-run the measurement from [README.md](README.md): AniList entries carrying a
-   `catalog` block should go **0 → ~19,000** (minus titles AniList lacks).
-3. On the inspector page, a title now shows **two** candidate values for `genres`,
-   `studios`, `mean`, `synopsis` — where before AniList had none.
-4. Precedence changes become observable. Until step 3 shows two values, any
-   precedence flip is provably a no-op.
+1. ~~Run the sweep on the live store.~~ Done via the Connections button.
+2. ~~Re-run the measurement:~~ catalog blocks went **0 → 19,293** (99.98% of the
+   19,297 AniList entries; 4 titles AniList returns nothing for, correctly left
+   un-swept rather than re-queued).
+3. ~~Two candidate values now exist~~ — measured both-present coverage: `mean`
+   15,649 · `genres` 17,127 · `studios` 14,430 (+1,900 AniList-only) · `synopsis`
+   17,809 · `numEpisodes` 18,771. (Inspector page E6 still to build, but the data
+   is there.)
+4. **Precedence changes are now observable.** The flip is no longer a no-op.
+
+Full post-sweep table in [README.md](README.md#after-the-sweep-2026-07-25-e2-shipped).
 
 ## Non-goals
 
