@@ -205,7 +205,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const handleConnect = async () => {
     try {
       setAuthError('');
-      const response = await fetch('/api/anime/auth?action=login');
+      const response = await fetch('/api/anime/mal/auth?action=login');
       const data = await response.json();
       if (data.authUrl) window.location.href = data.authUrl;
       else setAuthError('Failed to initiate authentication');
@@ -218,7 +218,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const handleDisconnect = async () => {
     try {
       setAuthError('');
-      await postLogout('/api/anime/auth');
+      await postLogout('/api/anime/mal/auth');
       await refreshStatuses();
     } catch (error) {
       console.error('Error disconnecting from MAL:', error);

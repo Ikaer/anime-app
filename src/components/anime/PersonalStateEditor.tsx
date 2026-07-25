@@ -12,7 +12,7 @@ import styles from './PersonalStateEditor.module.css';
  * title* to statused + scored, which is what first writes
  * `personal/local.json` for a local-only user.
  *
- * All three controls go through the same `PUT …/mal-status` endpoint → the
+ * All three controls go through the same `PUT …/personal` endpoint → the
  * `writePersonal` registry, so the edit fans out to whichever providers are
  * enabled and comes back with a per-provider outcome map. Rating and marking
  * watched stay two explicit acts — no auto-complete here (that's quick-rate's
@@ -46,7 +46,7 @@ interface Props {
   onWritten: () => void;
 }
 
-type Patch = { status?: UserAnimeStatus | null; score?: number; num_episodes_watched?: number };
+type Patch = { status?: UserAnimeStatus | null; score?: number; progress?: number };
 
 export default function PersonalStateEditor({
   animeId, status, score, progress, numEpisodes, canClearStatus, onWritten,
@@ -68,7 +68,7 @@ export default function PersonalStateEditor({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/anime/animes/${animeId}/mal-status`, {
+      const res = await fetch(`/api/anime/animes/${animeId}/personal`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -172,7 +172,7 @@ export default function PersonalStateEditor({
                 setProgressDraft(progress != null ? String(progress) : '');
                 return;
               }
-              send({ num_episodes_watched: n });
+              send({ progress: n });
             }}
           />
           {numEpisodes ? <span className={styles.total}>/ {numEpisodes}</span> : null}
@@ -183,7 +183,7 @@ export default function PersonalStateEditor({
             onClick={() => {
               const next = (progress ?? 0) + 1;
               setProgressDraft(String(next));
-              send({ num_episodes_watched: next });
+              send({ progress: next });
             }}
           >
             {t('personalEdit.plusOne')}

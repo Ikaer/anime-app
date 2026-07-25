@@ -128,9 +128,9 @@ export default function QuickRatePage() {
         const body: Record<string, unknown> = { score: item.score };
         if (item.autoComplete && item.score > 0) {
           body.status = 'completed';
-          if (item.numEpisodes) body.num_episodes_watched = item.numEpisodes;
+          if (item.numEpisodes) body.progress = item.numEpisodes;
         }
-        const res = await fetch(`/api/anime/animes/${item.id}/mal-status`, {
+        const res = await fetch(`/api/anime/animes/${item.id}/personal`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),

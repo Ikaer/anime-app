@@ -17,7 +17,8 @@ the trivial always-available instance of the new write abstraction.
 
 ## The backbone: local edits had no home of their own
 
-`rating.ts` and `mal-status.ts` used to write personal state **into the MAL
+`rating.ts` and `personal.ts` (then named `mal-status.ts`) used to write
+personal state **into the MAL
 catalog slice's `my_list_status`**, so "a local edit" and "MAL's mirror" were
 literally the same bytes.
 
@@ -85,7 +86,7 @@ extractor + a writer + register both".
 [providers/writers.ts](../../src/lib/providers/writers.ts) runs **every**
 local-authority write before **any** remote push — structurally encoding
 local-cache-authority — then fans the remotes out serially. It returns
-`{ found, outcomes }`, and both `rating.ts` and `mal-status.ts` are collapsed
+`{ found, outcomes }`, and both `rating.ts` and `personal.ts` are collapsed
 onto it.
 
 The local writer must **create, not just edit**: a local-only title has no MAL

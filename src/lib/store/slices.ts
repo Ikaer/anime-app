@@ -137,8 +137,8 @@ export function upsertAnime(newAnime: MALAnime[]): void {
 
 /**
  * The MAL id for a canonical id, when one is resolvable — the mirror of
- * `resolveByMalId` (mal → canonical) for the outward-id routes (mal-status,
- * rating, refresh, similar) that need the real MAL id for a remote API call.
+ * `resolveByMalId` (mal → canonical) for the routes (personal, rating, refresh,
+ * similar) that need the real MAL id for a remote API call.
  * Checks the MAL slice's own id first (authoritative when it exists), falling
  * back to the registry crosswalk — same precedence `assembleDisplayRow` uses,
  * so a refresh/similar call never disagrees with what the detail page shows

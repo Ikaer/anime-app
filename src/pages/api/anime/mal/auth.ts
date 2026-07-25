@@ -9,10 +9,17 @@ import { getMalClientId } from '@/lib/config/settings';
 import { getMalRedirectUri } from '@/lib/redirectUri';
 
 /**
- * MAL OAuth. This route deliberately does NOT live under `/api/anime/mal/`
- * with the other MAL routes: its path is the registered redirect URI of the
- * MyAnimeList OAuth application (`MAL_REDIRECT_URI`), which is configuration
- * outside this repo. Moving it breaks login on the next deploy.
+ * MAL OAuth — `login` / `status` / `logout` plus the registered callback, the
+ * same shape as its `simkl/` and `anilist/` peers.
+ *
+ * It used to sit at the generic `/api/anime/auth`, from the era when MAL was the
+ * only provider; the path was then kept because it is the redirect URI
+ * registered in the MyAnimeList OAuth application, which is configuration
+ * outside this repo. That is a one-time manual edit, not a reason for one
+ * provider to own the generic path — **moving this file requires updating the
+ * app's redirect URL at https://myanimelist.net/apiconfig** (and
+ * `MAL_REDIRECT_URI`, where the env escape hatch is set) to
+ * `<origin>/api/anime/mal/auth`, or the callback 404s.
  */
 
 // MAL client id / redirect uri now resolve at request time through the settings

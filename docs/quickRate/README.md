@@ -61,6 +61,6 @@ TV-only watcher must not have "set all" score the franchise's movies.
 
 A franchise "set all" is many writes. It reuses the tier board's **serial client
 queue** (`await` each before the next) to respect SIMKL's write-lock and 1 req/s
-cap, over `PUT …/mal-status` → `writePersonal` (not the score-only `rating`
+cap, over `PUT …/personal` → `writePersonal` (not the score-only `rating`
 endpoint, since auto-complete sets status too). Optimistic with revert, and
 per-provider failure badges from the outcome map.

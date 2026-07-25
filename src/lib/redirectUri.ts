@@ -34,7 +34,7 @@ export function getRequestBaseUrl(req: NextApiRequest): string {
 }
 
 export function getMalRedirectUri(req: NextApiRequest): string {
-  return process.env.MAL_REDIRECT_URI?.trim() || `${getRequestBaseUrl(req)}/api/anime/auth`;
+  return process.env.MAL_REDIRECT_URI?.trim() || `${getRequestBaseUrl(req)}/api/anime/mal/auth`;
 }
 
 export function getSimklRedirectUri(req: NextApiRequest): string {
