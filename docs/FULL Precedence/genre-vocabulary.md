@@ -1,6 +1,46 @@
 # The genre vocabulary issue
 
-> **✅ DECIDED AND SHIPPED 2026-07-25 — option C, union.** `genres` is merged
+> ## ✅ CLOSED — C then D, both shipped 2026-07-25
+>
+> **C (union)** merged the vocabularies element-wise, and **D (the three axes)**
+> then split them apart — but as a *derived function*, not as three catalog
+> fields. Together they answer the whole question: nothing is lost, and the
+> conflated taxonomy is legible.
+>
+> **D's cost estimate below is obsolete.** It priced a ~60-entry partition table
+> plus two new catalog fields plus two new filter dimensions, "larger than the
+> precedence mechanism itself". What actually shipped is `domain/genreAxis.ts`,
+> a pure lookup, because the partition is a function of the genre NAME and names
+> are already the identity key — the same property that makes the union dedupe.
+> So no new catalog fields, no precedence entries, no migration, no re-sweep.
+>
+> **Whitelists rather than a partition table.** Genre and demographic are closed
+> sets; theme is open-ended, so it is the fall-through. The genre whitelist is
+> AniList's `GenreCollection` transcribed rather than curated — the same property
+> that made AniList's taxonomy attractive in the first place — leaving 5
+> demographics and 6 MAL-only genres as the only hand judgement.
+>
+> Measured on the live store: **78 values → 25 genre / 5 demographic / 48 theme.**
+> `Suspense` lands in `genre`, which is the trap worth naming: the union stores
+> MAL's `Suspense` while AniList's collection says `Thriller`, so the whitelist
+> must go through the same `GENRE_ALIASES` map or a genre is silently misfiled by
+> the very table meant to prevent that. `Award Winning` lands in `theme` and is
+> neither — an accolade, harmless, and not worth an axis.
+>
+> ### ⚠️ One argument below was factually wrong
+>
+> The case against option A leans on *"the genre filter collapses 78 → 19
+> options"* and *"filtering by Isekai, School, Shounen stops being possible"*.
+> **There was no genre filter.** `/api/anime/animes` accepted a `genres` param,
+> but `AnimeFiltersState` and `PARAM_KEYS` had no genre key, so nothing ever sent
+> one — the reasoning described a surface that was unreachable. The filter was
+> built alongside the axes (URL key `g`, one dimension, three presentation
+> groups). The conclusion against A still holds on the *reco* argument and on the
+> plain fact that A discards 60 values; it just never held on the filter one.
+>
+> The analysis below is kept as the reasoning.
+
+> **✅ DECIDED 2026-07-25 — option C, union.** `genres` is merged
 > element-wise across providers (`unionGenres` in `domain/animeUtils.ts`) instead
 > of taken wholesale from one. **Nothing is lost, so the 60-value problem below is
 > void** — MAL's themes and demographics stay, and AniList's assignments are added
@@ -127,8 +167,11 @@ winning provider and never merges element-wise (the model states this explicitly
 `studios`). It also re-conflates the taxonomies inside one field, i.e. it reproduces
 exactly the problem AniList's taxonomy is attractive for.
 
-**D. Split the axes — recommended.** Take `genres` from AniList (19, clean), and
-promote MAL's extras into their **own catalog fields**:
+**D. Split the axes — recommended, and SHIPPED as a derived function.** The
+sketch below promotes MAL's extras into their **own catalog fields**; what
+shipped keeps one `genres` field and derives the axis from the name
+(`domain/genreAxis.ts`), which delivers the same separation with none of the
+store cost. Read the field sketch as "the three axes", not as the schema:
 
 ```
 catalog.genres        ← AniList  (19 values, genre proper)
@@ -143,10 +186,26 @@ single clear source, the filter gains structure (filter by demographic *or* them
 and the reco engine can weight the three independently rather than having genre
 signal diluted.
 
-**Cost:** MAL's 78 values must be partitioned into genre/theme/demographic — a
-one-time hand-curated mapping table (~60 entries), which is the honest bulk of the
-work. Also new filter dimensions (~6 spots each, per `CLAUDE.md`), and new reco
-sources if themes/demographics should score.
+**Cost (as estimated — see the banner for what it actually was):** MAL's 78
+values must be partitioned into genre/theme/demographic — a one-time hand-curated
+mapping table (~60 entries), which is the honest bulk of the work. Also new
+filter dimensions (~6 spots each, per `CLAUDE.md`), and new reco sources if
+themes/demographics should score.
+
+**Why that came in far under estimate.** Two of the three assumptions were
+avoidable. The partition does not need enumerating in full — whitelisting the
+two closed axes and letting the open one absorb the remainder cuts ~60 hand
+entries to ~11. And it does not need to live in the data at all, which removes
+the new catalog fields, the precedence entries and the migration; only ONE new
+filter dimension was needed, not two, because the axes are presentation over a
+single `genres` param.
+
+**The reco half was also oversold.** "The reco engine can weight the three axes
+independently rather than having genre signal diluted" is weaker than it reads:
+the `genre` source is IDF-weighted, so it already discounts `Shounen` (2,246
+titles) and rewards `Villainess` (31). Splitting axes recovers little signal IDF
+is not already extracting. The real payoff was the **filter**, and it is
+delivered. Per-axis reco sources remain possible and unscheduled.
 
 ## Decision — C (union), shipped 2026-07-25
 
@@ -155,11 +214,11 @@ this doc; in short, the option list above was written to answer "how do we avoid
 losing 60 values", and C answers it by not losing anything — while turning out to
 *add* 11,087 genre assignments the store did not have.
 
-**D is not foreclosed and remains the better end state.** Splitting `themes` and
-`demographics` out of `genres` is now a pure re-partition of a field containing
-strictly more data than before, and the ~60-entry partition table would be the
-same deliverable. C was taken first because it is ~25 lines against D's several
-days, and because C makes D's eventual payoff larger rather than smaller.
+**D followed, same day.** Splitting `themes` and `demographics` out of `genres`
+was a pure re-partition of a field containing strictly more data than before —
+and taking C first is what made D cheap rather than merely possible: the union
+had already established that genres are name-keyed and dedupe on the name, which
+is the exact property that lets the axis be a lookup instead of a schema change.
 
 **A is now off the table**: it was only ever justified by the taxonomy-cleanliness
 argument, and the union delivers AniList's clean assignments without discarding

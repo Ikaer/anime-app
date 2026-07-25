@@ -13,10 +13,14 @@
 > they are converted to canonical **at the boundary**, and each provider is queried
 > with its own id.
 >
-> Two things remain, both named and neither a design question: **deepen the AniList
-> season crawl** (`BULK_CRAWL_YEARS_BACK = 8` vs MAL's 1960 — a parameter), and
-> **option D for genres** (splitting `themes`/`demographics` out, unforeclosed and
-> unscheduled). Two documented survivors are listed under the Definition of Done.
+> **Genres are fully resolved**: C (union) merged the vocabularies, then D (the
+> three axes) split them apart as a derived lookup rather than three catalog
+> fields — 78 values → 25 genre / 5 demographic / 48 theme, with the genre filter
+> built alongside it because it turned out never to have existed.
+>
+> One thing remains, and it is a parameter rather than a design question:
+> **deepen the AniList season crawl** (`BULK_CRAWL_YEARS_BACK = 8` vs MAL's
+> 1960). Two documented survivors are listed under the Definition of Done.
 >
 > The rest of this document is the record of how each decision was reached. Read
 > it before re-opening any of them.
@@ -431,12 +435,15 @@ Done in the planned cheapest-first order, one commit each except the last two:
 > because the reasoning is what stops the questions being re-opened; read them as
 > the record of a decision, not as pending work.
 
-**1. `genres` — ANSWERED: option C (union), shipped 2026-07-25.** The framing
-below asks "how do we avoid losing 60 values"; C answers by not losing any, and
-turned out to *add* 11,087 genre assignments. **Option D (splitting `genres` /
-`themes` / `demographics`) remains the better end state and is not foreclosed** —
-it is now a pure re-partition of a field holding strictly more data. It is the
-single largest work item this folder ever identified and it is **not scheduled**.
+**1. `genres` — ANSWERED: C *and* D, both shipped 2026-07-25.** The framing below
+asks "how do we avoid losing 60 values"; C answers by not losing any, and turned
+out to *add* 11,087 genre assignments. D then split the three axes apart — as a
+**derived function** (`domain/genreAxis.ts`), not the three catalog fields it was
+scoped as, because the partition is a function of the genre name and names are
+already the identity key. That removed the migration, the new catalog fields and
+one of the two filter dimensions, turning "the single largest work item in this
+folder" into an afternoon. See [genre-vocabulary.md](genre-vocabulary.md) for
+what the original estimate got wrong.
 The original analysis lives in [genre-vocabulary.md](genre-vocabulary.md); D's
 cost is a hand-curated ~60-entry partition table, two new filter dimensions at ~6
 spots each per `CLAUDE.md`, and possibly new reco sources — larger than the
