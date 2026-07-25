@@ -71,7 +71,7 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `catalog/anilist_cast.json` — characters + Japanese seiyuu (`AniListCastEntry`), keyed by canonical id. **The one AniList slice that is NOT joined in `getAnimeForDisplay()`** — read only by the detail page, filled lazily per title (see "Cast" below).
 - `personal/local.json` — **in-app** personal state (`LocalPersonalEntry`: status/score/progress + `updated_at`), keyed by canonical id (see "Local personal-data provider").
 - `auth/mal.json` — MAL OAuth token + user data (its peers: `auth/simkl.json`, `auth/anilist.json`, and the three transient `auth/oauth_state_*.json` CSRF files)
-- `sync/mal_seasons.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`) — the seasonal-crawl checkpoint, sitting next to `sync/simkl_checkpoint.json` (all-items watermark + `lastRatedAt`) and `sync/anilist_import.json`.
+- `sync/mal_seasons.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`) — the seasonal-crawl checkpoint, sitting next to `sync/simkl_checkpoint.json` (all-items watermark + `lastRatedAt`), `sync/anilist_import.json` and `sync/anilist_years.json` (AniList's back-catalog checkpoint, `{ syncedYears: number[] }` — a year is never re-crawled, so re-running the window means deleting the file).
 - `user/reco_feedback.json` — "Pour toi" thumbs, `{ canonicalId: 'up' | 'down' }` (see the "Pour toi" section)
 - `cache/recommendations.json` — cached recommendations feed data (the one **rebuildable** file: `cache/` says so) (crowd/AniList seeds + hydrated candidates); the code constant is `RECOMMENDATIONS_FILE`. **Canonical-id-keyed like every other file here** since FULL Precedence E10, and carrying a `v` (`RECO_CACHE_VERSION`): an older MAL-keyed file parses fine but would miss every lookup and render an empty feed silently, so a version mismatch **discards** it rather than migrating — it is `cache/`, the next refresh rebuilds it.
 - `logs/connection_log.json` — the sync-progress feed. Named like diagnostics, but it is **app data**: the Connections panel and the first-run onboarding bar *poll* it (there is no SSE for meta-sync, the cast sweep or the catalog crawl — this log IS the transport). So it lives in the store under `DATA_PATH`, **not** under `LOGS_PATH`, which consequently has no writer left and stays reserved for real debug output.
@@ -377,7 +377,7 @@ genres.
 - **`local` has a card**: active/inactive, entry count, precedence rank, why `auto` switched it off, and a link to `/settings`. On a keyless install it is the only active personal provider, and it previously appeared nowhere in the UI.
 - **Actions are NOT abstracted.** Each provider's sync stays its own block in [CatalogRoleActions](src/components/anime/connections/CatalogRoleActions.tsx) / [PersonalRoleActions](src/components/anime/connections/PersonalRoleActions.tsx), passed to the card as children — MAL's seasonal crawl, SIMKL's delta and AniList's GraphQL batch are different operations (PROVIDER-ABSTRACTION.md). Only the card around them is uniform. Note MAL's list sync is a *personal*-role action while big-sync/historical-crawl are *catalog* ones; the sync-error state is split the same way.
 
-### Scheduled sync (cron-sync) — seven steps, none of them a gate
+### Scheduled sync (cron-sync) — eight steps, none of them a gate
 
 [cron-sync.ts](src/pages/api/anime/cron-sync.ts) is the one place scheduled work
 is orchestrated, and since PROVIDER-PARITY.md F1 it covers every provider, not
@@ -385,9 +385,10 @@ just MAL. It is **not** a generic loop, per PROVIDER-ABSTRACTION.md: MAL's
 seasonal crawl, SIMKL's two-phase delta and AniList's GraphQL batch are
 genuinely different operations. What is uniform is *enablement* and *reporting*.
 
-- **Seven steps, each isolated and non-fatal**: MAL catalog (big-sync via HTTP,
+- **Eight steps, each isolated and non-fatal**: MAL catalog (big-sync via HTTP,
   which owns the run lock, then a 5-season historical crawl), SIMKL delta,
-  AniList list import, the AniList season crawl (`anilistDiscovery`), the
+  AniList list import, the AniList season crawl (`anilistDiscovery`), the AniList
+  back-catalog crawl (`anilistHistorical`, 3 years a tick), the
   recommendations refresh, then the AniList metadata sync and catalog sweep.
   Each returns a `CronStepOutcome` and they are all echoed in the response
   — same "declare the degraded mode" shape as `RecoRefreshSources` (B4).
@@ -408,9 +409,23 @@ genuinely different operations. What is uniform is *enablement* and *reporting*.
   call returning `id` alongside `idMal`. Without a recurring crawl, every title
   MAL's seasonal sync adds from here on would be permanently invisible to AniList
   enrichment — the MAL-id bridge used to paper over that. Bounded on purpose:
-  the current season, ≤8 pages, early-exit on `hasNextPage`. Depth (matching
-  MAL's back-to-1960 window) is `performAnilistBulkCatalogCrawl`'s job, and stays
-  the open coverage item.
+  the current season, ≤8 pages, early-exit on `hasNextPage`.
+- **Depth is `anilistHistorical`'s job, and it is a THIRD crawl with its own
+  query.** `performAnilistHistoricalCrawl` walks the back catalog **by year, on
+  `startDate_greater`/`_lesser`**, checkpointed per year in
+  `sync/anilist_years.json`, paging each year to exhaustion (cron takes 3 years a
+  tick; the Connections button runs it uncapped, ~12 min for the whole
+  2017→1960 window). Two traps it exists to avoid, both live-measured:
+  **`season` is null on 23-45% of pre-2018 titles**, so no depth of season-keyed
+  sweep can reach them — hence the date range; and `startDate_greater` is
+  strict while fuzzy dates store as `YYYY0000`, so the lower bound must be
+  `YYYY0000 - 1` or every month-unknown title is dropped (28 of 1998's 234).
+  ⚠️ **It does NOT close the ~24% of the registry holding no AniList id, and
+  nothing will**: a full run moved that gap by zero, and 30 sampled gap titles
+  returned 0 hits when asked for individually — they are recaps, specials, PVs,
+  CMs, music videos and CN/KR web animation that MAL lists standalone and
+  AniList does not carry. It earns its place by adding titles AniList *does*
+  have (1,693 on the first run, 572 of them with no MAL id anywhere).
 - **Order is load-bearing.** Data pulls first, so the reco refresh consumes what
   they just landed (measured: 4 seeds keyless vs 274 after the SIMKL + AniList
   imports on the same store). `anilistDiscovery` is **awaited**, before the

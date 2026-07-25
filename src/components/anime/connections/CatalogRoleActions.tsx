@@ -2,6 +2,7 @@ import React from 'react';
 import styles from './ProviderActions.module.css';
 import { Button } from '@/components/shared';
 import type { HistoricalCrawlStats } from '@/lib/providers/mal/sync';
+import type { AnilistHistoricalCrawlStats } from '@/lib/providers/anilist/sync';
 import { useT } from '@/lib/i18n';
 
 /**
@@ -62,13 +63,16 @@ interface AnilistCatalogActionsProps {
   metaStats: { totalAnime: number; taggedCount: number } | null;
   isCatalogCrawling: boolean;
   catalogCrawlMessage: string;
-  catalogStats: { totalCanonicalIds: number; anilistOnlyIds: number } | null;
+  catalogStats: { totalCanonicalIds: number; anilistOnlyIds: number; historical?: AnilistHistoricalCrawlStats } | null;
+  isHistoricalCrawling: boolean;
+  historicalCrawlMessage: string;
   isCatalogSweeping: boolean;
   catalogSweepMessage: string;
   sweepStats: { totalEntries: number; catalogCount: number } | null;
   busy: boolean;
   onMetaSync: () => void;
   onCatalogCrawl: () => void;
+  onHistoricalCrawl: () => void;
   onCatalogSweep: () => void;
 }
 
@@ -80,10 +84,13 @@ interface AnilistCatalogActionsProps {
 export const AnilistCatalogActions: React.FC<AnilistCatalogActionsProps> = ({
   isMetaSyncing, metaSyncMessage, metaStats,
   isCatalogCrawling, catalogCrawlMessage, catalogStats,
+  isHistoricalCrawling, historicalCrawlMessage,
   isCatalogSweeping, catalogSweepMessage, sweepStats,
-  busy, onMetaSync, onCatalogCrawl, onCatalogSweep,
+  busy, onMetaSync, onCatalogCrawl, onHistoricalCrawl, onCatalogSweep,
 }) => {
   const t = useT();
+  const historical = catalogStats?.historical ?? null;
+  const historyDone = historical !== null && historical.remainingYears === 0;
   return (
     <>
       <div className={styles.buttonGroup}>
@@ -92,6 +99,11 @@ export const AnilistCatalogActions: React.FC<AnilistCatalogActionsProps> = ({
         </Button>
         <Button onClick={onCatalogCrawl} disabled={busy} variant="secondary">
           {isCatalogCrawling ? t('dataSync.starting') : t('dataSync.crawlAnilistCatalog')}
+        </Button>
+        <Button onClick={onHistoricalCrawl} disabled={busy || historyDone} variant="secondary">
+          {isHistoricalCrawling
+            ? t('dataSync.starting')
+            : historyDone ? t('dataSync.anilistHistoryComplete') : t('dataSync.crawlAnilistHistory')}
         </Button>
         <Button onClick={onCatalogSweep} disabled={busy} variant="secondary">
           {isCatalogSweeping ? t('dataSync.starting') : t('dataSync.sweepAnilistCatalog')}
@@ -109,6 +121,14 @@ export const AnilistCatalogActions: React.FC<AnilistCatalogActionsProps> = ({
         </div>
       )}
       {catalogCrawlMessage && <div className={styles.stats}>{catalogCrawlMessage}</div>}
+      {historical !== null && (
+        <div className={styles.stats}>
+          {historyDone
+            ? t('dataSync.anilistAllYearsCrawled', { total: historical.totalYears })
+            : `${t('dataSync.anilistYearsCrawled', { synced: historical.syncedYears, total: historical.totalYears })}${historical.oldestSyncedYear ? t('dataSync.backTo', { year: historical.oldestSyncedYear }) : ''}`}
+        </div>
+      )}
+      {historicalCrawlMessage && <div className={styles.stats}>{historicalCrawlMessage}</div>}
       {sweepStats !== null && (
         <div className={styles.stats}>
           {t('dataSync.anilistCatalogSwept', { covered: sweepStats.catalogCount, total: sweepStats.totalEntries })}

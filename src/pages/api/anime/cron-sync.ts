@@ -9,6 +9,7 @@ import {
   isAnilistCatalogSweepRunning,
   performAnilistCatalogSweep,
   performAnilistCatalogCrawl,
+  performAnilistHistoricalCrawl,
 } from '@/lib/providers/anilist/sync';
 import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
@@ -57,6 +58,7 @@ type CronSteps = Record<
   | 'simklPersonal'
   | 'anilistPersonal'
   | 'anilistDiscovery'
+  | 'anilistHistorical'
   | 'anilistCatalog'
   | 'anilistCatalogFields'
   | 'recommendations',
@@ -186,10 +188,8 @@ async function syncAnilistPersonal(): Promise<CronStepOutcome> {
  * sweeps below) precisely so the metadata sync that follows sees the ids it
  * just landed.
  *
- * Depth beyond the current season is NOT this step's job: matching MAL's
- * back-to-1960 window is what `performAnilistBulkCatalogCrawl` is for, and it
- * remains the open coverage item for the ~24% of the registry that holds no
- * AniList id (docs/FULL Precedence/anilist-catalog-sync.md).
+ * Depth beyond the current season is NOT this step's job — that is
+ * `syncAnilistHistorical` below, which walks the back catalog by year.
  */
 async function syncAnilistDiscovery(): Promise<CronStepOutcome> {
   const result = await performAnilistCatalogCrawl(undefined, undefined, 8);
@@ -214,6 +214,54 @@ async function syncAnilistDiscovery(): Promise<CronStepOutcome> {
       pagesFetched: result.pagesFetched,
       withMal: result.withMal,
       anilistOnlyMinted: result.anilistOnlyMinted,
+    },
+  };
+}
+
+/**
+ * The back catalog, a few years per tick, walking 1960-ward from just outside
+ * the bulk crawl's window. Checkpointed in `sync/anilist_years.json`, so this
+ * converges and then costs one cheap no-op call per run forever after.
+ *
+ * Bounded to `HISTORICAL_YEARS_PER_TICK` for the same reason MAL's historical
+ * crawl takes 5 seasons: a tick should stay short. The whole window is only
+ * ~12 minutes, so anyone who wants it *now* presses the Connections button,
+ * which runs it uncapped — this step is the version that needs nobody watching.
+ *
+ * Ungated (AniList's catalog role is anonymous) and **awaited before the
+ * enrichment sweeps**, same reasoning as discovery: the ids it lands are what
+ * they queue on. `alreadyRunning` is a normal outcome here, since the uncapped
+ * button run holds the same lock.
+ */
+const HISTORICAL_YEARS_PER_TICK = 3;
+
+async function syncAnilistHistorical(): Promise<CronStepOutcome> {
+  const result = await performAnilistHistoricalCrawl(HISTORICAL_YEARS_PER_TICK);
+  if (result.alreadyRunning) {
+    return { ok: true, skipped: true, reason: 'A catalog crawl is already running' };
+  }
+  if (result.stats.remainingYears === 0 && result.yearsCrawled === 0) {
+    return { ok: true, skipped: true, reason: 'Back catalog already crawled' };
+  }
+  if (!result.ok) {
+    appendLog('cron-sync', 'error', 'Cron sync AniList historical crawl failed', { error: result.error });
+    return { ok: false, reason: result.error };
+  }
+  appendLog(
+    'cron-sync',
+    'success',
+    `Cron sync crawled ${result.yearsCrawled} AniList year(s): ${result.titles} titles, ${result.minted} minted — ${result.stats.remainingYears} years remaining`,
+    { yearsCrawled: result.yearsCrawled, titles: result.titles, remainingYears: result.stats.remainingYears }
+  );
+  return {
+    ok: true,
+    detail: {
+      yearsCrawled: result.yearsCrawled,
+      titles: result.titles,
+      withMal: result.withMal,
+      minted: result.minted,
+      remainingYears: result.stats.remainingYears,
+      oldestSyncedYear: result.stats.oldestSyncedYear,
     },
   };
 }
@@ -323,6 +371,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ids they queue on. Ungated for the same reason they are — AniList's catalog
   // role is anonymous.
   steps.anilistDiscovery = await step('anilist-discovery', syncAnilistDiscovery);
+  steps.anilistHistorical = await step('anilist-historical', syncAnilistHistorical);
 
   // MAL is optional here (B4): with no valid token the refresh skips its two MAL
   // sources and runs on the anonymous AniList crowd source alone.

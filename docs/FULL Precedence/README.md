@@ -18,9 +18,11 @@
 > fields — 78 values → 25 genre / 5 demographic / 48 theme, with the genre filter
 > built alongside it because it turned out never to have existed.
 >
-> One thing remains, and it is a parameter rather than a design question:
-> **deepen the AniList season crawl** (`BULK_CRAWL_YEARS_BACK = 8` vs MAL's
-> 1960). Two documented survivors are listed under the Definition of Done.
+> **Nothing remains.** The last open item — "deepen the AniList season crawl" —
+> was built, run to completion against the live store, and **disproved as a
+> diagnosis**: the back catalog crawled to 1960 closed *zero* of the AniList-id
+> gap, because those 6,085 titles are not on AniList at all (see below). Two
+> documented survivors are listed under the Definition of Done.
 >
 > The rest of this document is the record of how each decision was reached. Read
 > it before re-opening any of them.
@@ -522,9 +524,26 @@ predicted. Two consequences, one handled and one open:
   bounded current-season crawl awaited in cron-sync before the enrichment sweeps.
   Without it, every title MAL's seasonal sync adds from here on would have been
   permanently invisible to AniList.
-- **Open**: `BULK_CRAWL_YEARS_BACK = 8` against MAL's back-to-1960 window is why
-  ~24% of the registry holds no AniList id. Deepening that crawl is the remaining
-  coverage work, and it is a parameter, not a design question.
+- ~~**Open**: `BULK_CRAWL_YEARS_BACK = 8` against MAL's back-to-1960 window is why
+  ~24% of the registry holds no AniList id.~~ **CLOSED, and the diagnosis was
+  wrong** (2026-07-25). `performAnilistHistoricalCrawl` now walks 2017→1960 by
+  start date — 58 years, paged to exhaustion, checkpointed in
+  `sync/anilist_years.json` — and a full live run landed 14,204 titles while
+  moving the gap by **exactly zero**, every era bucket unchanged. 30 sampled gap
+  titles asked for individually: **0 of 30 exist on AniList.** They are recaps,
+  specials, pilot films, music videos, CMs, PVs and Chinese/Korean web animation
+  that MAL lists standalone and AniList does not carry. The residual 24% is a
+  **catalog-scope difference between two sites**, not a coverage bug — it is
+  irreducible, and it should not be attacked with a wider window again.
+
+  Two things worth keeping from the attempt. **A season-keyed crawl could never
+  have answered this**: AniList leaves `season` null on 23-45% of pre-2018
+  titles, so any depth of season sweep is blind to a quarter of every old year —
+  which is why the historical crawl keys on `startDate` instead. And the crawl
+  **earns its place on a different justification than the one it was built for**:
+  it added 1,693 titles the store lacked (572 with no MAL id anywhere, 1,121
+  whose MAL id MAL's own crawl never landed). It crawls AniList's catalog for
+  what AniList has, which is the better-posed job.
 
 ## Non-goals
 

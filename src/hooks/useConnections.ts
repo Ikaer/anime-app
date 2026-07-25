@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { HistoricalCrawlStats } from '@/lib/providers/mal/sync';
+import type { AnilistHistoricalCrawlStats } from '@/lib/providers/anilist/sync';
 import type { AniListPersonalImportResult } from '@/lib/providers/anilist/personalSync';
 import type { AniListPushStats } from '@/lib/providers/anilist/push';
 import { useProviderStatuses } from './useProviderStatuses';
@@ -50,7 +51,11 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [anilistMetaStats, setAnilistMetaStats] = useState<{ totalAnime: number; taggedCount: number } | null>(null);
   const [isAnilistCatalogCrawling, setIsAnilistCatalogCrawling] = useState(false);
   const [anilistCatalogCrawlMessage, setAnilistCatalogCrawlMessage] = useState('');
-  const [anilistCatalogStats, setAnilistCatalogStats] = useState<{ totalCanonicalIds: number; anilistOnlyIds: number } | null>(null);
+  const [anilistCatalogStats, setAnilistCatalogStats] = useState<
+    { totalCanonicalIds: number; anilistOnlyIds: number; historical?: AnilistHistoricalCrawlStats } | null
+  >(null);
+  const [isAnilistHistoricalCrawling, setIsAnilistHistoricalCrawling] = useState(false);
+  const [anilistHistoricalCrawlMessage, setAnilistHistoricalCrawlMessage] = useState('');
   const [isAnilistCatalogSweeping, setIsAnilistCatalogSweeping] = useState(false);
   const [anilistCatalogSweepMessage, setAnilistCatalogSweepMessage] = useState('');
   const [anilistSweepStats, setAnilistSweepStats] = useState<{ totalEntries: number; catalogCount: number } | null>(null);
@@ -375,6 +380,29 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  // Uncapped on purpose — the whole 1960→cutoff window is ~12 min of throttled
+  // requests, and it is checkpointed per year, so pressing this twice resumes
+  // rather than restarts. The cron step is the batched version.
+  const handleAnilistHistoricalCrawl = async () => {
+    setIsAnilistHistoricalCrawling(true);
+    setAnilistHistoricalCrawlMessage('');
+    try {
+      const response = await fetch('/api/anime/anilist/catalog-crawl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'historical' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'AniList historical crawl failed');
+      setAnilistHistoricalCrawlMessage('Historical crawl started — see the log below for progress.');
+      fetchAnilistCatalogStats();
+    } catch (error) {
+      setAnilistHistoricalCrawlMessage(error instanceof Error ? error.message : 'Failed to start the AniList historical crawl.');
+    } finally {
+      setIsAnilistHistoricalCrawling(false);
+    }
+  };
+
   const handleAnilistCatalogSweep = async () => {
     setIsAnilistCatalogSweeping(true);
     setAnilistCatalogSweepMessage('');
@@ -422,7 +450,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   };
 
   const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling
-    || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistCatalogSweeping
+    || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistHistoricalCrawling || isAnilistCatalogSweeping
     || isAnilistImporting || isSimklSyncing;
 
   // Status (uniform, per provider) is kept separate from actions (per provider,
@@ -467,6 +495,9 @@ export function useConnections(options: UseConnectionsOptions = {}) {
       catalogCrawlMessage: anilistCatalogCrawlMessage,
       catalogStats: anilistCatalogStats,
       onCatalogCrawl: handleAnilistCatalogCrawl,
+      isHistoricalCrawling: isAnilistHistoricalCrawling,
+      historicalCrawlMessage: anilistHistoricalCrawlMessage,
+      onHistoricalCrawl: handleAnilistHistoricalCrawl,
       isCatalogSweeping: isAnilistCatalogSweeping,
       catalogSweepMessage: anilistCatalogSweepMessage,
       sweepStats: anilistSweepStats,

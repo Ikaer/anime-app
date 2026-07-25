@@ -96,10 +96,11 @@ log panel. No SSE — same pattern as meta-sync, cast sweep and the catalog craw
 > survives on purpose: `resolveAnilistMediaId` in `anilist/write.ts`, which is
 > crosswalk resolution for a *write*, where refusing would drop a user's rating.
 >
-> The predicted consequence arrived too, and is handled: coverage became a
-> crawl-depth problem, so `anilistDiscovery` (a bounded current-season crawl) is
-> now a cron step, awaited before the enrichment sweeps. Depth beyond that — the
-> `BULK_CRAWL_YEARS_BACK = 8` vs MAL's 1960 gap — is the remaining open item.
+> The predicted consequence arrived too, and is handled: new titles gain AniList
+> ids through `anilistDiscovery` (a bounded current-season crawl), now a cron
+> step awaited before the enrichment sweeps. **The depth half of the prediction
+> was wrong** — the back catalog was crawled to 1960 and closed none of the gap,
+> because those titles are not on AniList at all. See the ❌ banner below.
 
 **AniList methods take AniList ids, from the crosswalk. Full stop.** Enriching
 AniList *by MAL id* is a hard coupling: it makes MAL's identifier load-bearing for a
@@ -174,18 +175,47 @@ titles found *without* one are keyed off the `anilist` crosswalk alone.
 
 ### Consequence: the 6,085 become a crawl-depth problem
 
-This is the honest trade, and it is a far better problem to own. **It played out
-exactly as written** — the `anilistDiscovery` cron step handles the "new titles
-keep gaining AniList ids" half; deepening the season crawl is the half still open:
+> ## ❌ WRONG — measured and disproved 2026-07-25
+>
+> This section's prediction was tested by building the deeper crawl and running
+> it to completion. **The 6,085 are not a crawl-depth problem.** They are titles
+> AniList does not have.
+>
+> `performAnilistHistoricalCrawl` walked 2017→1960 — 58 years, by start date so
+> no season-shaped blind spot, every year paged to exhaustion — and landed
+> 14,204 titles. The gap moved by **zero**, every era bucket unchanged:
+>
+> | Era | no AniList id, before | after |
+> |---|---|---|
+> | 2018+ | 3,351 | 3,351 |
+> | 2010-2017 | 1,775 | 1,775 |
+> | 2000-2009 | 578 | 578 |
+> | 1990-1999 | 223 | 223 |
+> | pre-1990 | 96 | 96 |
+>
+> 30 gap titles were then sampled across both eras and asked for individually by
+> MAL id: **0 of 30 exist on AniList.** They are recaps, TV specials, pilot
+> films, "Memorial" compilation OVAs, music videos, CMs, PVs, and a long tail of
+> Chinese/Korean web animation — things MAL catalogues as standalone entries and
+> AniList does not carry. The residual gap is a **catalog-scope difference
+> between two sites**, and it is irreducible. Stop widening windows at it.
+>
+> The crawl was kept anyway, on its real merit: it added **1,693 titles the
+> store did not have** — 572 with no MAL id at all, and 1,121 whose MAL id MAL's
+> own seasonal crawl never landed. It crawls AniList's catalog for what *AniList*
+> has, which is a different and better-posed job than closing a MAL-shaped gap.
+>
+> What survives from the section below is the first bullet, which was right.
 
 - AniList coverage becomes a function of **how deep AniList-native crawling goes**,
   not of how cleverly MAL ids are bridged.
-- Today `BULK_CRAWL_YEARS_BACK = 8`, while MAL's historical crawl reaches back to
+- ~~Today `BULK_CRAWL_YEARS_BACK = 8`, while MAL's historical crawl reaches back to
   **1960**. *That* asymmetry — not id-space plumbing — is why 6,085 titles have no
-  AniList id.
-- So the fix is to **deepen the AniList season crawl** (it already accepts
-  `yearsBack` as a parameter) until its window matches MAL's, then accept whatever
-  AniList genuinely lacks.
+  AniList id.~~ **False**, see above: the window was closed and the 6,085 did not move.
+- ~~So the fix is to **deepen the AniList season crawl**~~ — done, and it fixed
+  nothing it was aimed at. Note the season crawl could not have done it either:
+  `season` is null on 23-45% of older titles, so a season-keyed sweep is blind to
+  a quarter of any pre-2018 year regardless of depth.
 - It also dissolves the negative-caching gap below: a title never found by an
   AniList-native crawl is simply never queued, instead of being re-queried by MAL id
   forever.

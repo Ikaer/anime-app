@@ -11,6 +11,7 @@
 import { getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry, toNum } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
 import { anilistQuery } from '@/lib/providers/anilist/client';
+import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry, AniListRelationEntry } from '@/models/anime';
 
@@ -551,6 +552,42 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
   }
 }`;
 
+/**
+ * Same fields, filtered by a **start-date range** instead of a season — the
+ * historical crawl's query.
+ *
+ * **AniList leaves `season` null on a large share of older titles** (OVAs,
+ * movies, specials and plenty of old TV), and `media(season:)` cannot match a
+ * null. Measured live 2026-07-25, titles AniList holds for a year vs the ones a
+ * season crawl can see:
+ *
+ * | Year | by start date | no `season` set |
+ * |---|---|---|
+ * | 2017 | 848 | 302 (36%) |
+ * | 2010 | 568 | 139 (24%) |
+ * | 1998 | 234 | 53 (23%) |
+ * | 1985 | 143 | 42 (29%) |
+ * | 1970 | 51 | 23 (45%) |
+ *
+ * So the season crawl is not merely *shallow* on the back catalog, it is
+ * **structurally blind** to a quarter of it — which is why the historical crawl
+ * is a different query rather than `performAnilistBulkCatalogCrawl` with a
+ * bigger `yearsBack`.
+ *
+ * ⚠️ **The lower bound must be `YYYY0000 - 1`, exclusive.** `startDate_greater`
+ * is strict, and a title whose month/day AniList doesn't know is stored as the
+ * fuzzy `YYYY0000` — so a bound of `19980000` drops exactly those. That cost 28
+ * of 1998's 234 titles when this was first probed with the obvious bound.
+ */
+const CATALOG_BY_YEAR_QUERY = `
+query ($from: FuzzyDateInt, $to: FuzzyDateInt, $page: Int) {
+  Page(page: $page, perPage: ${BATCH_SIZE}) {
+    pageInfo { hasNextPage }
+    media(startDate_greater: $from, startDate_lesser: $to, sort: POPULARITY_DESC, type: ANIME) {${CATALOG_FIELDS}
+    }
+  }
+}`;
+
 // The by-id catalog query — same fields, filtered by AniList's OWN id. This is
 // the id-space policy in code: a title whose AniList id we hold is enriched
 // THROUGH that id, never bridged back through MAL's. It had a `CATALOG_BY_MAL_QUERY`
@@ -1018,6 +1055,256 @@ export function getAnilistCatalogCrawlStats(): { totalCanonicalIds: number; anil
   const entries = Object.values(registry);
   const anilistOnlyIds = entries.filter(ids => ids.mal === undefined && ids.anilist !== undefined).length;
   return { totalCanonicalIds: entries.length, anilistOnlyIds, crawlRunning: isAnilistCatalogCrawlRunning };
+}
+
+// ============================================================================
+// AniList HISTORICAL crawl — the back catalog, by year, checkpointed
+// ============================================================================
+//
+// The third crawl: AniList's own back catalog, year by year. Mirrors MAL's
+// `performHistoricalCrawl` — a checkpoint file, a batch per invocation,
+// resumable, newest-first.
+//
+// ⚠️ **This does NOT close the registry's AniList-id gap, and nothing can.**
+// It was built to, on the theory that the ~24% of titles holding no AniList id
+// were out of the season crawl's reach. A full live run (2017→1960, 58 years,
+// 14,204 titles) moved that gap by **exactly zero**: every era bucket came back
+// unchanged. Sampling 30 of the gap titles across both eras and asking AniList
+// for each by MAL id returned **0 hits** — they are recaps, specials, pilot
+// films, music videos, CMs, PVs and a long tail of Chinese/Korean web animation
+// that MAL catalogues as standalone entries and **AniList simply does not
+// carry**. The gap is a catalog-scope difference between two sites, not a
+// coverage bug, so do not "fix" it by widening a window or a page cap again.
+//
+// What the run DID buy, and why this stays: **1,693 titles the store did not
+// have at all** — 572 with no MAL id anywhere (AniList-only, exactly the
+// population the provider-free direction exists to reach) and 1,121 whose MAL
+// id MAL's own seasonal crawl never landed. That is the honest justification:
+// this crawls AniList's catalog for what AniList has, not for what MAL has.
+//
+// **Two things make it a different query, not a bigger `yearsBack`:**
+//
+// 1. It walks **years by start date**, because `season` is null on 23-45% of
+//    pre-2018 titles and `media(season:)` cannot match a null (table on
+//    `CATALOG_BY_YEAR_QUERY`). That is what makes the run *complete* over what
+//    AniList holds — the finding above (no reachable gap left) is only
+//    trustworthy because this query has no season-shaped blind spot.
+// 2. It does **not cap pages per year**. The bulk crawl's `maxPagesPerSeason`
+//    exists to make first-run onboarding fast — it takes the popularity head and
+//    moves on. This one is a coverage tool, so it pages a year to exhaustion
+//    (`hasNextPage`), which for the back catalog is 2-17 pages.
+//
+// Cost, sized live: the 5 sampled years above are 1,844 titles in 39 pages, and
+// the whole 1960→cutoff window extrapolates to ~300-350 pages ≈ 11-12 min on the
+// shared 2.1s throttle. Cheap enough that the batching exists to be polite to
+// cron ticks, not because the full run is expensive.
+
+const HISTORICAL_CRAWL_FILE = dataFile('sync/anilist_years.json');
+const HISTORICAL_CRAWL_OLDEST_YEAR = 1960;
+// A runaway guard, not a coverage knob — the point of this crawl is that it
+// pages a year to exhaustion. The busiest sampled year (2017) took 17 pages, so
+// 40 leaves ample headroom while still bounding a year that never reports
+// `hasNextPage: false`.
+const HISTORICAL_MAX_PAGES_PER_YEAR = 40;
+
+interface AnilistHistoricalCheckpoint {
+  syncedYears: number[];
+}
+
+function getHistoricalCheckpoint(): AnilistHistoricalCheckpoint {
+  return readJsonFile<AnilistHistoricalCheckpoint>(HISTORICAL_CRAWL_FILE, { syncedYears: [] });
+}
+
+function markYearSynced(year: number): void {
+  const set = new Set(getHistoricalCheckpoint().syncedYears);
+  set.add(year);
+  writeJsonFile(HISTORICAL_CRAWL_FILE, { syncedYears: Array.from(set).sort((a, b) => b - a) });
+}
+
+/**
+ * The newest year the historical crawl owns: one year older than the bulk
+ * crawl's window, so the two tile rather than overlap.
+ *
+ * Pass a `from` to widen it. `from = current year` makes this cover the whole
+ * catalog — which is how the 2018+ half of the id gap gets closed, since that
+ * one is caused by `maxPagesPerSeason`, not by the year window.
+ */
+function historicalNewestYear(): number {
+  return getSeasonInfos().current.year - (BULK_CRAWL_YEARS_BACK + 1);
+}
+
+export interface AnilistHistoricalCrawlStats {
+  syncedYears: number;
+  remainingYears: number;
+  totalYears: number;
+  oldestSyncedYear: number | null;
+  nextYear: number | null;
+}
+
+export function getAnilistHistoricalCrawlStats(from?: number): AnilistHistoricalCrawlStats {
+  const newest = from ?? historicalNewestYear();
+  const synced = new Set(getHistoricalCheckpoint().syncedYears);
+  const all: number[] = [];
+  for (let y = newest; y >= HISTORICAL_CRAWL_OLDEST_YEAR; y--) all.push(y);
+  const done = all.filter(y => synced.has(y));
+  const remaining = all.filter(y => !synced.has(y));
+  return {
+    syncedYears: done.length,
+    remainingYears: remaining.length,
+    totalYears: all.length,
+    oldestSyncedYear: done.length > 0 ? Math.min(...done) : null,
+    nextYear: remaining.length > 0 ? remaining[0] : null,
+  };
+}
+
+export interface AnilistHistoricalCrawlResult {
+  ok: boolean;
+  alreadyRunning: boolean;
+  yearsCrawled: number;
+  yearsFailed: number;
+  titles: number;
+  withMal: number;
+  anilistOnly: number;
+  minted: number;
+  stats: AnilistHistoricalCrawlStats;
+  error?: string;
+}
+
+/** Fetch + map one year's pages to exhaustion. No persistence, no lock. */
+async function crawlCatalogYear(year: number): Promise<SeasonCrawlOutcome> {
+  const entries: AniListCatalogEntry[] = [];
+  const seen = new Set<number>();
+  let withMal = 0;
+  let anilistOnly = 0;
+  let pagesFetched = 0;
+
+  // `- 1` because startDate_greater is strict and fuzzy dates are `YYYY0000`.
+  const from = year * 10000 - 1;
+  const to = (year + 1) * 10000;
+
+  for (let page = 1; page <= HISTORICAL_MAX_PAGES_PER_YEAR; page++) {
+    const data = await anilistQuery<{ Page?: RawCatalogPage }>(CATALOG_BY_YEAR_QUERY, { from, to, page });
+    const result = data?.Page ?? { media: [] };
+    pagesFetched++;
+
+    for (const m of result.media ?? []) {
+      const entry = toCatalogEntry(m);
+      // Dedupe within the year: POPULARITY_DESC is not a stable total order, so
+      // a title can repeat across page boundaries.
+      if (!entry || seen.has(entry.anilist_id)) continue;
+      seen.add(entry.anilist_id);
+      entries.push(entry);
+      if (entry.mal_id !== undefined) withMal++; else anilistOnly++;
+    }
+
+    if (!result.pageInfo?.hasNextPage) break;
+  }
+
+  return { entries, pagesFetched, withMal, anilistOnly };
+}
+
+/**
+ * Crawl the back catalog year by year, newest first, `maxYears` per invocation
+ * (default: every remaining year).
+ *
+ * **Persists and checkpoints after EVERY year**, so an interrupted run keeps
+ * what it fetched and the next one resumes at the next unsynced year — the same
+ * property that makes the cast sweep safe to just run. A year that throws is
+ * non-fatal and is NOT checkpointed, so it is retried next time.
+ *
+ * The checkpoint is permanent: a year is never re-crawled once done. AniList
+ * does keep adding old titles, so re-running the whole window means deleting
+ * `sync/anilist_years.json` — a deliberate manual act, like MAL's equivalent.
+ */
+export async function performAnilistHistoricalCrawl(
+  maxYears?: number,
+  from?: number
+): Promise<AnilistHistoricalCrawlResult> {
+  if (isAnilistCatalogCrawlRunning) {
+    appendLog('anilist-catalog-crawl', 'info', 'AniList historical crawl skipped: a catalog crawl is already running');
+    return { ok: false, alreadyRunning: true, yearsCrawled: 0, yearsFailed: 0, titles: 0, withMal: 0, anilistOnly: 0, minted: 0, stats: getAnilistHistoricalCrawlStats(from) };
+  }
+
+  const newest = from ?? historicalNewestYear();
+  const synced = new Set(getHistoricalCheckpoint().syncedYears);
+  const queue: number[] = [];
+  for (let y = newest; y >= HISTORICAL_CRAWL_OLDEST_YEAR; y--) {
+    if (!synced.has(y)) queue.push(y);
+    if (maxYears !== undefined && queue.length >= maxYears) break;
+  }
+
+  if (queue.length === 0) {
+    appendLog('anilist-catalog-crawl', 'success', 'AniList historical crawl already complete: no remaining years');
+    return { ok: true, alreadyRunning: false, yearsCrawled: 0, yearsFailed: 0, titles: 0, withMal: 0, anilistOnly: 0, minted: 0, stats: getAnilistHistoricalCrawlStats(from) };
+  }
+
+  isAnilistCatalogCrawlRunning = true;
+  let yearsCrawled = 0;
+  let yearsFailed = 0;
+  let titles = 0;
+  let withMal = 0;
+  let anilistOnly = 0;
+  let minted = 0;
+  try {
+    appendLog(
+      'anilist-catalog-crawl',
+      'info',
+      `AniList historical crawl started: ${queue.length} years (${queue[queue.length - 1]} → ${queue[0]})`,
+      { totalYears: queue.length }
+    );
+
+    for (let i = 0; i < queue.length; i++) {
+      const year = queue[i];
+      try {
+        const result = await crawlCatalogYear(year);
+        const counts = result.entries.length > 0
+          ? resolveCanonicalIds(result.entries.map(e => ({ mal: e.mal_id, anilist: e.anilist_id })))
+          : { minted: 0, resolved: 0 };
+        if (result.entries.length > 0) upsertAnilistCatalogFields(result.entries);
+        markYearSynced(year);
+
+        yearsCrawled++;
+        titles += result.entries.length;
+        withMal += result.withMal;
+        anilistOnly += result.anilistOnly;
+        minted += counts.minted;
+        appendLog(
+          'anilist-catalog-crawl',
+          'info',
+          `AniList historical: ${year} — ${result.entries.length} titles in ${result.pagesFetched} pages (${result.withMal} with a MAL id)`,
+          { yearIndex: i + 1, totalYears: queue.length, year, titles: result.entries.length }
+        );
+      } catch (error) {
+        // Non-fatal and NOT checkpointed — a transient AniList hiccup must not
+        // burn the year. Logged at info level; an error-level entry is the
+        // onboarding panel's fatal signal and this is not that.
+        yearsFailed++;
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        appendLog(
+          'anilist-catalog-crawl',
+          'info',
+          `AniList historical: ${year} failed, continuing`,
+          { yearIndex: i + 1, totalYears: queue.length, year, error: message }
+        );
+      }
+    }
+
+    const stats = getAnilistHistoricalCrawlStats(from);
+    appendLog(
+      'anilist-catalog-crawl',
+      'success',
+      `AniList historical crawl complete: ${yearsCrawled}/${queue.length} years, ${titles} titles (${minted} canonical ids minted)${yearsFailed > 0 ? `, ${yearsFailed} years failed` : ''} — ${stats.remainingYears} years remaining`,
+      { yearsCrawled, yearsFailed, titles, withMal, anilistOnly, minted, remainingYears: stats.remainingYears }
+    );
+    return { ok: yearsCrawled > 0, alreadyRunning: false, yearsCrawled, yearsFailed, titles, withMal, anilistOnly, minted, stats };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('AniList historical crawl error:', error);
+    appendLog('anilist-catalog-crawl', 'error', 'AniList historical crawl failed', { error: message });
+    return { ok: false, alreadyRunning: false, yearsCrawled, yearsFailed, titles, withMal, anilistOnly, minted, stats: getAnilistHistoricalCrawlStats(from), error: message };
+  } finally {
+    isAnilistCatalogCrawlRunning = false;
+  }
 }
 
 // ============================================================================

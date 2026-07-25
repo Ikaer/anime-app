@@ -77,12 +77,15 @@ export default function ConnectionsPage() {
         isCatalogCrawling={anilist.isCatalogCrawling}
         catalogCrawlMessage={anilist.catalogCrawlMessage}
         catalogStats={anilist.catalogStats}
+        isHistoricalCrawling={anilist.isHistoricalCrawling}
+        historicalCrawlMessage={anilist.historicalCrawlMessage}
         isCatalogSweeping={anilist.isCatalogSweeping}
         catalogSweepMessage={anilist.catalogSweepMessage}
         sweepStats={anilist.sweepStats}
         busy={anyBusy}
         onMetaSync={anilist.onMetaSync}
         onCatalogCrawl={anilist.onCatalogCrawl}
+        onHistoricalCrawl={anilist.onHistoricalCrawl}
         onCatalogSweep={anilist.onCatalogSweep}
       />
     ),
