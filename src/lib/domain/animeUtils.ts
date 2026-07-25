@@ -332,10 +332,17 @@ export const CONFIGURABLE_CATALOG_FIELDS: (keyof AnimeCatalog)[] = [
  * else keeps their relative order in `base`. Storing the whole array rather than
  * just the winner keeps `settings.json` in the shape `mergeWithProvenance`
  * consumes, so nothing has to reconstitute an ordering at read time.
+ *
+ * `base` defaults to `CATALOG_CONTRIBUTORS`, **not** `DEFAULT_CATALOG_PRECEDENCE`.
+ * A stored ordering is an order among the providers that can actually fill the
+ * field, so a tail of providers whose extractors return `{}` would be noise the
+ * validator then has to accept. It did not accept it: building over the default
+ * appended `simkl`, `sanitizeCatalogPrecedence` rejected the entry as containing
+ * a non-contributor, and every save silently persisted nothing.
  */
 export function catalogOrderingWithWinner(
   winner: CatalogSource,
-  base: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE
+  base: CatalogSource[] = CATALOG_CONTRIBUTORS
 ): CatalogSource[] {
   return [winner, ...base.filter(s => s !== winner)];
 }

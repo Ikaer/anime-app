@@ -88,6 +88,19 @@ log panel. No SSE — same pattern as meta-sync, cast sweep and the catalog craw
 
 ## Id-space policy — query AniList by AniList's id
 
+> **✅ IMPLEMENTED 2026-07-25 (E8 + E11).** Everything below is now how the code
+> works, not how it should. `selectMetaTargets` returns one id list, `MetaIdSpace`
+> is gone, `fetchAnilistCatalogByMalIds` is `fetchAnilistCatalog`, `RECS_QUERY`
+> keeps `mediaRecommendation { id idMal }`, and `cast.ts` — a `Media(idMal:)`
+> query key this section never listed — went with them. One `Media(idMal:)`
+> survives on purpose: `resolveAnilistMediaId` in `anilist/write.ts`, which is
+> crosswalk resolution for a *write*, where refusing would drop a user's rating.
+>
+> The predicted consequence arrived too, and is handled: coverage became a
+> crawl-depth problem, so `anilistDiscovery` (a bounded current-season crawl) is
+> now a cron step, awaited before the enrichment sweeps. Depth beyond that — the
+> `BULK_CRAWL_YEARS_BACK = 8` vs MAL's 1960 gap — is the remaining open item.
+
 **AniList methods take AniList ids, from the crosswalk. Full stop.** Enriching
 AniList *by MAL id* is a hard coupling: it makes MAL's identifier load-bearing for a
 provider that has its own, and routes an exact lookup through a foreign key.
@@ -161,7 +174,9 @@ titles found *without* one are keyed off the `anilist` crosswalk alone.
 
 ### Consequence: the 6,085 become a crawl-depth problem
 
-This is the honest trade, and it is a far better problem to own:
+This is the honest trade, and it is a far better problem to own. **It played out
+exactly as written** — the `anilistDiscovery` cron step handles the "new titles
+keep gaining AniList ids" half; deepening the season crawl is the half still open:
 
 - AniList coverage becomes a function of **how deep AniList-native crawling goes**,
   not of how cleverly MAL ids are bridged.

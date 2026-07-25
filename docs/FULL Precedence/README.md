@@ -1,5 +1,26 @@
 # FULL Precedence — closing the MAL-legacy question for good
 
+> ## ✅ CLOSED — 2026-07-25
+>
+> Every item E1–E11 is shipped and the Definition of Done is fully checked. The
+> short answer to the question this folder exists to stop re-asking:
+>
+> **AniList is not "the catalog north star", and deliberately not.** Precedence is
+> per-field and user-configurable; MAL keeps `mean` (voter base) and `studios`
+> (measured coverage — the AniList case was producers miscounted as studios);
+> `genres` is unioned rather than arbitrated; everything else follows the default,
+> and `/settings` can repoint any of it. Separately, provider ids no longer travel:
+> they are converted to canonical **at the boundary**, and each provider is queried
+> with its own id.
+>
+> Two things remain, both named and neither a design question: **deepen the AniList
+> season crawl** (`BULK_CRAWL_YEARS_BACK = 8` vs MAL's 1960 — a parameter), and
+> **option D for genres** (splitting `themes`/`demographics` out, unforeclosed and
+> unscheduled). Two documented survivors are listed under the Definition of Done.
+>
+> The rest of this document is the record of how each decision was reached. Read
+> it before re-opening any of them.
+
 > **Why this folder exists.** The "catalog precedence still defaults MAL-first"
 > question has been re-opened, re-investigated and re-deferred across multiple
 > sessions. Every time, the same three facts get re-discovered from scratch. This
@@ -179,13 +200,13 @@ each already has a rationale in `CLAUDE.md`.
 | ~~E2~~ | ~~AniList `catalog` blocks unpopulated for MAL-linked titles~~ | `catalog/anilist.json` | ✅ **SHIPPED 2026-07-25** — catalog sweep, 0 → 19,293 → [anilist-catalog-sync.md](anilist-catalog-sync.md) |
 | ~~E3~~ | ~~`genres` sourced from MAL~~ | `unionGenres` | ✅ **SHIPPED 2026-07-25 — option C, union.** Not a precedence question: genres merge element-wise, so nothing is lost and the 60-value problem is void → [genre-vocabulary.md](genre-vocabulary.md) |
 | ~~E4~~ | ~~`studios` sourced from MAL~~ | `catalogFromMal` | ✅ **RESOLVED 2026-07-25 — not a defect.** MAL stays the source; the AniList case was producers miscounted as studios. Contamination fixed in Phase 0 → [studio-id-namespace.md](studio-id-namespace.md) |
-| E5 | Precedence is a source-code constant, not user-configurable | `animeUtils.ts` | Goal 2 |
+| ~~E5~~ | ~~Precedence is a source-code constant, not user-configurable~~ | `/settings`, `getCatalogPrecedenceByField` | ✅ **SHIPPED 2026-07-25** — `settings.json` overrides layered over the shipped map; one seam feeds the merge, the row-cache key and the inspector |
 | ~~E6~~ | ~~No way to *see* which provider won a field~~ | `/precedence`, `explainCatalogPrecedence` | ✅ **SHIPPED 2026-07-25** — per-field winner + ordering + every provider's value |
-| E7 | Residual raw-`sources.*` value reads that bypass the merge | ~38 grep hits, **not yet fully classified** | Audit during implementation; rule below |
-| E8 | AniList is enriched **by MAL id** (`Media(idMal:)`) | `selectMetaTargets`, `fetchAnilistCatalogByMalIds` | Foreign key used as primary. Remove the id-space entirely → [anilist-catalog-sync.md](anilist-catalog-sync.md#id-space-policy--query-anilist-by-anilists-id) |
-| E9 | Reco engine keys its internal maps on `crosswalk.mal` | `feed.ts`, `similar.ts`, `refresh.ts`, `byCredits.ts` | **Was K1.** Convert MAL-keyed crowd edges to canonical ids **at ingest**, then key on canonical |
-| E10 | `cache/recommendations.json` stored MAL-id-keyed | `reco/data.ts` | **Was K2.** Follows E9 — once ingest converts, the cache stores canonical ids |
-| E11 | `RECS_QUERY` seeds AniList by MAL id | `anilist/sync.ts` | **Was K3.** Same fix as E8: seed by AniList ids, resolve returned edges via the crosswalk |
+| ~~E7~~ | ~~Residual raw-`sources.*` value reads that bypass the merge~~ | 33 hits, classified | ✅ **DONE 2026-07-25** — two violations (both SIMKL-pinned badges), rest legitimate; rule recorded on `AnimeSources` |
+| ~~E8~~ | ~~AniList is enriched **by MAL id** (`Media(idMal:)`)~~ | `selectMetaTargets`, `cast.ts` | ✅ **SHIPPED 2026-07-25** — AniList-id-only everywhere, `MetaIdSpace` gone; discovery moved to a cron season crawl |
+| ~~E9~~ | ~~Reco engine keys its internal maps on `crosswalk.mal`~~ | `feed.ts`, `similar.ts`, `refresh.ts`, `byCredits.ts` | ✅ **SHIPPED 2026-07-25** — converted at ingest via `buildCrosswalkIndexes()` (resolve-only, never mints) |
+| ~~E10~~ | ~~`cache/recommendations.json` stored MAL-id-keyed~~ | `reco/data.ts` | ✅ **SHIPPED 2026-07-25** — canonical, with `RECO_CACHE_VERSION`; a stale file is discarded, not migrated |
+| ~~E11~~ | ~~`RECS_QUERY` seeds AniList by MAL id~~ | `anilist/sync.ts` | ✅ **SHIPPED 2026-07-25** — seeded by `id_in`, `mediaRecommendation { id idMal }`; AniList-only recs are now first-class candidates |
 
 ### Keep — deliberate, not precedence exceptions
 
@@ -363,52 +384,66 @@ E5 now has somewhere to render into: `catalogPrecedenceFor()` is the seam both
 read, so the settings editor and this page cannot disagree about what the merge
 did.
 
-### Phase 3 — the two flips, each behind its own gate
+### Phase 3 — the two flips ✅ RESOLVED WITHOUT FLIPPING
 
-- `studios: ['anilist','mal']` — unblocked by Phase 0's measurement (gate 2 below).
-- `genres` — blocked on the product decision (gate 1 below).
+Neither flip happened, and both for good reasons rather than for lack of time:
 
-### Phase 4 — id-space cleanup (E8, E11, E9+E10)
+- `studios` — **stays on MAL.** Phase 0's measurement dissolved the case (gate 2).
+- `genres` — **unioned, not arbitrated** (E3, option C). It was never a precedence
+  question (gate 1).
 
-Orthogonal to precedence; slots anywhere after Phase 0. Ordered cheapest-first:
+This phase is the folder's most useful outcome: the two fields the whole exercise
+was named after both turned out not to need a precedence flip, and the mechanism
+built for them (E1/E5) is what makes any *future* flip a settings change.
 
-1. **E8** — flip `selectMetaTargets` to AniList-id-only, drop its MAL branch and
-   the `MetaIdSpace` parameter, rename `fetchAnilistCatalogByMalIds` →
-   `fetchAnilistCatalog`. Immediate payoff beyond tidiness: it kills the
-   negative-caching loop where the 6,085 titles with no AniList id are re-queued on
-   **every** meta-sync run (~122 requests that always miss and never converge).
-2. **E11** — `mediaRecommendation { id idMal }`. AniList's own id is discarded
-   today, which is the *only* reason the keyless hydration path needs a MAL bridge
-   at all. Also a real coverage gain: recs AniList cannot map to a MAL id are
-   currently dropped, and those are exactly the AniList-only titles a keyless
-   install exists to surface.
-3. **E9 + E10 as one atomic change** — `feed.ts`, `similar.ts`, `refresh.ts`,
-   `byCredits.ts` plus the cache key format. Largest blast radius in the folder;
-   do it last, and do it in one go (a half-converted engine mixes key spaces).
+### Phase 4 — id-space cleanup ✅ SHIPPED 2026-07-25 (E8, E11, E9+E10)
 
-### Phase 5 — closeout
+Done in the planned cheapest-first order, one commit each except the last two:
 
-- **E7 audit** — sweep the ~38 raw `sources.*` reads with the classification rule.
-- **`CLAUDE.md`** — record K4–K7 so they stop being re-flagged, **and delete the
-  now-superseded "the reco engine stays MAL-keyed internally by design" stance**
-  (PROVIDER-PARITY B3). The boundary rule at the top of this doc supersedes it, so
-  until that paragraph goes, `CLAUDE.md` contradicts the direction Phase 4
-  implements.
+1. ✅ **E8** — `selectMetaTargets` is AniList-id-only; `MetaIdSpace`, the
+   `idMal_in` twin of `TAGS_QUERY` and `refreshAnilistMetaForIds`' `by` argument
+   are gone. It killed the negative-caching loop (~122 requests a run that always
+   missed) at zero coverage cost, since a title with no AniList id is exactly one
+   AniList never returned. **Two things the plan did not anticipate**: `cast.ts`
+   was also a live `Media(idMal:)` query key and had to go with it, or the
+   Definition of Done would have read as met while it wasn't; and dropping the
+   bridge makes *discovery* a job that has to actually run, hence the
+   `anilistDiscovery` cron step.
+2. ✅ **E11** — `mediaRecommendation { id idMal }`, seeded by `id_in`.
+   `fetchAnilistCatalogByMalIds` → `fetchAnilistCatalog`, and
+   `CATALOG_BY_MAL_QUERY` is gone.
+3. ✅ **E9 + E10** — shipped **together with E11**, not after it. The doc's own
+   "do it in one go, a half-converted engine mixes key spaces" applies to E11
+   too: E11 *is* the ingest side of the same conversion, and splitting it out
+   would have produced a commit whose only content was an intermediate key space.
 
-## Open decisions
+### Phase 5 — closeout ✅ DONE 2026-07-25
 
-Two gates. Neither blocks Phases 0–2 or 4; both block their own flip in Phase 3.
+- ✅ **E7 audit** — 33 reads classified; two violations fixed, and the rule itself
+  recorded on `AnimeSources` so it does not have to be re-derived from this doc.
+- ✅ **`CLAUDE.md`** — K4–K7 recorded, and the superseded "the reco engine stays
+  MAL-keyed internally by design" stance (PROVIDER-PARITY B3) replaced by the
+  boundary rule.
 
-**1. `genres` — option A, C or D?** See
-[genre-vocabulary.md](genre-vocabulary.md). D (split `genres` / `themes` /
-`demographics`) is recommended there, and it is worth knowing that **D is the
-single largest work item in this folder** — a hand-curated ~60-entry partition
-table, two new filter dimensions at ~6 spots each per `CLAUDE.md`, and possibly new
-reco sources. Larger than the precedence mechanism itself. A is explicitly *not*
-the default: on this store it silently degrades both the genre filter (78 → 19
-options) and the genre reco source.
+## Open decisions — BOTH CLOSED
 
-**2. `studios` — ANSWERED by Phase 0's measurement, pending a ruling.**
+> Both gates below are **answered**, and neither blocks anything. They are kept
+> because the reasoning is what stops the questions being re-opened; read them as
+> the record of a decision, not as pending work.
+
+**1. `genres` — ANSWERED: option C (union), shipped 2026-07-25.** The framing
+below asks "how do we avoid losing 60 values"; C answers by not losing any, and
+turned out to *add* 11,087 genre assignments. **Option D (splitting `genres` /
+`themes` / `demographics`) remains the better end state and is not foreclosed** —
+it is now a pure re-partition of a field holding strictly more data. It is the
+single largest work item this folder ever identified and it is **not scheduled**.
+The original analysis lives in [genre-vocabulary.md](genre-vocabulary.md); D's
+cost is a hand-curated ~60-entry partition table, two new filter dimensions at ~6
+spots each per `CLAUDE.md`, and possibly new reco sources — larger than the
+precedence mechanism itself. Option A is off the table: on this store it silently
+degrades both the genre filter (78 → 19 options) and the genre reco source.
+
+**2. `studios` — ANSWERED by Phase 0's measurement, and ruled.**
 The question was "full AniList coverage ⇒ flip is safe; materially partial ⇒
 canonical studio ids (`../CREDITS-ID-NAMESPACE.md` option E) stop being
 deferrable." The data answers it differently than either branch expected: **there
@@ -420,18 +455,15 @@ So E4 resolves to **keep `studios` on MAL** — status quo, no work, and option 
 stays deferred. `studios` simply comes off the "target per-field precedence" table
 as a field that was targeted for the wrong reason.
 
-**One real fix remains, and it is independent of any flip:** the five reco/stats
-spots that key studio identity on `s.id` should key on the **normalized name**
-instead — `scoring.ts:50`, `feed.ts:101`, `byCredits.ts:102,144`, `stats.ts:183`
-(which already falls back to name). Namespace mixing is not hypothetical or
-future-tense: the 524 AniList-only-studio titles carry AniList-namespace ids
-*today*, so `/stats` already counts those studios twice and the reco studio IDF
-already fragments on them. Measured name agreement across sources is **87.9%**
-identical under normalization, which is what makes the name a usable key.
-
-That change needs no data migration, no re-sweep, and no precedence decision, and
-it closes the id-namespace question permanently rather than deferring it again.
-Left as a separate task — it is a scoring fix, not a precedence one.
+**The one real fix it left — ✅ SHIPPED 2026-07-25.** The five reco/stats spots
+that keyed studio identity on `s.id` now key on the **normalized name**
+(`catalogNameKey`). Namespace mixing was never hypothetical: the 524
+AniList-only-studio titles carry AniList-namespace ids *today*, so `/stats` was
+double-counting them and the reco studio IDF was fragmenting on them. Measured
+name agreement across sources is **87.9%** identical under normalization, which
+is what made the name a usable key — it collapsed 86 split studios. No data
+migration, no re-sweep, and the id-namespace question is closed rather than
+deferred again.
 
 ## Definition of done
 
@@ -442,19 +474,50 @@ MAL legacy is **closed** when all of these hold:
 - [x] The store is re-swept at `CATALOG_SCHEMA_VERSION` 2 and re-measured (Phase 0, data) — **done 2026-07-25**, contamination 2.68 → 1.09 studios/title
 - [x] Catalog precedence is per-field, with a global default (E1) — **shipped 2026-07-25**
 - [x] The inspector page shows per-field winner + ordering + all raw values (E6) — **shipped 2026-07-25**, `/precedence`
-- [ ] Precedence is user-configurable in `/settings` (E5)
+- [x] Precedence is user-configurable in `/settings` (E5) — **shipped 2026-07-25**
 - [x] `mean` explicitly pinned to MAL rather than winning by default (target table) — **shipped 2026-07-25**
 - [x] `genres` resolved (E3) — **option C, union across providers**, shipped 2026-07-25. No value is lost, so the 60-value question is void; `Thriller`→`Suspense` aliased
 - [x] `studios` resolved (E4) — **stays on MAL**; the AniList case was a measurement artifact, hazard 2 fixed in Phase 0, hazard 1 moot without a flip
 - [x] Studio identity keyed on normalized name, not `s.id`, in the five reco/stats spots — **shipped 2026-07-25**, collapsed 86 split studios
-- [ ] AniList queried **only** by AniList ids; `Media(idMal:)` gone as a query key (E8)
-- [ ] Provider ids converted to canonical **at ingest**; reco internals, the reco
-      cache and `RECS_QUERY` all speak canonical (E9–E11)
-- [ ] Raw-`sources.*` reads audited; every survivor justified under the rule (E7)
-- [ ] The **Keep** table is reflected in `CLAUDE.md`, and the superseded B3 stance removed
+- [x] AniList queried **only** by AniList ids; `Media(idMal:)` gone as a query key (E8) — **shipped 2026-07-25**, with the one documented survivor below
+- [x] Provider ids converted to canonical **at ingest**; reco internals, the reco
+      cache and `RECS_QUERY` all speak canonical (E9–E11) — **shipped 2026-07-25**
+- [x] Raw-`sources.*` reads audited; every survivor justified under the rule (E7) — **done 2026-07-25**
+- [x] The **Keep** table is reflected in `CLAUDE.md`, and the superseded B3 stance removed — **done 2026-07-25**
 
-When this list is checked, "is AniList the catalog north star yet?" has a written
-answer and does not need re-investigating.
+**This list is complete.** "Is AniList the catalog north star yet?" now has a
+written answer — *no, and deliberately not: per-field precedence decides it field
+by field, MAL still wins `mean` and `studios` on measurement, `genres` is unioned
+rather than arbitrated, and the user can repoint any of it in `/settings`* — and
+does not need re-investigating.
+
+### The two documented survivors
+
+Both were examined under the rules above and kept, so neither is an open item:
+
+- **`resolveAnilistMediaId` (`anilist/write.ts`) still does a live `Media(idMal:)`
+  lookup.** That is crosswalk *resolution for a write*, not enrichment: refusing
+  it would drop a user's rating rather than skip a metadata refill, and durable
+  user data is the one cost category this project treats as real.
+- **Two MAL id spaces remain inside the reco engine, legitimately.**
+  `catalog.relatedAnime` targets are raw MAL relation ids (so `isPrematureSequel`
+  and the franchise exclusions build a second MAL-keyed view on purpose), and
+  `user/reco_dismissed.json` is frozen read-only MAL-keyed data whose ids
+  `computeFeed` resolves through the crosswalk on read.
+
+### What this exposed, and did not close
+
+Dropping the MAL bridge (E8) makes AniList coverage a **crawl-depth** problem, as
+[anilist-catalog-sync.md](anilist-catalog-sync.md#consequence-the-6085-become-a-crawl-depth-problem)
+predicted. Two consequences, one handled and one open:
+
+- **Handled**: new titles now gain an AniList id through `anilistDiscovery`, a
+  bounded current-season crawl awaited in cron-sync before the enrichment sweeps.
+  Without it, every title MAL's seasonal sync adds from here on would have been
+  permanently invisible to AniList.
+- **Open**: `BULK_CRAWL_YEARS_BACK = 8` against MAL's back-to-1960 window is why
+  ~24% of the registry holds no AniList id. Deepening that crawl is the remaining
+  coverage work, and it is a parameter, not a design question.
 
 ## Non-goals
 

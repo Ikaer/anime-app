@@ -170,7 +170,7 @@ export default function SettingsPage() {
           catalogPrecedence: Object.fromEntries(
             Object.entries(catalogWinners).map(([field, winner]) => [
               field,
-              catalogOrderingWithWinner(winner, data?.catalogPrecedence.defaultOrder),
+              catalogOrderingWithWinner(winner, data?.catalogPrecedence.contributors),
             ])
           ),
         }),
