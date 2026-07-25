@@ -1,7 +1,7 @@
 import type {
   AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
   ProvenanceSource, SeasonName, SeasonInfo, MALAnime, MALPersonalEntry, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
-  LocalPersonalEntry, SourceIds, Discrepancy,
+  LocalPersonalEntry, SourceIds, Discrepancy, Genre,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 import { buildProviderStates, toAnimePersonal } from '@/lib/providers/personalState';
@@ -290,6 +290,64 @@ function mergeWithProvenance<T extends object>(
   return { merged, provenance };
 }
 
+// ── Genre union ──────────────────────────────────────────────────────────────
+//
+// `genres` is the ONE catalog field merged element-wise instead of by precedence
+// (docs/FULL Precedence/genre-vocabulary.md, option C). Every other field takes
+// its value wholesale from the first provider in precedence that has one.
+//
+// Why genres get the exception, when `studios` explicitly does NOT:
+//
+//  - Genres are identified by NAME. AniList exposes them as names only (synthetic
+//    `id: 0`) and every consumer keys on `name`, so dedupe is a Set and no
+//    cross-source identity problem exists. Studios are id-keyed across two
+//    namespaces, so a union there needs an identity answer first — and measured,
+//    it would list the same studio twice on 4.6% of titles while adding a real
+//    one on only 7.6%.
+//  - The union genuinely adds data: measured on the live store, AniList
+//    contributes a genre MAL omits on 45.6% of both-present titles (11,087
+//    assignments — `Slice of Life` alone on 1,893 titles).
+//
+// Vocabulary is unaffected: MAL carries 78 values, AniList 19, and `Thriller` is
+// the only AniList-only name — which is MAL's `Suspense` under another label.
+
+/**
+ * AniList genre names that denote a MAL genre under a different label. Without
+ * the alias the union lists both spellings as separate genres, splitting the
+ * filter and the reco IDF profile for one concept.
+ */
+const GENRE_ALIASES: Record<string, string> = { thriller: 'Suspense' };
+
+/** Genre identity for dedupe: case/punctuation-insensitive name. */
+const genreKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Element-wise union of every provider's genres, deduped by normalized name and
+ * ordered by catalog precedence — so a genre both providers carry keeps the
+ * higher-precedence provider's entry (and therefore MAL's real genre id, rather
+ * than AniList's synthetic 0).
+ *
+ * Returns `undefined` rather than `[]` when no provider had genres, matching the
+ * merge's own "absent means absent" contract.
+ */
+function unionGenres(
+  precedence: ProvenanceSource[],
+  extracted: Partial<Record<ProvenanceSource, Partial<AnimeCatalog>>>
+): Genre[] | undefined {
+  const out: Genre[] = [];
+  const seen = new Set<string>();
+  for (const source of precedence) {
+    for (const genre of extracted[source]?.genres ?? []) {
+      const name = GENRE_ALIASES[genreKey(genre.name)] ?? genre.name;
+      const key = genreKey(name);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...genre, name });
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** MAL's raw shape → the provider-neutral `AnimeCatalog` field names. */
 function catalogFromMal(mal?: MALAnime): Partial<AnimeCatalog> {
   if (!mal) return {};
@@ -402,10 +460,22 @@ export function toAnimeRecord(
 ): AnimeRecord {
   const { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk } = slices;
 
+  const catalogExtracted = {
+    mal: catalogFromMal(mal),
+    anilist: catalogFromAnilist(anilistMeta),
+    simkl: catalogFromSimkl(),
+    local: catalogFromLocal(),
+  };
   const { merged: catalogMerged, provenance: catalogProvenance } = mergeWithProvenance<AnimeCatalog>(
     catalogPrecedence,
-    { mal: catalogFromMal(mal), anilist: catalogFromAnilist(anilistMeta), simkl: catalogFromSimkl(), local: catalogFromLocal() }
+    catalogExtracted
   );
+  // `genres` is unioned across providers rather than taken wholesale — see
+  // `unionGenres`. Provenance keeps naming the highest-precedence contributor
+  // (what the merge already chose); the inspector page surfaces every provider's
+  // raw list, which is where the full picture belongs.
+  const unionedGenres = unionGenres(catalogPrecedence, catalogExtracted);
+  if (unionedGenres) catalogMerged.genres = unionedGenres;
   const providerStates = buildProviderStates({ mal, malPersonal, simkl, anilist: anilistPersonal, local, anilistMeta }, personalPrecedence);
   const { merged: personalMerged, provenance: personalProvenance } = mergeWithProvenance<AnimePersonal>(
     personalPrecedence,

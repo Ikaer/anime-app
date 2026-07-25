@@ -215,7 +215,9 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
             <div className="head-meta">
               {anime.catalog.genres && anime.catalog.genres.length > 0 && (
                 <div className="head-chips">
-                  {anime.catalog.genres.map(g => <span key={g.id} className="chip">{g.name}</span>)}
+                  {/* keyed on name, not id: unioned AniList genres all carry the
+                      synthetic id 0, so two of them on one title would collide */}
+                  {anime.catalog.genres.map(g => <span key={g.name} className="chip">{g.name}</span>)}
                 </div>
               )}
               {anime.catalog.studios && anime.catalog.studios.length > 0 && (
