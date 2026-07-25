@@ -1,8 +1,12 @@
 /**
  * AniList catalog-metadata sync. Public GraphQL API, no auth. Pulls the tag
  * taxonomy, the top staff credits, the banner art and the franchise relation
- * edges for every anime the **registry** knows of — by MAL id where there is
- * one, by AniList id otherwise. Read-only against AniList; no writes.
+ * edges for every anime the **registry** knows of — **by AniList's own id, and
+ * only by it**. Read-only against AniList; no writes.
+ *
+ * The id-space policy (docs/FULL Precedence E8): AniList methods take AniList
+ * ids out of the crosswalk. A title with no AniList id is simply not enriched;
+ * finding one is the *season crawl's* job, never a `Media(idMal:)` bridge's.
  */
 import { getAllAnilistMeta, upsertAnilistMeta, upsertAnilistCatalogFields, resolveCanonicalIds, getRegistry, toNum } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
@@ -23,19 +27,16 @@ const STAFF_PER_ANIME = 15;
 // any miss. `relations.node.type` is fetched because an ADAPTATION edge's
 // `idMal` is the MANGA's id and would otherwise be read as an unrelated anime.
 //
-// The body is built with `idMal_in` OR `id_in` — the same filter over each id
-// space, so a title with no MAL id is still reachable by its AniList id.
-// `selectMetaTargets` picks per title, and a batch is never mixed: AniList
-// applies a supplied-but-null argument as a real filter (see cast.ts), so a
-// query carries exactly one id filter.
-type MetaIdField = 'idMal_in' | 'id_in';
-/** Which provider's id space a batch of enrichment ids lives in. */
-export type MetaIdSpace = 'mal' | 'anilist';
-
-const buildTagsQuery = (idField: MetaIdField) => `
+// **One id filter, `id_in`, and no MAL-keyed twin.** The query used to be built
+// over `idMal_in` OR `id_in` with `selectMetaTargets` routing per title and MAL
+// winning whenever it had an id — a foreign key used as AniList's primary lookup
+// key. E8 removed that branch: `idMal` is still SELECTED (AniList declaring its
+// own crosswalk, as data — that half is reconciliation and stays), it is simply
+// never a query key.
+const TAGS_QUERY = `
 query ($ids: [Int]) {
   Page(page: 1, perPage: ${BATCH_SIZE}) {
-    media(${idField}: $ids, type: ANIME) {
+    media(id_in: $ids, type: ANIME) {
       idMal
       id
       bannerImage
@@ -63,9 +64,6 @@ query ($ids: [Int]) {
   }
 }`;
 
-const TAGS_QUERY_BY_MAL = buildTagsQuery('idMal_in');
-const TAGS_QUERY_BY_ANILIST = buildTagsQuery('id_in');
-
 interface RawStaffEdge {
   role?: string;
   node?: { id?: number; name?: { full?: string } };
@@ -75,7 +73,10 @@ interface RawRelationEdge {
   node?: { id?: number | null; idMal?: number | null; type?: string };
 }
 interface RawMedia {
-  /** Null for an AniList-only title — the case the `id_in` path exists to serve. */
+  /**
+   * AniList's declared MAL crosswalk, `null` for an AniList-only title. Read as
+   * data on the way OUT, never used as a query key on the way in (E8).
+   */
   idMal?: number | null;
   id: number;
   bannerImage?: string | null;
@@ -139,16 +140,9 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-/**
- * One enrichment batch. `by` picks the id space the `ids` are in — `'mal'` for
- * MAL ids (the overwhelming majority of the catalog), `'anilist'` for titles
- * that have no MAL id. A batch is homogeneous by construction (see the query).
- */
-async function fetchTagsBatch(ids: number[], by: MetaIdSpace): Promise<RawMedia[]> {
-  const data = await anilistQuery<{ Page?: { media?: RawMedia[] } }>(
-    by === 'mal' ? TAGS_QUERY_BY_MAL : TAGS_QUERY_BY_ANILIST,
-    { ids }
-  );
+/** One enrichment batch, by AniList id. */
+async function fetchTagsBatch(anilistIds: number[]): Promise<RawMedia[]> {
+  const data = await anilistQuery<{ Page?: { media?: RawMedia[] } }>(TAGS_QUERY, { ids: anilistIds });
   return data?.Page?.media ?? [];
 }
 
@@ -262,8 +256,7 @@ export function isAnilistMetaSyncRunning(): boolean {
 }
 
 /**
- * Which titles still need enrichment, split by the id space they can be queried
- * in.
+ * AniList ids of the titles that still need enrichment.
  *
  * **The scan source must be the registry, not the MAL catalog slice** — the
  * latter cannot even name a title MAL doesn't know, which would leave every
@@ -276,50 +269,52 @@ export function isAnilistMetaSyncRunning(): boolean {
  * already-tagged titles. Absent values are stored as `null`/`[]` rather than
  * left undefined, so a title AniList genuinely lacks never re-queues.
  *
- * MAL id wins when a title has both: it is the join key the catalog is anchored
- * on, and the crosswalk's `anilist` id can be a mirrored SIMKL value, whereas
- * `mal` is the id the record was built from.
+ * **No AniList id in the crosswalk ⇒ AniList does not enrich this title** (E8).
+ * This used to route by MAL id first, which cost nothing but requests: a title
+ * lacking an AniList id is precisely one AniList never returned, so the MAL-keyed
+ * query was guaranteed to miss — and because a miss stores nothing, the same
+ * ~6,000 titles re-queued on every single run and never converged. Dropping the
+ * branch removes the loop at its source rather than needing a "looked, found
+ * nothing" sentinel; absence from the crosswalk already carries that meaning.
+ *
+ * Coverage for those titles is the season crawl's job (`syncAnilistDiscovery` in
+ * cron-sync, and `performAnilistBulkCatalogCrawl` for depth) — AniList-native
+ * browsing returns `id` AND `idMal`, so one AniList-native call is what puts a
+ * title's AniList id in the crosswalk in the first place.
  */
-function selectMetaTargets(): { malIds: number[]; anilistIds: number[] } {
+function selectMetaTargets(): number[] {
   const meta = getAllAnilistMeta();
-  const malIds: number[] = [];
   const anilistIds: number[] = [];
 
   for (const [canonicalId, crosswalk] of Object.entries(getRegistry())) {
     const e = meta[canonicalId];
     const needed = !e || e.staff === undefined || e.banner_image === undefined || e.relations === undefined;
     if (!needed) continue;
-    const malId = toNum(crosswalk.mal);
-    if (malId !== undefined) {
-      malIds.push(malId);
-      continue;
-    }
     const anilistId = toNum(crosswalk.anilist);
     if (anilistId !== undefined) anilistIds.push(anilistId);
-    // Neither id: a SIMKL-only title AniList has no handle on.
   }
 
-  return { malIds, anilistIds };
+  return anilistIds;
 }
 
 /**
- * Force-refresh AniList tags + staff + banner + relations for specific ids,
- * bypassing the "missing only" filter that `performAnilistMetaSync` uses. Powers
- * the per-anime refresh on the detail page. One batch, no throttle loop (the
- * caller passes few ids). Returns how many ids AniList actually had — it
+ * Force-refresh AniList tags + staff + banner + relations for specific **AniList
+ * ids**, bypassing the "missing only" filter that `performAnilistMetaSync` uses.
+ * Powers the per-anime refresh on the detail page. One batch, no throttle loop
+ * (the caller passes few ids). Returns how many ids AniList actually had — it
  * silently skips ones it doesn't know.
  *
- * `by` selects the id space, since the caller may hold only one of the two: a
- * title with no MAL id is refreshed by its AniList id.
+ * Took a `by: MetaIdSpace` until E8; it lost the parameter together with
+ * `selectMetaTargets`' MAL branch, since a caller holding only a MAL id has
+ * nothing for AniList to answer anyway.
  */
 export async function refreshAnilistMetaForIds(
-  ids: number[],
-  by: MetaIdSpace = 'mal'
+  anilistIds: number[]
 ): Promise<{ ok: boolean; tagged: number; error?: string }> {
-  const batch = ids.filter(id => Number.isInteger(id)).slice(0, BATCH_SIZE);
+  const batch = anilistIds.filter(id => Number.isInteger(id)).slice(0, BATCH_SIZE);
   if (batch.length === 0) return { ok: true, tagged: 0 };
   try {
-    const media = await fetchTagsBatch(batch, by);
+    const media = await fetchTagsBatch(batch);
     const now = new Date().toISOString();
     // Keyed on `m.id` (AniList's own, always present) rather than `m.idMal` —
     // filtering on the MAL id here would discard exactly the AniList-only
@@ -329,7 +324,7 @@ export async function refreshAnilistMetaForIds(
     return { ok: true, tagged: entries.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    appendLog('anilist-meta-sync', 'error', `AniList refresh failed for ${by} ids ${batch.join(',')}: ${message}`);
+    appendLog('anilist-meta-sync', 'error', `AniList refresh failed for anilist ids ${batch.join(',')}: ${message}`);
     return { ok: false, tagged: 0, error: message };
   }
 }
@@ -342,8 +337,8 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 
   anilistMetaSyncRunning = true;
   try {
-    const { malIds, anilistIds } = selectMetaTargets();
-    const totalMissing = malIds.length + anilistIds.length;
+    const anilistIds = selectMetaTargets();
+    const totalMissing = anilistIds.length;
 
     if (totalMissing === 0) {
       appendLog('anilist-meta-sync', 'success', 'AniList sync: nothing to do, all anime already have tags + staff');
@@ -353,24 +348,20 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
     appendLog(
       'anilist-meta-sync',
       'info',
-      `AniList metadata sync started: ${totalMissing} anime to fetch (${malIds.length} by MAL id, ${anilistIds.length} by AniList id)`,
-      { byMalId: malIds.length, byAnilistId: anilistIds.length }
+      `AniList metadata sync started: ${totalMissing} anime to fetch by AniList id`,
+      { byAnilistId: totalMissing }
     );
 
-    // Two id spaces, one stream — a batch is homogeneous (AniList treats a
-    // supplied-but-null filter argument as real), but the counters span both.
-    // Pacing is `client.ts`'s job, shared with every other AniList caller.
-    const batches: Array<{ ids: number[]; by: MetaIdSpace }> = [
-      ...chunk(malIds, BATCH_SIZE).map(ids => ({ ids, by: 'mal' as const })),
-      ...chunk(anilistIds, BATCH_SIZE).map(ids => ({ ids, by: 'anilist' as const })),
-    ];
+    // One id space since E8. Pacing is `client.ts`'s job, shared with every
+    // other AniList caller — no `setTimeout` of our own.
+    const batches = chunk(anilistIds, BATCH_SIZE);
     let processed = 0;
     let tagged = 0;
     let failed = 0;
 
-    for (const [batchIndex, { ids: batch, by }] of batches.entries()) {
+    for (const [batchIndex, batch] of batches.entries()) {
       try {
-        const media = await fetchTagsBatch(batch, by);
+        const media = await fetchTagsBatch(batch);
         const now = new Date().toISOString();
         const entries: AniListMetaEntry[] = media.filter(m => m.id).map(m => toEntry(m, now));
         if (entries.length > 0) {
@@ -387,7 +378,7 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
         failed += batch.length;
         processed += batch.length;
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`AniList tags batch ${batchIndex + 1}/${batches.length} error (${by} ids ${batch[0]}-${batch[batch.length - 1]}):`, error);
+        console.error(`AniList tags batch ${batchIndex + 1}/${batches.length} error (anilist ids ${batch[0]}-${batch[batch.length - 1]}):`, error);
         appendLog(
           'anilist-meta-sync',
           'error',
@@ -396,7 +387,6 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
             batchIndex: batchIndex + 1,
             batchCount: batches.length,
             batchSize: batch.length,
-            idSpace: by,
             ids: batch,
             error: errorMessage,
           }

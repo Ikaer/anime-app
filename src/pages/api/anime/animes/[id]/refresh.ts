@@ -13,16 +13,17 @@ import { appendLog } from '@/lib/config/connectionLog';
  *
  * - MAL: GET /v2/anime/{id} (single-title catalog + personal status), merged
  *   over the existing local record so unreturned fields are preserved.
- * - AniList: force-refetch tags + staff + banner + relations, by MAL id when
- *   there is one and by AniList id otherwise, so the button still works on a
- *   title MAL has never heard of.
+ * - AniList: force-refetch tags + staff + banner + relations, **by AniList id**
+ *   — the only id space AniList is queried in (E8). A title with no AniList id
+ *   is one AniList has never returned; finding it is the season crawl's job, not
+ *   this button's.
  * - SIMKL: the standard incremental library delta (SIMKL has no per-id read; the
  *   user accepted the incremental sync for the refresh).
  */
 
 const NO_MAL_ID: { ok: false; error: string } = { ok: false, error: 'No MAL id known for this title' };
 const NO_ANILIST_HANDLE: { ok: false; tagged: number; error: string } =
-  { ok: false, tagged: 0, error: 'No MAL or AniList id known for this title' };
+  { ok: false, tagged: 0, error: 'No AniList id known for this title' };
 
 async function refreshMal(
   canonicalId: string,
@@ -70,13 +71,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     malId !== undefined
       ? refreshMal(canonicalId, malId).catch(e => ({ ok: false, error: e instanceof Error ? e.message : 'MAL refresh failed' }))
       : Promise.resolve(NO_MAL_ID),
-    // MAL id preferred (the id space the catalog is anchored on), AniList id as
-    // the fallback that makes this work at all on a keyless install.
-    malId !== undefined || anilistId !== undefined
-      ? refreshAnilistMetaForIds(
-          malId !== undefined ? [malId] : [anilistId as number],
-          malId !== undefined ? 'mal' : 'anilist'
-        ).catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' }))
+    // AniList id only. This used to prefer the MAL id and fall back to AniList's;
+    // E8 removed the MAL branch, so a title with no AniList id reports that
+    // rather than issuing a `Media(idMal:)` lookup that could only miss.
+    anilistId !== undefined
+      ? refreshAnilistMetaForIds([anilistId])
+          .catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' }))
       : Promise.resolve(NO_ANILIST_HANDLE),
     performSimklSync().catch(e => ({ ok: false, phase: 'noop' as const, added: 0, removed: 0, orphansSkipped: 0, error: e instanceof Error ? e.message : 'SIMKL sync failed' })),
     // `force` — the point of a manual refresh is to re-pull, and an existing

@@ -3,7 +3,13 @@ import { getValidMalToken } from '@/lib/providers/mal/client';
 import { performHistoricalCrawl } from '@/lib/providers/mal/sync';
 import { performSimklSync } from '@/lib/providers/simkl/sync';
 import { importAnilistPersonalList } from '@/lib/providers/anilist/personalSync';
-import { isAnilistMetaSyncRunning, performAnilistMetaSync, isAnilistCatalogSweepRunning, performAnilistCatalogSweep } from '@/lib/providers/anilist/sync';
+import {
+  isAnilistMetaSyncRunning,
+  performAnilistMetaSync,
+  isAnilistCatalogSweepRunning,
+  performAnilistCatalogSweep,
+  performAnilistCatalogCrawl,
+} from '@/lib/providers/anilist/sync';
 import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
 import { getRecommendationsData } from '@/lib/reco/data';
@@ -47,7 +53,13 @@ interface CronStepOutcome {
 }
 
 type CronSteps = Record<
-  'malCatalog' | 'simklPersonal' | 'anilistPersonal' | 'anilistCatalog' | 'anilistCatalogFields' | 'recommendations',
+  | 'malCatalog'
+  | 'simklPersonal'
+  | 'anilistPersonal'
+  | 'anilistDiscovery'
+  | 'anilistCatalog'
+  | 'anilistCatalogFields'
+  | 'recommendations',
   CronStepOutcome
 >;
 
@@ -157,6 +169,56 @@ async function syncAnilistPersonal(): Promise<CronStepOutcome> {
 }
 
 /**
+ * AniList's **catalog** role, discovery half — a bounded current-season crawl of
+ * AniList's own catalog.
+ *
+ * This step exists because of E8. AniList is now queried only by AniList ids, so
+ * a title enters the enrichment queue only once its AniList id is in the
+ * crosswalk — and the ONLY thing that puts it there is an AniList-native call
+ * returning `id` alongside `idMal`. Without a recurring crawl, every title MAL's
+ * seasonal sync adds from here on would be permanently invisible to AniList
+ * enrichment. The MAL-id bridge used to paper over that; removing it makes
+ * discovery a scheduled job rather than an accident.
+ *
+ * Cheap and bounded: the current season only, ≤8 pages, and `crawlCatalogSeason`
+ * stops early on `hasNextPage: false` — so a handful of requests per tick
+ * against the same throttle everything else shares. Awaited (unlike the two
+ * sweeps below) precisely so the metadata sync that follows sees the ids it
+ * just landed.
+ *
+ * Depth beyond the current season is NOT this step's job: matching MAL's
+ * back-to-1960 window is what `performAnilistBulkCatalogCrawl` is for, and it
+ * remains the open coverage item for the ~24% of the registry that holds no
+ * AniList id (docs/FULL Precedence/anilist-catalog-sync.md).
+ */
+async function syncAnilistDiscovery(): Promise<CronStepOutcome> {
+  const result = await performAnilistCatalogCrawl(undefined, undefined, 8);
+  if (result.alreadyRunning) {
+    return { ok: true, skipped: true, reason: 'A catalog crawl is already running' };
+  }
+  if (!result.ok) {
+    appendLog('cron-sync', 'error', 'Cron sync AniList season crawl failed', { error: result.error });
+    return { ok: false, reason: result.error };
+  }
+  appendLog(
+    'cron-sync',
+    'success',
+    `Cron sync crawled AniList ${result.season} ${result.seasonYear}: ${result.withMal} with a MAL id, ${result.anilistOnlyMinted} minted`,
+    { season: result.season, seasonYear: result.seasonYear, withMal: result.withMal }
+  );
+  return {
+    ok: true,
+    detail: {
+      season: result.season,
+      seasonYear: result.seasonYear,
+      pagesFetched: result.pagesFetched,
+      withMal: result.withMal,
+      anilistOnlyMinted: result.anilistOnlyMinted,
+    },
+  };
+}
+
+/**
  * AniList's **catalog** role — tags / staff / banner / relations. Deliberately
  * ungated: this role's auth kind is `anonymous`, so it runs on an install with
  * no account of any kind, which is the whole keyless promise. Gating it on the
@@ -257,6 +319,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   steps.malCatalog = await step('mal', syncMal);
   steps.simklPersonal = await step('simkl', syncSimkl);
   steps.anilistPersonal = await step('anilist-personal', syncAnilistPersonal);
+  // Before the enrichment sweeps, and awaited: it is what supplies the AniList
+  // ids they queue on. Ungated for the same reason they are — AniList's catalog
+  // role is anonymous.
+  steps.anilistDiscovery = await step('anilist-discovery', syncAnilistDiscovery);
 
   // MAL is optional here (B4): with no valid token the refresh skips its two MAL
   // sources and runs on the anonymous AniList crowd source alone.

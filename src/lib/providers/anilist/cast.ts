@@ -23,9 +23,15 @@ const CHARACTERS_PER_ANIME = 25;
 // A single-title query, so unlike the batched syncs in anilistSync.ts there is
 // no query-complexity pressure here and `Media(...)` may be used directly.
 // `language: JAPANESE` is what makes these seiyuu rather than dub actors.
+//
+// **Keyed on AniList's own id only** (E8). This took `($malId, $anilistId)` and
+// sent whichever it had — which made `Media(idMal:)` a live query key on the one
+// path the FULL Precedence inventory never listed. A title with no AniList id is
+// one AniList-native discovery has not reached; the season crawl fixes that, a
+// foreign-key lookup does not.
 const CAST_QUERY = `
-query ($malId: Int, $anilistId: Int) {
-  Media(idMal: $malId, id: $anilistId, type: ANIME) {
+query ($anilistId: Int) {
+  Media(id: $anilistId, type: ANIME) {
     id
     idMal
     characters(sort: [ROLE, RELEVANCE], perPage: ${CHARACTERS_PER_ANIME}) {
@@ -128,20 +134,17 @@ class AniListCastError extends Error {}
  * that as a failure would leave the title permanently unfetched and re-query it
  * on every single page view; the caller instead persists an empty cast.
  */
-async function fetchCast(ids: { malId?: number; anilistId?: number }): Promise<RawCastMedia | null> {
-  // Send ONLY the id we have. Passing the other as an explicit `null` is NOT
-  // equivalent to omitting it: AniList applies a supplied-but-null argument as a
-  // real filter (`id = null`), matching nothing and answering 404 —
-  // `{malId: 16498, anilistId: null}` → 404, `{malId: 16498}` → 200. Since a 404
-  // reads as "AniList has no cast", that persists an empty cast for EVERY title,
-  // permanently, because empties short-circuit.
-  const variables: Record<string, number> = {};
-  if (ids.malId !== undefined) variables.malId = ids.malId;
-  if (ids.anilistId !== undefined) variables.anilistId = ids.anilistId;
-
+async function fetchCast(anilistId: number): Promise<RawCastMedia | null> {
+  // One id, always supplied. The old two-variable form had to omit the absent
+  // one rather than send `null`, because AniList applies a supplied-but-null
+  // argument as a REAL filter (`id = null`), matching nothing and answering 404
+  // — which reads as "AniList has no cast" and persists an empty entry
+  // permanently, since empties short-circuit. That hazard is gone with the
+  // variable, but the rule behind it has not changed: never send an id as null.
+  //
   // Deliberately `anilistFetch` rather than the strict `anilistQuery`: a 404 is
   // a legitimate answer here, so this caller has to see the status itself.
-  const res = await anilistFetch<{ Media: RawCastMedia | null }>(CAST_QUERY, variables);
+  const res = await anilistFetch<{ Media: RawCastMedia | null }>(CAST_QUERY, { anilistId });
 
   if (!res.ok && res.status !== 404) {
     throw new AniListCastError(httpErrorMessage(res));
@@ -196,12 +199,12 @@ export async function getOrFetchAnilistCast(
     if (cached && cached.studios !== undefined) return { ok: true, entry: cached, cached: true };
   }
 
-  if (ids.malId === undefined && ids.anilistId === undefined) {
-    return { ok: false, cached: false, error: 'No MAL or AniList id known for this title' };
+  if (ids.anilistId === undefined) {
+    return { ok: false, cached: false, error: 'No AniList id known for this title' };
   }
 
   try {
-    const media = await fetchCast(ids);
+    const media = await fetchCast(ids.anilistId);
     const entry: AniListCastEntry = {
       mal_id: media?.idMal ?? ids.malId,
       anilist_id: media?.id ?? ids.anilistId,
@@ -256,10 +259,13 @@ function toNum(value: number | string | undefined): number | undefined {
 }
 
 /**
- * The id pair to query one record by. `sources.anilist.anilist_id` is preferred
- * over the crosswalk's copy for the same reason the single-title route prefers
- * it: it's AniList's own resolved id, whereas the crosswalk may carry SIMKL's
- * occasionally-stale mirror of it.
+ * The ids to fetch one record's cast with. `anilistId` is the QUERY key (E8);
+ * `malId` rides along only to be stored on the entry's crosswalk when AniList's
+ * own payload doesn't carry an `idMal`.
+ *
+ * `sources.anilist.anilist_id` is preferred over the crosswalk's copy for the
+ * same reason the single-title route prefers it: it's AniList's own resolved id,
+ * whereas the crosswalk may carry SIMKL's occasionally-stale mirror of it.
  */
 function castIdsFor(anime: AnimeRecord): { malId?: number; anilistId?: number } {
   return {
@@ -309,12 +315,11 @@ export async function performAnilistCastSweep(): Promise<AniListCastSweepResult>
 
     const queue = getAnimeForDisplay()
       .filter(a => !!getEffectiveStatus(a))
-      // Same id resolution the fetch itself will use, so a title whose only id
-      // is a non-numeric string is dropped here rather than counted as a failure.
-      .filter(a => {
-        const ids = castIdsFor(a);
-        return ids.malId !== undefined || ids.anilistId !== undefined;
-      })
+      // Same id resolution the fetch itself will use, so a title AniList has no
+      // handle on is dropped here rather than counted as a failure. Since E8
+      // that means an AniList id specifically — a MAL id is not a handle on
+      // AniList.
+      .filter(a => castIdsFor(a).anilistId !== undefined)
       .filter(a => needsCastFetch(a.id));
 
     appendLog('anilist-cast-sweep', 'info',
