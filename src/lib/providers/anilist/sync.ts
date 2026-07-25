@@ -4,7 +4,7 @@
  * edges for every anime the **registry** knows of — **by AniList's own id, and
  * only by it**. Read-only against AniList; no writes.
  *
- * The id-space policy (docs/FULL Precedence E8): AniList methods take AniList
+ * The id-space policy (docs/DECISIONS.md, E8): AniList methods take AniList
  * ids out of the crosswalk. A title with no AniList id is simply not enriched;
  * finding one is the *season crawl's* job, never a `Media(idMal:)` bridge's.
  */
@@ -505,7 +505,7 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 // (`cast.ts` already relies on exactly this). `nodes` discards the edge and with
 // it the flag, so it imports producers AS studios — measured at 2.68 studios per
 // title against MAL's 1.10 before this was fixed. See
-// docs/FULL Precedence/studio-id-namespace.md hazard 2.
+// docs/DECISIONS.md, "Catalog precedence".
 const CATALOG_FIELDS = `
       id
       idMal
@@ -1317,13 +1317,11 @@ export async function performAnilistHistoricalCrawl(
 // synopsis, mean, genres, studios, …). Until it runs, catalog precedence has no
 // AniList value to weigh against MAL's, so every field falls through to MAL for
 // lack of an alternative (the whole reason the sweep is the "spine" of
-// docs/FULL Precedence/).
+// docs/DECISIONS.md).
 //
 // **Queries AniList by ITS OWN id**, read from the crosswalk — the id-space
 // policy in code. A title with no AniList id is simply not swept; coverage there
-// is the season crawl's job, never a MAL-id bridge's. That is why this does NOT
-// reuse the MAL-keyed `fetchAnilistCatalogByMalIds` (kept for the keyless reco
-// hydration path, whose candidates arrive as bare MAL ids).
+// is the season crawl's job, never a MAL-id bridge's.
 
 let catalogSweepRunning = false;
 

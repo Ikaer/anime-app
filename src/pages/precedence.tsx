@@ -1,5 +1,5 @@
 /**
- * `/precedence` — the catalog precedence inspector (docs/FULL Precedence, E6).
+ * `/precedence` — the catalog precedence inspector (docs/DECISIONS.md, E6).
  *
  * Answers, for one title: what value does each catalog field hold, WHICH PROVIDER
  * supplied it, under what ordering, and what did every other provider offer?

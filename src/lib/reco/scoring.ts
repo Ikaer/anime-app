@@ -51,7 +51,7 @@ export const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[
   // provider supplied them, and MAL's and AniList's namespaces disagree. That
   // mixing is live today — titles MAL has no studio for fall through to AniList
   // — so an id key splits one real studio's affinity in two. See
-  // docs/FULL Precedence/studio-id-namespace.md.
+  // docs/DECISIONS.md.
   studio: a => (a.catalog.studios || []).map(s => catalogNameKey(s.name)),
   nsfw: a => (a.catalog.nsfw ? [a.catalog.nsfw] : []),
   rating: a => (a.catalog.rating ? [a.catalog.rating] : []),

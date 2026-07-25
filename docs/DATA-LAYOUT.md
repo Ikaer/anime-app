@@ -1,27 +1,12 @@
 # Data layout — the on-disk store
 
-> Closed. The store is organized into role folders; this keeps the layout, the
-> rules that pick it, and the migration contract (scripts and code comments cite
-> this file).
->
-> **Older `§n` citations in code map to named sections here:** §3.1 (the full
-> old→new mapping) now lives only in `scripts/migrate-layout.js`'s `MOVES` table,
-> which is its authority; §3.2 → *The rules* (the connection log); §4 (orphan
-> files) → *Migration contract*, `--sweep-orphans`; §5.2 → *Migration contract*,
-> the runbook and the refuse-to-start check.
+The store's shape, the rules that pick it, and the migration contract. Scripts
+and code comments cite this file.
 
-## Why folders, not filename prefixes
-
-The store used to be 22 files in one flat folder with the taxonomy encoded as
-prefixes — `animes_`, `mal_`, `simkl_`, `anilist_`, `recommendations_`. **The
-prefixes were folders, badly spelled**, and they sorted into groupings nobody
-wanted (a catalog slice filing next to a personal one, its actual peer five
-entries away).
-
-The cost was not tidiness. It was that **no question about the store could be
-answered by looking at it**: which files feed personal precedence, which survive a
-provider disconnect, which are caches safe to delete, which are authoritative
-user data that must be backed up. Each of those is now an `ls`.
+> **Older `§n` citations in `scripts/migrate-layout.js` map here:** §3.1 (the full
+> old→new mapping) lives only in that script's `MOVES` table, which is its
+> authority; §3.2 → *The rules* (the connection log); §4 and §5.2 → *Migration
+> contract*.
 
 ## Layout
 
@@ -41,16 +26,16 @@ user data that must be backed up. Each of those is now an `ls`.
   user/
     hidden.json
     reco_feedback.json
-    reco_dismissed.json          # legacy read-only; still excluded from the feed
   auth/
     mal.json  simkl.json  anilist.json
     oauth_state_mal.json         # transient CSRF state, one file per provider
     oauth_state_simkl.json
     oauth_state_anilist.json
   sync/
-    mal_seasons.json             # seasonal-crawl checkpoint
+    mal_seasons.json             # MAL seasonal-crawl checkpoint
     simkl_checkpoint.json        # all-items watermark + lastRatedAt
     anilist_import.json          # last-import count/date
+    anilist_years.json           # AniList back-catalog checkpoint, { syncedYears }
   cache/
     recommendations.json         # rebuildable: crowd/AniList seeds + hydrated candidates
   logs/
@@ -63,14 +48,18 @@ user data that must be backed up. Each of those is now an `ls`.
 `anilist/`) files a 39 MB catalog next to an auth token, splits the four personal
 slices across three folders, and has no home at all for `local` or the registry.
 Role also mirrors how the code is organized (`personalState.ts`, `writers.ts`,
-personal precedence) and how the Connections UI is split — *what is my catalog,
-and which lists am I syncing?*
+personal precedence) and how the Connections UI is split.
+
+The test it has to keep passing: every question about the store is answerable by
+looking at it — which files feed personal precedence, which survive a provider
+disconnect, which are caches safe to delete, which are durable user data that must
+be backed up.
 
 **`personal/` holds exactly one file per `ProvenanceSource`** — the same set
 precedence ranges over, `writers.ts` registers, and `buildProviderStates`
-iterates. That rule is the folder's whole point: a missing file becomes a visible
-bug rather than something to remember, and adding a provider is "add a file, add
-a `ProvenanceSource`" with no third place to update.
+iterates. That rule is the folder's whole point: a missing file is a visible bug
+rather than something to remember, and adding a provider is "add a file, add a
+`ProvenanceSource`" with no third place to update.
 
 **Two files stay at the root, for reasons:**
 
@@ -83,9 +72,9 @@ a `ProvenanceSource`" with no third place to update.
 under `catalog/` and `personal/` is the point, not a collision.
 
 **The three `oauth_state` files stay separate.** Merging them into one
-`{provider: state}` map was proposed and rejected while building: three modules
-read-modify-write their state independently, so one shared file makes concurrent
-logins a clobber race — for no gain on data that expires in ten minutes.
+`{provider: state}` map was proposed and rejected: three modules read-modify-write
+their state independently, so one shared file makes concurrent logins a clobber
+race — for no gain on data that expires in ten minutes.
 
 **`connection_log.json` is app data, not diagnostics.** It is the progress feed
 the Connections panel and the onboarding bar *poll* (there is no SSE for
@@ -147,7 +136,7 @@ is a different install:
 | Copy | What it is |
 |---|---|
 | `\\syno\root4\AppData\AnimeTracker\data` | **Production.** The NAS volume mounted at `/app/data`. |
-| `E:\Workspace\local\AnimeTracker\data` | A **pull of production** for local debugging. |
+| `E:\Workspace\local\AnimeTracker\data` (office) · `D:\Workspaces\local\AnimeTracker\data` (salon) | A **pull of production** for local debugging. |
 | `%APPDATA%\anime-app\data` | The **first-launch default**. |
 
 - **Production is the one that matters**, and the script must run against the

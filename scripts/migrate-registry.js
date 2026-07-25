@@ -1,5 +1,5 @@
 /**
- * Phase 1 migration (docs/PROVIDER-FREE.md): seeds animes_registry.json with
+ * Phase 1 migration (docs/DECISIONS.md): seeds animes_registry.json with
  * one canonical id per known MAL id, crosswalk assembled from animes_mal.json
  * + animes_simkl.json + animes_anilist_meta.json.
  *
@@ -101,7 +101,7 @@ if (collisions.length > 0) {
   for (const [claimKey, ids] of collisions) {
     console.warn(`  ${claimKey}  ->  ${ids.join(', ')}`);
   }
-  console.warn('\nNo automatic resolution — collision policy is an open question (see docs/PROVIDER-FREE.md).');
+  console.warn('\nNo automatic resolution — collision policy is an open question (see docs/DECISIONS.md).');
 } else {
   console.log('No provider-id collisions detected.');
 }

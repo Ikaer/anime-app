@@ -67,7 +67,7 @@ function buildAnilistIndex(registry: Record<string, SourceIds>): Map<number, str
 
 /**
  * Both provider→canonical lookups from ONE registry read — the boundary
- * converter for data arriving keyed by a provider id (docs/FULL Precedence E9).
+ * converter for data arriving keyed by a provider id (docs/DECISIONS.md, E9).
  *
  * Read-only: it **never mints**. That is the point. A crowd edge naming a title
  * the store has never heard of must stay unresolved so the caller can decide

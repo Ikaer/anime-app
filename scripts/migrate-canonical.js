@@ -1,5 +1,5 @@
 /**
- * Phase B + Phase D migration (docs/PROVIDER-FREE-CUTOVER.md): re-key every
+ * Phase B + Phase D migration (docs/DECISIONS.md, label glossary): re-key every
  * identity-bearing store file from its provider id (MAL id) to the synthetic
  * canonical id, so the canonical id becomes the only key at rest AND the only
  * outward id. The registry (animes_registry.json) is the durable identity

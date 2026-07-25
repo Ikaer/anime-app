@@ -43,7 +43,7 @@ const AUTH_KEYS: Record<ProviderAuthKind, TranslationKey> = {
  * What is uniform: identity, the auth slot, capability chips, status. What is
  * not, and is passed in as `children`: the actions. MAL's seasonal crawl,
  * SIMKL's delta and AniList's GraphQL batch are different operations, and
- * PROVIDER-ABSTRACTION.md is right that hiding them behind one interface buys
+ * docs/DECISIONS.md is right that hiding them behind one interface buys
  * nothing.
  */
 const ProviderCard: React.FC<ProviderCardProps> = ({ status, role, authControl, note, children }) => {

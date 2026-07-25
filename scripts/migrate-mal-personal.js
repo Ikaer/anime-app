@@ -1,5 +1,5 @@
 /**
- * H1 migration (docs/PROVIDER-PARITY.md "H1"): split MAL's personal-list state
+ * H1 migration (docs/DECISIONS.md, "H1"): split MAL's personal-list state
  * out of the catalog payload into its own slice, like every other provider.
  *
  *   animes_mal.json           { canonicalId → MALAnime (incl. my_list_status) }

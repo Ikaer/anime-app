@@ -1,6 +1,6 @@
 /**
  * The three axes hiding inside `catalog.genres`, as a **pure function of the
- * genre name** (docs/FULL Precedence/genre-vocabulary.md, option D).
+ * genre name** (docs/DECISIONS.md, E3).
  *
  * MAL's `genres` conflates genre proper (Action, Romance), theme/setting
  * (School, Isekai, Vampire) and demographic (Shounen, Seinen). Option D as

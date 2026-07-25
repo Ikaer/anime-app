@@ -404,11 +404,12 @@ export interface AniListMetaEntry {
      * predate that filter and hold producers too; they re-queue on sight.
      *
      * Ids are AniList's namespace, NOT MAL's — so a title present on BOTH keeps
-     * MAL studios under the default MAL-first precedence. Caveat if precedence
-     * ever flips to anilist-first: the reco studio IDF profile keys off studio
-     * `id`, so cross-source id mismatch would fragment studio affinity. Measured
-     * at ~15% of titles falling through to MAL, i.e. permanently mixed — the
-     * open gate 2 in docs/FULL Precedence/studio-id-namespace.md.
+     * MAL studios under the default MAL-first precedence, and the ~524 titles
+     * only AniList has studios for carry AniList ids by fall-through. That
+     * mixing is live, which is why the reco/stats consumers key studio identity
+     * on the normalized NAME rather than on `id` (docs/DECISIONS.md). The
+     * `/credits/studio/[id]` route is the one surface still id-keyed — see
+     * docs/CREDITS-ID-NAMESPACE.md.
      *
      * `undefined` when AniList has none, never `[]`: the precedence merge takes
      * the first `!== undefined` value, so an empty array would WIN and blank the
@@ -513,7 +514,7 @@ export interface AnimePersonal {
  * merge. Needed for reads that deliberately want ONE source's raw value rather
  * than the effective/merged one.
  *
- * **When reading from here is legitimate** (the E7 rule, docs/FULL Precedence).
+ * **When reading from here is legitimate** (the E7 rule, docs/DECISIONS.md).
  * A `record.sources.<p>.<field>` read is a VIOLATION if a precedence-merged
  * equivalent exists on `catalog.*` / `personal.*` — it silently pins that
  * surface to one provider, which is how the card's status badge and the

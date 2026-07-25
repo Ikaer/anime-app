@@ -240,7 +240,7 @@ export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 's
  * `config/settings.ts`). Clearing a field in `/settings` restores the entry
  * here, which is why the arguments below still matter.
  *
- * The point of per-field ordering (docs/FULL Precedence E1) is that "which
+ * The point of per-field ordering (docs/DECISIONS.md, E1) is that "which
  * provider is the catalog authority" is not one question — MAL wins `mean` on
  * voter count while AniList would win a field like `synopsis` on freshness, and
  * a single global array cannot express both.
@@ -260,7 +260,7 @@ export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 's
  * - **`studios`** — measured, and MAL simply covers more (15,391 titles vs
  *   12,254). AniList's 524 unique titles already fall through under the default,
  *   so an override would gain nothing and only swap id namespaces. See
- *   docs/FULL Precedence/studio-id-namespace.md.
+ *   docs/DECISIONS.md.
  */
 export const CATALOG_PRECEDENCE_BY_FIELD: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = {
   mean: ['mal', 'anilist', 'simkl'],
@@ -427,7 +427,7 @@ function mergeWithProvenance<T extends object>(
 // ── Genre union ──────────────────────────────────────────────────────────────
 //
 // `genres` is the ONE catalog field merged element-wise instead of by precedence
-// (docs/FULL Precedence/genre-vocabulary.md, option C). Every other field takes
+// (docs/DECISIONS.md, E3). Every other field takes
 // its value wholesale from the first provider in precedence that has one.
 //
 // Why genres get the exception, when `studios` explicitly does NOT:
@@ -463,7 +463,7 @@ const GENRE_ALIASES: Record<string, string> = { thriller: 'Suspense' };
  * store: **87.9%** of titles carrying studios from both providers have
  * name-identical sets under this key. The residue is genuine aliasing
  * (`Gallop` / `Studio Gallop`) that only a hand-written table would collapse —
- * see docs/FULL Precedence/studio-id-namespace.md.
+ * see docs/DECISIONS.md.
  */
 export const catalogNameKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
 

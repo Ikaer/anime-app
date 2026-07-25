@@ -3,16 +3,14 @@
  * Measure catalog-precedence coverage: which provider actually holds a value for
  * each overlapping field, over the population precedence order decides.
  *
- * Written for docs/FULL Precedence/ — the folder's numbers were computed ad-hoc
- * in earlier sessions, which makes a before/after delta unreadable. Gate 2
- * (studio-id-namespace.md: "full coverage ⇒ the flip is safe, materially partial
- * ⇒ option E stops being deferrable") turns on exactly such a delta, so the
- * measurement has to be reproducible rather than re-derived.
+ * Exists so a before/after delta is computed identically rather than re-derived
+ * ad-hoc each time. Every coverage number quoted in docs/DECISIONS.md came from
+ * here; re-run it before re-opening any precedence question.
  *
  *   node scripts/measure-precedence.js [dataPath]
  *
  * Defaults to DATA_PATH, then the office local store. Prints markdown tables
- * ready to paste into docs/FULL Precedence/README.md.
+ * ready to paste into a doc or an issue.
  */
 
 const fs = require('fs');
@@ -90,7 +88,8 @@ for (const [label, fromMal, fromAni] of FIELDS) {
 // AniList catalog block has no studios falls through to MAL — and carries
 // MAL-namespace studio ids while its neighbours carry AniList's. That mixing
 // rate, NOT the flip itself, is what fragments the reco studio IDF profile
-// (studio-id-namespace.md hazard 1).
+// (docs/DECISIONS.md, "Catalog precedence"). Studio identity is name-keyed now,
+// which is what defuses it — this measures the exposure that made it necessary.
 let anilistWins = 0, malFallthrough = 0, noStudiosAnywhere = 0;
 for (const id of registryIds) {
   const c = anilist[id] && anilist[id].catalog;

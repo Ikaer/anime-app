@@ -1,7 +1,7 @@
 # First-run setup & runtime configuration
 
-> Shipped. The two-tier config model, the security posture, and what is still
-> deferred.
+The two-tier config model and the security posture. Open items are in
+[mytodo.md](mytodo.md).
 
 ## Goal
 
@@ -105,14 +105,3 @@ data folder at runtime requires a **restart**. For a single-user app that is an
 acceptable trade and not worth engineering around — the `/settings` folder editor
 shows a restart-required note.
 
-## Deferred
-
-- **The guided first-run wizard flow** — a redirect/step-through for brand-new
-  installs. The per-field editing all exists; only the onboarding funnel is
-  missing. (The empty-store onboarding that *does* exist is a different thing —
-  it seeds the catalog, not the config.)
-- **`defaultTitleLanguage`.** Its rendering seam `getPrimaryTitle` is
-  English-hardcoded across ~15 server + client call sites, so it is a separate
-  cross-cutting change. Note this is a **server-side** knob (titles render in
-  `getServerSideProps`), unlike the FR/EN **UI** language which is client
-  `localStorage` — two different knobs, easily conflated.

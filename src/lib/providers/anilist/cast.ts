@@ -26,7 +26,7 @@ const CHARACTERS_PER_ANIME = 25;
 //
 // **Keyed on AniList's own id only** (E8). This took `($malId, $anilistId)` and
 // sent whichever it had — which made `Media(idMal:)` a live query key on the one
-// path the FULL Precedence inventory never listed. A title with no AniList id is
+// path the id-space inventory never listed. A title with no AniList id is
 // one AniList-native discovery has not reached; the season crawl fixes that, a
 // foreign-key lookup does not.
 const CAST_QUERY = `

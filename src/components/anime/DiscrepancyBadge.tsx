@@ -31,7 +31,7 @@ const DiscrepancyBadge: React.FC<Props> = ({ anime }) => {
   // It used to hardcode `sources.simkl`, which contradicted this component's own
   // provider-neutral premise two lines up and left an AniList-only or local-only
   // user with no chip at all — the same "one surface looks empty without SIMKL"
-  // shape PROVIDER-PARITY C1 removed from the card's status badge.
+  // shape C1 (docs/DECISIONS.md) removed from the card's status badge.
   if (!d) {
     const { status, score } = anime.personal;
     const winner = anime.provenance.personal.status ?? anime.provenance.personal.score;

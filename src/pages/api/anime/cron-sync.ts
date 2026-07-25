@@ -293,7 +293,7 @@ function syncAnilistCatalog(): CronStepOutcome {
  * auth kind), fire-and-forget, its own running flag. Kept a SEPARATE step from
  * the tags/staff sync because it is a different query against a different id
  * space, and its coverage is what unblocks catalog precedence
- * (docs/FULL Precedence/).
+ * (docs/DECISIONS.md).
  */
 function syncAnilistCatalogFields(): CronStepOutcome {
   if (isAnilistCatalogSweepRunning()) {
