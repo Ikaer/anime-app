@@ -104,9 +104,11 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
   const crosswalk = anime.crosswalk || {};
 
   // Raw per-provider personal state, in precedence-ish reading order. Raw on
-  // purpose: this table exists to show where the effective value came from and
-  // where the providers disagree, so it must never show merged values.
+  // purpose, and a legitimate `sources.*` read under the E7 rule: this table
+  // exists to show WHERE the effective value came from and where the providers
+  // disagree, so a merged value is precisely what it must not show.
   const local = anime.sources.local;
+  const anilistPersonal = anime.sources.anilistPersonal;
   const providerLines: {
     provider: ProvenanceSource;
     status?: string;
@@ -116,8 +118,12 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
   }[] = [
     { provider: 'mal', status: mal?.status, score: mal?.score, progress: mal?.num_episodes_watched, total: anime.catalog.numEpisodes },
     { provider: 'simkl', status: simkl?.status, score: simkl?.score, progress: simkl?.num_episodes_watched, total: simkl?.total_episodes },
-    // Local only shows up once it holds something — an empty row would just be
-    // noise for the MAL/SIMKL user, whose local provider is off entirely.
+    // AniList and local only show up once they hold something — an empty row is
+    // noise for a MAL/SIMKL user whose other providers are off entirely.
+    // AniList was missing here altogether: it is a full personal provider that
+    // takes part in discrepancy detection, so the table that explains a
+    // discrepancy could not show the entry causing it.
+    ...(anilistPersonal ? [{ provider: 'anilist' as ProvenanceSource, status: anilistPersonal.status, score: anilistPersonal.score, progress: anilistPersonal.progress, total: anime.catalog.numEpisodes }] : []),
     ...(local ? [{ provider: 'local' as ProvenanceSource, status: local.status, score: local.score, progress: local.progress, total: anime.catalog.numEpisodes }] : []),
   ];
 

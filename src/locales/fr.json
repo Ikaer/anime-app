@@ -201,7 +201,7 @@
   "statusShort.dropped": "Abandonné",
   "statusShort.plan_to_watch": "Prévu",
 
-  "disc.syncedFromSimkl": "Synchronisé depuis SIMKL",
+  "disc.syncedFrom": "Valeur fournie par {provider}",
   "disc.mismatch": "Divergence entre tes sources",
   "disc.episodesShort": "ép",
   "disc.absentFrom": "Absent de {providers}",

@@ -24,15 +24,23 @@ const DiscrepancyBadge: React.FC<Props> = ({ anime }) => {
   const t = useT();
   const d = anime.discrepancy;
 
-  // No mismatch, but the title IS synced from SIMKL -> subtle "merge is visible"
-  // chip so the user can see SIMKL's own status/score even when it agrees.
+  // No mismatch — a subtle "the merge is visible" chip naming the provider whose
+  // value won, so the displayed state never looks like it came from nowhere.
+  //
+  // Reads the MERGED `personal` block and its provenance, not a raw slice (E7).
+  // It used to hardcode `sources.simkl`, which contradicted this component's own
+  // provider-neutral premise two lines up and left an AniList-only or local-only
+  // user with no chip at all — the same "one surface looks empty without SIMKL"
+  // shape PROVIDER-PARITY C1 removed from the card's status badge.
   if (!d) {
-    if (!anime.sources.simkl) return null;
-    const parts = [fmtStatus(t, anime.sources.simkl.status)];
-    if (anime.sources.simkl.score != null) parts.push(`★${anime.sources.simkl.score}`);
+    const { status, score } = anime.personal;
+    const winner = anime.provenance.personal.status ?? anime.provenance.personal.score;
+    if (!winner || (!status && !score)) return null;
+    const parts = [fmtStatus(t, status)];
+    if (score) parts.push(`★${score}`);
     return (
-      <span className={styles.badge} title={t('disc.syncedFromSimkl')}>
-        <span className={`${styles.chip} ${styles.info}`}>SIMKL: {parts.join(' ')}</span>
+      <span className={styles.badge} title={t('disc.syncedFrom', { provider: providerLabel(t, winner) })}>
+        <span className={`${styles.chip} ${styles.info}`}>{providerLabel(t, winner)}: {parts.join(' ')}</span>
       </span>
     );
   }

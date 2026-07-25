@@ -201,7 +201,7 @@
   "statusShort.dropped": "Dropped",
   "statusShort.plan_to_watch": "Plan",
 
-  "disc.syncedFromSimkl": "Synced from SIMKL",
+  "disc.syncedFrom": "Value supplied by {provider}",
   "disc.mismatch": "Your sources disagree",
   "disc.episodesShort": "ep",
   "disc.absentFrom": "Absent from {providers}",

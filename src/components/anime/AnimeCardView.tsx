@@ -342,7 +342,12 @@ export default function AnimeCardView({
                                 {(allExplainsOpen || explainOpen.has(anime.id)) && renderExplain(anime.recoMeta)}
                             </div>
                         )}
-                        {(feedbackMode || anime.discrepancy || anime.sources.simkl) && (
+                        {/* The badge row shows when there is a badge to show. That
+                            test reads the MERGED personal block (E7) — it used to ask
+                            whether a SIMKL slice existed, which hid the row from every
+                            AniList-only or local-only user even though DiscrepancyBadge
+                            had something to render for them. */}
+                        {(feedbackMode || anime.discrepancy || anime.personal.status || anime.personal.score) && (
                         <div className={styles.actions}>
                             <DiscrepancyBadge anime={anime} />
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (

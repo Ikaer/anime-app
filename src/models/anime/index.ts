@@ -510,10 +510,27 @@ export interface AnimePersonal {
 
 /**
  * Raw, verbatim per-provider slices — nothing is lost in the catalog/personal
- * merge. Needed for reads that deliberately want ONE source's raw value, not
- * the effective/merged one (e.g. `computeDiscrepancy` compares raw MAL vs raw
- * SIMKL; the card's "MAL status" label is intentionally not flipped to
- * effective — see CLAUDE.md "Local cache authority").
+ * merge. Needed for reads that deliberately want ONE source's raw value rather
+ * than the effective/merged one.
+ *
+ * **When reading from here is legitimate** (the E7 rule, docs/FULL Precedence).
+ * A `record.sources.<p>.<field>` read is a VIOLATION if a precedence-merged
+ * equivalent exists on `catalog.*` / `personal.*` — it silently pins that
+ * surface to one provider, which is how the card's status badge and the
+ * discrepancy chip each ended up invisible to a non-SIMKL user. It is
+ * LEGITIMATE when:
+ *
+ *  - the datum is **provider-specific by nature** and has no neutral equivalent
+ *    — "added to MAL on <date>", AniList's `tags` / `staff` / `banner_image` /
+ *    `relations`;
+ *  - the read IS the per-provider comparison — `computeDiscrepancy` and the
+ *    detail page's provider table exist to show where sources disagree, so a
+ *    merged value is exactly what they must not show;
+ *  - it is **join identity** — a provider's own id, for an API call or a link out
+ *    (prefer `crosswalk` where it has the id; these slices are the fallback).
+ *
+ * Audited under this rule; every surviving read in the codebase falls into one
+ * of those three.
  */
 export interface AnimeSources {
   /** Raw MAL catalog slice. Post-H1 it carries NO `my_list_status` — MAL's
