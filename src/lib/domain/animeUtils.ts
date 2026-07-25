@@ -235,6 +235,11 @@ export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 's
  * so the common case stays a one-liner and this map holds only the fields whose
  * ordering is a deliberate, argued decision.
  *
+ * Since E5 this is the **shipped default**, not the last word: the user's
+ * `settings.json` overrides layer on top of it (`getCatalogPrecedenceByField` in
+ * `config/settings.ts`). Clearing a field in `/settings` restores the entry
+ * here, which is why the arguments below still matter.
+ *
  * The point of per-field ordering (docs/FULL Precedence E1) is that "which
  * provider is the catalog authority" is not one question — MAL wins `mean` on
  * voter count while AniList would win a field like `synopsis` on freshness, and
@@ -263,8 +268,8 @@ export const CATALOG_PRECEDENCE_BY_FIELD: Partial<Record<keyof AnimeCatalog, Cat
 
 /**
  * The precedence a given catalog field resolves under. Single seam, so the
- * inspector page (E6) and the future `/settings` editor (E5) report exactly what
- * the merge did rather than re-deriving it.
+ * inspector page (E6) and the `/settings` editor (E5) report exactly what the
+ * merge did rather than re-deriving it.
  */
 export function catalogPrecedenceFor(
   field: keyof AnimeCatalog,
@@ -272,6 +277,72 @@ export function catalogPrecedenceFor(
   byField: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = CATALOG_PRECEDENCE_BY_FIELD
 ): CatalogSource[] {
   return byField[field] ?? base;
+}
+
+// ── The configurable surface (E5) ────────────────────────────────────────────
+//
+// Client-safe: the settings page renders from these and the settings API
+// validates against them, so the editor's option list and the merge's accepted
+// values cannot drift apart. The *stored* shape stays a full ordering array —
+// the mechanism is general — even though the UI only asks "who wins", for the
+// reason stated on `CATALOG_CONTRIBUTORS`.
+
+/** A per-field catalog ordering map, as stored in `settings.json`. */
+export type CatalogPrecedenceOverrides = Partial<Record<keyof AnimeCatalog, CatalogSource[]>>;
+
+/**
+ * Providers that can actually supply a catalog field. `catalogFromSimkl` and
+ * `catalogFromLocal` return `{}` — SIMKL's public API adds nothing MAL doesn't
+ * already give, and the local provider is personal-only — so ordering them is a
+ * knob attached to nothing. The real question every configurable field asks is
+ * MAL or AniList, and offering the six permutations of a three-element array
+ * would dress that up as five decisions it isn't.
+ */
+export const CATALOG_CONTRIBUTORS: CatalogSource[] = ['mal', 'anilist'];
+
+/**
+ * Catalog fields whose ordering is worth configuring: the ones **both**
+ * contributors produce, so precedence genuinely arbitrates. Every other field
+ * has exactly one possible supplier and a setting for it would be inert.
+ *
+ * Tracks `catalogFromAnilist`'s key set (MAL's is a superset) minus `genres`,
+ * which is not a precedence question at all — `unionGenres` merges it
+ * element-wise afterwards and overrides whatever the merge chose. Adding an
+ * AniList catalog field means adding it here too; the inspector page shows the
+ * field either way, so the failure mode is a missing knob, not a wrong value.
+ */
+export const CONFIGURABLE_CATALOG_FIELDS: (keyof AnimeCatalog)[] = [
+  'title',
+  'alternativeTitles',
+  'mainPicture',
+  'pictures',
+  'synopsis',
+  'startDate',
+  'mean',
+  'numListUsers',
+  'mediaType',
+  'airingStatus',
+  'numEpisodes',
+  'startSeason',
+  'studios',
+];
+
+/**
+ * The full ordering that makes `winner` win: it moves to the front and everyone
+ * else keeps their relative order in `base`. Storing the whole array rather than
+ * just the winner keeps `settings.json` in the shape `mergeWithProvenance`
+ * consumes, so nothing has to reconstitute an ordering at read time.
+ */
+export function catalogOrderingWithWinner(
+  winner: CatalogSource,
+  base: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE
+): CatalogSource[] {
+  return [winner, ...base.filter(s => s !== winner)];
+}
+
+/** The provider an ordering puts first — the inverse of `catalogOrderingWithWinner`. */
+export function catalogWinnerOf(ordering: CatalogSource[]): CatalogSource | undefined {
+  return ordering[0];
 }
 
 /**

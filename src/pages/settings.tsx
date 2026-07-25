@@ -1,6 +1,9 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useT, type TranslationKey } from '@/lib/i18n';
+import { catalogOrderingWithWinner, catalogWinnerOf } from '@/lib/domain/animeUtils';
+import type { CatalogSource } from '@/models/anime';
 
 /**
  * Runtime settings page. Enters the data/log folders (Tier 0, → config.json) and
@@ -47,10 +50,26 @@ interface PreferencesStatus {
   };
 }
 
+/**
+ * Catalog precedence (E5). The server hands over both what the user stored and
+ * what the merge resolves to, plus the field/contributor lists — so this form's
+ * options come from the same constants the POST validates against and the two
+ * cannot drift.
+ */
+interface CatalogPrecedenceStatus {
+  stored: Record<string, CatalogSource[]>;
+  resolved: Record<string, CatalogSource[]>;
+  shipped: Record<string, CatalogSource[]>;
+  fields: string[];
+  contributors: CatalogSource[];
+  defaultOrder: CatalogSource[];
+}
+
 interface SettingsResponse {
   fields: Record<FieldName, FieldStatus>;
   bootstrap: Record<BootField, BootFieldStatus>;
   preferences: PreferencesStatus;
+  catalogPrecedence: CatalogPrecedenceStatus;
   derivedRedirectUris: { mal: string; simkl: string; anilist: string };
 }
 
@@ -86,6 +105,11 @@ export default function SettingsPage() {
   );
   const [localEnabled, setLocalEnabled] = useState<LocalEnabled>('auto');
   const [localPrecedence, setLocalPrecedence] = useState<LocalPrecedence>('auto');
+  // Keyed by catalog field, holding the WINNER only. The full ordering is
+  // rebuilt on save via `catalogOrderingWithWinner` — the store keeps arrays
+  // (the shape the merge consumes) while the control asks the one question that
+  // actually has more than one answer.
+  const [catalogWinners, setCatalogWinners] = useState<Record<string, CatalogSource>>({});
   const [status, setStatus] = useState<'loading' | 'idle' | 'saving' | 'saved' | 'error'>('loading');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -106,6 +130,18 @@ export default function SettingsPage() {
     );
     setLocalEnabled(resp.preferences?.localProviderEnabled ?? 'auto');
     setLocalPrecedence(resp.preferences?.localPrecedenceMode ?? 'auto');
+    // Prefill from RESOLVED, not stored: a field the user never touched still
+    // has a winner (its shipped pin, or the global default), and showing that
+    // is the point — the form states who wins today, not who was overridden.
+    const cp = resp.catalogPrecedence;
+    setCatalogWinners(
+      Object.fromEntries(
+        (cp?.fields ?? []).map(f => [
+          f,
+          catalogWinnerOf(cp.resolved[f] ?? cp.defaultOrder) ?? cp.defaultOrder[0],
+        ])
+      )
+    );
   }, []);
 
   useEffect(() => {
@@ -129,6 +165,14 @@ export default function SettingsPage() {
           ...bootValues,
           localProviderEnabled: localEnabled,
           localPrecedenceMode: localPrecedence,
+          // Every configurable field, always — the server sanitizes the no-ops
+          // away, so "back to default" needs no separate clear action.
+          catalogPrecedence: Object.fromEntries(
+            Object.entries(catalogWinners).map(([field, winner]) => [
+              field,
+              catalogOrderingWithWinner(winner, data?.catalogPrecedence.defaultOrder),
+            ])
+          ),
         }),
       });
       if (!resp.ok) throw new Error(String(resp.status));
@@ -138,7 +182,7 @@ export default function SettingsPage() {
     } catch {
       setStatus('error');
     }
-  }, [values, bootValues, localEnabled, localPrecedence, applyResponse]);
+  }, [values, bootValues, localEnabled, localPrecedence, catalogWinners, data, applyResponse]);
 
   const copy = useCallback((text: string, key: string) => {
     const done = () => {
@@ -321,6 +365,49 @@ export default function SettingsPage() {
               </div>
             </section>
 
+            {/* Field names stay raw identifiers in <code>, untranslated — the
+                same standing exception `/precedence` takes, and for the same
+                reason: `numEpisodes` and `airingStatus` ARE the field names,
+                and a translated label would not match what the inspector and
+                the record show. */}
+            <section className="group">
+              <h2>{t('settings.group.catalogPrecedence')}</h2>
+              <p className="group-note">{t('settings.catalogPrecedence.note')}</p>
+              <div className="prec-grid">
+                {data.catalogPrecedence.fields.map(f => {
+                  const cp = data.catalogPrecedence;
+                  const shippedWinner =
+                    catalogWinnerOf(cp.shipped[f] ?? cp.defaultOrder) ?? cp.defaultOrder[0];
+                  return (
+                    <div key={f} className="prec-row">
+                      <label htmlFor={`prec-${f}`}>
+                        <code>{f}</code>
+                        {cp.stored[f] && (
+                          <span className="badge set">{t('settings.catalogPrecedence.changed')}</span>
+                        )}
+                      </label>
+                      <select
+                        id={`prec-${f}`}
+                        value={catalogWinners[f] ?? shippedWinner}
+                        onChange={e =>
+                          setCatalogWinners(w => ({ ...w, [f]: e.target.value as CatalogSource }))
+                        }
+                      >
+                        {cp.contributors.map(s => (
+                          <option key={s} value={s}>
+                            {s === shippedWinner ? t('settings.catalogPrecedence.default', { winner: s }) : s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="group-note prec-foot">
+                <Link href="/precedence">{t('settings.catalogPrecedence.inspect')}</Link>
+              </p>
+            </section>
+
             <div className="actions">
               <button type="submit" className="save" disabled={status === 'saving'}>
                 {status === 'saving' ? t('settings.saving') : t('settings.save')}
@@ -356,6 +443,17 @@ export default function SettingsPage() {
         .derived code { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 0.1rem 0.35rem; color: var(--text-primary); }
         .copy { background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 4px; padding: 0.1rem 0.45rem; cursor: pointer; font-size: 0.72rem; }
         .copy:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+        /* Two columns of (field, select) pairs: thirteen full-width rows read as
+           a wall, and each control is a single narrow <select>. Collapses to one
+           column when the viewport can't hold two — the TV target is 4K at 300%
+           zoom, i.e. ~1280 CSS px, which fits two. */
+        .prec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: .5rem 1.25rem; }
+        .prec-row { display: flex; align-items: center; gap: .6rem; }
+        .prec-row label { margin-bottom: 0; flex: 1; display: flex; align-items: center; gap: .4rem; min-width: 0; }
+        .prec-row code { color: var(--text-primary); font-size: .85rem; word-break: break-all; }
+        .prec-row select { flex: 0 0 9rem; padding: .3rem .45rem; font-size: .85rem; }
+        .prec-foot { margin: 1rem 0 0; }
+        .prec-foot :global(a) { color: var(--accent-color, #4a9eff); }
         .actions { display: flex; align-items: center; gap: 1rem; }
         .save { background: var(--accent-color, #4a9eff); color: #fff; border: none; border-radius: 6px; padding: 0.6rem 1.4rem; font-size: 0.95rem; cursor: pointer; }
         .save:disabled { opacity: 0.6; cursor: default; }

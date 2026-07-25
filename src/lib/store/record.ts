@@ -14,7 +14,8 @@
 import { MALAnime, AnimeRecord, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, MALPersonalEntry } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/providers/discrepancy';
 import { buildProviderStates } from '@/lib/providers/personalState';
-import { toAnimeRecord } from '@/lib/domain/animeUtils';
+import { toAnimeRecord, type CatalogPrecedenceOverrides } from '@/lib/domain/animeUtils';
+import { getCatalogPrecedenceByField } from '@/lib/config/settings';
 import { getResolvedPersonalPrecedence } from '@/lib/providers/registry';
 import { getRegistry, resolveByMalId, toNum } from '@/lib/store/registry';
 import { getCachedRows, setCachedRows } from '@/lib/store/recordCache';
@@ -48,6 +49,18 @@ function assembleCrosswalk(
 }
 
 /**
+ * Value-compare a per-field precedence map as one cache-key string. Sorted, so
+ * two maps that say the same thing in a different key order hash the same and
+ * don't force a spurious 25k-row rebuild.
+ */
+function catalogPrecedenceKey(byField: CatalogPrecedenceOverrides): string {
+  return Object.entries(byField)
+    .map(([field, order]) => `${field}:${(order ?? []).join('>')}`)
+    .sort()
+    .join('|');
+}
+
+/**
  * Assemble one `AnimeRecord` row for a canonical id from the already-read
  * slices. Shared by `getAnimeForDisplay` (loops every canonical id) and
  * `getAnimeByCanonicalId` (looks up one, bypassing the cache). Returns
@@ -64,7 +77,8 @@ function assembleDisplayRow(
   localByCanonical: Record<string, LocalPersonalEntry>,
   registry: Record<string, SourceIds>,
   hiddenIds: Set<string>,
-  personalPrecedence: ProvenanceSource[]
+  personalPrecedence: ProvenanceSource[],
+  catalogPrecedenceByField: CatalogPrecedenceOverrides
 ): AnimeRecord | undefined {
   const mal = malAnime[canonicalId];
   const malPersonal = malPersonalByCanonical[canonicalId];
@@ -86,7 +100,8 @@ function assembleDisplayRow(
     { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
     canonicalId,
     undefined,
-    personalPrecedence
+    personalPrecedence,
+    catalogPrecedenceByField
   );
 }
 
@@ -104,10 +119,14 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
   const localByCanonical = getAllLocalEntries();
   const registry = getRegistry();
-  // Resolved once per call and folded into the cache key as a stable string, so
-  // flipping a settings toggle — or a MAL/SIMKL token appearing or lapsing —
-  // rebuilds the rows even though no *slice file* changed.
+  // Both precedences are resolved once per call and folded into the cache key as
+  // stable strings, so flipping a settings toggle — or a MAL/SIMKL token
+  // appearing or lapsing — rebuilds the rows even though no *slice file*
+  // changed. Catalog precedence is user-configurable since E5, which is exactly
+  // why it has to be in the key: a `/settings` save must repoint every field it
+  // touches without waiting for an unrelated sync to bump some mtime.
   const personalPrecedence = getResolvedPersonalPrecedence();
+  const catalogPrecedenceByField = getCatalogPrecedenceByField();
 
   // The assembled rows are cached against the IDENTITY of the parsed slices
   // (jsonStore's parse cache returns the same object until the file on disk
@@ -117,7 +136,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   // slice reference changes, and the page bundle's row cache rebuilds. The
   // precedence join is a value-compared string (see 1d.3), so a mode/token
   // change invalidates too.
-  const inputs = [malAnime, malPersonalByCanonical, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|')];
+  const inputs = [malAnime, malPersonalByCanonical, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|'), catalogPrecedenceKey(catalogPrecedenceByField)];
   const cached = getCachedRows(inputs);
   if (cached) return cached;
 
@@ -136,7 +155,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const rows: AnimeRecord[] = [];
   for (const canonicalId of canonicalIds) {
     const row = assembleDisplayRow(
-      canonicalId, malAnime, malPersonalByCanonical, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, personalPrecedence
+      canonicalId, malAnime, malPersonalByCanonical, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, personalPrecedence, catalogPrecedenceByField
     );
     if (row) rows.push(row);
   }
@@ -168,7 +187,8 @@ export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefi
     getAllLocalEntries(),
     getRegistry(),
     new Set(getHiddenAnimeIds()),
-    getResolvedPersonalPrecedence()
+    getResolvedPersonalPrecedence(),
+    getCatalogPrecedenceByField()
   );
 }
 

@@ -11,7 +11,16 @@ import {
   resolveSetting,
   getLocalProviderEnabledMode,
   getLocalPrecedenceMode,
+  getStoredCatalogPrecedence,
+  getCatalogPrecedenceByField,
+  sanitizeCatalogPrecedence,
 } from '@/lib/config/settings';
+import {
+  CONFIGURABLE_CATALOG_FIELDS,
+  CATALOG_CONTRIBUTORS,
+  CATALOG_PRECEDENCE_BY_FIELD,
+  DEFAULT_CATALOG_PRECEDENCE,
+} from '@/lib/domain/animeUtils';
 import {
   hasWritableExternal,
   isLocalProviderEnabled,
@@ -106,6 +115,22 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
         precedenceOrder: getResolvedPersonalPrecedence(),
       },
     },
+    // Catalog precedence (E5). `stored` is what the user set (sparse — the form
+    // shows every other field as "default"); `resolved` is what the merge
+    // actually uses, so the UI never has to re-layer the shipped defaults
+    // itself. The field/contributor lists ride along so the form's options come
+    // from the same constants the POST validates against.
+    catalogPrecedence: {
+      stored: getStoredCatalogPrecedence(),
+      resolved: getCatalogPrecedenceByField(),
+      // The shipped map WITHOUT the user's overrides, so the form can label the
+      // option that is the default — which is the only way to see how to revert
+      // a field once it has been repointed.
+      shipped: CATALOG_PRECEDENCE_BY_FIELD,
+      fields: CONFIGURABLE_CATALOG_FIELDS,
+      contributors: CATALOG_CONTRIBUTORS,
+      defaultOrder: DEFAULT_CATALOG_PRECEDENCE,
+    },
     // The exact URI each OAuth flow will send — what the user must register with
     // the provider. Same derivation as the flow (env → request host).
     derivedRedirectUris: {
@@ -144,6 +169,15 @@ function handlePost(req: NextApiRequest, res: NextApiResponse) {
     const raw = body[field];
     if (typeof raw === 'string' && PREFERENCE_VALUES[field].includes(raw)) next[field] = raw as never;
     else delete next[field];
+  }
+  // Catalog precedence: a submitted map REPLACES the stored one wholesale (it is
+  // one control, not a set of independent fields — the form always sends every
+  // configurable field), and `sanitizeCatalogPrecedence` drops the no-ops so
+  // "back to default" is expressed by simply not surviving the filter.
+  if ('catalogPrecedence' in body) {
+    const sanitized = sanitizeCatalogPrecedence(body.catalogPrecedence);
+    if (Object.keys(sanitized).length > 0) next.catalogPrecedence = sanitized;
+    else delete next.catalogPrecedence;
   }
   saveSettings(next);
 

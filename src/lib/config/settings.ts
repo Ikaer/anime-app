@@ -1,6 +1,15 @@
 import fs from 'fs';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import type { LocalPrecedenceMode } from '@/lib/domain/animeUtils';
+import {
+  CATALOG_CONTRIBUTORS,
+  CATALOG_PRECEDENCE_BY_FIELD,
+  CONFIGURABLE_CATALOG_FIELDS,
+  DEFAULT_CATALOG_PRECEDENCE,
+  catalogWinnerOf,
+  type CatalogPrecedenceOverrides,
+  type LocalPrecedenceMode,
+} from '@/lib/domain/animeUtils';
+import type { AnimeCatalog, CatalogSource } from '@/models/anime';
 
 export type { LocalPrecedenceMode };
 export type LocalProviderEnabled = 'auto' | 'on' | 'off';
@@ -34,6 +43,13 @@ export interface AppSettings {
   localProviderEnabled?: LocalProviderEnabled;
   /** Where the local tier sits in personal-state precedence. `auto` resolves via the same predicate. */
   localPrecedenceMode?: LocalPrecedenceMode;
+  /**
+   * Per-field catalog precedence (E5), layered over the shipped
+   * `CATALOG_PRECEDENCE_BY_FIELD`. Sparse: only the fields the user actually
+   * repointed. Not an enum, so it sits outside PREFERENCE_FIELDS and gets its
+   * own validation + persistence below.
+   */
+  catalogPrecedence?: CatalogPrecedenceOverrides;
 }
 
 /**
@@ -96,6 +112,39 @@ export const PREFERENCE_DEFAULTS: Record<PreferenceField, string> = {
   localPrecedenceMode: 'auto',
 };
 
+/**
+ * Keep only the catalog-precedence entries that are meaningful, dropping the
+ * rest silently rather than rejecting the whole payload — the same
+ * unrecognized-value-clears-the-field rule the preference enums follow.
+ *
+ * An entry survives when its field is configurable (`CONFIGURABLE_CATALOG_FIELDS`),
+ * its ordering is a non-empty, duplicate-free list of real catalog contributors,
+ * and it actually differs from what the field already resolves to. That last
+ * check is what keeps the store sparse: picking "MAL" for a field MAL already
+ * wins persists nothing, so the shipped defaults keep applying and a future
+ * change to them is not silently frozen by a no-op the user never made.
+ */
+export function sanitizeCatalogPrecedence(raw: unknown): CatalogPrecedenceOverrides {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: CatalogPrecedenceOverrides = {};
+  for (const [field, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!CONFIGURABLE_CATALOG_FIELDS.includes(field as keyof AnimeCatalog)) continue;
+    if (!Array.isArray(value) || value.length === 0) continue;
+    const ordering = value.filter(
+      (s, i): s is CatalogSource =>
+        typeof s === 'string' && CATALOG_CONTRIBUTORS.includes(s as CatalogSource) && value.indexOf(s) === i
+    );
+    if (ordering.length !== value.length) continue;
+    // The ordering this field already resolves to without any stored override:
+    // its shipped entry, else the global default. Read as values so a change to
+    // either can't leave this file asserting a stale winner.
+    const current = CATALOG_PRECEDENCE_BY_FIELD[field as keyof AnimeCatalog] ?? DEFAULT_CATALOG_PRECEDENCE;
+    if (catalogWinnerOf(ordering) === catalogWinnerOf(current)) continue;
+    out[field as keyof AnimeCatalog] = ordering;
+  }
+  return out;
+}
+
 const SETTINGS_FILE = dataFile('settings.json');
 
 /** Raw stored settings (sparse — only fields the user set in the UI). */
@@ -125,6 +174,11 @@ export function saveSettings(next: AppSettings): void {
       sparse[field] = value as never;
     }
   }
+  // Catalog precedence: sanitized on the way in AND on the way out, so a
+  // hand-edited settings.json can't feed the merge a field or provider that
+  // isn't real. An empty map is omitted entirely — sparse, like everything else.
+  const catalogPrecedence = sanitizeCatalogPrecedence(next.catalogPrecedence);
+  if (Object.keys(catalogPrecedence).length > 0) sparse.catalogPrecedence = catalogPrecedence;
   writeJsonFile(SETTINGS_FILE, sparse);
   try {
     fs.chmodSync(SETTINGS_FILE, 0o600);
@@ -193,4 +247,22 @@ export function getLocalProviderEnabledMode(): LocalProviderEnabled {
 
 export function getLocalPrecedenceMode(): LocalPrecedenceMode {
   return readPreference<LocalPrecedenceMode>('localPrecedenceMode');
+}
+
+/** The user's stored catalog-precedence overrides alone, sanitized. */
+export function getStoredCatalogPrecedence(): CatalogPrecedenceOverrides {
+  return sanitizeCatalogPrecedence(readSettings().catalogPrecedence);
+}
+
+/**
+ * The per-field catalog precedence actually in force: the user's stored
+ * overrides layered over the shipped `CATALOG_PRECEDENCE_BY_FIELD` (E5).
+ *
+ * This is the single seam — `getAnimeForDisplay` threads it into the merge and
+ * folds it into the row-cache key, and `/precedence` renders from it, so the
+ * inspector reports what the merge did rather than what the source constant
+ * says. Same role `getResolvedPersonalPrecedence` plays for personal state.
+ */
+export function getCatalogPrecedenceByField(): CatalogPrecedenceOverrides {
+  return { ...CATALOG_PRECEDENCE_BY_FIELD, ...getStoredCatalogPrecedence() };
 }

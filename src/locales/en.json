@@ -60,6 +60,11 @@
   "settings.local.hasExternal": "an external provider is connected",
   "settings.local.noExternal": "no external provider",
   "settings.local.resolvedOrder": "Effective priority: {order}",
+  "settings.group.catalogPrecedence": "Catalog precedence",
+  "settings.catalogPrecedence.note": "Which provider fills each catalog field. Only fields both MAL and AniList supply are listed — the rest have exactly one possible source. Genres are absent on purpose: they are merged across providers, not arbitrated.",
+  "settings.catalogPrecedence.default": "Default ({winner})",
+  "settings.catalogPrecedence.changed": "changed",
+  "settings.catalogPrecedence.inspect": "Verify against a title in the inspector →",
 
   "onboarding.title": "Welcome 👋",
   "onboarding.intro": "First things first: the anime catalog needs to be loaded.",

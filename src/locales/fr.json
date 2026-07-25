@@ -60,6 +60,11 @@
   "settings.local.hasExternal": "un fournisseur externe est connecté",
   "settings.local.noExternal": "aucun fournisseur externe",
   "settings.local.resolvedOrder": "Priorité effective : {order}",
+  "settings.group.catalogPrecedence": "Priorité du catalogue",
+  "settings.catalogPrecedence.note": "Quel fournisseur remplit chaque champ du catalogue. Seuls les champs que MAL et AniList fournissent tous les deux sont listés — pour les autres, il n'y a qu'une source possible. Les genres n'y figurent pas : ils sont fusionnés entre fournisseurs, pas arbitrés.",
+  "settings.catalogPrecedence.default": "Défaut ({winner})",
+  "settings.catalogPrecedence.changed": "modifié",
+  "settings.catalogPrecedence.inspect": "Vérifier sur un titre dans l'inspecteur →",
 
   "onboarding.title": "Bienvenue 👋",
   "onboarding.intro": "Pour commencer, il faut charger le catalogue d'anime.",

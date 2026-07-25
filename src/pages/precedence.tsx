@@ -41,7 +41,6 @@ import {
   explainCatalogPrecedence,
   getPrimaryTitle,
   DEFAULT_CATALOG_PRECEDENCE,
-  CATALOG_PRECEDENCE_BY_FIELD,
   type CatalogFieldExplain,
 } from '@/lib/domain/animeUtils';
 import type { AnimeSearchHit } from '@/lib/domain/globalSearch';
@@ -52,6 +51,15 @@ const SOURCES: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE;
 interface Props {
   anime: { id: string; title: string } | null;
   rows: CatalogFieldExplain[];
+  /**
+   * Fields carrying an explicit ordering — the shipped `CATALOG_PRECEDENCE_BY_FIELD`
+   * plus whatever `/settings` overrode (E5). Passed as a prop rather than read
+   * from the constant: since precedence is user-configurable, importing the
+   * source constant here would make this page report the shipped default while
+   * the merge used the user's choice — on the one page whose job is to be
+   * trusted about what the merge did.
+   */
+  pinnedFields: string[];
   notFound: boolean;
 }
 
@@ -286,7 +294,7 @@ function Picker({ current }: { current?: string }) {
   );
 }
 
-export default function PrecedencePage({ anime, rows, notFound }: Props) {
+export default function PrecedencePage({ anime, rows, pinnedFields, notFound }: Props) {
   const contested = rows.filter(r => r.contested).length;
 
   return (
@@ -347,7 +355,7 @@ export default function PrecedencePage({ anime, rows, notFound }: Props) {
                             information the numbered sub-rows already carry. */}
                         <th scope="rowgroup" rowSpan={1 + sub.length}>
                           <span className="fname">{r.field}</span>
-                          {r.field in CATALOG_PRECEDENCE_BY_FIELD && (
+                          {pinnedFields.includes(r.field) && (
                             <span className="pin" title={`Explicit per-field ordering: ${r.precedence.join(' › ')}`}>pinned</span>
                           )}
                           {overridesDefault(r) && <span className="order">{r.precedence.join(' › ')}</span>}
@@ -473,21 +481,29 @@ export default function PrecedencePage({ anime, rows, notFound }: Props) {
 
 export const getServerSideProps: GetServerSideProps<Props> = async ({ query }) => {
   const id = typeof query.id === 'string' ? query.id : '';
-  if (!id) return { props: { anime: null, rows: [], notFound: false } };
+  // Server-only: imported inside getServerSideProps so neither the store nor the
+  // settings reader reaches the client bundle. The resolved per-field map is the
+  // same one `getAnimeForDisplay` threads into the merge — read it here too, or
+  // this page describes an ordering the record wasn't built with.
+  const { getCatalogPrecedenceByField } = await import('@/lib/config/settings');
+  const byField = getCatalogPrecedenceByField();
+  const pinnedFields = Object.keys(byField);
 
-  // Server-only: imported inside getServerSideProps so the store never reaches
-  // the client bundle. One record via the cache-bypassing lookup — cheap, and
-  // fresh by construction (see CLAUDE.md on the detail page doing the same).
+  if (!id) return { props: { anime: null, rows: [], pinnedFields, notFound: false } };
+
+  // One record via the cache-bypassing lookup — cheap, and fresh by construction
+  // (see CLAUDE.md on the detail page doing the same).
   const { getAnimeByCanonicalId } = await import('@/lib/store');
   const record: AnimeRecord | undefined = getAnimeByCanonicalId(id);
-  if (!record) return { props: { anime: null, rows: [], notFound: true } };
+  if (!record) return { props: { anime: null, rows: [], pinnedFields, notFound: true } };
 
   return {
     props: {
       anime: { id: record.id, title: getPrimaryTitle(record) },
       // JSON round-trip: `undefined` is not serializable across the SSR boundary,
       // and the explain rows are dense with optional fields.
-      rows: JSON.parse(JSON.stringify(explainCatalogPrecedence(record))),
+      rows: JSON.parse(JSON.stringify(explainCatalogPrecedence(record, undefined, byField))),
+      pinnedFields,
       notFound: false,
     },
   };
