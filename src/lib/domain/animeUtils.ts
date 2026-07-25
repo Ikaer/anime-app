@@ -230,6 +230,51 @@ export function formatUserStatus(status?: string) {
 export const DEFAULT_CATALOG_PRECEDENCE: CatalogSource[] = ['mal', 'anilist', 'simkl'];
 
 /**
+ * Per-field catalog precedence overrides, layered over
+ * `DEFAULT_CATALOG_PRECEDENCE`. A field absent from this map uses the default,
+ * so the common case stays a one-liner and this map holds only the fields whose
+ * ordering is a deliberate, argued decision.
+ *
+ * The point of per-field ordering (docs/FULL Precedence E1) is that "which
+ * provider is the catalog authority" is not one question — MAL wins `mean` on
+ * voter count while AniList would win a field like `synopsis` on freshness, and
+ * a single global array cannot express both.
+ *
+ * Current entries:
+ *
+ * - **`mean` → MAL, explicitly.** MAL's larger voter base gives a more reliable
+ *   central tendency, and `mean` backs the `minScore`/`maxScore` filters — a
+ *   mixed source would mean mixed filter semantics inside one sorted list. It
+ *   already won by falling through the default; pinning it states the reason so
+ *   a future default flip cannot silently take it.
+ *
+ * Deliberately NOT here:
+ *
+ * - **`genres`** — not a precedence question at all. Merged element-wise by
+ *   `unionGenres`, which runs after this map and overrides whatever it chose.
+ * - **`studios`** — measured, and MAL simply covers more (15,391 titles vs
+ *   12,254). AniList's 524 unique titles already fall through under the default,
+ *   so an override would gain nothing and only swap id namespaces. See
+ *   docs/FULL Precedence/studio-id-namespace.md.
+ */
+export const CATALOG_PRECEDENCE_BY_FIELD: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = {
+  mean: ['mal', 'anilist', 'simkl'],
+};
+
+/**
+ * The precedence a given catalog field resolves under. Single seam, so the
+ * inspector page (E6) and the future `/settings` editor (E5) report exactly what
+ * the merge did rather than re-deriving it.
+ */
+export function catalogPrecedenceFor(
+  field: keyof AnimeCatalog,
+  base: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
+  byField: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = CATALOG_PRECEDENCE_BY_FIELD
+): CatalogSource[] {
+  return byField[field] ?? base;
+}
+
+/**
  * Personal-state precedence: SIMKL > MAL > AniList — exactly the pre-Phase-C
  * `getEffective*` order. `local`'s position is NOT baked here: it's inserted by
  * `resolveLocalPrecedence` (top or bottom) only when the local provider is
@@ -260,14 +305,25 @@ export function resolveLocalPrecedence(
 }
 
 /**
- * Generic precedence merge: for every field any extractor produced, walk
- * `precedence` and take the first source with a defined value, recording which
- * source won in a sibling provenance map. A field no source touched is simply
- * absent from both `merged` and `provenance`.
+ * Generic precedence merge: for every field any extractor produced, walk that
+ * field's precedence and take the first source with a defined value, recording
+ * which source won in a sibling provenance map. A field no source touched is
+ * simply absent from both `merged` and `provenance`.
+ *
+ * Precedence is resolved **per field**: `byField` supplies an ordering for the
+ * fields that have a deliberate one, and everything else uses `precedence`.
+ * Passing no `byField` reproduces the old single-array behaviour exactly, which
+ * is what the personal merge still does (SIMKL > MAL > AniList is one decision
+ * for the whole block, not a per-field one).
+ *
+ * Note `value !== undefined` is the test, so a field an extractor sets to an
+ * empty array WINS. Extractors must emit `undefined` for "this provider has no
+ * value" — see the `genres`/`studios` note in `providers/anilist/sync.ts`.
  */
 function mergeWithProvenance<T extends object>(
   precedence: ProvenanceSource[],
-  extracted: Partial<Record<ProvenanceSource, Partial<T>>>
+  extracted: Partial<Record<ProvenanceSource, Partial<T>>>,
+  byField?: Partial<Record<keyof T, ProvenanceSource[]>>
 ): { merged: Partial<T>; provenance: Partial<Record<keyof T, ProvenanceSource>> } {
   const merged: Partial<T> = {};
   const provenance: Partial<Record<keyof T, ProvenanceSource>> = {};
@@ -277,7 +333,7 @@ function mergeWithProvenance<T extends object>(
     for (const key of Object.keys(values) as (keyof T)[]) allKeys.add(key);
   }
   for (const key of allKeys) {
-    for (const source of precedence) {
+    for (const source of byField?.[key] ?? precedence) {
       const values = extracted[source];
       const value = values ? values[key] : undefined;
       if (value !== undefined) {
@@ -468,7 +524,8 @@ export function toAnimeRecord(
   slices: RawAnimeSlices,
   canonicalId: string,
   catalogPrecedence: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
-  personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE
+  personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE,
+  catalogPrecedenceByField: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = CATALOG_PRECEDENCE_BY_FIELD
 ): AnimeRecord {
   const { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk } = slices;
 
@@ -480,7 +537,8 @@ export function toAnimeRecord(
   };
   const { merged: catalogMerged, provenance: catalogProvenance } = mergeWithProvenance<AnimeCatalog>(
     catalogPrecedence,
-    catalogExtracted
+    catalogExtracted,
+    catalogPrecedenceByField
   );
   // `genres` is unioned across providers rather than taken wholesale — see
   // `unionGenres`. Provenance keeps naming the highest-precedence contributor

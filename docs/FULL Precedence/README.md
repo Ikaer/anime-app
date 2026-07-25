@@ -175,9 +175,9 @@ each already has a rationale in `CLAUDE.md`.
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| E1 | Catalog precedence is a single global array; per-field is inexpressible | `mergeWithProvenance`, `DEFAULT_CATALOG_PRECEDENCE` | The structural blocker for everything the user actually wants |
+| ~~E1~~ | ~~Catalog precedence is a single global array~~ | `mergeWithProvenance`, `CATALOG_PRECEDENCE_BY_FIELD` | ✅ **SHIPPED 2026-07-25** — per-field map + `catalogPrecedenceFor()`; `mean` pinned to MAL |
 | ~~E2~~ | ~~AniList `catalog` blocks unpopulated for MAL-linked titles~~ | `catalog/anilist.json` | ✅ **SHIPPED 2026-07-25** — catalog sweep, 0 → 19,293 → [anilist-catalog-sync.md](anilist-catalog-sync.md) |
-| E3 | `genres` sourced from MAL | `catalogFromMal` | Target: AniList → [genre-vocabulary.md](genre-vocabulary.md). **Blocked on a product decision** (see Open decisions) |
+| ~~E3~~ | ~~`genres` sourced from MAL~~ | `unionGenres` | ✅ **SHIPPED 2026-07-25 — option C, union.** Not a precedence question: genres merge element-wise, so nothing is lost and the 60-value problem is void → [genre-vocabulary.md](genre-vocabulary.md) |
 | ~~E4~~ | ~~`studios` sourced from MAL~~ | `catalogFromMal` | ✅ **RESOLVED 2026-07-25 — not a defect.** MAL stays the source; the AniList case was producers miscounted as studios. Contamination fixed in Phase 0 → [studio-id-namespace.md](studio-id-namespace.md) |
 | E5 | Precedence is a source-code constant, not user-configurable | `animeUtils.ts` | Goal 2 |
 | E6 | No way to *see* which provider won a field | — | Goal 3 |
@@ -309,16 +309,29 @@ asking for it. Do it as its own task, with its consumer: model field +
 `catalogFromAnilist` + the `/stats` read + coverage/dedup against the cast slice +
 a re-sweep, together.
 
-### Phase 1 — the per-field mechanism (E1) + pin `mean`
+### Phase 1 — the per-field mechanism (E1) + pin `mean` ✅ SHIPPED 2026-07-25
 
-No data prerequisite; can run alongside Phase 0.
+- ✅ `mergeWithProvenance` takes an optional `byField` map and resolves precedence
+  **per key**. Provenance recording is unchanged — it already stored the winner
+  per field, which is exactly what E5/E6 need. Passing no `byField` reproduces the
+  old single-array behaviour, which is what the *personal* merge still does
+  (SIMKL > MAL > AniList is one decision for the whole block, not a per-field one).
+- ✅ `CATALOG_PRECEDENCE_BY_FIELD` + `catalogPrecedenceFor(field)` live next to
+  `DEFAULT_CATALOG_PRECEDENCE` in `domain/animeUtils.ts`. The helper is the single
+  seam the inspector page (E6) and the settings editor (E5) read, so they report
+  what the merge did rather than re-deriving it.
+- ✅ **`mean` pinned to MAL explicitly**, with the reason recorded at the
+  definition: larger voter base, and it backs `minScore`/`maxScore`, so a mixed
+  source would mean mixed filter semantics inside one sorted list.
 
-- `mergeWithProvenance` takes `(default, byField)` and resolves per key. Provenance
-  recording is unchanged.
-- `CATALOG_PRECEDENCE_BY_FIELD` lands next to `DEFAULT_CATALOG_PRECEDENCE` in
-  `domain/animeUtils.ts`.
-- **Pin `mean: ['mal','anilist']` explicitly.** It is its own Definition-of-done
-  line ("rather than winning by default") and the one flip with no blocker.
+**Verified by temporarily flipping the pin**, since pinning `mean` to the provider
+that already won by fall-through proves nothing on its own: with
+`mean: ['anilist','mal']` Death Note reported `mean 8.4 / provenance anilist`;
+reverted, `mean 8.62 / provenance mal`. The override genuinely overrides.
+
+Two fields are deliberately **absent** from the map, each for its own reason:
+`genres` is not a precedence question at all (unioned element-wise — see E3), and
+`studios` measured out as MAL-covers-more, so an override would gain nothing (E4).
 
 ### Phase 2 — inspector page (E6), *then* settings (E5)
 
@@ -404,13 +417,13 @@ MAL legacy is **closed** when all of these hold:
 - [x] Every AniList entry for a MAL-linked title carries a `catalog` block (E2) — **shipped 2026-07-25, 19,293 blocks**
 - [x] `CATALOG_FIELDS` uses the `edges { isMain node }` form, empty arrays store `undefined`, and the block is schema-versioned so stale entries re-queue (Phase 0, code) — **shipped 2026-07-25**
 - [x] The store is re-swept at `CATALOG_SCHEMA_VERSION` 2 and re-measured (Phase 0, data) — **done 2026-07-25**, contamination 2.68 → 1.09 studios/title
-- [ ] Catalog precedence is per-field, with a global default (E1)
+- [x] Catalog precedence is per-field, with a global default (E1) — **shipped 2026-07-25**
 - [ ] The inspector page shows per-field winner + ordering + all raw values (E6)
 - [ ] Precedence is user-configurable in `/settings` (E5)
-- [ ] `mean` explicitly pinned to MAL rather than winning by default (target table)
-- [ ] `genres` resolved and sourced per decision, with the 60-value loss handled (E3)
+- [x] `mean` explicitly pinned to MAL rather than winning by default (target table) — **shipped 2026-07-25**
+- [x] `genres` resolved (E3) — **option C, union across providers**, shipped 2026-07-25. No value is lost, so the 60-value question is void; `Thriller`→`Suspense` aliased
 - [x] `studios` resolved (E4) — **stays on MAL**; the AniList case was a measurement artifact, hazard 2 fixed in Phase 0, hazard 1 moot without a flip
-- [ ] Studio identity keyed on normalized name, not `s.id`, in the five reco/stats spots — closes hazard 1 permanently (already live at ~2% via fall-through)
+- [x] Studio identity keyed on normalized name, not `s.id`, in the five reco/stats spots — **shipped 2026-07-25**, collapsed 86 split studios
 - [ ] AniList queried **only** by AniList ids; `Media(idMal:)` gone as a query key (E8)
 - [ ] Provider ids converted to canonical **at ingest**; reco internals, the reco
       cache and `RECS_QUERY` all speak canonical (E9–E11)

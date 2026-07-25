@@ -1,9 +1,45 @@
 # The genre vocabulary issue
 
-> **Problem E3.** The decision is `genres` should come from AniList. Measured
-> against the live store, that **drops 60 of 78 genre values** with nothing
-> replacing them. This is the hardest of the three problems and the one that needs
-> a product decision, not just an implementation.
+> **✅ DECIDED AND SHIPPED 2026-07-25 — option C, union.** `genres` is merged
+> element-wise across providers (`unionGenres` in `domain/animeUtils.ts`) instead
+> of taken wholesale from one. **Nothing is lost, so the 60-value problem below is
+> void** — MAL's themes and demographics stay, and AniList's assignments are added
+> on top.
+>
+> The doc argued C "requires a new merge mode" and "re-conflates the taxonomies".
+> The first is true and turned out to be ~25 lines; the second is a real cost that
+> was accepted — MAL's `genres` was already three taxonomies in one field, so the
+> union does not make it worse, it just declines to fix it. **Option D remains the
+> better long-term shape** and is not foreclosed: splitting `themes` /
+> `demographics` out later is a pure re-partition of a field that now contains
+> strictly more data.
+>
+> What the union actually buys, measured on the live store (this was NOT known when
+> the options below were written — the whole framing was about avoiding *loss*, not
+> about gain):
+>
+> | | |
+> |---|---|
+> | Titles gaining ≥1 genre from AniList | **7,807 of 17,128 (45.6%)** |
+> | Genre assignments added | **11,087** |
+> | Biggest single gain | `Slice of Life` on 1,893 titles |
+> | Live filter effect | Mystery 1,018 → 1,222 · Slice of Life 1,184 → **3,078** |
+>
+> Vocabulary is unchanged at 78: `Thriller` is AniList's only non-MAL genre name,
+> and `GENRE_ALIASES` folds it into MAL's `Suspense` as this doc recommended.
+> Verified on Death Note — gains `Mystery`, and does **not** list both `Suspense`
+> and `Thriller`.
+>
+> **Studios did NOT get the same treatment**, and the asymmetry is the useful part:
+> genres union cleanly *because they are name-keyed*, so dedupe is a `Set`. See
+> [studio-id-namespace.md](studio-id-namespace.md).
+>
+> The analysis below is kept as the reasoning.
+
+> **Problem E3 (original framing).** The decision is `genres` should come from
+> AniList. Measured against the live store, that **drops 60 of 78 genre values**
+> with nothing replacing them. This is the hardest of the three problems and the
+> one that needs a product decision, not just an implementation.
 
 ## Measured (2026-07-24, live store + live `GenreCollection`)
 
@@ -112,15 +148,22 @@ one-time hand-curated mapping table (~60 entries), which is the honest bulk of t
 work. Also new filter dimensions (~6 spots each, per `CLAUDE.md`), and new reco
 sources if themes/demographics should score.
 
-## Decision needed
+## Decision — C (union), shipped 2026-07-25
 
-Pick A, C or D before flipping `genres` in the per-field precedence map. **D is
-recommended**; A is acceptable only if the genre filter and the genre reco source
-are both considered expendable. **Do not flip to A by default** — on this store it
-would silently degrade both the filter and the reco engine.
+Picked **C**. The full rationale and measurements are in the banner at the top of
+this doc; in short, the option list above was written to answer "how do we avoid
+losing 60 values", and C answers it by not losing anything — while turning out to
+*add* 11,087 genre assignments the store did not have.
 
-If D: the partition table is the deliverable, and it should live in this folder
-next to this doc.
+**D is not foreclosed and remains the better end state.** Splitting `themes` and
+`demographics` out of `genres` is now a pure re-partition of a field containing
+strictly more data than before, and the ~60-entry partition table would be the
+same deliverable. C was taken first because it is ~25 lines against D's several
+days, and because C makes D's eventual payoff larger rather than smaller.
+
+**A is now off the table**: it was only ever justified by the taxonomy-cleanliness
+argument, and the union delivers AniList's clean assignments without discarding
+MAL's 60 values.
 
 ## Non-goals
 
