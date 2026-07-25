@@ -1,0 +1,93 @@
+.genresSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search {
+  padding: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.clear {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 3px 8px;
+}
+
+.clear:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.axisGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.axisLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text-secondary));
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.checkboxLabel input[type="checkbox"] {
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+/* The name takes the slack so every count lines up on the right edge. */
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.more {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--accent-primary, #4a9eff);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 2px 0;
+}
+
+.more:hover {
+  text-decoration: underline;
+}

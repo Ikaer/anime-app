@@ -141,6 +141,7 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
     searchQuery: currentState.searchQuery,
     seasons: currentState.seasons,
     mediaTypes: currentState.mediaTypes,
+    genres: currentState.genres,
     hiddenOnly: currentState.hiddenOnly,
     discrepanciesOnly: currentState.discrepanciesOnly,
     unratedOnly: currentState.unratedOnly,

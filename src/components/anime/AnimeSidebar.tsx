@@ -6,7 +6,8 @@ import { CollapsibleSection, DebouncedSearchInput } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 import {
   ViewsSection,
-  FiltersSection
+  FiltersSection,
+  GenresSection
 } from './sidebar';
 
 /**
@@ -24,6 +25,8 @@ interface AnimeSidebarProps {
   onSeasonsChange: (v: SeasonInfo[]) => void;
   mediaTypes: string[];
   onMediaTypesChange: (v: string[]) => void;
+  genres: string[];
+  onGenresChange: (v: string[]) => void;
   hiddenOnly: boolean;
   onHiddenOnlyChange: (v: boolean) => void;
   discrepanciesOnly: boolean;
@@ -43,6 +46,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   searchQuery, onSearchChange,
   seasons, onSeasonsChange,
   mediaTypes, onMediaTypesChange,
+  genres, onGenresChange,
   hiddenOnly, onHiddenOnlyChange,
   discrepanciesOnly, onDiscrepanciesOnlyChange,
   minScore, onMinScoreChange,
@@ -95,6 +99,17 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           maxScore={maxScore}
           onMaxScoreChange={onMaxScoreChange}
         />
+      </CollapsibleSection>
+
+      {/* Its own section rather than a block inside Filters: it is the longest
+          control in the sidebar (78 values across three axes) and collapsing it
+          independently is what keeps the rest of the filters reachable. */}
+      <CollapsibleSection
+        title={t('section.genres')}
+        isExpanded={sidebarExpanded.genres}
+        onToggle={() => toggle('genres')}
+      >
+        <GenresSection genres={genres} onGenresChange={onGenresChange} />
       </CollapsibleSection>
     </div>
   );

@@ -50,6 +50,11 @@ export default function AnimePage() {
         params.set('mediaType', filters.mediaTypes.join(','));
       }
 
+      // Genres (all three axes in one param — the split is presentation only)
+      if (filters.genres.length > 0) {
+        params.set('genres', filters.genres.join(','));
+      }
+
       // Hidden
       params.set('hidden', filters.hiddenOnly ? 'true' : 'false');
 
@@ -107,6 +112,10 @@ export default function AnimePage() {
 
   const handleMediaTypesChange = (mediaTypes: string[]) => {
     updateFilters({ mediaTypes });
+  };
+
+  const handleGenresChange = (genres: string[]) => {
+    updateFilters({ genres });
   };
 
   const handleHiddenOnlyChange = (hiddenOnly: boolean) => {
@@ -167,6 +176,8 @@ export default function AnimePage() {
       onSeasonsChange={handleSeasonsChange}
       mediaTypes={filters.mediaTypes}
       onMediaTypesChange={handleMediaTypesChange}
+      genres={filters.genres}
+      onGenresChange={handleGenresChange}
       hiddenOnly={filters.hiddenOnly}
       onHiddenOnlyChange={handleHiddenOnlyChange}
       discrepanciesOnly={filters.discrepanciesOnly}

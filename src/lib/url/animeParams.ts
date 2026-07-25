@@ -23,6 +23,14 @@ export interface AnimeFiltersState {
   searchQuery: string;
   seasons: SeasonInfo[];
   mediaTypes: string[];
+  /**
+   * Genre NAMES to match, OR'd together (a title matches if it carries any).
+   * Names rather than ids because genres are name-keyed everywhere in this app —
+   * AniList supplies no real ids (synthetic `0`) and `unionGenres` dedupes on
+   * the name, so the name IS the identity. Carries all three axes; the split
+   * into genre/theme/demographic is presentation, see `domain/genreAxis.ts`.
+   */
+  genres: string[];
   hiddenOnly: boolean;
   discrepanciesOnly: boolean;
   unratedOnly: boolean;
@@ -102,6 +110,7 @@ const SIDEBAR_TO_CODE: Record<string, string> = {
   views: 'v',
   display: 'd',
   filters: 'f',
+  genres: 'g',
   sort: 'so',
   stats: 'st',
   simkl: 'sk',
@@ -124,6 +133,9 @@ const DEFAULT_SIDEBAR_EXPANDED: Record<string, boolean> = {
   views: true,
   display: true,
   filters: true,
+  // Collapsed by default: it is the tallest section in the sidebar, and the
+  // default view (current-season TV) is not a genre-driven one.
+  genres: false,
   sort: true,
   stats: true,
   simkl: true,
@@ -134,6 +146,7 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   searchQuery: '',
   seasons: [],
   mediaTypes: [],
+  genres: [],
   hiddenOnly: false,
   discrepanciesOnly: false,
   unratedOnly: false,
@@ -168,6 +181,7 @@ const PARAM_KEYS = {
   search: 'q',
   seasons: 'sn',
   mediaType: 'mt',
+  genres: 'g',
   hidden: 'h',
   discrepancies: 'disc',
   unrated: 'ur',
@@ -204,16 +218,36 @@ function encodeMediaTypes(types: string[]): string | null {
   return types.join(',');
 }
 
-function encodeSidebarExpanded(expanded: Record<string, boolean>): string | null {
-  // Encode only expanded sections; if all expanded, omit
-  const expandedCodes = Object.entries(expanded)
-    .filter(([, v]) => v)
-    .map(([k]) => SIDEBAR_TO_CODE[k] || k);
+/**
+ * Genre names, comma-joined. Unlike statuses/seasons/sorts there is no short
+ * code table: the vocabulary is ~78 open-ended values that grow whenever a
+ * provider adds one, so a code map would be a second place to keep in sync for
+ * a URL nobody hand-writes. Commas inside a name would break the join, and none
+ * exist — `encodeStateToUrl` un-escapes `%2C` for readability, so a genre
+ * containing one would be ambiguous on decode; worth knowing if a provider ever
+ * ships one.
+ */
+function encodeGenres(genres: string[]): string | null {
+  if (genres.length === 0) return null;
+  return genres.join(',');
+}
 
-  if (expandedCodes.length === Object.keys(DEFAULT_SIDEBAR_EXPANDED).length) {
-    return null; // All expanded = default
+function encodeSidebarExpanded(expanded: Record<string, boolean>): string | null {
+  // Omit from the URL when the state MATCHES THE DEFAULT — compared per key,
+  // not by counting expanded sections. The count test assumed the default was
+  // "everything expanded", which stopped being true when `genres` shipped
+  // collapsed: with all nine expanded the count matched, the param was omitted,
+  // and decoding fell back to the default that re-collapsed `genres` — an
+  // expansion that silently undid itself on reload.
+  const keys = Object.keys(DEFAULT_SIDEBAR_EXPANDED);
+  if (keys.every(k => !!expanded[k] === DEFAULT_SIDEBAR_EXPANDED[k])) {
+    return null;
   }
-  return expandedCodes.join(',');
+
+  return Object.entries(expanded)
+    .filter(([, v]) => v)
+    .map(([k]) => SIDEBAR_TO_CODE[k] || k)
+    .join(',');
 }
 
 function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchParams {
@@ -236,6 +270,11 @@ function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchPa
   if (filters.mediaTypes !== undefined) {
     const encoded = encodeMediaTypes(filters.mediaTypes);
     if (encoded) params.set(PARAM_KEYS.mediaType, encoded);
+  }
+
+  if (filters.genres !== undefined) {
+    const encoded = encodeGenres(filters.genres);
+    if (encoded) params.set(PARAM_KEYS.genres, encoded);
   }
 
   if (filters.hiddenOnly) {
@@ -336,6 +375,11 @@ function decodeMediaTypes(value: string | null): string[] {
   return value.split(',').filter(Boolean);
 }
 
+function decodeGenres(value: string | null): string[] {
+  if (!value) return [];
+  return value.split(',').map(g => g.trim()).filter(Boolean);
+}
+
 function decodeSidebarExpanded(value: string | null): Record<string, boolean> {
   if (!value) return { ...DEFAULT_SIDEBAR_EXPANDED };
 
@@ -367,6 +411,7 @@ function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     searchQuery: params.get(PARAM_KEYS.search) || '',
     seasons: decodeSeasons(params.get(PARAM_KEYS.seasons)),
     mediaTypes: decodeMediaTypes(params.get(PARAM_KEYS.mediaType)),
+    genres: decodeGenres(params.get(PARAM_KEYS.genres)),
     hiddenOnly: params.get(PARAM_KEYS.hidden) === '1',
     discrepanciesOnly: params.get(PARAM_KEYS.discrepancies) === '1',
     unratedOnly: params.get(PARAM_KEYS.unrated) === '1',
