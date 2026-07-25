@@ -373,6 +373,16 @@ export interface AniListMetaEntry {
    * until a real cross-source genre/studio identity exists.
    */
   catalog?: {
+    /**
+     * Schema version of this block (`CATALOG_SCHEMA_VERSION` in
+     * `providers/anilist/sync.ts`). `undefined` = written before versioning, i.e.
+     * by the pre-`isMain` query whose `studios` folded in producers.
+     *
+     * This is what lets a *shape* change re-queue already-fetched entries: the
+     * ordinary `undefined` backfill signal can only say "never fetched", which is
+     * useless when 19k entries were fetched correctly under a wrong query.
+     */
+    v?: number;
     title: string;
     /** AniList's romaji title, kept as the `alternative_titles`-less fallback secondary. */
     titleRomaji?: string;
@@ -388,12 +398,21 @@ export interface AniListMetaEntry {
      */
     genres?: Genre[];
     /**
-     * AniList studios (Phase 3 P3a). Ids are AniList's namespace, NOT MAL's —
-     * so a title present on BOTH keeps MAL studios under the default MAL-first
-     * precedence. Caveat if precedence ever flips to anilist-first: the reco
-     * studio IDF profile keys off studio `id`, so cross-source id mismatch
-     * would fragment studio affinity. Not a problem today (MAL wins for
-     * MAL-linked titles; AniList-only titles have no MAL studio profile anyway).
+     * AniList studios (Phase 3 P3a) — **animation studios only**. AniList's
+     * studios connection carries producers in the same list; `isMain` separates
+     * them and `toCatalogEntry` keeps only mains. Blocks at `v: undefined`
+     * predate that filter and hold producers too; they re-queue on sight.
+     *
+     * Ids are AniList's namespace, NOT MAL's — so a title present on BOTH keeps
+     * MAL studios under the default MAL-first precedence. Caveat if precedence
+     * ever flips to anilist-first: the reco studio IDF profile keys off studio
+     * `id`, so cross-source id mismatch would fragment studio affinity. Measured
+     * at ~15% of titles falling through to MAL, i.e. permanently mixed — the
+     * open gate 2 in docs/FULL Precedence/studio-id-namespace.md.
+     *
+     * `undefined` when AniList has none, never `[]`: the precedence merge takes
+     * the first `!== undefined` value, so an empty array would WIN and blank the
+     * field under an anilist-first flip.
      */
     studios?: Studio[];
     // ── Wider catalog fields (added so an AniList-only title renders a full row

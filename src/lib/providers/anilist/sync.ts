@@ -450,6 +450,13 @@ export async function performAnilistMetaSync(): Promise<AniListMetaSyncResult> {
 // The catalog field set, shared by the season crawler and the by-MAL-id
 // hydration path below so the two can never drift into producing differently
 // shaped rows for the same title.
+//
+// `studios` MUST use the edge form: AniList's studios connection holds animation
+// studios AND producers together, and `isMain` is the only thing separating them
+// (`cast.ts` already relies on exactly this). `nodes` discards the edge and with
+// it the flag, so it imports producers AS studios — measured at 2.68 studios per
+// title against MAL's 1.10 before this was fixed. See
+// docs/FULL Precedence/studio-id-namespace.md hazard 2.
 const CATALOG_FIELDS = `
       id
       idMal
@@ -465,7 +472,27 @@ const CATALOG_FIELDS = `
       popularity
       averageScore
       genres
-      studios { nodes { id name } }`;
+      studios { edges { isMain node { id name } } }`;
+
+/**
+ * Schema version of the `catalog` block `toCatalogEntry` produces.
+ *
+ * This is the **re-sweep signal**, and it exists because the ordinary backfill
+ * signal cannot express what happens when the query SHAPE changes. `catalog ===
+ * undefined` means "never fetched"; it has nothing to say about 19k entries that
+ * were fetched correctly under a wrong query. Bumping this re-queues every entry
+ * written by an older shape, and — unlike a force flag — the run stays
+ * **resumable**: each batch persists at the new version and stops re-queueing, so
+ * an interrupted 15-20 min sweep resumes instead of restarting from zero.
+ *
+ * Bump when the produced block changes in a way that makes stored data wrong.
+ *
+ * - **1** — implicit/absent. `studios` came from `studios { nodes }`, so producers
+ *   were imported as animation studios (2.68 studios/title vs MAL's 1.10).
+ * - **2** — `studios { edges { isMain node } }`, mains only; empty `genres`/
+ *   `studios` stored as `undefined` rather than `[]`.
+ */
+export const CATALOG_SCHEMA_VERSION = 2;
 
 const CATALOG_QUERY = `
 query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
@@ -512,7 +539,9 @@ interface RawCatalogMedia {
   popularity?: number | null;
   averageScore?: number | null;
   genres?: (string | null)[] | null;
-  studios?: { nodes?: ({ id?: number | null; name?: string | null } | null)[] | null } | null;
+  studios?: {
+    edges?: ({ isMain?: boolean | null; node?: { id?: number | null; name?: string | null } | null } | null)[] | null;
+  } | null;
 }
 
 // ── AniList → MAL vocabulary maps (the widened catalog fields normalize to MAL's
@@ -595,20 +624,28 @@ function toCatalogEntry(m: RawCatalogMedia): AniListCatalogEntry | null {
   const genres = (m.genres ?? [])
     .filter((g): g is string => !!g)
     .map(name => ({ id: 0, name }));
-  // AniList studios carry AniList-namespace ids (see AniListMetaEntry.catalog caveat).
-  const studios = (m.studios?.nodes ?? [])
-    .filter((s): s is { id?: number | null; name?: string | null } => !!s && !!s.name)
-    .map(s => ({ id: s.id ?? 0, name: s.name as string }));
+  // Animation studios only — `isMain: false` is a producer and must not land in
+  // `catalog.studios` (hazard 2). AniList studios carry AniList-namespace ids
+  // (see AniListMetaEntry.catalog caveat).
+  const studios = (m.studios?.edges ?? [])
+    .filter(e => !!e && e.isMain === true && !!e.node?.name)
+    .map(e => ({ id: e!.node!.id ?? 0, name: e!.node!.name as string }));
   const cover = m.coverImage?.medium || m.coverImage?.large
     ? { medium: m.coverImage?.medium ?? m.coverImage?.large ?? '', large: m.coverImage?.large ?? m.coverImage?.medium ?? '' }
     : undefined;
   const catalog: NonNullable<AniListMetaEntry['catalog']> = {
+    v: CATALOG_SCHEMA_VERSION,
     title,
     titleRomaji: m.title?.romaji ?? undefined,
     titleEnglish: m.title?.english ?? undefined,
     mean,
-    genres,
-    studios,
+    // `undefined`, never `[]`, when AniList has none. `mergeWithProvenance` takes
+    // the first source whose value is `!== undefined`, so an empty array is a
+    // WINNING value — under a future `studios: ['anilist','mal']` flip an empty
+    // AniList list would silently beat MAL's real one. Same trap the isMain fix
+    // above exists to avoid, arriving through a different door.
+    genres: genres.length > 0 ? genres : undefined,
+    studios: studios.length > 0 ? studios : undefined,
     coverImage: cover,
     synopsis: stripHtml(m.description),
     mediaType: mapFormat(m.format),
@@ -968,10 +1005,16 @@ export function isAnilistCatalogSweepRunning(): boolean {
 }
 
 /**
- * AniList ids of titles still missing a `catalog` block. Backfill signal is
- * `catalog === undefined` (no entry at all counts too). The scan source is the
- * **registry**, not the MAL slice, for the same reason `selectMetaTargets` uses
- * it — a title MAL doesn't know can still have an AniList id worth sweeping.
+ * AniList ids of titles whose `catalog` block is missing OR was written by an
+ * older schema version. The scan source is the **registry**, not the MAL slice,
+ * for the same reason `selectMetaTargets` uses it — a title MAL doesn't know can
+ * still have an AniList id worth sweeping.
+ *
+ * Two re-queue signals, and they mean different things:
+ * - `catalog === undefined` — never fetched (no entry at all counts too).
+ * - `catalog.v !== CATALOG_SCHEMA_VERSION` — fetched, but under a query shape
+ *   that produced wrong data. This is what makes a re-sweep possible at all;
+ *   see `CATALOG_SCHEMA_VERSION` for why a force flag was the wrong tool.
  *
  * A title with no AniList id in the crosswalk is skipped, not bridged through a
  * MAL id: that is the id-space policy, and it is why this selector is separate
@@ -982,7 +1025,7 @@ function selectCatalogSweepTargets(): number[] {
   const anilistIds: number[] = [];
   for (const [canonicalId, crosswalk] of Object.entries(getRegistry())) {
     const e = meta[canonicalId];
-    if (e && e.catalog !== undefined) continue; // already swept
+    if (e && e.catalog !== undefined && e.catalog.v === CATALOG_SCHEMA_VERSION) continue; // already swept, current shape
     const anilistId = toNum(crosswalk.anilist);
     if (anilistId !== undefined) anilistIds.push(anilistId);
   }
