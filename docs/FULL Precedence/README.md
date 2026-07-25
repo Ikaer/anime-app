@@ -180,7 +180,7 @@ each already has a rationale in `CLAUDE.md`.
 | ~~E3~~ | ~~`genres` sourced from MAL~~ | `unionGenres` | ✅ **SHIPPED 2026-07-25 — option C, union.** Not a precedence question: genres merge element-wise, so nothing is lost and the 60-value problem is void → [genre-vocabulary.md](genre-vocabulary.md) |
 | ~~E4~~ | ~~`studios` sourced from MAL~~ | `catalogFromMal` | ✅ **RESOLVED 2026-07-25 — not a defect.** MAL stays the source; the AniList case was producers miscounted as studios. Contamination fixed in Phase 0 → [studio-id-namespace.md](studio-id-namespace.md) |
 | E5 | Precedence is a source-code constant, not user-configurable | `animeUtils.ts` | Goal 2 |
-| E6 | No way to *see* which provider won a field | — | Goal 3 |
+| ~~E6~~ | ~~No way to *see* which provider won a field~~ | `/precedence`, `explainCatalogPrecedence` | ✅ **SHIPPED 2026-07-25** — per-field winner + ordering + every provider's value |
 | E7 | Residual raw-`sources.*` value reads that bypass the merge | ~38 grep hits, **not yet fully classified** | Audit during implementation; rule below |
 | E8 | AniList is enriched **by MAL id** (`Media(idMal:)`) | `selectMetaTargets`, `fetchAnilistCatalogByMalIds` | Foreign key used as primary. Remove the id-space entirely → [anilist-catalog-sync.md](anilist-catalog-sync.md#id-space-policy--query-anilist-by-anilists-id) |
 | E9 | Reco engine keys its internal maps on `crosswalk.mal` | `feed.ts`, `similar.ts`, `refresh.ts`, `byCredits.ts` | **Was K1.** Convert MAL-keyed crowd edges to canonical ids **at ingest**, then key on canonical |
@@ -333,12 +333,35 @@ Two fields are deliberately **absent** from the map, each for its own reason:
 `genres` is not a precedence question at all (unioned element-wise — see E3), and
 `studios` measured out as MAL-covers-more, so an override would gain nothing (E4).
 
-### Phase 2 — inspector page (E6), *then* settings (E5)
+### Phase 2 — inspector page (E6) ✅ SHIPPED, *then* settings (E5)
 
-Split these rather than building them as one unit. The inspector is the
-verification instrument for every later flip: build it read-only against the
-hardcoded map first, confirm the mechanism does what Phase 1 claims, then put the
-`/settings` UI on top of a page that already proves it.
+Split rather than built as one unit, and that ordering paid off: the inspector is
+the verification instrument for every later flip, so it exists first, read-only
+against the hardcoded map.
+
+**`/precedence?id=<canonicalId>`** — one row per catalog field: winning provider,
+the ordering in force, the effective value, and **every** provider's value beside
+it. Backed by `explainCatalogPrecedence` in `domain/animeUtils.ts`, a pure reader
+that rearranges what is already on the record — no bespoke API, no new data path.
+
+Three decisions worth keeping:
+
+- **`genres` reports `union`, never a winner.** `unionGenres` runs after the merge
+  and overwrites its choice, so `provenance.catalog.genres` names whoever the
+  merge happened to pick and means nothing. Rendering that as a winner would be
+  the one lie this page could most easily tell — on the page whose entire job is
+  to stop the merge being re-derived from scratch. The row shows each provider's
+  list instead.
+- **Contested fields sort first.** The interesting rows are where providers
+  disagreed (13 of 25 on Death Note), not the dozen where only MAL had anything.
+- **Not translated**, deliberately. The content is field identifiers, provider ids
+  and raw JSON; the doc asks for "dense raw-JSON legibility over the app's usual
+  card styling". Same standing exception as `/rate`'s rubric. Only the nav label
+  is localized.
+
+E5 now has somewhere to render into: `catalogPrecedenceFor()` is the seam both
+read, so the settings editor and this page cannot disagree about what the merge
+did.
 
 ### Phase 3 — the two flips, each behind its own gate
 
@@ -418,7 +441,7 @@ MAL legacy is **closed** when all of these hold:
 - [x] `CATALOG_FIELDS` uses the `edges { isMain node }` form, empty arrays store `undefined`, and the block is schema-versioned so stale entries re-queue (Phase 0, code) — **shipped 2026-07-25**
 - [x] The store is re-swept at `CATALOG_SCHEMA_VERSION` 2 and re-measured (Phase 0, data) — **done 2026-07-25**, contamination 2.68 → 1.09 studios/title
 - [x] Catalog precedence is per-field, with a global default (E1) — **shipped 2026-07-25**
-- [ ] The inspector page shows per-field winner + ordering + all raw values (E6)
+- [x] The inspector page shows per-field winner + ordering + all raw values (E6) — **shipped 2026-07-25**, `/precedence`
 - [ ] Precedence is user-configurable in `/settings` (E5)
 - [x] `mean` explicitly pinned to MAL rather than winning by default (target table) — **shipped 2026-07-25**
 - [x] `genres` resolved (E3) — **option C, union across providers**, shipped 2026-07-25. No value is lost, so the 60-value question is void; `Thriller`→`Suspense` aliased

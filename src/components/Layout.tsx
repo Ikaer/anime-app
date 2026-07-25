@@ -86,6 +86,13 @@ function OthersDropdown() {
             {t('nav.discrepancies')}
           </Link>
           <Link
+            href="/precedence"
+            role="menuitem"
+            className={`nav-dropdown-item ${router.pathname === '/precedence' ? 'active' : ''}`}
+          >
+            {t('nav.precedence')}
+          </Link>
+          <Link
             href="/settings"
             role="menuitem"
             className={`nav-dropdown-item ${router.pathname === '/settings' ? 'active' : ''}`}

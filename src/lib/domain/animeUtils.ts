@@ -513,6 +513,105 @@ export interface RawAnimeSlices {
   crosswalk?: SourceIds;
 }
 
+// ============================================================================
+// Precedence inspector (E6) — a READER, not a new data path
+// ============================================================================
+
+/** Per-provider normalized catalog views — the inputs the merge chose between. */
+export type CatalogBySource = Partial<Record<CatalogSource, Partial<AnimeCatalog>>>;
+
+/**
+ * Rebuild each provider's normalized catalog view from a record's raw slices.
+ *
+ * The same extractors `toAnimeRecord` feeds the merge, so the inspector compares
+ * providers on the **neutral field names** (`numEpisodes`) rather than on their
+ * raw shapes (MAL's `num_episodes` vs AniList's `numEpisodes`) — which is the
+ * only way the comparison is readable by eye.
+ */
+export function extractCatalogBySource(sources: AnimeRecord['sources']): CatalogBySource {
+  return {
+    mal: catalogFromMal(sources.mal),
+    anilist: catalogFromAnilist(sources.anilist),
+    simkl: catalogFromSimkl(),
+    local: catalogFromLocal(),
+  };
+}
+
+/** How a field's final value was arrived at. */
+export type CatalogMergeMode = 'precedence' | 'union';
+
+export interface CatalogFieldExplain {
+  field: keyof AnimeCatalog;
+  mergeMode: CatalogMergeMode;
+  /** The ordering this field resolved under — its override, or the default. */
+  precedence: CatalogSource[];
+  /**
+   * Which provider supplied the value. `undefined` for a `union` field, where
+   * "who won" is the wrong question.
+   */
+  winner?: ProvenanceSource;
+  /** The value actually sitting on `record.catalog`. */
+  effective: unknown;
+  /** Every provider's value for this field, losers included. */
+  bySource: Partial<Record<CatalogSource, unknown>>;
+  /** More than one provider offered a value — i.e. precedence really decided something. */
+  contested: boolean;
+}
+
+/**
+ * Per-field account of how `record.catalog` was assembled: the winning value,
+ * the winning provider, the ordering in force, and every provider's raw value.
+ *
+ * Everything here already exists on the record — this only arranges it, which is
+ * why the inspector needs no bespoke API. Pure and client-safe.
+ *
+ * Contested fields sort first: on a debugging surface the interesting rows are
+ * the ones where providers disagreed, not the thirty where only MAL had anything.
+ */
+export function explainCatalogPrecedence(
+  record: AnimeRecord,
+  base: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
+  byField: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = CATALOG_PRECEDENCE_BY_FIELD
+): CatalogFieldExplain[] {
+  const bySource = extractCatalogBySource(record.sources);
+
+  // Field list = every key any provider produced. Derived rather than hardcoded,
+  // so a new catalog field appears here without touching this function.
+  const fields = new Set<keyof AnimeCatalog>();
+  for (const values of Object.values(bySource)) {
+    for (const key of Object.keys(values ?? {}) as (keyof AnimeCatalog)[]) fields.add(key);
+  }
+
+  const rows = [...fields].map<CatalogFieldExplain>(field => {
+    const values: Partial<Record<CatalogSource, unknown>> = {};
+    let present = 0;
+    for (const source of Object.keys(bySource) as CatalogSource[]) {
+      const value = bySource[source]?.[field];
+      if (value === undefined) continue;
+      values[source] = value;
+      present++;
+    }
+    // `genres` is unioned AFTER the merge, so its provenance entry names whoever
+    // the merge happened to pick and means nothing. Reporting that as a winner is
+    // the one lie this page could most easily tell, on the page whose entire job
+    // is to stop people re-deriving this.
+    const mergeMode: CatalogMergeMode = field === 'genres' ? 'union' : 'precedence';
+    return {
+      field,
+      mergeMode,
+      precedence: catalogPrecedenceFor(field, base, byField),
+      winner: mergeMode === 'union' ? undefined : record.provenance.catalog[field],
+      effective: record.catalog[field],
+      bySource: values,
+      contested: present > 1,
+    };
+  });
+
+  return rows.sort((a, b) =>
+    Number(b.contested) - Number(a.contested) || a.field.localeCompare(b.field)
+  );
+}
+
 /**
  * Build the provider-neutral `AnimeRecord` from a canonical id's raw slices
  * via the generic hydration engine above. `personal` reproduces the exact
