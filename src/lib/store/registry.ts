@@ -65,6 +65,25 @@ function buildAnilistIndex(registry: Record<string, SourceIds>): Map<number, str
   return index;
 }
 
+/**
+ * Both provider→canonical lookups from ONE registry read — the boundary
+ * converter for data arriving keyed by a provider id (docs/FULL Precedence E9).
+ *
+ * Read-only: it **never mints**. That is the point. A crowd edge naming a title
+ * the store has never heard of must stay unresolved so the caller can decide
+ * (hydrate it, or drop it) — minting there would seed `registry.json` with
+ * entries no slice backs, and `getAnimeForDisplay` unions the registry's keys,
+ * so each one would surface as a phantom row with an empty title.
+ *
+ * Returned as maps rather than a `resolve(id)` function because callers convert
+ * whole edge sets: `resolveByMalId` rebuilds the index per call, which is fine
+ * for a route param and quadratic for six thousand edges.
+ */
+export function buildCrosswalkIndexes(): { byMal: Map<number, string>; byAnilist: Map<number, string> } {
+  const registry = getRegistry();
+  return { byMal: buildMalIndex(registry), byAnilist: buildAnilistIndex(registry) };
+}
+
 /** Same as `buildMalIndex`, keyed by the `simkl` crosswalk field instead. */
 function buildSimklIndex(registry: Record<string, SourceIds>): Map<number, string> {
   const index = new Map<number, string>();

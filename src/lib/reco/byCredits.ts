@@ -63,10 +63,23 @@ function technicalStaff(a: AnimeRecord): StaffEntry[] {
   return staff;
 }
 
-/** The anime's own raw MAL id, when resolvable — for comparing against another title's raw MAL relation ids. */
-function malIdOf(a: AnimeRecord): number {
-  const mal = a.crosswalk.mal;
-  return typeof mal === 'string' ? parseInt(mal, 10) : (mal as number);
+/**
+ * MAL id -> canonical id, built from the catalog array itself.
+ *
+ * `relatedAnime` ids come off the raw MAL relation payload, so converting them
+ * needs a crosswalk — but this module is **client-safe** (see the eslint import
+ * guard in CLAUDE.md) and must not reach for the registry. Deriving the index
+ * from the records the caller already handed us keeps the function pure, the
+ * same trick `domain/franchise.ts` uses for exactly the same reason.
+ */
+function malToCanonical(catalog: AnimeRecord[]): Map<number, string> {
+  const index = new Map<number, string>();
+  for (const a of catalog) {
+    const mal = a.crosswalk.mal;
+    const malId = typeof mal === 'string' ? parseInt(mal, 10) : mal;
+    if (typeof malId === 'number' && !Number.isNaN(malId) && !index.has(malId)) index.set(malId, a.id);
+  }
+  return index;
 }
 
 /**
@@ -134,15 +147,20 @@ export function computeSimilarByCredits(
   const studioName = new Map(targetStudios.map(s => [catalogNameKey(s.name), s.name]));
   const staffById = new Map(targetStaff.map(s => [s.id, s]));
 
-  // Franchise exclusion is keyed by MAL id: `relatedAnime` ids come straight
-  // off the raw MAL relation payload, so a candidate's own MAL id (not its
-  // canonical id) is the only thing they're comparable against.
-  const excludedMalIds = new Set<number>((target.catalog.relatedAnime || []).map(r => r.node.id));
+  // Franchise exclusion, converted to canonical up front (E9): `relatedAnime`
+  // ids arrive as raw MAL ids, so they are resolved ONCE here rather than
+  // re-deriving each candidate's MAL id inside the loop.
+  const toCanonical = malToCanonical(catalog);
+  const excluded = new Set<string>(
+    (target.catalog.relatedAnime || [])
+      .map(r => toCanonical.get(r.node.id))
+      .filter((id): id is string => id !== undefined)
+  );
 
   const scored: Array<SimilarByCredits & { mean: number }> = [];
   for (const cand of catalog) {
     if (cand.id === target.id) continue;
-    if (excludedMalIds.has(malIdOf(cand))) continue;
+    if (excluded.has(cand.id)) continue;
 
     const candStudioKeys = new Set((cand.catalog.studios || []).map(s => catalogNameKey(s.name)));
     const candStaffIds = new Set(technicalStaff(cand).map(s => s.id));

@@ -7,10 +7,11 @@
  * pure kernel in `scoring.ts`; each card carries the per-source breakdown that
  * powers the on-demand "Pourquoi ?" explain.
  *
- * The internal candidate map is MAL-id-keyed by design — edges, candidates and
- * suggestions all arrive as MAL ids.
- * Only the outward edges (each item's `.id`, the hidden/feedback exclusions) are
- * canonical.
+ * **Canonical ids throughout** (E9). Crowd edges arrive from MAL and AniList in
+ * their own id spaces, but `refresh.ts` converts them at ingest, so nothing here
+ * speaks a provider id: candidates, seeds, suggestions, the hidden/feedback
+ * exclusions and each item's `.id` are all `a_<n>`. The one remaining number-keyed
+ * set is the legacy `reco_dismissed.json`, read-only and resolved on read.
  *
  * Server-only (reads the store and the two JSON caches). Never import this
  * module client-side except via `import type`.
@@ -85,8 +86,8 @@ export function getSeeds(threshold: number): AnimeRecord[] {
 
 interface Accumulator {
   affinity: number;
-  /** seed id -> summed backers (num) contributed by that seed. */
-  perSeed: Map<number, number>;
+  /** seed canonical id -> summed backers (num) contributed by that seed. */
+  perSeed: Map<string, number>;
 }
 
 /**
@@ -164,15 +165,21 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const threshold = options.threshold ?? data.seedThreshold ?? TUNING.DEFAULT_SEED_THRESHOLD;
 
   const all = getAnimeForDisplay();
-  // The engine's internal crowd-edge math is MAL-keyed by design: edges,
-  // candidates and suggestions all arrive as MAL ids from MAL/AniList, so `byId`
-  // keys off `crosswalk.mal` rather than the record's own canonical `.id`.
-  const byId = new Map<number, AnimeRecord>();
+  // Canonical throughout (E9): the stored edges were converted at ingest, so
+  // this is the record's own `.id` rather than a MAL crosswalk lookup.
+  const byId = new Map<string, AnimeRecord>(all.map(a => [a.id, a]));
+  // `isPrematureSequel` compares against RAW MAL relation ids, which are a
+  // provider id space and stay one — so it needs its own MAL-keyed view.
+  const byMalId = new Map<number, AnimeRecord>();
   for (const a of all) {
     const malId = toNum(a.crosswalk.mal);
-    if (malId !== undefined) byId.set(malId, a);
+    if (malId !== undefined) byMalId.set(malId, a);
   }
-  const dismissed = new Set(getDismissedIds());
+  // Legacy pure-hide list: MAL ids on disk, resolved here so the exclusion is
+  // expressed in the same key space as everything else.
+  const dismissed = new Set(
+    getDismissedIds().map(malId => byMalId.get(malId)?.id).filter((id): id is string => id !== undefined)
+  );
   const hidden = new Set(getHiddenAnimeIds());
   const suggestionIds = new Set(data.suggestions.map(s => s.id));
   const feedback = getFeedback();
@@ -180,16 +187,15 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const downIds = feedbackIds(feedback, 'down');
 
   // Accumulate affinity from edges, grouped by originating seed.
-  const acc = new Map<number, Accumulator>();
-  const bump = (candId: number, seedId: number, contribution: number, backers: number) => {
+  const acc = new Map<string, Accumulator>();
+  const bump = (candId: string, seedId: string, contribution: number, backers: number) => {
     let a = acc.get(candId);
     if (!a) { a = { affinity: 0, perSeed: new Map() }; acc.set(candId, a); }
     a.affinity += contribution;
     a.perSeed.set(seedId, (a.perSeed.get(seedId) || 0) + backers);
   };
 
-  for (const [seedIdStr, edges] of Object.entries(data.seeds)) {
-    const seedId = Number(seedIdStr);
+  for (const [seedId, edges] of Object.entries(data.seeds)) {
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
     // Live threshold filter, with a fallback for 👍 seeds (no personal score).
@@ -218,15 +224,14 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // `rating` isn't comparable to MAL's `num_recommendations`). Same seed-weight
   // and threshold gating as MAL crowd. Candidates surfaced ONLY by AniList are
   // ensured in `acc` (with zero MAL affinity) so they enter the eligible pass.
-  const anilistAcc = new Map<number, Accumulator>();
-  const bumpAnilist = (candId: number, seedId: number, contribution: number, backers: number) => {
+  const anilistAcc = new Map<string, Accumulator>();
+  const bumpAnilist = (candId: string, seedId: string, contribution: number, backers: number) => {
     let a = anilistAcc.get(candId);
     if (!a) { a = { affinity: 0, perSeed: new Map() }; anilistAcc.set(candId, a); }
     a.affinity += contribution;
     a.perSeed.set(seedId, (a.perSeed.get(seedId) || 0) + backers);
   };
-  for (const [seedIdStr, edges] of Object.entries(data.anilistSeeds || {})) {
-    const seedId = Number(seedIdStr);
+  for (const [seedId, edges] of Object.entries(data.anilistSeeds || {})) {
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
     let weight: number;
@@ -265,7 +270,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
 
   // Pass 1: apply hard filters and gather the maxima used to normalize the
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
-  const eligible: { anime: AnimeRecord; a: Accumulator; candId: number }[] = [];
+  const eligible: { anime: AnimeRecord; a: Accumulator; candId: string }[] = [];
   let maxRaw = 0;
   let maxAnilistRaw = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
@@ -276,10 +281,10 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     // Hard filters (spec §5.3)
     const st = getEffectiveStatus(anime);
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
-    if (dismissed.has(candId)) continue; // legacy pure-hide list — still MAL-keyed, read-only
+    if (dismissed.has(candId)) continue; // legacy pure-hide list, read-only
     if (hidden.has(anime.id)) continue;
     if (upIds.has(anime.id) || downIds.has(anime.id)) continue; // already thumbed
-    if (isPrematureSequel(anime, byId)) continue; // later season of an unwatched show
+    if (isPrematureSequel(anime, byMalId)) continue; // later season of an unwatched show
 
     eligible.push({ anime, a, candId });
     if (a.affinity > maxRaw) maxRaw = a.affinity;
@@ -326,7 +331,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     };
 
     const sortedSeeds = Array.from(a.perSeed.entries()).sort((x, y) => y[1] - x[1]);
-    const seedTitle = (sid: number) => { const s = byId.get(sid); return s ? getPrimaryTitle(s) : `#${sid}`; };
+    const seedTitle = (sid: string) => { const s = byId.get(sid); return s ? getPrimaryTitle(s) : sid; };
     const topSeeds = sortedSeeds
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
       .map(([sid, backers]) => ({ id: sid, title: seedTitle(sid), backers }));

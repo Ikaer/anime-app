@@ -59,9 +59,14 @@ const SIMILAR_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0, fee
 /** Default number of similar titles returned. */
 export const SIMILAR_LIMIT = 12;
 
-/** One AniList crowd edge as returned by `fetchAnilistRecommendations`. */
+/**
+ * One AniList crowd edge, already converted onto a canonical id by the caller
+ * (E9) — the route is the ingest boundary, so nothing in here speaks a provider
+ * id space.
+ */
 export interface AniListEdgeInput {
-  id: number;
+  /** Canonical id of the recommended title. */
+  id: string;
   rating: number;
 }
 
@@ -92,7 +97,7 @@ export interface SimilarItem {
  * caller fetched — no MAL/AniList calls, no writes.
  */
 export function computeSimilarTo(
-  targetId: number,
+  targetId: string,
   malEdges: RecoEdge[],
   anilistEdges: AniListEdgeInput[],
   limit: number = SIMILAR_LIMIT,
@@ -100,47 +105,52 @@ export function computeSimilarTo(
 ): SimilarItem[] {
   const t = makeT(lang);
   const all = getAnimeForDisplay();
-  // MAL-keyed, same reasoning as `computeFeed`'s `byId` — `targetId` and edge
-  // ids arrive as MAL ids.
-  const byId = new Map<number, AnimeRecord>();
+  // Canonical throughout (E9) — `targetId` and both edge sets were converted by
+  // the route before they got here.
+  const byId = new Map<string, AnimeRecord>(all.map(a => [a.id, a]));
+  // `isPrematureSequel` and the franchise exclusion below both compare against
+  // RAW MAL relation ids, which stay a provider id space — hence a second view.
+  const byMalId = new Map<number, AnimeRecord>();
   for (const a of all) {
     const malId = toNum(a.crosswalk.mal);
-    if (malId !== undefined) byId.set(malId, a);
+    if (malId !== undefined) byMalId.set(malId, a);
   }
   const target = byId.get(targetId);
   if (!target) return [];
 
   // The target itself and its franchise entries trivially "resemble" it, and the
-  // page already lists relations in its own section. These are raw MAL ids
-  // (the target's own relation payload), kept separate from hidden/feedback
-  // below (canonical-keyed) since a crowd-edge candidate id is MAL too.
-  const excludedMalIds = new Set<number>([
+  // page already lists relations in its own section. `relatedAnime` ids come off
+  // the raw MAL relation payload, so they are resolved through `byMalId` to join
+  // the canonical exclusions.
+  const excluded = new Set<string>([
     targetId,
-    ...(target.catalog.relatedAnime || []).map(r => r.node.id),
+    ...(target.catalog.relatedAnime || [])
+      .map(r => byMalId.get(r.node.id)?.id)
+      .filter((id): id is string => id !== undefined),
   ]);
   const hiddenCanonical = new Set(getHiddenAnimeIds());
   const downCanonical = feedbackIds(getFeedback(), 'down');
 
-  const crowd = new Map<number, number>();
+  const crowd = new Map<string, number>();
   for (const e of malEdges) {
     if (e.num > 0) crowd.set(e.id, (crowd.get(e.id) || 0) + e.num);
   }
-  const anilistCrowd = new Map<number, number>();
+  const anilistCrowd = new Map<string, number>();
   for (const e of anilistEdges) {
     if (e.rating > 0) anilistCrowd.set(e.id, (anilistCrowd.get(e.id) || 0) + e.rating);
   }
 
   // Pass 1: hard filters + the maxima that normalize the unbounded sources.
-  const eligible: { anime: AnimeRecord; candId: number }[] = [];
+  const eligible: { anime: AnimeRecord; candId: string }[] = [];
   let maxCrowd = 0;
   let maxAnilist = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   for (const candId of new Set([...crowd.keys(), ...anilistCrowd.keys()])) {
-    if (excludedMalIds.has(candId)) continue;
+    if (excluded.has(candId)) continue;
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
     if (hiddenCanonical.has(anime.id) || downCanonical.has(anime.id)) continue;
-    if (isPrematureSequel(anime, byId)) continue;
+    if (isPrematureSequel(anime, byMalId)) continue;
 
     eligible.push({ anime, candId });
     maxCrowd = Math.max(maxCrowd, crowd.get(candId) || 0);

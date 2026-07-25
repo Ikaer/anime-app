@@ -9,12 +9,12 @@
  */
 
 import { MALAnime } from '@/models/anime';
-import { getAllAnime, upsertAnime, toNum } from '@/lib/store';
+import { getAnimeForDisplay, upsertAnime, buildCrosswalkIndexes, toNum } from '@/lib/store';
 import { TUNING } from '@/lib/reco/scoring';
 import { RecoEdge, RecommendationsData, saveRecommendationsData } from '@/lib/reco/data';
 import { getFeedbackAnime } from '@/lib/reco/feedback';
 import { getSeeds, type FeedOptions } from '@/lib/reco/feed';
-import { fetchAnilistRecommendations, fetchAnilistCatalogByMalIds } from '@/lib/providers/anilist/sync';
+import { fetchAnilistRecommendations, fetchAnilistCatalog } from '@/lib/providers/anilist/sync';
 import {
   fetchAnimeById,
   fetchAnimeRecommendations,
@@ -75,15 +75,32 @@ export function isRecommendationsRefreshRunning(): boolean {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * A crowd edge as it ARRIVES — still in the provider's id space, before the
+ * boundary conversion in `persist()` turns it into a canonical-keyed `RecoEdge`.
+ *
+ * Both id fields are optional and at least one is always set: MAL's endpoint
+ * yields `malId`, AniList's yields `anilistId` plus `malId` when AniList knows
+ * one. Carrying both is what lets an edge resolve through whichever crosswalk
+ * entry exists, and is why an AniList-only recommendation is no longer dropped.
+ */
+export interface RawEdge {
+  malId?: number;
+  anilistId?: number;
+  num: number;
+  hop: 1 | 2;
+}
+
+/**
  * The target's crowd edges, capped at MAL's own per-anime ceiling. Thin over
  * `providers/mal/client.ts` — the cap and the `hop` tag are recommender
- * concerns, the HTTP is not.
+ * concerns, the HTTP is not. Returns RAW (MAL-id) edges; converting them is the
+ * caller's job, at its ingest boundary.
  */
-export async function fetchRecoEdges(animeId: number, accessToken: string): Promise<RecoEdge[]> {
+export async function fetchRecoEdges(animeId: number, accessToken: string): Promise<RawEdge[]> {
   const edges = await fetchAnimeRecommendations(accessToken, animeId);
   return edges
     .slice(0, TUNING.MAX_RECS_PER_ANIME)
-    .map(e => ({ id: e.id, num: e.num, hop: 1 as const }));
+    .map(e => ({ malId: e.id, num: e.num, hop: 1 as const }));
 }
 
 /** One candidate's full catalog record. Non-fatal: a dead title is skipped. */
@@ -136,45 +153,89 @@ export async function performRecommendationsRefresh(
     const malSeeds = getSeeds(threshold);
     const seenSeed = new Set(malSeeds.map(s => s.id));
     const upSeeds = getFeedbackAnime('up').filter(a => !seenSeed.has(a.id));
+    // Seeds are RECORDS, and each provider call takes that record's own id out
+    // of the crosswalk (E9). A seed with no MAL id simply isn't asked of MAL;
+    // one with no AniList id isn't asked of AniList. Neither disqualifies it
+    // from the other source, which the old "reduce every seed to a MAL id"
+    // step quietly did.
     const seedRecords = [...malSeeds, ...upSeeds];
-    // `data.seeds`/`data.anilistSeeds` are MAL-id-keyed like the rest of the
-    // engine, so seeds are reduced to their MAL id here. Every stored record has
-    // a resolvable MAL id, but the filter guards rather than assumes.
-    const seeds = seedRecords
-      .map(record => toNum(record.crosswalk.mal))
-      .filter((id): id is number => id !== undefined);
 
-    const data: RecommendationsData = {
-      lastRefresh: null,
-      seedThreshold: threshold,
-      nicheMode: options.nicheMode,
-      seeds: {},
-      anilistSeeds: {},
-      suggestions: [],
+    // Raw, provider-keyed accumulation. It is deliberately NOT what gets
+    // persisted: `cache/recommendations.json` is canonical-keyed (E10), and the
+    // conversion happens in `persist()` below, after hydration has had a chance
+    // to mint the ids these edges point at.
+    const malEdgesBySeed = new Map<string, RawEdge[]>();
+    const anilistEdgesBySeed = new Map<string, RawEdge[]>();
+    let rawSuggestions: { malId: number; rank: number }[] = [];
+
+    /**
+     * Convert everything gathered so far onto canonical ids and write it out.
+     *
+     * `buildCrosswalkIndexes()` is resolve-only, so an edge naming a title the
+     * store has never heard of is DROPPED rather than minting a registry entry
+     * with no slice behind it. That is not data loss: `computeFeed` drops any
+     * candidate with no local record anyway, and hydration (which runs before
+     * the final call) is what turns a worth-keeping candidate into a resolvable
+     * one.
+     */
+    // Built once and reused across the incremental saves: nothing in the fetch
+    // phase mints a canonical id, so the registry is static until hydration —
+    // which is why the final `persist()` rebuilds it (see below).
+    let indexes = buildCrosswalkIndexes();
+    const persist = (lastRefresh: string | null = null): RecommendationsData => {
+      const { byMal, byAnilist } = indexes;
+      const canonical = (e: RawEdge): string | undefined =>
+        (e.anilistId !== undefined ? byAnilist.get(e.anilistId) : undefined)
+        ?? (e.malId !== undefined ? byMal.get(e.malId) : undefined);
+      const convert = (bySeed: Map<string, RawEdge[]>): Record<string, RecoEdge[]> => {
+        const out: Record<string, RecoEdge[]> = {};
+        for (const [seedCanonicalId, edges] of bySeed) {
+          out[seedCanonicalId] = edges
+            .map(e => ({ id: canonical(e), num: e.num, hop: e.hop }))
+            .filter((e): e is RecoEdge => e.id !== undefined);
+        }
+        return out;
+      };
+      const data: RecommendationsData = {
+        lastRefresh,
+        seedThreshold: threshold,
+        nicheMode: options.nicheMode,
+        seeds: convert(malEdgesBySeed),
+        anilistSeeds: convert(anilistEdgesBySeed),
+        suggestions: rawSuggestions
+          .map(s => ({ id: byMal.get(s.malId), rank: s.rank }))
+          .filter((s): s is { id: string; rank: number } => s.id !== undefined),
+      };
+      saveRecommendationsData(data);
+      return data;
     };
 
-    report({ type: 'start', message: `Refreshing recommendations from ${seeds.length} seeds`, totalSeeds: seeds.length });
+    const totalSeeds = seedRecords.length;
+    report({ type: 'start', message: `Refreshing recommendations from ${totalSeeds} seeds`, totalSeeds });
 
     // 1-hop crowd-seed. Skipped wholesale with no MAL token — MAL's
     // recommendations endpoint is authenticated, so there is nothing to attempt.
     let edgeCount = 0;
     if (!accessToken) {
       sources.malCrowd = { ok: false, skipped: true, reason: NO_MAL };
-      report({ type: 'seed_done', totalSeeds: seeds.length, message: 'MAL crowd recos skipped (no MAL account)' });
+      report({ type: 'seed_done', totalSeeds, message: 'MAL crowd recos skipped (no MAL account)' });
     } else {
-      for (let i = 0; i < seeds.length; i++) {
-        const seedMalId = seeds[i];
+      for (let i = 0; i < seedRecords.length; i++) {
+        const seed = seedRecords[i];
+        const seedMalId = toNum(seed.crosswalk.mal);
+        if (seedMalId === undefined) continue; // MAL cannot be asked about this seed
         try {
           const edges = await fetchRecoEdges(seedMalId, accessToken);
-          data.seeds[seedMalId.toString()] = edges;
+          malEdgesBySeed.set(seed.id, edges);
           edgeCount += edges.length;
         } catch (error) {
-          console.error(`Failed to fetch recos for seed ${seedMalId}:`, error);
-          data.seeds[seedMalId.toString()] = [];
+          console.error(`Failed to fetch recos for seed ${seed.id} (mal ${seedMalId}):`, error);
+          malEdgesBySeed.set(seed.id, []);
         }
-        // Persist incrementally (resumability).
-        saveRecommendationsData(data);
-        report({ type: 'seed_done', currentSeed: i + 1, totalSeeds: seeds.length, edges: edgeCount, message: `Seed ${i + 1}/${seeds.length}` });
+        // Persist incrementally, so an interrupted run leaves usable partial
+        // results rather than nothing.
+        persist();
+        report({ type: 'seed_done', currentSeed: i + 1, totalSeeds, edges: edgeCount, message: `Seed ${i + 1}/${totalSeeds}` });
         await delay(TUNING.FETCH_DELAY_MS);
       }
     }
@@ -187,30 +248,43 @@ export async function performRecommendationsRefresh(
     } else {
       try {
         report({ type: 'suggestions', message: 'Fetching personal suggestions...' });
-        data.suggestions = await fetchUserSuggestions(accessToken);
-        saveRecommendationsData(data);
+        rawSuggestions = (await fetchUserSuggestions(accessToken)).map(s => ({ malId: s.id, rank: s.rank }));
+        persist();
       } catch (error) {
         console.error('Failed to fetch suggestions:', error);
         sources.malSuggestions = { ok: false, reason: error instanceof Error ? error.message : 'Unknown error' };
       }
     }
 
-    // AniList crowd recos for the same seeds (orthogonal source). AniList
-    // resolves recs straight to MAL ids, so no crosswalk; batched + throttled
-    // inside fetchAnilistRecommendations. Non-fatal — a failure leaves the
-    // AniList source empty (weight defaults to 0 anyway).
+    // AniList crowd recos for the same seeds (orthogonal source), asked of
+    // AniList by AniList ids and answering with both ids per edge (E8/E11).
+    // Batched + throttled inside `fetchAnilistRecommendations`. Non-fatal — a
+    // failure leaves the AniList source empty (weight defaults to 0 anyway).
     try {
       report({ type: 'anilist', message: 'Fetching AniList recommendations...' });
+      // Seed AniList ids, and the way back to the seed RECORD they belong to:
+      // the response is keyed by the id we asked with, and the cache is keyed by
+      // canonical id.
+      const seedCanonicalByAnilistId = new Map<number, string>();
+      for (const seed of seedRecords) {
+        const anilistId = seed.sources.anilist?.anilist_id ?? toNum(seed.crosswalk.anilist);
+        if (anilistId !== undefined && !seedCanonicalByAnilistId.has(anilistId)) {
+          seedCanonicalByAnilistId.set(anilistId, seed.id);
+        }
+      }
       const anilistRecs = await fetchAnilistRecommendations(
-        seeds,
+        [...seedCanonicalByAnilistId.keys()],
         (done, total) => report({ type: 'anilist', currentSeed: done, totalSeeds: total, message: `AniList ${done}/${total}` })
       );
-      const anilistSeeds: Record<string, RecoEdge[]> = {};
-      anilistRecs.forEach((edges, seedMalId) => {
-        anilistSeeds[seedMalId.toString()] = edges.map(e => ({ id: e.id, num: e.rating, hop: 1 as const }));
+      anilistRecs.forEach((edges, seedAnilistId) => {
+        const seedCanonicalId = seedCanonicalByAnilistId.get(seedAnilistId);
+        if (!seedCanonicalId) return;
+        anilistEdgesBySeed.set(
+          seedCanonicalId,
+          edges.map(e => ({ anilistId: e.anilistId, malId: e.malId, num: e.rating, hop: 1 as const }))
+        );
       });
-      data.anilistSeeds = anilistSeeds;
-      saveRecommendationsData(data);
+      persist();
     } catch (error) {
       console.error('Failed to fetch AniList recommendations:', error);
       sources.anilistCrowd = { ok: false, reason: error instanceof Error ? error.message : 'Unknown error' };
@@ -219,65 +293,95 @@ export async function performRecommendationsRefresh(
     // Optional niche 2-hop: recos of each 1-hop candidate, stored under its seed.
     // Rides on the MAL crowd source, so it goes where that goes.
     if (options.nicheMode && accessToken) {
-      for (let i = 0; i < seeds.length; i++) {
-        const seedKey = seeds[i].toString();
-        const oneHop = (data.seeds[seedKey] || []).filter(e => e.hop === 1);
-        const hop2: RecoEdge[] = [];
+      for (let i = 0; i < seedRecords.length; i++) {
+        const seedCanonicalId = seedRecords[i].id;
+        const oneHop = (malEdgesBySeed.get(seedCanonicalId) || []).filter(e => e.hop === 1);
+        const hop2: RawEdge[] = [];
         for (const cand of oneHop) {
+          if (cand.malId === undefined) continue; // MAL's endpoint takes MAL ids
           try {
-            const edges = await fetchRecoEdges(cand.id, accessToken);
-            for (const e of edges) hop2.push({ id: e.id, num: e.num, hop: 2 });
+            const edges = await fetchRecoEdges(cand.malId, accessToken);
+            for (const e of edges) hop2.push({ malId: e.malId, num: e.num, hop: 2 });
           } catch (error) {
-            console.error(`Failed to fetch 2-hop for ${cand.id}:`, error);
+            console.error(`Failed to fetch 2-hop for mal ${cand.malId}:`, error);
           }
           await delay(TUNING.FETCH_DELAY_MS);
         }
-        data.seeds[seedKey] = [...(data.seeds[seedKey] || []), ...hop2];
+        malEdgesBySeed.set(seedCanonicalId, [...(malEdgesBySeed.get(seedCanonicalId) || []), ...hop2]);
         edgeCount += hop2.length;
-        saveRecommendationsData(data);
-        report({ type: 'hop2', currentSeed: i + 1, totalSeeds: seeds.length, edges: edgeCount, message: `2-hop ${i + 1}/${seeds.length}` });
+        persist();
+        report({ type: 'hop2', currentSeed: i + 1, totalSeeds, edges: edgeCount, message: `2-hop ${i + 1}/${totalSeeds}` });
       }
     }
 
-    // Hydrate missing titles so the feed can render them. The store is
-    // canonical-keyed now, but candidate/edge ids are MAL ids — test coverage
-    // against the raw MAL slice's own `.id` (getAllAnime(), unaffected by the
-    // AnimeRecord collapse), not the slice's canonical key.
-    const existingMalIds = new Set(Object.values(getAllAnime()).map(a => a.id));
-    const candidateIds = new Set<number>();
-    for (const edges of Object.values(data.seeds)) {
-      for (const e of edges) candidateIds.add(e.id);
+    // Hydrate missing titles so the feed can render them.
+    //
+    // "Missing" means **no usable local record**, not "absent from the MAL
+    // catalog slice". That distinction is E11's doing: an AniList-only candidate
+    // will never have a MAL slice, so the old test re-hydrated it on every
+    // single run and never converged — the same negative-caching shape E8
+    // removed from the metadata sync.
+    const { byMal, byAnilist } = indexes;
+    const usable = new Set(getAnimeForDisplay().filter(a => a.catalog.title !== '').map(a => a.id));
+    const candidates = new Map<string, RawEdge>(); // deduped by provider-id pair
+    for (const edges of [...malEdgesBySeed.values(), ...anilistEdgesBySeed.values()]) {
+      for (const e of edges) candidates.set(`${e.malId ?? ''}/${e.anilistId ?? ''}`, e);
     }
-    for (const edges of Object.values(data.anilistSeeds || {})) {
-      for (const e of edges) candidateIds.add(e.id);
-    }
-    for (const s of data.suggestions) candidateIds.add(s.id);
+    for (const s of rawSuggestions) candidates.set(`${s.malId}/`, { malId: s.malId, num: 0, hop: 1 });
 
-    const missing = Array.from(candidateIds).filter(id => !existingMalIds.has(id));
-    report({ type: 'hydrate', candidates: candidateIds.size, message: `Hydrating ${missing.length} missing titles` });
+    const missing = [...candidates.values()].filter(e => {
+      const canonicalId = (e.anilistId !== undefined ? byAnilist.get(e.anilistId) : undefined)
+        ?? (e.malId !== undefined ? byMal.get(e.malId) : undefined);
+      return canonicalId === undefined || !usable.has(canonicalId);
+    });
+    report({ type: 'hydrate', candidates: candidates.size, message: `Hydrating ${missing.length} missing titles` });
 
     // A candidate with no local record is DROPPED by computeFeed — there is no
     // metadata to rank it on. So hydration is what decides whether the feed has
-    // content at all, and it must not be MAL-only: without it, a keyless install
-    // would gather AniList crowd edges and then render none of them.
+    // content at all.
+    //
+    // The split is by WHICH ID THE CANDIDATE HAS, not by whether a MAL account
+    // exists. With a token, MAL's one-at-a-time detail endpoint handles anything
+    // holding a MAL id — but an AniList-ONLY candidate has nothing MAL can be
+    // asked about, so it goes to AniList regardless. That case is new: before
+    // E11 those edges were discarded at fetch time for lacking an `idMal`, which
+    // is precisely the coverage a keyless install exists to surface. Sending
+    // them down the `else` branch would have quietly re-lost them for anyone
+    // with a MAL account.
+    //
+    // De-duplicated because one title can arrive as several edges (a MAL edge
+    // keyed `mal only`, an AniList edge keyed `mal + anilist`), and a duplicate
+    // here is a duplicate HTTP request.
+    const missingMalIds = [...new Set(missing.map(e => e.malId).filter((id): id is number => id !== undefined))];
+    const missingAnilistOnlyIds = [...new Set(
+      missing.filter(e => e.malId === undefined).map(e => e.anilistId).filter((id): id is number => id !== undefined)
+    )];
+    const missingAnilistIds = [...new Set(missing.map(e => e.anilistId).filter((id): id is number => id !== undefined))];
+
     if (accessToken) {
       const hydrated: MALAnime[] = [];
-      for (let i = 0; i < missing.length; i++) {
-        const detail = await fetchAnimeDetail(missing[i], accessToken);
+      for (let i = 0; i < missingMalIds.length; i++) {
+        const detail = await fetchAnimeDetail(missingMalIds[i], accessToken);
         if (detail) hydrated.push(detail);
         if (hydrated.length > 0 && hydrated.length % 25 === 0) {
           upsertAnime(hydrated.splice(0)); // flush in batches
-          report({ type: 'hydrate', hydrated: i + 1, message: `Hydrated ${i + 1}/${missing.length}` });
+          report({ type: 'hydrate', hydrated: i + 1, message: `Hydrated ${i + 1}/${missingMalIds.length}` });
         }
         await delay(TUNING.FETCH_DELAY_MS);
       }
       if (hydrated.length > 0) upsertAnime(hydrated);
-    } else if (missing.length > 0) {
-      // Keyless: AniList's public API answers by MAL id, which is exactly the
-      // key candidates already carry — 50 per request instead of one, and the
-      // result lands as a `catalog` block that renders through the normal
-      // provenance hydration, same as a season-crawled title.
-      const result = await fetchAnilistCatalogByMalIds(missing, (done, total) =>
+      // The AniList-only remainder, batched 50 per request.
+      if (missingAnilistOnlyIds.length > 0) {
+        await fetchAnilistCatalog(missingAnilistOnlyIds, (done, total) =>
+          report({ type: 'hydrate', hydrated: done, message: `Hydrated ${done}/${total} AniList-only titles` })
+        );
+      }
+    } else if (missingAnilistIds.length > 0) {
+      // Keyless: the candidates came from AniList's own recommendation edges and
+      // carry AniList's id (E11), so AniList is asked with its own key — 50 per
+      // request instead of one, landing as a `catalog` block that renders through
+      // the normal provenance hydration, same as a season-crawled title.
+      const result = await fetchAnilistCatalog(missingAnilistIds, (done, total) =>
         report({ type: 'hydrate', hydrated: done, message: `Hydrated ${done}/${total} via AniList` })
       );
       sources.hydration = result.failed > 0 && result.hydrated === 0
@@ -285,8 +389,11 @@ export async function performRecommendationsRefresh(
         : { ok: true, via: 'anilist' };
     }
 
-    data.lastRefresh = new Date().toISOString();
-    saveRecommendationsData(data);
+    // Final conversion, against a REBUILT index: hydration has just minted
+    // canonical ids for the titles it landed, so this pass resolves the edges
+    // every earlier persist had to drop.
+    indexes = buildCrosswalkIndexes();
+    persist(new Date().toISOString());
 
     report({
       type: 'complete',
@@ -295,13 +402,13 @@ export async function performRecommendationsRefresh(
       message: accessToken
         ? 'Recommendations refresh complete'
         : 'Recommendations refresh complete (AniList only — no MAL account connected)',
-      totalSeeds: seeds.length,
+      totalSeeds,
       edges: edgeCount,
       hydrated: missing.length,
       sources,
     });
 
-    return { success: true, alreadyRunning: false, seedCount: seeds.length, edgeCount, hydratedCount: missing.length, sources };
+    return { success: true, alreadyRunning: false, seedCount: totalSeeds, edgeCount, hydratedCount: missing.length, sources };
   } catch (error) {
     console.error('Recommendations refresh error:', error);
     report({ type: 'error', error: 'Refresh failed', details: error instanceof Error ? error.message : 'Unknown error' });

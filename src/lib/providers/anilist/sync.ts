@@ -148,25 +148,26 @@ async function fetchTagsBatch(anilistIds: number[]): Promise<RawMedia[]> {
 
 // Crowd recommendations query — kept SEPARATE from TAGS_QUERY (tags + staff
 // already sit near AniList's query-complexity ceiling; stacking a
-// recommendations connection on top risks blowing it). Lightweight: only idMal
-// + the recommendations edge. `mediaRecommendation.idMal` resolves the rec
-// straight back onto our MAL join key, so no crosswalk is needed.
+// recommendations connection on top risks blowing it).
 //
-// This query stays MAL-keyed on purpose, unlike the enrichment one above: its
-// only consumer is the reco engine, which is MAL-keyed end to end (seeds, crowd
-// edges and cache/recommendations.json are all MAL ids). An `id_in` path here
-// would return edges the engine has no key to store or rank.
+// Seeded by `id_in` like every other AniList query here (E8), and each
+// `mediaRecommendation` yields **both** ids (E11). Selecting only `idMal` — as
+// this did — threw away AniList's own identifier for a title AniList had just
+// handed us, with two costs: recs AniList cannot map to a MAL id were dropped
+// outright (precisely the AniList-only titles a keyless install exists to
+// surface), and hydrating the survivors had to ask AniList *back* by MAL id,
+// which was the only reason a `Media(idMal:)` bridge existed on that path.
 const RECS_PER_ANIME = 15;
 const RECS_QUERY = `
 query ($ids: [Int]) {
   Page(page: 1, perPage: ${BATCH_SIZE}) {
-    media(idMal_in: $ids, type: ANIME) {
-      idMal
+    media(id_in: $ids, type: ANIME) {
+      id
       recommendations(sort: RATING_DESC, perPage: ${RECS_PER_ANIME}) {
         edges {
           node {
             rating
-            mediaRecommendation { idMal }
+            mediaRecommendation { id idMal }
           }
         }
       }
@@ -175,39 +176,43 @@ query ($ids: [Int]) {
 }`;
 
 interface RawRecEdge {
-  node?: { rating?: number; mediaRecommendation?: { idMal?: number | null } };
+  node?: { rating?: number; mediaRecommendation?: { id?: number | null; idMal?: number | null } };
 }
 interface RawRecMedia {
-  idMal: number;
+  id: number;
   recommendations?: { edges?: RawRecEdge[] };
 }
 
-/** One AniList crowd recommendation resolved onto a MAL id, with its net rating. */
+/**
+ * One AniList crowd recommendation, carrying both of the recommended title's
+ * ids. `anilistId` is always present (the edge came from AniList); `malId` is
+ * AniList's declared crosswalk and may be absent — which is data, not a defect,
+ * and no longer a reason to discard the edge.
+ */
 export interface AniListRecEdge {
-  /** Recommended anime's MAL id. */
-  id: number;
+  anilistId: number;
+  malId?: number;
   /** AniList net recommendation rating (crowd backers) — always > 0 here. */
   rating: number;
 }
 
-async function fetchRecsBatch(malIds: number[]): Promise<RawRecMedia[]> {
-  const data = await anilistQuery<{ Page?: { media?: RawRecMedia[] } }>(RECS_QUERY, { ids: malIds });
+async function fetchRecsBatch(anilistIds: number[]): Promise<RawRecMedia[]> {
+  const data = await anilistQuery<{ Page?: { media?: RawRecMedia[] } }>(RECS_QUERY, { ids: anilistIds });
   return data?.Page?.media ?? [];
 }
 
 /**
- * Fetch AniList crowd recommendations for the given seed MAL ids, batched by 50
- * (throttled by `client.ts` like every other AniList call). Returns a map of
- * seed MAL id -> recommended
- * MAL edges (recs AniList couldn't map to a MAL id, or with a non-positive net
- * rating, are dropped). AniList silently skips ids it doesn't know, so the map
- * only contains seeds it recognized.
+ * Fetch AniList crowd recommendations for the given seed **AniList ids**,
+ * batched by 50 (throttled by `client.ts` like every other AniList call).
+ * Returns a map of seed AniList id -> recommended edges; only a non-positive net
+ * rating drops an edge now. AniList silently skips ids it doesn't know, so the
+ * map only contains seeds it recognized.
  */
 export async function fetchAnilistRecommendations(
-  seedMalIds: number[],
+  seedAnilistIds: number[],
   onBatch?: (done: number, total: number) => void
 ): Promise<Map<number, AniListRecEdge[]>> {
-  const ids = seedMalIds.filter(id => Number.isInteger(id));
+  const ids = seedAnilistIds.filter(id => Number.isInteger(id));
   const batches = chunk(ids, BATCH_SIZE);
   const out = new Map<number, AniListRecEdge[]>();
   let processed = 0;
@@ -216,15 +221,19 @@ export async function fetchAnilistRecommendations(
     try {
       const media = await fetchRecsBatch(batch);
       for (const m of media) {
-        if (!m.idMal) continue;
+        if (!m.id) continue;
         const edges: AniListRecEdge[] = (m.recommendations?.edges ?? [])
-          .map(e => ({ id: e.node?.mediaRecommendation?.idMal ?? 0, rating: e.node?.rating ?? 0 }))
-          .filter(e => e.id > 0 && e.rating > 0);
-        if (edges.length > 0) out.set(m.idMal, edges);
+          .map(e => ({
+            anilistId: e.node?.mediaRecommendation?.id ?? 0,
+            malId: e.node?.mediaRecommendation?.idMal ?? undefined,
+            rating: e.node?.rating ?? 0,
+          }))
+          .filter(e => e.anilistId > 0 && e.rating > 0);
+        if (edges.length > 0) out.set(m.id, edges);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      appendLog('anilist-meta-sync', 'error', `AniList recos batch failed (mal ids ${batch[0]}-${batch[batch.length - 1]}), continuing: ${message}`);
+      appendLog('anilist-meta-sync', 'error', `AniList recos batch failed (anilist ids ${batch[0]}-${batch[batch.length - 1]}), continuing: ${message}`);
     }
     processed += batch.length;
     if (onBatch) onBatch(processed, ids.length);
@@ -493,19 +502,12 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int) {
   }
 }`;
 
-const CATALOG_BY_MAL_QUERY = `
-query ($ids: [Int]) {
-  Page(page: 1, perPage: ${BATCH_SIZE}) {
-    media(idMal_in: $ids, type: ANIME) {${CATALOG_FIELDS}
-    }
-  }
-}`;
-
-// The catalog sweep's query — same fields, filtered by AniList's OWN id. This is
-// the id-space policy in code: a title whose AniList id we already hold is
-// enriched THROUGH that id, never bridged back through MAL's. Sibling of
-// CATALOG_BY_MAL_QUERY, which stays for the keyless reco-hydration path (whose
-// candidates arrive as MAL ids with no crosswalk entry yet).
+// The by-id catalog query — same fields, filtered by AniList's OWN id. This is
+// the id-space policy in code: a title whose AniList id we hold is enriched
+// THROUGH that id, never bridged back through MAL's. It had a `CATALOG_BY_MAL_QUERY`
+// twin for the keyless reco-hydration path; E11 removed the need by keeping
+// AniList's id on the recommendation edges that path consumes, so there is one
+// query and one id space left here.
 const CATALOG_BY_ANILIST_QUERY = `
 query ($ids: [Int]) {
   Page(page: 1, perPage: ${BATCH_SIZE}) {
@@ -601,10 +603,10 @@ interface RawCatalogPage {
  * One AniList catalog media node → a storable entry, normalized to MAL's
  * vocabulary. `null` when the title has no usable name (nothing to render).
  *
- * Shared by the season crawler and by `fetchAnilistCatalogByMalIds` — the
- * keyless hydration path for reco candidates. Both need AniList's catalog view
- * of a title in exactly the same shape; only the *query* that finds the media
- * differs (by season vs. by MAL id).
+ * Shared by the season crawler, the catalog sweep and `fetchAnilistCatalog` —
+ * the keyless hydration path for reco candidates. All need AniList's catalog
+ * view of a title in exactly the same shape; only the *query* that finds the
+ * media differs (by season vs. by id).
  */
 function toCatalogEntry(m: RawCatalogMedia): AniListCatalogEntry | null {
   const title = m.title?.english || m.title?.romaji;
@@ -658,15 +660,19 @@ async function fetchCatalogPage(season: string, seasonYear: number, page: number
 }
 
 /**
- * Fetch AniList's catalog view of specific MAL ids and persist it — the
+ * Fetch AniList's catalog view of specific **AniList ids** and persist it — the
  * **keyless hydration path** for recommendation candidates.
  *
  * `performRecommendationsRefresh` hydrates candidate titles missing from the
  * local catalog so the feed has something to rank. This is the keyless path for
- * that: candidates arrive as MAL ids (the reco engine's join key) and AniList
- * queries by MAL id happily, so no crosswalk is involved and no MAL account is
- * needed. Without it a user with no MAL account accumulates AniList crowd edges
+ * that: with no MAL account the candidates come from `anilistCrowd`, i.e.
+ * AniList's own recommendation edges, which since E11 carry AniList's id — so
+ * the title is fetched with the provider's own key and no bridge is involved.
+ * Without this path a user with no MAL account accumulates AniList crowd edges
  * and renders none of them.
+ *
+ * Was `fetchAnilistCatalogByMalIds`, taking MAL ids through an `idMal_in`
+ * filter. The rename is the point, not cosmetics: the id space changed.
  *
  * Persists through `upsertAnilistCatalogFields`, so a hydrated title lands as a
  * `catalog` block on the AniList meta slice and renders through the normal
@@ -674,11 +680,11 @@ async function fetchCatalogPage(season: string, seasonYear: number, page: number
  * AniList doesn't know are silently skipped. Batched by 50, on the shared
  * `client.ts` throttle like every other sweep here.
  */
-export async function fetchAnilistCatalogByMalIds(
-  malIds: number[],
+export async function fetchAnilistCatalog(
+  anilistIds: number[],
   onBatch?: (done: number, total: number) => void
 ): Promise<{ requested: number; hydrated: number; failed: number }> {
-  const ids = malIds.filter(id => Number.isInteger(id));
+  const ids = anilistIds.filter(id => Number.isInteger(id));
   const batches = chunk(ids, BATCH_SIZE);
   let processed = 0;
   let hydrated = 0;
@@ -687,7 +693,7 @@ export async function fetchAnilistCatalogByMalIds(
   for (const batch of batches) {
     try {
       const data = await anilistQuery<{ Page?: { media?: RawCatalogMedia[] } }>(
-        CATALOG_BY_MAL_QUERY,
+        CATALOG_BY_ANILIST_QUERY,
         { ids: batch }
       );
       const entries = (data?.Page?.media ?? [])

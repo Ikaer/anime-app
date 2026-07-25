@@ -660,7 +660,8 @@ export interface RecoContribution {
 // Recommendation match metadata attached to each card in the "Pour toi" feed.
 export interface RecoMeta {
   affinityScore: number;
-  topSeeds: { id: number; title: string; backers: number }[];
+  /** `id` is the seed's CANONICAL id (E9) — the whole engine speaks canonical. */
+  topSeeds: { id: string; title: string; backers: number }[];
   /** Total number of seeds (liked/list anime) whose crowd recos point at this candidate. */
   totalSeeds: number;
   fromSuggestions: boolean;

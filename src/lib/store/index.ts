@@ -31,6 +31,7 @@ export {
   resolveByMalId,
   resolveCanonicalId,
   resolveCanonicalIds,
+  buildCrosswalkIndexes,
   toNum,
 } from '@/lib/store/registry';
 

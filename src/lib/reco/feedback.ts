@@ -53,7 +53,11 @@ export function getFeedbackAnime(verdict: RecoVerdict): AnimeRecord[] {
 
 /**
  * Legacy pure-hide dismiss list — superseded by 👎 feedback. Kept read-only so
- * any previously-dismissed ids stay excluded from the feed. Still MAL-keyed.
+ * any previously-dismissed ids stay excluded from the feed.
+ *
+ * MAL-keyed on disk, and staying that way: it is frozen historical data that
+ * nothing writes to, so migrating it would be work with no reader. `computeFeed`
+ * resolves the ids through the crosswalk on read instead.
  */
 export function getDismissedIds(): number[] {
   return readJsonFile<number[]>(DISMISSED_FILE, []);
