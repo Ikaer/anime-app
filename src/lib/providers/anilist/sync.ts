@@ -15,13 +15,56 @@ import { getSeasonInfos } from '@/lib/domain/animeUtils';
 import { AniListTagEntry, AniListStaffEntry, AniListMetaEntry, AniListRelationEntry } from '@/models/anime';
 
 const BATCH_SIZE = 50;
-// Top-relevance staff credits to keep per anime — enough for the discriminative
-// creative roles (director, character design, music…) without bloating storage.
-const STAFF_PER_ANIME = 15;
+// Top-relevance staff credits per anime, as PAGES rather than one number, because
+// **25 is AniList's hard cap on this connection** — asking `perPage: 50` returns
+// 25 anyway (verified live 2026-07-25), so more depth can only come from more
+// pages. Two pages ⇒ up to 50 credits.
+//
+// 15 (the original) truncated 35% of the store's ~19k entries and cut real
+// credits, not just noise: AniList's RELEVANCE sort is only loosely
+// importance-first — on AniList 8407 the Theme Song Composition, Art Setting and
+// ADR Director credits sit at ranks 30-35, *below* per-episode key animation.
+// Measured over a 200-title sample of the live store, titles fully covered:
+// 67.5% at 15, 75.0% at 25, 84.5% at 50. The remaining tail is blockbusters with
+// hundreds of per-episode animation credits; a third page is not worth another
+// slab of a slice that sits in the seven-slice join.
+//
+// **Do NOT trust `staff.pageInfo.total` on page 1** — it reports a placeholder
+// (500/lastPage 20 for a title that actually has 40). Only the LAST page's
+// pageInfo is truthful, which is why coverage above was measured by walking
+// pages, never by reading `total`.
+const STAFF_PER_PAGE = 25;
 
-// Tags, staff AND relations in one query per batch. `perPage:50` with nested
-// `staff(perPage:15)` plus the relations connection stays under AniList's
-// query-complexity ceiling; adding to it may not.
+/**
+ * The aliased staff pages, in order. `satisfies` ties them to `RawMedia`'s
+ * fields, so adding a third page is "add the key here, add the field there" and
+ * a typo is a compile error rather than a silently-dropped page.
+ */
+const STAFF_PAGE_KEYS = ['staffPage1', 'staffPage2'] as const satisfies readonly (keyof RawMedia)[];
+
+/** One aliased page of the staff connection, `staffPage1`, `staffPage2`, … */
+function staffPageField(page: number): string {
+  return `staffPage${page}: staff(sort: RELEVANCE, page: ${page}, perPage: ${STAFF_PER_PAGE}) {
+        edges {
+          role
+          node {
+            id
+            name { full }
+          }
+        }
+      }`;
+}
+
+// Tags, staff AND relations in one query per batch. `perPage:50` media with TWO
+// nested aliased `staff(perPage:25)` connections plus relations stays under
+// AniList's query-complexity ceiling — verified live at exactly this shape
+// (HTTP 200, 50/50 media returned, no null pages); adding to it may not.
+//
+// The staff pages are ALIASED FIELDS on the media node (`staffPage1`/`staffPage2`),
+// which is a different thing from the aliased-`Media` null bomb warned about
+// below: that hazard is aliasing the top-level single-media root, not aliasing a
+// connection inside `Page.media`. Verified live — every sampled title populated
+// both aliases.
 //
 // Staff must stay nested inside `Page.media` — an aliased `Media` null-bombs on
 // any miss. `relations.node.type` is fetched because an ADAPTATION edge's
@@ -45,15 +88,7 @@ query ($ids: [Int]) {
         rank
         category
       }
-      staff(sort: RELEVANCE, perPage: ${STAFF_PER_ANIME}) {
-        edges {
-          role
-          node {
-            id
-            name { full }
-          }
-        }
-      }
+      ${STAFF_PAGE_KEYS.map((_, i) => staffPageField(i + 1)).join('\n      ')}
       relations {
         edges {
           relationType
@@ -68,6 +103,9 @@ interface RawStaffEdge {
   role?: string;
   node?: { id?: number; name?: { full?: string } };
 }
+interface RawStaffConnection {
+  edges?: RawStaffEdge[];
+}
 interface RawRelationEdge {
   relationType?: string;
   node?: { id?: number | null; idMal?: number | null; type?: string };
@@ -81,7 +119,9 @@ interface RawMedia {
   id: number;
   bannerImage?: string | null;
   tags: AniListTagEntry[];
-  staff?: { edges?: RawStaffEdge[] };
+  /** The aliased staff pages the query selects — see `STAFF_PAGE_KEYS`. */
+  staffPage1?: RawStaffConnection;
+  staffPage2?: RawStaffConnection;
   relations?: { edges?: RawRelationEdge[] };
 }
 
@@ -125,9 +165,18 @@ function parseRelations(media: RawMedia): AniListRelationEntry[] {
     }));
 }
 
-/** Flatten AniList staff edges to our lean {id,name,role} records. */
+/**
+ * Flatten AniList staff edges to our lean {id,name,role} records, concatenating
+ * the aliased pages in order so relevance ranking survives the merge.
+ *
+ * NOT de-duplicated by staff id on purpose: one person legitimately holds
+ * several credits on a title (Tetsuya Yanagisawa is both Episode Director and
+ * Storyboard on AniList 8407), and the role is half the record. The stats page
+ * and the reco profile both count DISTINCT anime per person, so a repeated id
+ * costs nothing there.
+ */
 function parseStaff(media: RawMedia): AniListStaffEntry[] {
-  return (media.staff?.edges ?? [])
+  return STAFF_PAGE_KEYS.flatMap(key => media[key]?.edges ?? [])
     .filter((e): e is RawStaffEdge & { node: { id: number } } => !!e.node?.id)
     .map(e => ({ id: e.node.id, name: e.node?.name?.full ?? '', role: e.role ?? '' }));
 }
