@@ -12,7 +12,7 @@
  */
 
 import { AnimeRecord } from '@/models/anime';
-import { getEffectiveStatus, getEffectiveScore } from '@/lib/domain/animeUtils';
+import { getEffectiveStatus, getEffectiveScore, catalogNameKey } from '@/lib/domain/animeUtils';
 
 // ============================================================================
 // Tuning constants (all knobs live here — no scattered magic numbers)
@@ -47,7 +47,12 @@ export type FieldValue = string | number;
 
 export const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[]> = {
   genre: a => (a.catalog.genres || []).map(g => g.name),
-  studio: a => (a.catalog.studios || []).map(s => s.id),
+  // Keyed on the NORMALIZED NAME, not `s.id`: studio ids belong to whichever
+  // provider supplied them, and MAL's and AniList's namespaces disagree. That
+  // mixing is live today — titles MAL has no studio for fall through to AniList
+  // — so an id key splits one real studio's affinity in two. See
+  // docs/FULL Precedence/studio-id-namespace.md.
+  studio: a => (a.catalog.studios || []).map(s => catalogNameKey(s.name)),
   nsfw: a => (a.catalog.nsfw ? [a.catalog.nsfw] : []),
   rating: a => (a.catalog.rating ? [a.catalog.rating] : []),
   anilistTags: a => (a.sources.anilist?.tags || []).map(t => t.name),

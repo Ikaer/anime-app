@@ -16,7 +16,7 @@
  */
 
 import type { AnimeRecord } from '@/models/anime';
-import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
+import { getCatalogPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
 
 export interface SharedStaffCredit {
   name: string;
@@ -90,7 +90,8 @@ function computeIdf<T>(catalog: AnimeRecord[], extract: (a: AnimeRecord) => T[])
 // old entry is GC'd). Without this, every detail-page hit re-walked the whole
 // ~25k-row catalog twice.
 interface IdfMaps {
-  studioIdf: Map<number, number>;
+  /** Keyed by normalized studio NAME (see `catalogNameKey`), not by provider id. */
+  studioIdf: Map<string, number>;
   staffIdf: Map<number, number>;
 }
 const idfCache = new WeakMap<AnimeRecord[], IdfMaps>();
@@ -99,7 +100,9 @@ function catalogIdf(catalog: AnimeRecord[]): IdfMaps {
   let maps = idfCache.get(catalog);
   if (!maps) {
     maps = {
-      studioIdf: computeIdf(catalog, a => (a.catalog.studios || []).map(s => s.id)),
+      // Normalized name, not `s.id` — the two providers' studio id namespaces
+      // disagree and both are live in the store. See scoring.ts's `studio` extractor.
+      studioIdf: computeIdf(catalog, a => (a.catalog.studios || []).map(s => catalogNameKey(s.name))),
       staffIdf: computeIdf(catalog, a => technicalStaff(a).map(s => s.id)),
     };
     idfCache.set(catalog, maps);
@@ -121,14 +124,14 @@ export function computeSimilarByCredits(
 ): SimilarByCredits[] {
   const targetStudios = target.catalog.studios || [];
   const targetStaff = technicalStaff(target);
-  const targetStudioIds = new Set(targetStudios.map(s => s.id));
+  const targetStudioKeys = new Set(targetStudios.map(s => catalogNameKey(s.name)));
   const targetStaffIds = new Set(targetStaff.map(s => s.id));
-  if (targetStudioIds.size === 0 && targetStaffIds.size === 0) return [];
+  if (targetStudioKeys.size === 0 && targetStaffIds.size === 0) return [];
 
   const { studioIdf, staffIdf } = catalogIdf(catalog);
 
   // Display lookups from the target (names/roles as the target credits them).
-  const studioName = new Map(targetStudios.map(s => [s.id, s.name]));
+  const studioName = new Map(targetStudios.map(s => [catalogNameKey(s.name), s.name]));
   const staffById = new Map(targetStaff.map(s => [s.id, s]));
 
   // Franchise exclusion is keyed by MAL id: `relatedAnime` ids come straight
@@ -141,13 +144,13 @@ export function computeSimilarByCredits(
     if (cand.id === target.id) continue;
     if (excludedMalIds.has(malIdOf(cand))) continue;
 
-    const candStudioIds = new Set((cand.catalog.studios || []).map(s => s.id));
+    const candStudioKeys = new Set((cand.catalog.studios || []).map(s => catalogNameKey(s.name)));
     const candStaffIds = new Set(technicalStaff(cand).map(s => s.id));
 
     let score = 0;
     const sharedStudios: string[] = [];
-    for (const sid of targetStudioIds) {
-      if (candStudioIds.has(sid)) {
+    for (const sid of targetStudioKeys) {
+      if (candStudioKeys.has(sid)) {
         score += studioIdf.get(sid) || 0;
         sharedStudios.push(studioName.get(sid) || String(sid));
       }

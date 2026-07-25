@@ -19,7 +19,7 @@
  */
 
 import type { AniListCastEntry, AnimeRecord } from '@/models/anime';
-import { getEffectiveStatus } from '@/lib/domain/animeUtils';
+import { getEffectiveStatus, catalogNameKey } from '@/lib/domain/animeUtils';
 
 /** The six repartition dimensions. */
 export type StatsDimension =
@@ -180,7 +180,13 @@ export function computeStats(
     const studios = anime.catalog.studios || [];
     if (studios.length > 0) covered.studios++;
     for (const s of studios) {
-      bump(buckets.studios, `s:${s.id || s.name}`, animeId, { name: s.name, id: s.id || undefined });
+      // Bucketed on the normalized NAME, never the provider id: MAL's and
+      // AniList's studio id namespaces disagree, and both are live in the store
+      // (a title MAL has no studio for falls through to AniList), so an id key
+      // ranks one real studio as two rows. The `id` still rides along for the
+      // `/credits/studio/<id>` link — first one seen wins, which under MAL-first
+      // precedence is MAL's.
+      bump(buckets.studios, `s:${catalogNameKey(s.name)}`, animeId, { name: s.name, id: s.id || undefined });
     }
 
     const genres = anime.catalog.genres || [];

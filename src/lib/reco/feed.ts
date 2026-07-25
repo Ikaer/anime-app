@@ -33,7 +33,7 @@ import {
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { feedbackIds, getFeedback, getDismissedIds } from '@/lib/reco/feedback';
-import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 export interface RecommendationItem extends AnimeRecord {
@@ -98,7 +98,7 @@ interface Accumulator {
 function diversitySignature(anime: AnimeRecord): Set<string> {
   const s = new Set<string>();
   for (const g of anime.catalog.genres || []) s.add(`g:${g.name}`);
-  for (const st of anime.catalog.studios || []) s.add(`s:${st.id}`);
+  for (const st of anime.catalog.studios || []) s.add(`s:${catalogNameKey(st.name)}`);
   return s;
 }
 
@@ -337,7 +337,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       .sort((x, y) => y[1] - x[1])
       .map(([sid]) => seedTitle(sid));
 
-    const studioNames = new Map((anime.catalog.studios || []).map(s => [s.id, s.name]));
+    // Keyed like the studio profile (normalized name) so the explain can turn a
+    // matched key back into the studio's display name.
+    const studioNames = new Map((anime.catalog.studios || []).map(s => [catalogNameKey(s.name), s.name]));
     const staffById = new Map((anime.sources.anilist?.staff || []).map(s => [s.id, s]));
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: allSeedTitles.length ? t('recoDetail.crowd', { titles: allSeedTitles.join(', ') }) : undefined,
@@ -346,13 +348,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       feedback: (() => {
         const parts = [
           ...(fbGenreM.matched as string[]),
-          ...fbStudioM.matched.map(id => studioNames.get(id as number) || `#${id}`),
+          ...fbStudioM.matched.map(k => studioNames.get(k as string) || String(k)),
         ];
         return parts.length ? t('recoDetail.feedback', { parts: parts.join(', ') }) : undefined;
       })(),
       genre: genreM.matched.length ? (genreM.matched as string[]).join(', ') : undefined,
       studio: studioM.matched.length
-        ? studioM.matched.map(id => studioNames.get(id as number) || `#${id}`).join(', ')
+        ? studioM.matched.map(k => studioNames.get(k as string) || String(k)).join(', ')
         : undefined,
       nsfw: values.nsfw > 0 && anime.catalog.nsfw ? anime.catalog.nsfw : undefined,
       rating: values.rating > 0 && anime.catalog.rating ? anime.catalog.rating.toUpperCase() : undefined,
@@ -369,7 +371,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       rejection: (() => {
         const parts = [
           ...(negGenreM.matched as string[]),
-          ...negStudioM.matched.map(id => studioNames.get(id as number) || `#${id}`),
+          ...negStudioM.matched.map(k => studioNames.get(k as string) || String(k)),
         ];
         return parts.length ? parts.join(', ') : undefined;
       })(),

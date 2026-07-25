@@ -318,8 +318,20 @@ function mergeWithProvenance<T extends object>(
  */
 const GENRE_ALIASES: Record<string, string> = { thriller: 'Suspense' };
 
-/** Genre identity for dedupe: case/punctuation-insensitive name. */
-const genreKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+/**
+ * Identity key for a catalog value that is named rather than stably identified
+ * — genres and studios both qualify, for the same reason: their provider ids do
+ * not survive a crossing between MAL's and AniList's namespaces, so the name is
+ * the only key the two sources agree on.
+ *
+ * Case- and punctuation-insensitive, whitespace stripped, which is what makes
+ * `P.A. Works` and `P.A.WORKS` one studio. Measured agreement across the live
+ * store: **87.9%** of titles carrying studios from both providers have
+ * name-identical sets under this key. The residue is genuine aliasing
+ * (`Gallop` / `Studio Gallop`) that only a hand-written table would collapse —
+ * see docs/FULL Precedence/studio-id-namespace.md.
+ */
+export const catalogNameKey = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /**
  * Element-wise union of every provider's genres, deduped by normalized name and
@@ -338,8 +350,8 @@ function unionGenres(
   const seen = new Set<string>();
   for (const source of precedence) {
     for (const genre of extracted[source]?.genres ?? []) {
-      const name = GENRE_ALIASES[genreKey(genre.name)] ?? genre.name;
-      const key = genreKey(name);
+      const name = GENRE_ALIASES[catalogNameKey(genre.name)] ?? genre.name;
+      const key = catalogNameKey(name);
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({ ...genre, name });
