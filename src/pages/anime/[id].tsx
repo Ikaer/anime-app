@@ -358,7 +358,13 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
 
         {/* ---------- Catalog facts (MAL authority) ---------- */}
         <section className="section">
-          <h2>{t('detail.catalogSheet')}</h2>
+          {/* The inspector answers "why does this field hold THAT value" for the
+              very fields tabulated below, so its entry point belongs on this
+              heading rather than in the topbar's external-links row. */}
+          <h2 className="h2-row">
+            {t('detail.catalogSheet')}
+            <Link href={`/precedence?id=${anime.id}`} className="inspect">{t('detail.inspectPrecedence')}</Link>
+          </h2>
           <div className="grid">
             <Field label={t('detail.meanScore')} value={anime.catalog.mean != null ? anime.catalog.mean.toFixed(2) : '—'} />
             <Field label={t('field.rank')} value={anime.catalog.rank != null ? `#${anime.catalog.rank}` : '—'} />
@@ -551,6 +557,13 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
         .section { border: 1px solid var(--border-color); border-radius: 12px;
           padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
         .section h2 { margin: 0 0 1rem; font-size: 1.15rem; }
+        .section h2.h2-row { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
+        /* next/link renders its own <a>, which styled-jsx can't scope — same
+           :global() escape hatch as .ext-link above. */
+        .h2-row :global(.inspect) { margin-left: auto; font-size: 0.78rem; font-weight: 500;
+          color: var(--text-secondary); text-decoration: none; border: 1px solid var(--border-color);
+          border-radius: 6px; padding: 3px 9px; white-space: nowrap; }
+        .h2-row :global(.inspect):hover { color: var(--text-primary); border-color: var(--border-hover); }
         .section h3 { margin: 1rem 0 0.5rem; font-size: 0.95rem; color: var(--text-secondary); }
 
         .reco-table { width: 100%; border-collapse: collapse; }

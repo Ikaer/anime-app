@@ -297,6 +297,7 @@
   "detail.discTitle": "⚠ Divergence entre tes sources",
   "detail.discAbsent": "Présent sur {present} mais absent de {absent}",
   "detail.catalogSheet": "Fiche catalogue (MAL)",
+  "detail.inspectPrecedence": "⚖ Provenance des champs",
   "detail.meanScore": "Score moyen",
   "detail.durationPerEp": "Durée / ép.",
   "detail.source": "Source",

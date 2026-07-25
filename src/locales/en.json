@@ -297,6 +297,7 @@
   "detail.discTitle": "⚠ Your sources disagree",
   "detail.discAbsent": "Present on {present} but absent from {absent}",
   "detail.catalogSheet": "Catalog sheet (MAL)",
+  "detail.inspectPrecedence": "⚖ Field provenance",
   "detail.meanScore": "Mean score",
   "detail.durationPerEp": "Duration / ep.",
   "detail.source": "Source",
