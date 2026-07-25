@@ -100,20 +100,70 @@ actually decides):
 | `synopsis` | 17,809 | 588 | 486 |
 | `numEpisodes` | 18,771 | 522 | 0 |
 
-`studios`' 1,900 AniList-only titles are a genuine coverage gain — and mean the
-producer-contamination hazard ([studio-id-namespace.md](studio-id-namespace.md) §2)
-is now **live in the store**, not hypothetical: the sweep used the `nodes` query
-without the `isMain` filter. The genre and studio decisions are now measurable
-against real both-present data.
+> **⚠️ The `studios` row here is an ARTIFACT — superseded by the next section.**
+> Those 1,900 "AniList-only" titles were read as a coverage gain. They were
+> producers being counted as animation studios: the sweep used the `nodes` query
+> with no `isMain` filter ([studio-id-namespace.md](studio-id-namespace.md) §2).
+> The table is kept as the baseline the Phase 0 delta is measured against; every
+> other row is sound.
 
-> **These are pre-fix numbers.** Reproduce them any time with
-> `node scripts/measure-precedence.js` — written so the Phase 0 before/after delta
-> is computed identically rather than re-derived (gate 2 turns on that delta). It
-> also reports two things this table doesn't: the studio id-namespace **mixing
-> rate** (pre-fix **15.5%** — 2,997 titles that would fall through to MAL-namespace
-> ids under an anilist-first flip), and the contamination itself as list bloat
-> (AniList **2.68** studios/title vs MAL's **1.10**). Expect `studios` coverage to
-> *drop* after the re-sweep: producer-only entries correctly become `undefined`.
+## After the `isMain` re-sweep (2026-07-25, Phase 0 shipped)
+
+Re-swept on production at `CATALOG_SCHEMA_VERSION` 2 — all 19,293 entries
+re-queued off the version stamp, no force flag, no button change. **The
+contamination is gone**, and it took the case for flipping `studios` with it.
+
+| Metric | Pre-fix | Post-fix | MAL |
+|---|---|---|---|
+| Mean studios/title (AniList) | 2.68 | **1.09** | 1.11 |
+| Titles where AniList's list is longer than MAL's | 60.0% | **2.2%** | — |
+
+| Field | Both present | MAL only | AniList only |
+|---|---|---|---|
+| `mean` | 15,650 | 1,050 | 95 |
+| `genres` | 17,128 | 2,128 | 21 |
+| `studios` | **11,730** | **3,661** | **524** |
+| `synopsis` | 17,807 | 588 | 489 |
+| `numEpisodes` | 18,774 | 519 | 0 |
+
+**Three findings, all of which point the same way.**
+
+**1. AniList is the WEAKER studio source, not the stronger one.** Post-fix MAL has
+studios for 15,391 titles against AniList's 12,254. The "AniList-only" column
+collapsed 1,900 → 524 because most of those titles had no *animation* studio on
+AniList at all, only producers. The coverage argument for `studios: ['anilist','mal']`
+was an artifact of the bug.
+
+**2. Under MAL-first, AniList's unique titles are ALREADY captured.** Those 524
+fall through to AniList today. So flipping the field would change only the 11,730
+titles where *both* sources have data — i.e. it gains **zero** coverage and swaps
+MAL-namespace studio ids for AniList's on two-thirds of the catalog.
+
+**3. Union (genre option C applied to studios) barely earns its keep.** Measured
+over the 11,730 both-present titles:
+
+| What unioning AniList in would add | Titles | |
+|---|---|---|
+| Nothing — same names | 10,306 | 87.9% |
+| Only an **alias** of a MAL studio (`Gallop` / `Studio Gallop`) | 534 | 4.6% |
+| A **genuinely new** studio | 890 | 7.6% (950 credits) |
+
+Genres and studios are **not symmetric**, and this is why option C transfers badly:
+genres union cleanly because they are already **name**-keyed (synthetic `id: 0`,
+every consumer reads `name`), so dedupe is a `Set`; and the 60 MAL-only values are
+genuinely distinct concepts. Studios have no cross-source dedupe key, and 4.6% of
+the time the union would list one real studio twice.
+
+**Consequence for gate 2.** The id-namespace mixing rate rose 15.5% → **31.7%**
+(5,697 of 17,951 titles with studios would fall through to MAL ids under a flip) —
+but that is now moot, because the flip has no reason to happen. What is NOT moot:
+mixing is **already live at ~2%** (the 524 AniList-only-studio titles carry
+AniList-namespace ids under today's fall-through), so `/stats` already
+double-counts them and the reco IDF already fragments on them. See gate 2 below
+for the cheap fix that closes this permanently.
+
+> Reproduce all of this with `node scripts/measure-precedence.js` — written so the
+> before/after delta is computed identically rather than re-derived.
 
 ## MAL-legacy inventory
 
@@ -128,7 +178,7 @@ each already has a rationale in `CLAUDE.md`.
 | E1 | Catalog precedence is a single global array; per-field is inexpressible | `mergeWithProvenance`, `DEFAULT_CATALOG_PRECEDENCE` | The structural blocker for everything the user actually wants |
 | ~~E2~~ | ~~AniList `catalog` blocks unpopulated for MAL-linked titles~~ | `catalog/anilist.json` | ✅ **SHIPPED 2026-07-25** — catalog sweep, 0 → 19,293 → [anilist-catalog-sync.md](anilist-catalog-sync.md) |
 | E3 | `genres` sourced from MAL | `catalogFromMal` | Target: AniList → [genre-vocabulary.md](genre-vocabulary.md). **Blocked on a product decision** (see Open decisions) |
-| E4 | `studios` sourced from MAL | `catalogFromMal` | Target: AniList → [studio-id-namespace.md](studio-id-namespace.md). Contamination is **live**, see Phase 0 |
+| ~~E4~~ | ~~`studios` sourced from MAL~~ | `catalogFromMal` | ✅ **RESOLVED 2026-07-25 — not a defect.** MAL stays the source; the AniList case was producers miscounted as studios. Contamination fixed in Phase 0 → [studio-id-namespace.md](studio-id-namespace.md) |
 | E5 | Precedence is a source-code constant, not user-configurable | `animeUtils.ts` | Goal 2 |
 | E6 | No way to *see* which provider won a field | — | Goal 3 |
 | E7 | Residual raw-`sources.*` value reads that bypass the merge | ~38 grep hits, **not yet fully classified** | Audit during implementation; rule below |
@@ -164,7 +214,7 @@ The user's decisions, and the reason each is not arbitrary:
 | Field | Winner | Rationale |
 |---|---|---|
 | `genres` | **AniList** | Cleaner taxonomy — but drops 60 MAL values; unresolved, see [genre-vocabulary.md](genre-vocabulary.md) |
-| `studios` | **AniList** | Aligns with AniList-as-catalog-authority — but two hazards, see [studio-id-namespace.md](studio-id-namespace.md) |
+| ~~`studios`~~ | ~~AniList~~ → **MAL** | **Reversed by Phase 0's measurement.** The AniList coverage advantage was producers miscounted as studios; post-fix MAL covers 15,391 titles to AniList's 12,254, and AniList's 524 unique titles already fall through under MAL-first. A flip would gain nothing and swap id namespaces on two-thirds of the catalog. See gate 2 |
 | `mean` | **MAL** | Larger voter base ⇒ more reliable central tendency. Also drives `minScore`/`maxScore`, so a mixed source would mean mixed filter semantics in one sorted list |
 | everything else | **MAL** (unchanged default) | Flip individually once measurable; `synopsis` and cover art are the plausible AniList wins |
 
@@ -240,10 +290,13 @@ fall-through (MAL has no studios for them at all). That is a live defect in
    — a force flag restarts from zero on every interruption of a 15–20 min sweep —
    and because it needs no endpoint or button change at all: the existing
    Connections button and the cron step pick the work up unprompted.
-4. ⏳ **Re-sweep, then measure** with `scripts/measure-precedence.js` (new; it
-   reproduces this doc's pre-fix baseline exactly, so the delta is readable):
-   AniList studio coverage after the fix, and how many titles keep **MAL-id**
-   studios by fall-through. The second number is the input to gate 2 below.
+4. ✅ **Re-swept on production and re-measured.** All 19,293 entries re-queued off
+   the version stamp. Contamination gone (2.68 → 1.09 studios/title against MAL's
+   1.11). Full results in [After the `isMain`
+   re-sweep](#after-the-ismain-re-sweep-2026-07-25-phase-0-shipped) — the headline
+   is that the case for flipping `studios` to AniList **did not survive the fix**.
+
+**Phase 0 is complete.** It also resolved gate 2 by dissolving it: see below.
 
 **Producers are deliberately NOT captured here.** The original rationale was "free
 only if it rides this pass, else a third 19k sweep" — void, since a sweep is a
@@ -319,13 +372,30 @@ reco sources. Larger than the precedence mechanism itself. A is explicitly *not*
 the default: on this store it silently degrades both the genre filter (78 → 19
 options) and the genre reco source.
 
-**2. `studios` — does option E get un-deferred?**
-[studio-id-namespace.md](studio-id-namespace.md) step 2: full AniList coverage ⇒
-the flip is safe; materially partial ⇒ mixed id namespaces are the permanent steady
-state and canonical studio ids (`../CREDITS-ID-NAMESPACE.md` option E) stop being
-deferrable. The post-sweep table above already shows 961 MAL-only `studios` titles,
-so mixed namespaces look permanent at *some* rate — Phase 0's re-measurement gives
-the real number to rule on.
+**2. `studios` — ANSWERED by Phase 0's measurement, pending a ruling.**
+The question was "full AniList coverage ⇒ flip is safe; materially partial ⇒
+canonical studio ids (`../CREDITS-ID-NAMESPACE.md` option E) stop being
+deferrable." The data answers it differently than either branch expected: **there
+is no reason to flip `studios` at all.** MAL covers more titles (15,391 vs
+12,254), AniList's 524 unique titles already fall through under MAL-first, and a
+flip would gain zero coverage while swapping ids on two-thirds of the catalog.
+
+So E4 resolves to **keep `studios` on MAL** — status quo, no work, and option E
+stays deferred. `studios` simply comes off the "target per-field precedence" table
+as a field that was targeted for the wrong reason.
+
+**One real fix remains, and it is independent of any flip:** the five reco/stats
+spots that key studio identity on `s.id` should key on the **normalized name**
+instead — `scoring.ts:50`, `feed.ts:101`, `byCredits.ts:102,144`, `stats.ts:183`
+(which already falls back to name). Namespace mixing is not hypothetical or
+future-tense: the 524 AniList-only-studio titles carry AniList-namespace ids
+*today*, so `/stats` already counts those studios twice and the reco studio IDF
+already fragments on them. Measured name agreement across sources is **87.9%**
+identical under normalization, which is what makes the name a usable key.
+
+That change needs no data migration, no re-sweep, and no precedence decision, and
+it closes the id-namespace question permanently rather than deferring it again.
+Left as a separate task — it is a scoring fix, not a precedence one.
 
 ## Definition of done
 
@@ -333,13 +403,14 @@ MAL legacy is **closed** when all of these hold:
 
 - [x] Every AniList entry for a MAL-linked title carries a `catalog` block (E2) — **shipped 2026-07-25, 19,293 blocks**
 - [x] `CATALOG_FIELDS` uses the `edges { isMain node }` form, empty arrays store `undefined`, and the block is schema-versioned so stale entries re-queue (Phase 0, code) — **shipped 2026-07-25**
-- [ ] The store is re-swept at `CATALOG_SCHEMA_VERSION` 2 and re-measured (Phase 0, data)
+- [x] The store is re-swept at `CATALOG_SCHEMA_VERSION` 2 and re-measured (Phase 0, data) — **done 2026-07-25**, contamination 2.68 → 1.09 studios/title
 - [ ] Catalog precedence is per-field, with a global default (E1)
 - [ ] The inspector page shows per-field winner + ordering + all raw values (E6)
 - [ ] Precedence is user-configurable in `/settings` (E5)
 - [ ] `mean` explicitly pinned to MAL rather than winning by default (target table)
 - [ ] `genres` resolved and sourced per decision, with the 60-value loss handled (E3)
-- [ ] `studios` resolved and sourced per decision, with both hazards handled (E4)
+- [x] `studios` resolved (E4) — **stays on MAL**; the AniList case was a measurement artifact, hazard 2 fixed in Phase 0, hazard 1 moot without a flip
+- [ ] Studio identity keyed on normalized name, not `s.id`, in the five reco/stats spots — closes hazard 1 permanently (already live at ~2% via fall-through)
 - [ ] AniList queried **only** by AniList ids; `Media(idMal:)` gone as a query key (E8)
 - [ ] Provider ids converted to canonical **at ingest**; reco internals, the reco
       cache and `RECS_QUERY` all speak canonical (E9–E11)

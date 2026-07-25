@@ -1,8 +1,28 @@
 # The studio id namespace issue
 
-> **Problem E4.** The decision is `studios` should come from AniList. Two distinct
-> hazards sit in the way — an **id namespace** hazard and a **producer contamination**
-> hazard. They are independent; both must be resolved before the field is flipped.
+> **Problem E4 — RESOLVED 2026-07-25, and not the way this doc expected.**
+> The premise was that `studios` should come from AniList, blocked by two hazards.
+> Hazard 2 (producer contamination) was fixed and the store re-swept — and the fix
+> **removed the reason to flip at all**. AniList's apparent coverage advantage was
+> producers being counted as animation studios. Post-fix:
+>
+> | | Titles with studios |
+> |---|---|
+> | MAL | **15,391** |
+> | AniList | 12,254 |
+> | AniList-only (already captured by MAL-first fall-through) | 524 |
+>
+> A flip would gain **zero** coverage and swap id namespaces on the 11,730
+> both-present titles. **`studios` stays on MAL.** Hazard 1 becomes moot as a
+> precedence question — but see "What's actually left" at the bottom, because a
+> smaller version of it is already live and worth fixing on its own.
+>
+> The rest of this doc is kept for the reasoning and the measurements.
+
+> **Original framing.** The decision is `studios` should come from AniList. Two
+> distinct hazards sit in the way — an **id namespace** hazard and a **producer
+> contamination** hazard. They are independent; both must be resolved before the
+> field is flipped.
 
 > ⚠️ **Sequencing note (2026-07-25).** This doc's §2 fix was written as a
 > *pre*-sweep task — "make it before the catalog sweep runs". It did not happen:
@@ -173,7 +193,50 @@ step 5 is Phase 3 and is the only part that waits on a ruling.
    through. Gate 2 looks likely to open; decide against the re-measured figure.
 5. Only then set `studios: ['anilist','mal']` in the per-field precedence map.
 
+## What's actually left
+
+The precedence question is closed. One genuine defect survives it, and it is a
+**scoring** fix rather than a precedence one:
+
+**Key studio identity on the normalized name, not `s.id`.** Five spots do this
+today — `reco/scoring.ts:50`, `reco/feed.ts:101`, `reco/byCredits.ts:102` and
+`:144`, `domain/stats.ts:183` (which already falls back to name when the id is 0).
+
+This is not pre-emptive. Namespace mixing is **already live**: the 524
+AniList-only-studio titles carry AniList-namespace ids under today's MAL-first
+fall-through, so `/stats` already counts those studios twice and the reco studio
+IDF already fragments on them. It is ~2% of the catalog — small, real, and
+permanent as long as identity is an id.
+
+Measured name agreement, over the 11,730 titles where both sources have studios:
+
+| | Titles | |
+|---|---|---|
+| Identical name sets (exact) | 7,486 | 63.8% |
+| Identical after normalization | 9,808 | **83.6%** |
+| Partial overlap | 687 | 5.9% |
+| Fully disjoint (mostly aliases — `Gallop` / `Studio Gallop`) | 1,235 | 10.5% |
+
+Distinct normalized studio names: MAL 1,366 · AniList 1,176 · shared 792. A
+whitespace-stripping normalizer pushes agreement to ~88% (`P.A. Works` /
+`P.A.WORKS`); the residue is genuine aliasing that only a small hand table fixes.
+
+**Why not canonical studio ids (option E) instead:** minting them requires exactly
+this fuzzy name reconciliation to build the crosswalk in the first place. The name
+key is the same work minus the id-minting, the migration and the new store file.
+Option E stays deferred — now for a reason rather than by postponement.
+
+**Union (genre option C) was considered and rejected for studios.** It needs a
+dedupe key, which is the identity problem again; and measured over the both-present
+titles, unioning AniList in adds nothing on 87.9%, adds only an alias of an
+existing MAL studio on 4.6% (actively worse — one studio listed twice), and adds a
+genuinely new studio on just 7.6% (950 credits). Genres union cleanly because they
+are *already* name-keyed and their 60 MAL-only values are genuinely distinct
+concepts; studios are neither.
+
 ## Non-goals
 
 - Re-deciding the routing question — that is CREDITS-ID-NAMESPACE.md's option D.
-- Minting canonical studio ids **unless** step 2 shows permanent mixed namespaces.
+  `/credits/studio/[id]` and its two link sites (`GlobalSearch.tsx:37`,
+  `stats.tsx:300`) are the one genuinely id-shaped surface and are out of scope here.
+- Minting canonical studio ids — see above; deferred with a reason now.
