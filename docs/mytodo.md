@@ -3,17 +3,6 @@
 Everything shipped has been removed — git has it. Closed *rulings* (things
 deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
 
-## Defects
-
-**`catalog.relatedAnime` is MAL-only, so it is empty.** `catalogFromAnilist` never
-maps `relations` into it. Measured on the live store: **48** titles have MAL
-relations against **11,419** with AniList relations (21,590 edges). Consequence —
-`isPrematureSequel` falls back to its title regex for 99.8% of the catalog, and
-the franchise exclusions in "Plus comme ça" (`similar.ts`) and `byCredits.ts` are
-no-ops. `domain/franchise.ts` already does it right: it unions both edge sets and
-resolves MAL id first, AniList id second. Either hydrate `relatedAnime` from both
-providers, or give the three reco consumers the same two-space resolution.
-
 ## Features
 
 - **Provenance chips** — surface which provider each displayed field came from.
@@ -53,12 +42,6 @@ providers, or give the three reco consumers the same two-space resolution.
 
 ## Chores
 
-- **Retire `user/reco_dismissed.json` + `getDismissedIds`.** This was filed as a
-  data decision ("deleting it resurrects every dismissed title"), but **the file
-  does not exist in the store** — `user/` holds only `hidden.json` and
-  `reco_feedback.json`. The decision is made by default; what is left is deleting
-  the reader, `DISMISSED_FILE`, and the MAL-keyed `byMalId` view in `feed.ts` that
-  only exists to resolve it.
 - **The guided first-run wizard.** Per-field editing all exists; only the
   onboarding funnel is missing. (The empty-store onboarding that *does* exist is a
   different thing — it seeds the catalog, not the config.)

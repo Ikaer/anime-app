@@ -10,7 +10,7 @@
  */
 
 import { AnimeRecord, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
-import { getAnimeForDisplay, getHiddenAnimeIds, toNum } from '@/lib/store';
+import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
 import {
   TUNING,
@@ -24,6 +24,7 @@ import {
 import type { RecoEdge } from '@/lib/reco/data';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 // ============================================================================
@@ -108,25 +109,18 @@ export function computeSimilarTo(
   // Canonical throughout (E9) — `targetId` and both edge sets were converted by
   // the route before they got here.
   const byId = new Map<string, AnimeRecord>(all.map(a => [a.id, a]));
-  // `isPrematureSequel` and the franchise exclusion below both compare against
-  // RAW MAL relation ids, which stay a provider id space — hence a second view.
-  const byMalId = new Map<number, AnimeRecord>();
-  for (const a of all) {
-    const malId = toNum(a.crosswalk.mal);
-    if (malId !== undefined) byMalId.set(malId, a);
-  }
+  // Relation lookups, shared by the franchise exclusion and `isPrematureSequel`.
+  const relations = buildRelationIndex(all);
   const target = byId.get(targetId);
   if (!target) return [];
 
   // The target itself and its franchise entries trivially "resemble" it, and the
-  // page already lists relations in its own section. `relatedAnime` ids come off
-  // the raw MAL relation payload, so they are resolved through `byMalId` to join
-  // the canonical exclusions.
+  // page already lists relations in its own section. Both providers' edges count:
+  // MAL's alone cover 48 titles catalog-wide, so this exclusion used to be a
+  // no-op on essentially every target.
   const excluded = new Set<string>([
     targetId,
-    ...(target.catalog.relatedAnime || [])
-      .map(r => byMalId.get(r.node.id)?.id)
-      .filter((id): id is string => id !== undefined),
+    ...resolveRelations(target, relations).map(r => r.record.id),
   ]);
   const hiddenCanonical = new Set(getHiddenAnimeIds());
   const downCanonical = feedbackIds(getFeedback(), 'down');
@@ -150,7 +144,7 @@ export function computeSimilarTo(
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
     if (hiddenCanonical.has(anime.id) || downCanonical.has(anime.id)) continue;
-    if (isPrematureSequel(anime, byMalId)) continue;
+    if (isPrematureSequel(anime, relations)) continue;
 
     eligible.push({ anime, candId });
     maxCrowd = Math.max(maxCrowd, crowd.get(candId) || 0);

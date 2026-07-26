@@ -15,7 +15,6 @@ import { getAnimeForDisplay } from '@/lib/store';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 
 const FEEDBACK_FILE = dataFile('user/reco_feedback.json');
-const DISMISSED_FILE = dataFile('user/reco_dismissed.json');
 
 /** Keyed by canonical id. */
 export type FeedbackMap = Record<string, RecoVerdict>;
@@ -51,14 +50,3 @@ export function getFeedbackAnime(verdict: RecoVerdict): AnimeRecord[] {
   return getAnimeForDisplay().filter(a => ids.has(a.id));
 }
 
-/**
- * Legacy pure-hide dismiss list — superseded by 👎 feedback. Kept read-only so
- * any previously-dismissed ids stay excluded from the feed.
- *
- * MAL-keyed on disk, and staying that way: it is frozen historical data that
- * nothing writes to, so migrating it would be work with no reader. `computeFeed`
- * resolves the ids through the crosswalk on read instead.
- */
-export function getDismissedIds(): number[] {
-  return readJsonFile<number[]>(DISMISSED_FILE, []);
-}

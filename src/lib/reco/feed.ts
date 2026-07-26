@@ -10,15 +10,16 @@
  * **Canonical ids throughout** (E9). Crowd edges arrive from MAL and AniList in
  * their own id spaces, but `refresh.ts` converts them at ingest, so nothing here
  * speaks a provider id: candidates, seeds, suggestions, the hidden/feedback
- * exclusions and each item's `.id` are all `a_<n>`. The one remaining number-keyed
- * set is the legacy `reco_dismissed.json`, read-only and resolved on read.
+ * exclusions and each item's `.id` are all `a_<n>`. Relation edges are the one
+ * provider-id payload left, and they are resolved to records by
+ * `domain/relations.ts` rather than compared as ids.
  *
  * Server-only (reads the store and the two JSON caches). Never import this
  * module client-side except via `import type`.
  */
 
 import { AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
-import { getAnimeForDisplay, getHiddenAnimeIds, toNum } from '@/lib/store';
+import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
 import {
   TUNING,
@@ -33,8 +34,9 @@ import {
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
-import { feedbackIds, getFeedback, getDismissedIds } from '@/lib/reco/feedback';
+import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
+import { buildRelationIndex } from '@/lib/domain/relations';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 export interface RecommendationItem extends AnimeRecord {
@@ -168,18 +170,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // Canonical throughout (E9): the stored edges were converted at ingest, so
   // this is the record's own `.id` rather than a MAL crosswalk lookup.
   const byId = new Map<string, AnimeRecord>(all.map(a => [a.id, a]));
-  // `isPrematureSequel` compares against RAW MAL relation ids, which are a
-  // provider id space and stay one — so it needs its own MAL-keyed view.
-  const byMalId = new Map<number, AnimeRecord>();
-  for (const a of all) {
-    const malId = toNum(a.crosswalk.mal);
-    if (malId !== undefined) byMalId.set(malId, a);
-  }
-  // Legacy pure-hide list: MAL ids on disk, resolved here so the exclusion is
-  // expressed in the same key space as everything else.
-  const dismissed = new Set(
-    getDismissedIds().map(malId => byMalId.get(malId)?.id).filter((id): id is string => id !== undefined)
-  );
+  // Relation lookups for `isPrematureSequel`, built once for the whole pass.
+  const relations = buildRelationIndex(all);
   const hidden = new Set(getHiddenAnimeIds());
   const suggestionIds = new Set(data.suggestions.map(s => s.id));
   const feedback = getFeedback();
@@ -281,10 +273,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     // Hard filters (spec §5.3)
     const st = getEffectiveStatus(anime);
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
-    if (dismissed.has(candId)) continue; // legacy pure-hide list, read-only
     if (hidden.has(anime.id)) continue;
     if (upIds.has(anime.id) || downIds.has(anime.id)) continue; // already thumbed
-    if (isPrematureSequel(anime, byMalId)) continue; // later season of an unwatched show
+    if (isPrematureSequel(anime, relations)) continue; // later season of an unwatched show
 
     eligible.push({ anime, a, candId });
     if (a.affinity > maxRaw) maxRaw = a.affinity;

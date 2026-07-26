@@ -6,6 +6,7 @@
  * catalog (~25k records) and only the grouped, lean projection crosses the wire.
  */
 import type { AnimeRecord } from '@/models/anime';
+import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 
 /**
  * Relation types that mean "same franchise", as an undirected edge. MAL emits
@@ -17,6 +18,12 @@ import type { AnimeRecord } from '@/models/anime';
  * universe or a cast without being the same watch-order franchise, and pulling
  * them in over-merges (one `other` edge can chain two unrelated series together,
  * and a bad merge here means a bulk score lands on the wrong show).
+ *
+ * **One vocabulary, both providers.** `resolveRelations` normalizes AniList's
+ * names into MAL's before this set is consulted, so `PARENT` arrives as
+ * `parent_story` (a franchise edge) and `ALTERNATIVE` as `alternative_version`
+ * (deliberately not one — it links the 2003 and 2009 Fullmetal Alchemist, which
+ * are separate watch orders you may well rate differently).
  */
 export const FRANCHISE_RELATIONS = new Set([
   'sequel',
@@ -27,57 +34,17 @@ export const FRANCHISE_RELATIONS = new Set([
 ]);
 
 /**
- * The same rule in AniList's vocabulary. AniList is the **primary** source here:
- * MAL only returns `related_anime` from its single-title detail endpoint, so the
- * crawled catalog has relations for a handful of titles, while AniList returns
- * them 50 at a time (see `AniListRelationEntry`). MAL edges are still unioned in
- * — they're free and cover anything AniList missed.
- *
- * `ALTERNATIVE` is excluded alongside the MAL equivalents: it links different
- * adaptations of one work (the 2003 and 2009 Fullmetal Alchemist series), which
- * are separate watch orders you may well rate differently.
- */
-export const ANILIST_FRANCHISE_RELATIONS = new Set([
-  'SEQUEL',
-  'PREQUEL',
-  'SIDE_STORY',
-  'PARENT',
-]);
-
-/** Numeric provider id from a crosswalk value (SIMKL sometimes stores them as strings). */
-function toProviderId(v: number | string | undefined): number | undefined {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
-  if (typeof v === 'string' && v.trim() !== '') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
-}
-
-/**
  * Group records into franchises: each returned array is one connected component
  * of the relation graph, in the input's order. A record with no in-catalog
  * relations comes back as its own single-member group.
  *
- * Relation edges carry **provider** ids while records are canonical-keyed, so the
- * traversal resolves through provider→canonical indices built from `crosswalk`.
- * An edge pointing at a title the catalog doesn't have is simply dropped.
- *
- * Two indices, not one: MAL edges only ever carry a MAL id, but an AniList edge
- * may point at an AniList-only title, which has no MAL id at either end. Keying
- * on MAL alone silently drops every such edge.
+ * Edge resolution — both providers' payloads, one vocabulary, targets returned
+ * as records — is `domain/relations.ts`'s job; this walks what it returns. An
+ * edge pointing at a title the catalog doesn't have is dropped there.
  */
 export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
-  const byCanonical = new Map<string, AnimeRecord>();
-  const canonicalByMal = new Map<number, string>();
-  const canonicalByAnilist = new Map<number, string>();
-  for (const r of records) {
-    byCanonical.set(r.id, r);
-    const malId = toProviderId(r.crosswalk?.mal);
-    if (malId !== undefined && !canonicalByMal.has(malId)) canonicalByMal.set(malId, r.id);
-    const anilistId = toProviderId(r.crosswalk?.anilist);
-    if (anilistId !== undefined && !canonicalByAnilist.has(anilistId)) canonicalByAnilist.set(anilistId, r.id);
-  }
+  const index = buildRelationIndex(records);
+  const byCanonical = index.byCanonical;
 
   // Adjacency, canonical id → canonical ids. Built undirected.
   const adjacency = new Map<string, Set<string>>();
@@ -88,21 +55,10 @@ export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
     adjacency.get(a)!.add(b);
     adjacency.get(b)!.add(a);
   };
-  const linkTo = (from: string, target: string | undefined) => {
-    if (target && byCanonical.has(target)) link(from, target);
-  };
   for (const r of records) {
-    for (const rel of r.catalog.relatedAnime || []) {
-      if (!FRANCHISE_RELATIONS.has(rel.relation_type)) continue;
-      linkTo(r.id, canonicalByMal.get(rel.node.id));
-    }
-    for (const rel of r.sources.anilist?.relations || []) {
-      if (!ANILIST_FRANCHISE_RELATIONS.has(rel.relationType)) continue;
-      // MAL id first — it's the key the catalog is overwhelmingly anchored on —
-      // then AniList's, which is the only handle on an AniList-only target.
-      const target = (rel.idMal !== undefined ? canonicalByMal.get(rel.idMal) : undefined)
-        ?? (rel.id !== undefined ? canonicalByAnilist.get(rel.id) : undefined);
-      linkTo(r.id, target);
+    for (const rel of resolveRelations(r, index)) {
+      if (!FRANCHISE_RELATIONS.has(rel.relationType)) continue;
+      link(r.id, rel.record.id);
     }
   }
 

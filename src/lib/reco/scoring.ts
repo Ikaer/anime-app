@@ -13,6 +13,7 @@
 
 import { AnimeRecord } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, catalogNameKey } from '@/lib/domain/animeUtils';
+import { resolveRelations, type RelationIndex } from '@/lib/domain/relations';
 
 // ============================================================================
 // Tuning constants (all knobs live here — no scattered magic numbers)
@@ -201,8 +202,8 @@ export function seedWeight(score: number, threshold: number): number {
 
 /**
  * Title markers for "2nd Season / Season 3 / Third Stage"-style sequels.
- * Used only as a fallback when a candidate has no `related_anime` links — many
- * obscure donghua ship with empty relations on MAL, so the relation check alone
+ * Used only as a fallback when a candidate has no resolvable relations — some
+ * titles genuinely have none on either provider, so the relation check alone
  * misses exactly the worst offenders. Deliberately narrow (explicit ordinal +
  * Season/Stage/Cour) to avoid flagging standalone titles.
  */
@@ -217,18 +218,17 @@ const SEQUEL_TITLE_REGEX =
  * If relations exist and every prequel is seen, the candidate is kept even if
  * its title matches the pattern (the user is caught up).
  *
- * `byId` is MAL-id-keyed — deliberately, and now the exception rather than the
- * rule. The rest of the engine speaks canonical ids (E9), but `relatedAnime`
- * comes off the raw MAL relation payload, so its targets ARE MAL ids and a
- * canonical-keyed map could not answer this question. Callers build the second
- * view for exactly this.
+ * Takes a `RelationIndex`, not a MAL-id map: relations come from BOTH providers
+ * and resolve to records (`domain/relations.ts`). That is not a refactor —
+ * `catalog.relatedAnime` alone is populated on 48 of 25,391 titles, so the
+ * prequel branch below was unreachable for the entire catalog and every
+ * candidate was judged by the title regex alone.
  */
-export function isPrematureSequel(anime: AnimeRecord, byId: Map<number, AnimeRecord>): boolean {
-  const prequels = (anime.catalog.relatedAnime || []).filter(r => r.relation_type === 'prequel');
+export function isPrematureSequel(anime: AnimeRecord, index: RelationIndex): boolean {
+  const prequels = resolveRelations(anime, index).filter(r => r.relationType === 'prequel');
   if (prequels.length > 0) {
     return prequels.some(rel => {
-      const target = byId.get(rel.node.id);
-      const status = target ? getEffectiveStatus(target) : undefined;
+      const status = getEffectiveStatus(rel.record);
       return !status || !PREQUEL_OK_STATUSES.has(status);
     });
   }

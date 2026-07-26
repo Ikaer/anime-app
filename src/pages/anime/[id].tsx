@@ -7,14 +7,31 @@ import type { AnimeRecord, AniListCharacterEntry, Discrepancy, ProvenanceSource,
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/reco/byCredits';
+import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
+/**
+ * A relation, projected for display. Lean on purpose: a resolved relation holds
+ * the whole target record, and shipping ~20 of those would dwarf the page.
+ */
+interface RelatedItem {
+  id: string;
+  title: string;
+  picture?: string;
+  relation: string;
+}
+
 interface Props {
   anime: AnimeRecord;
   similar: SimilarByCredits[];
+  /** Relations from BOTH providers, resolved to canonical ids — see
+   *  `domain/relations.ts`. MAL's `catalog.relatedAnime` alone covers 48 titles
+   *  catalog-wide, so reading it directly left this section blank almost
+   *  everywhere. */
+  related: RelatedItem[];
   /** Cached cast, or `null` when this title has never been fetched — the
    *  CastSection then fills it once from AniList. Passed separately from
    *  `anime` because cast lives in its own slice, off the hydration path
@@ -86,7 +103,7 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }: Props) {
+export default function AnimeDetailPage({ anime, similar, related, cast, canClearStatus }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -273,17 +290,17 @@ export default function AnimeDetailPage({ anime, similar, cast, canClearStatus }
           )}
 
           {/* ---------- Related anime ---------- */}
-          {anime.catalog.relatedAnime && anime.catalog.relatedAnime.length > 0 && (
+          {related.length > 0 && (
             <section className="section">
               <h2>{t('detail.relatedAnime')}</h2>
               <div className="related">
-                {anime.catalog.relatedAnime.map(r => (
-                  <Link key={r.node.id} href={`/anime/${r.node.id}`} className="related-card" title={r.node.title}>
-                    {r.node.main_picture?.medium
-                      ? <img src={r.node.main_picture.medium} alt="" />
+                {related.map(r => (
+                  <Link key={r.id} href={`/anime/${r.id}`} className="related-card" title={r.title}>
+                    {r.picture
+                      ? <img src={r.picture} alt="" />
                       : <div className="related-noimg">?</div>}
-                    <span className="related-rel">{r.relation_type_formatted || r.relation_type}</span>
-                    <span className="related-title">{r.node.title}</span>
+                    <span className="related-rel">{r.relation}</span>
+                    <span className="related-title">{r.title}</span>
                   </Link>
                 ))}
               </div>
@@ -698,7 +715,16 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
   // Similar-by-credits reads catalog fields (studios/staff) only, so the
   // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
-  const similar = computeSimilarByCredits(anime, getAnimeForDisplay(), 3);
+  const catalog = getAnimeForDisplay();
+  const similar = computeSimilarByCredits(anime, catalog, 3);
+  // Relations resolve against that same array — the page already had it in hand,
+  // so both providers' edges cost nothing extra here.
+  const related = resolveRelations(anime, buildRelationIndex(catalog)).map(r => ({
+    id: r.record.id,
+    title: getPrimaryTitle(r.record),
+    picture: r.record.catalog.mainPicture?.medium,
+    relation: r.formatted,
+  }));
   // AnimeRecord carries many optional/undefined fields; Next can't serialize
   // `undefined`, so round-trip through JSON to drop them.
   // Cast is read straight from its own slice — never fetched here, so the page
@@ -709,6 +735,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     props: {
       anime: JSON.parse(JSON.stringify(anime)),
       similar: JSON.parse(JSON.stringify(similar)),
+      related: JSON.parse(JSON.stringify(related)),
       cast: cast ? JSON.parse(JSON.stringify(cast)) : null,
       // Offered only when every enabled provider declares it can clear a status
       // (`personal.clearStatus` in providerCapabilities.ts) — in practice, when
