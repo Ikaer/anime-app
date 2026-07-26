@@ -11,15 +11,20 @@ export interface HeaderSortControls {
   onSortDirChange: (d: SortDirection) => void;
 }
 
+/** The cards-per-row group, or `undefined` on a page that isn't a card grid. */
+export interface HeaderDisplayControls {
+  cardsPerRow: number | null;
+  onCardsPerRowChange: (value: number | null) => void;
+}
+
 interface AnimeListHeaderProps {
   /** Page heading. `/` has none; `/recommendations` names the feed or review list. */
   title?: React.ReactNode;
   /** The result count — or whatever replaces it (`/recommendations` swaps in a back button). */
   count?: React.ReactNode;
   sort?: HeaderSortControls;
-  cardsPerRow: number | null;
-  onCardsPerRowChange: (value: number | null) => void;
-  /** Page-specific controls, appended after cards-per-row. */
+  display?: HeaderDisplayControls;
+  /** Page-specific controls, appended after the shared groups. */
   children?: React.ReactNode;
 }
 
@@ -34,8 +39,10 @@ interface AnimeListHeaderProps {
  * Everything a page legitimately differs on is a slot: `/` has no `title` and
  * passes `sort`; `/recommendations` has a title, no sort (its order IS the
  * affinity ranking, so offering one would contradict the page) and appends its
- * "show all explains" toggle as a child. The shell — panel, typography,
- * spacing, divider — is not negotiable, which is the whole point.
+ * "show all explains" toggle as a child; `/tier` has no `display` (its rows are
+ * wrapped thumbnails, not a card grid, so cards-per-row means nothing there)
+ * and passes its axis/versus/thumbnail groups as children. The shell — panel,
+ * typography, spacing, divider — is not negotiable, which is the whole point.
  *
  * It renders `SortOrderSection`/`DisplaySection` with `variant="inline"` rather
  * than reimplementing them, so the controls stay identical to their stacked
@@ -45,42 +52,53 @@ interface AnimeListHeaderProps {
  * control block: nested, a narrow viewport drops the whole block onto its own
  * line instead of breaking between the groups. `.spacer` is what right-aligns
  * the controls, and it simply absorbs the slack when a row does wrap.
+ *
+ * Dividers are placed *between* whichever groups a page actually filled, rather
+ * than hardcoded after `sort` — with two optional groups, a fixed divider is
+ * either orphaned or missing depending on the combination.
  */
 const AnimeListHeader: React.FC<AnimeListHeaderProps> = ({
   title,
   count,
   sort,
-  cardsPerRow,
-  onCardsPerRowChange,
+  display,
   children,
-}) => (
-  <div className={styles.header}>
-    {title && <h1 className={styles.title}>{title}</h1>}
-    {count && <span className={styles.count}>{count}</span>}
+}) => {
+  const groups = [
+    sort && (
+      <SortOrderSection
+        variant="inline"
+        sortBy={sort.sortBy}
+        sortDir={sort.sortDir}
+        onSortByChange={sort.onSortByChange}
+        onSortDirChange={sort.onSortDirChange}
+      />
+    ),
+    display && (
+      <DisplaySection
+        variant="inline"
+        cardsPerRow={display.cardsPerRow}
+        onCardsPerRowChange={display.onCardsPerRowChange}
+      />
+    ),
+    children,
+  ].filter(Boolean);
 
-    <span className={styles.spacer} aria-hidden="true" />
+  return (
+    <div className={styles.header}>
+      {title && <h1 className={styles.title}>{title}</h1>}
+      {count && <span className={styles.count}>{count}</span>}
 
-    {sort && (
-      <>
-        <SortOrderSection
-          variant="inline"
-          sortBy={sort.sortBy}
-          sortDir={sort.sortDir}
-          onSortByChange={sort.onSortByChange}
-          onSortDirChange={sort.onSortDirChange}
-        />
-        <span className={styles.divider} aria-hidden="true" />
-      </>
-    )}
+      <span className={styles.spacer} aria-hidden="true" />
 
-    <DisplaySection
-      variant="inline"
-      cardsPerRow={cardsPerRow}
-      onCardsPerRowChange={onCardsPerRowChange}
-    />
-
-    {children}
-  </div>
-);
+      {groups.map((group, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span className={styles.divider} aria-hidden="true" />}
+          {group}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
 
 export default AnimeListHeader;

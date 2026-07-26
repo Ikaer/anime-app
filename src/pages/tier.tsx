@@ -1,17 +1,43 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
-import { AnimePageLayout } from '@/components/anime';
+import { AnimePageLayout, AnimeListHeader } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize } from '@/models/anime';
-import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { applyNarrowingFilters, extractCatalogBySource, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { useTierUrlState } from '@/hooks';
+import type { TierAxis, TierVersus } from '@/hooks/useTierUrlState';
 import { useT, TranslationKey } from '@/lib/i18n';
 
-// Row 0 is the "à noter" tray (unrated); scores 10→1 carry MAL's word labels
-// (localized via `tierWord.<n>`).
+// Scores 10→1 carry MAL's word labels (localized via `tierWord.<n>`). Titles
+// that have no value on the active axis go to the tray below the board.
 const TIER_SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+// ---- The `gap` axis: rows are (my score − the provider's rounded mean). ----
+// Clamped to ±5 because beyond that the rows are empty on any real list; the
+// two end rows are labelled "or more" / "or less" rather than pretending the
+// clamp is the value. Labels are `tierGap.<p5…p1|zero|m1…m5>` — a dynamic key
+// family, so keep it exhaustive by hand (see CLAUDE.md's i18n note).
+const GAP_MAX = 5;
+const GAP_ROWS = [5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5];
+
+const AXES: readonly TierAxis[] = ['me', 'mal', 'anilist', 'gap'];
+const VERSUS: readonly TierVersus[] = ['none', 'mal', 'anilist'];
+
+function gapKey(d: number): TranslationKey {
+  const suffix = d === 0 ? 'zero' : d > 0 ? `p${d}` : `m${-d}`;
+  return `tierGap.${suffix}` as TranslationKey;
+}
+
+// Blue when I rate above the crowd, amber when below, neutral when we agree —
+// the same encoding the per-card chip uses, so a chip predicts its gap row.
+function gapColor(d: number): string {
+  if (d === 0) return 'var(--bg-secondary, #33373d)';
+  const strength = Math.min(Math.abs(d), GAP_MAX) / GAP_MAX;
+  const light = 30 + Math.round(strength * 22);
+  return d > 0 ? `hsl(213, 60%, ${light}%)` : `hsl(32, 62%, ${light}%)`;
+}
 
 // The four statuses the board's fetch already scopes to (plan_to_watch excluded).
 const TIER_STATUSES = ['watching', 'completed', 'on_hold', 'dropped'] as const;
@@ -22,6 +48,7 @@ function scoreColor(n: number): string {
 }
 
 const THUMB_W: Record<ImageSize, number> = { 0: 46, 1: 62, 2: 84, 3: 112 };
+const THUMB_LABELS: Record<ImageSize, string> = { 0: 'S', 1: 'M', 2: 'L', 3: 'XL' };
 const POSTER_RATIO = 0.7; // width / height
 
 interface Preview { anime: AnimeRecord; x: number; y: number; }
@@ -99,7 +126,7 @@ export default function TierPage() {
     };
   }, [draggingId]);
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ filters: true, display: true });
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ filters: true });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
   // ---- Load: the user's watched list (statused, excluding plan_to_watch). ----
@@ -135,6 +162,55 @@ export default function TierPage() {
     [overrides, baseScore],
   );
 
+  // ---- Community means, per provider, RAW rather than merged. ----------------
+  // `catalog.mean` is the precedence winner (one number); comparing my score to
+  // a provider needs that provider's own value, which is what
+  // `extractCatalogBySource` rebuilds. Both are already on MAL's 1-10 scale
+  // (AniList's averageScore is divided by 10 at hydration).
+  const meansById = useMemo(() => {
+    const m = new Map<string, { mal: number | null; anilist: number | null }>();
+    for (const a of animes) {
+      const bySource = extractCatalogBySource(a.sources);
+      m.set(a.id, { mal: bySource.mal?.mean ?? null, anilist: bySource.anilist?.mean ?? null });
+    }
+    return m;
+  }, [animes]);
+
+  // `gap` has to compare against something, so `vs: 'none'` falls back to MAL
+  // there rather than emptying the board. On the other axes `none` just hides
+  // the chip, and `vsProvider` goes unused.
+  const vsProvider: 'mal' | 'anilist' = state.vs === 'anilist' ? 'anilist' : 'mal';
+  const showChip = state.vs !== 'none' && state.by !== 'gap';
+
+  /** My score minus the comparison provider's rounded mean; null if either is missing. */
+  const gapOf = useCallback((id: string): number | null => {
+    const mine = effScoreOf(id);
+    if (mine <= 0) return null;
+    const mean = meansById.get(id)?.[vsProvider];
+    if (mean == null) return null;
+    return mine - Math.round(mean);
+  }, [effScoreOf, meansById, vsProvider]);
+
+  /** Which row a card lands in on the active axis; null sends it to the tray. */
+  const rowOf = useCallback((id: string): number | null => {
+    if (state.by === 'me') {
+      const s = effScoreOf(id);
+      return s > 0 ? s : null;
+    }
+    if (state.by === 'gap') {
+      const d = gapOf(id);
+      return d === null ? null : Math.max(-GAP_MAX, Math.min(GAP_MAX, d));
+    }
+    const mean = meansById.get(id)?.[state.by === 'anilist' ? 'anilist' : 'mal'];
+    if (mean == null) return null;
+    return Math.max(1, Math.min(10, Math.round(mean)));
+  }, [state.by, effScoreOf, gapOf, meansById]);
+
+  // Only my own scores are writable — a community mean and a difference are both
+  // readings, not settings, so those axes drop the drag affordance entirely.
+  const readOnly = state.by !== 'me';
+  const rows = state.by === 'gap' ? GAP_ROWS : TIER_SCORES;
+
   // Client-side narrowing (search / media type / mean range / year range / genres),
   // plus the tier board's own status filter (page-specific, so not in
   // applyNarrowingFilters — same reasoning as the main list page). OR semantics:
@@ -166,20 +242,43 @@ export default function TierPage() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [animes]);
 
-  // Bucket the filtered list by effective score. Index 0 holds the tray.
-  // Unrated `watching` titles DO land in the tray: rating mid-watch is a
-  // legitimate verdict ("I'm 8 episodes in and it's an 8"), and excluding them
-  // made the board render empty whenever the status filter was narrowed to
-  // En Cours alone. Dropping into a row is score-only — status is untouched.
-  const buckets = useMemo(() => {
-    const b = new Map<number, AnimeRecord[]>();
-    for (let s = 0; s <= 10; s++) b.set(s, []);
+  // Bucket the filtered list onto the active axis; whatever has no value there
+  // falls to the tray. On the `me` axis that means unrated titles, and unrated
+  // `watching` ones DO land there: rating mid-watch is a legitimate verdict
+  // ("I'm 8 episodes in and it's an 8"), and excluding them made the board
+  // render empty whenever the status filter was narrowed to En Cours alone.
+  // On a provider axis it means "that provider has no mean for this title",
+  // and on `gap` it means either side is missing. Dropping into a row is
+  // score-only — status is untouched.
+  //
+  // Within a row, cards sort by gap descending when the chip is on, so the
+  // titles you disagree with the crowd about cluster at one end; alphabetical
+  // otherwise (and as the tiebreak).
+  const board = useMemo(() => {
+    const byRow = new Map<number, AnimeRecord[]>();
+    for (const r of rows) byRow.set(r, []);
+    const tray: AnimeRecord[] = [];
     for (const a of filtered) {
-      b.get(effScoreOf(a.id))!.push(a);
+      const r = rowOf(a.id);
+      if (r === null || !byRow.has(r)) tray.push(a);
+      else byRow.get(r)!.push(a);
     }
-    for (const list of b.values()) list.sort((a, c) => getPrimaryTitle(a).localeCompare(getPrimaryTitle(c)));
-    return b;
-  }, [filtered, effScoreOf]);
+    const cmp = (a: AnimeRecord, c: AnimeRecord) => {
+      if (showChip) {
+        const ga = gapOf(a.id);
+        const gc = gapOf(c.id);
+        if (ga !== gc) {
+          if (ga === null) return 1;
+          if (gc === null) return -1;
+          return gc - ga;
+        }
+      }
+      return getPrimaryTitle(a).localeCompare(getPrimaryTitle(c));
+    };
+    for (const list of byRow.values()) list.sort(cmp);
+    tray.sort((a, c) => getPrimaryTitle(a).localeCompare(getPrimaryTitle(c)));
+    return { byRow, tray };
+  }, [filtered, rows, rowOf, showChip, gapOf]);
 
   // ---- Serial write queue (respects SIMKL's 1 req/s + 20s per-user lock). ----
   const queueRef = useRef<QueueItem[]>([]);
@@ -272,23 +371,20 @@ export default function TierPage() {
   const thumbW = THUMB_W[state.thumbSize];
   const thumbH = Math.round(thumbW / POSTER_RATIO);
 
-  const ratedCount = useMemo(() => {
-    let n = 0;
-    for (let s = 1; s <= 10; s++) n += buckets.get(s)!.length;
-    return n;
-  }, [buckets]);
+  const placedCount = useMemo(() => filtered.length - board.tray.length, [filtered, board]);
 
   const renderCard = (a: AnimeRecord) => {
     const thumb = a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large || '';
     const isSaving = saving.has(a.id);
     const fail = failed.get(a.id);
+    const gap = showChip ? gapOf(a.id) : null;
     return (
       <div
         key={a.id}
-        className={`card ${draggingId === a.id ? 'dragging' : ''} ${fail ? 'failed' : ''}`}
-        draggable
-        onDragStart={(e) => onDragStart(e, a.id)}
-        onDragEnd={onDragEnd}
+        className={`card ${draggingId === a.id ? 'dragging' : ''} ${fail ? 'failed' : ''} ${readOnly ? 'readonly' : ''}`}
+        draggable={!readOnly}
+        onDragStart={readOnly ? undefined : (e) => onDragStart(e, a.id)}
+        onDragEnd={readOnly ? undefined : onDragEnd}
         onMouseEnter={(e) => onCardEnter(e, a)}
         onMouseLeave={onCardLeave}
         title={getPrimaryTitle(a)}
@@ -297,6 +393,12 @@ export default function TierPage() {
         {thumb
           ? <img src={thumb} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%' }} />
           : <div className="noimg">{getPrimaryTitle(a).slice(0, 2)}</div>}
+        {gap !== null && (
+          <span
+            className={`gap-chip ${gap > 0 ? 'gap-up' : gap < 0 ? 'gap-down' : 'gap-eq'}`}
+            title={t('tier.gapChipHint', { provider: vsProvider === 'anilist' ? 'AniList' : 'MAL' })}
+          >{gap === 0 ? '=' : gap > 0 ? `+${gap}` : `−${-gap}`}</span>
+        )}
         <a
           className="detail-link"
           href={`/anime/${a.id}`}
@@ -372,24 +474,6 @@ export default function TierPage() {
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection title={t('section.display')} isExpanded={expanded.display} onToggle={() => toggle('display')}>
-        <div>
-          <label className="thumb-label">{t('section.thumbnailSize')}</label>
-          <div className="thumb-buttons">
-            {([0, 1, 2, 3] as ImageSize[]).map(s => (
-              <Button
-                key={s}
-                variant="secondary"
-                size="xs"
-                className={state.thumbSize === s ? 'thumb-active' : ''}
-                onClick={() => update({ thumbSize: s })}
-              >
-                {['S', 'M', 'L', 'XL'][s]}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </CollapsibleSection>
     </div>
   );
 
@@ -403,31 +487,105 @@ export default function TierPage() {
         <div className="tier-main">
           {error && <div className="error-banner">{error} <button onClick={() => setError('')}>×</button></div>}
 
-          <div className="tier-header">
-            <h1 className="tier-title">{t('nav.tierList')}</h1>
-            <span className="tier-count">{t('tier.headerCount', { rated: ratedCount, toRate: buckets.get(0)!.length })}</span>
-          </div>
+          {/* The same bar `/` and `/recommendations` render — these are all
+              "how the board looks" controls, so they belong next to the board
+              rather than in the sidebar, which answers *which* anime.
+              No `display` slot: the rows are wrapped thumbnails, not a card
+              grid, so cards-per-row means nothing here — thumbnail size is
+              this page's equivalent and rides in as a child. */}
+          <AnimeListHeader
+            title={t('nav.tierList')}
+            count={state.by === 'me'
+              ? t('tier.headerCount', { rated: placedCount, toRate: board.tray.length })
+              : t('tier.headerCountRead', { placed: placedCount, missing: board.tray.length })}
+          >
+            <div className="hdr-group">
+              <span className="hdr-label">{t('tier.axisLabel')}</span>
+              {AXES.map(a => (
+                <Button
+                  key={a}
+                  variant="secondary"
+                  size="xs"
+                  className={state.by === a ? 'thumb-active' : ''}
+                  onClick={() => update({ by: a })}
+                >
+                  {t(`tier.axis.${a}` as TranslationKey)}
+                </Button>
+              ))}
+            </div>
+
+            <div className="hdr-group">
+              <span className="hdr-label">{t('tier.vsLabel')}</span>
+              {(state.by === 'gap' ? VERSUS.filter(v => v !== 'none') : VERSUS).map(v => (
+                <Button
+                  key={v}
+                  variant="secondary"
+                  size="xs"
+                  className={(state.by === 'gap' ? vsProvider : state.vs) === v ? 'thumb-active' : ''}
+                  onClick={() => update({ vs: v })}
+                >
+                  {t(`tier.vs.${v}` as TranslationKey)}
+                </Button>
+              ))}
+            </div>
+
+            {/* Icon + dropdown rather than a label and four buttons: this is the
+                header's least-used group and it was costing ~200px on a bar that
+                already wraps at the TV target. The label survives as the icon's
+                tooltip and the select's aria-label, so it is still named. */}
+            <div className="hdr-group">
+              <span className="hdr-icon" title={t('section.thumbnailSize')} aria-hidden="true">🖼</span>
+              <select
+                className="hdr-select"
+                aria-label={t('section.thumbnailSize')}
+                value={state.thumbSize}
+                onChange={(e) => update({ thumbSize: parseInt(e.target.value, 10) as ImageSize })}
+              >
+                {([0, 1, 2, 3] as ImageSize[]).map(s => (
+                  <option key={s} value={s}>{THUMB_LABELS[s]}</option>
+                ))}
+              </select>
+            </div>
+
+            {readOnly && <span className="hdr-note">{t('tier.readOnlyNote')}</span>}
+          </AnimeListHeader>
 
           {!isReady || isLoading ? (
             <div className="loading-state">{t('common.loading')}</div>
           ) : (
             <div className="board">
-              {TIER_SCORES.map(s => (
-                <div key={s} className="tier-row" onDragOver={allowDrop} onDrop={(e) => onDropTo(e, s)}>
-                  <div className="tier-label" style={{ background: scoreColor(s) }}>
-                    <span className="tier-num">{s}</span>
-                    <span className="tier-word">{t(`tierWord.${s}` as TranslationKey)}</span>
+              {rows.map(r => (
+                <div
+                  key={r}
+                  className="tier-row"
+                  onDragOver={readOnly ? undefined : allowDrop}
+                  onDrop={readOnly ? undefined : (e) => onDropTo(e, r)}
+                >
+                  <div
+                    className={`tier-label ${state.by === 'gap' ? 'wide' : ''}`}
+                    style={{ background: state.by === 'gap' ? gapColor(r) : scoreColor(r) }}
+                  >
+                    <span className="tier-num">
+                      {state.by === 'gap' ? (r > 0 ? `+${r}` : r < 0 ? `−${-r}` : '0') : r}
+                    </span>
+                    <span className="tier-word">
+                      {t(state.by === 'gap' ? gapKey(r) : (`tierWord.${r}` as TranslationKey))}
+                    </span>
                   </div>
                   <div className="tier-cards">
-                    {buckets.get(s)!.map(renderCard)}
+                    {board.byRow.get(r)!.map(renderCard)}
                   </div>
                 </div>
               ))}
 
-              <div className="tray" onDragOver={allowDrop} onDrop={(e) => onDropTo(e, 0)}>
-                <div className="tray-label">{t('tier.trayLabel', { count: buckets.get(0)!.length })}</div>
+              <div className="tray" onDragOver={readOnly ? undefined : allowDrop} onDrop={readOnly ? undefined : (e) => onDropTo(e, 0)}>
+                <div className="tray-label">
+                  {state.by === 'me'
+                    ? t('tier.trayLabel', { count: board.tray.length })
+                    : t('tier.trayLabelRead', { count: board.tray.length })}
+                </div>
                 <div className="tier-cards">
-                  {buckets.get(0)!.map(renderCard)}
+                  {board.tray.map(renderCard)}
                 </div>
               </div>
             </div>
@@ -439,16 +597,31 @@ export default function TierPage() {
         <div className="hover-preview" style={{ left: preview.x, top: preview.y }}>
           <img src={preview.anime.catalog.mainPicture?.large || preview.anime.catalog.mainPicture?.medium || ''} alt="" />
           <div className="hover-title">{getPrimaryTitle(preview.anime)}</div>
-          {preview.anime.catalog.mean != null && <div className="hover-mean">MAL {preview.anime.catalog.mean.toFixed(2)}</div>}
+          <div className="hover-mean">
+            {[
+              meansById.get(preview.anime.id)?.mal != null ? `MAL ${meansById.get(preview.anime.id)!.mal!.toFixed(2)}` : null,
+              meansById.get(preview.anime.id)?.anilist != null ? `AniList ${meansById.get(preview.anime.id)!.anilist!.toFixed(2)}` : null,
+              effScoreOf(preview.anime.id) > 0 ? t('tier.hoverMine', { score: effScoreOf(preview.anime.id) }) : null,
+            ].filter(Boolean).join(' · ') || '—'}
+          </div>
         </div>
       )}
 
       <style jsx>{`
         .tier-main { display: flex; flex-direction: column; gap: 1rem; }
         .error-banner { background: #fee2e2; color: #dc2626; padding: 1rem; border-radius: 8px; }
-        .tier-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
-        .tier-title { font-size: 1.5rem; margin: 0; color: var(--text-primary); }
-        .tier-count { color: var(--text-secondary); }
+        /* Header children: one group each, shaped like DisplaySection's inline
+           variant (nowrap label + controls) so they sit flush with the shared
+           groups on the main list and the reco feed. NOTE: no backticks in here
+           — this whole block is a template literal, and one would end it. */
+        .hdr-group { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .hdr-label { font-weight: 600; color: var(--text-primary); font-size: 0.9rem; white-space: nowrap; }
+        .hdr-note { color: var(--text-secondary); font-size: 0.8rem; font-style: italic; }
+        .hdr-icon { font-size: 1rem; line-height: 1; cursor: default; }
+        /* Matches SortOrderSection's inline .select so the two read as one bar. */
+        .hdr-select { padding: 5px 8px; background: var(--bg-secondary); color: var(--text-primary);
+          border: 1px solid #444; border-radius: 4px; font-size: 0.9rem; cursor: pointer; }
+        .hdr-select:hover, .hdr-select:focus { outline: none; border-color: var(--accent-primary); }
         .loading-state { text-align: center; padding: 3rem; color: var(--text-secondary); }
 
         .board { display: flex; flex-direction: column; gap: 6px; }
@@ -456,6 +629,7 @@ export default function TierPage() {
           border: 1px solid var(--border-color); border-radius: 8px; min-height: 64px; }
         .tier-label { flex: 0 0 96px; display: flex; flex-direction: column; align-items: center;
           justify-content: center; border-radius: 8px 0 0 8px; color: #fff; padding: 4px; }
+        .tier-label.wide { flex: 0 0 132px; }
         .tier-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
         .tier-word { font-size: 0.7rem; opacity: 0.9; text-align: center; }
         .tier-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; flex: 1 1 auto; align-content: flex-start; }
@@ -463,8 +637,6 @@ export default function TierPage() {
         .tray { border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-secondary, var(--bg-primary)); margin-top: 6px; }
         .tray-label { padding: 6px 10px; color: var(--text-secondary); font-weight: 600; }
 
-        .thumb-label { display: block; color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 6px; }
-        .thumb-buttons { display: flex; gap: 6px; }
         :global(.thumb-active) { outline: 2px solid var(--accent-color, #3b82f6); }
       `}</style>
       <style jsx global>{`
@@ -476,6 +648,16 @@ export default function TierPage() {
           cursor: grab; background: var(--bg-secondary, #222); border: 1px solid transparent; }
         .board .card img { object-fit: cover; display: block; }
         .board .card.dragging { opacity: 0.4; }
+        .board .card.readonly { cursor: default; }
+
+        /* Gap chip sits top-LEFT: top-right is taken by the saving/failure badge.
+           Blue = I rate above the crowd, amber = below, neutral = we agree. */
+        .board .gap-chip { position: absolute; top: 2px; left: 2px; min-width: 17px; height: 15px;
+          padding: 0 3px; border-radius: 8px; font-size: 0.65rem; line-height: 15px; text-align: center;
+          font-weight: 700; pointer-events: none; }
+        .board .gap-up { background: #bfdbfe; color: #1e3a5f; }
+        .board .gap-down { background: #fde3b8; color: #663d0a; }
+        .board .gap-eq { background: rgba(0,0,0,0.55); color: #d4d4d8; }
         .board .card.failed { border-color: #dc2626; box-shadow: 0 0 0 1px #dc2626; }
         .board .noimg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
           font-size: 0.7rem; color: var(--text-secondary); }

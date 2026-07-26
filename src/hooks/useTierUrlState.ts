@@ -10,6 +10,18 @@ import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ImageSize } from '@/models/anime';
 
+/**
+ * What the board's rows mean.
+ *
+ * `me` is the original board (rows = my score, the only writable mode); `mal` /
+ * `anilist` re-bucket the same cards on that provider's community mean rounded
+ * to MAL's 1-10 scale; `gap` makes the rows the difference itself.
+ */
+export type TierAxis = 'me' | 'mal' | 'anilist' | 'gap';
+
+/** Which community mean the per-card gap chip (and the `gap` axis) compares to. */
+export type TierVersus = 'none' | 'mal' | 'anilist';
+
 export interface TierUrlState {
   search: string;
   mediaTypes: string[];
@@ -23,6 +35,10 @@ export interface TierUrlState {
   statuses: string[];
   /** Thumbnail size for the board (small by default — hover zooms to large). */
   thumbSize: ImageSize;
+  /** What the rows mean. Anything but `me` makes the board read-only. */
+  by: TierAxis;
+  /** Comparison provider for the gap chip; `gap` coerces `none` to `mal`. */
+  vs: TierVersus;
 }
 
 export const TIER_DEFAULTS: TierUrlState = {
@@ -35,7 +51,12 @@ export const TIER_DEFAULTS: TierUrlState = {
   genres: [],
   statuses: [],
   thumbSize: 1,
+  by: 'me',
+  vs: 'mal',
 };
+
+const AXES: readonly TierAxis[] = ['me', 'mal', 'anilist', 'gap'];
+const VERSUS: readonly TierVersus[] = ['none', 'mal', 'anilist'];
 
 const KEYS = {
   search: 'q',
@@ -47,6 +68,8 @@ const KEYS = {
   genres: 'g',
   statuses: 'st',
   thumbSize: 'ts',
+  by: 'by',
+  vs: 'vs',
 } as const;
 
 function decode(params: URLSearchParams): TierUrlState {
@@ -67,7 +90,14 @@ function decode(params: URLSearchParams): TierUrlState {
     thumbSize: params.has(KEYS.thumbSize)
       ? (parseInt(params.get(KEYS.thumbSize)!, 10) as ImageSize)
       : TIER_DEFAULTS.thumbSize,
+    by: oneOf(params.get(KEYS.by), AXES, TIER_DEFAULTS.by),
+    vs: oneOf(params.get(KEYS.vs), VERSUS, TIER_DEFAULTS.vs),
   };
+}
+
+/** Guard a closed-set param: an unknown value falls back rather than typing a lie. */
+function oneOf<T extends string>(value: string | null, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
 function encode(state: TierUrlState): string {
@@ -81,6 +111,8 @@ function encode(state: TierUrlState): string {
   if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
   if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
   if (state.thumbSize !== TIER_DEFAULTS.thumbSize) params.set(KEYS.thumbSize, String(state.thumbSize));
+  if (state.by !== TIER_DEFAULTS.by) params.set(KEYS.by, state.by);
+  if (state.vs !== TIER_DEFAULTS.vs) params.set(KEYS.vs, state.vs);
   const qs = params.toString().replace(/%2C/g, ',');
   return qs ? `/tier?${qs}` : '/tier';
 }

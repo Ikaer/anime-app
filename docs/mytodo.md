@@ -32,8 +32,6 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
 - **Seiyuu as a reco source, or a "more from this seiyuu" browse page.** Both need
   catalog-wide cast, which the sweep deliberately skips (it covers the statused
   list, ~500-700 titles, not the ~25k catalog).
-- **Tier view on the provider's rating** instead of mine — plus maybe a versus
-  view, to see how my rating compares.
 - **Discrepancy page utilities.** SIMKL auto-syncs from MAL but the others don't,
   so the page gets noisier as providers land: provider checkboxes to filter rows
   out (URL state, like the rest of the app), and one-way "fully sync provider A ⇒

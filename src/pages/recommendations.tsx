@@ -247,8 +247,10 @@ export default function RecommendationsPage() {
                 </Button>
               )
               : t('reco.countTitles', { count: animes.length })}
-            cardsPerRow={state.cardsPerRow}
-            onCardsPerRowChange={(value: number | null) => update({ cardsPerRow: value })}
+            display={{
+              cardsPerRow: state.cardsPerRow,
+              onCardsPerRowChange: (value: number | null) => update({ cardsPerRow: value }),
+            }}
           >
             <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
               {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}

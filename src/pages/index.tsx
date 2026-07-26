@@ -235,8 +235,10 @@ export default function AnimePage() {
               onSortByChange: handleSortByChange,
               onSortDirChange: handleSortDirChange,
             }}
-            cardsPerRow={display.cardsPerRow}
-            onCardsPerRowChange={handleCardsPerRowChange}
+            display={{
+              cardsPerRow: display.cardsPerRow,
+              onCardsPerRowChange: handleCardsPerRowChange,
+            }}
           />
           <div className="cards-container">
             {!isReady || isLoading || storeEmpty === null ? (
