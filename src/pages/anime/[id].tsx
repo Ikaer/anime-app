@@ -3,14 +3,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId, getAnilistCast } from '@/lib/store';
-import type { AnimeRecord, AniListCharacterEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
-import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
+import type { AnimeRecord, AnimeCatalog, AniListCharacterEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
+import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle, catalogFieldOrigins, type CatalogFieldOrigin } from '@/lib/domain/animeUtils';
+import { getCatalogPrecedenceByField } from '@/lib/config/settings';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/reco/byCredits';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
-import { MoreLikeThis, PersonalStateEditor, CastSection } from '@/components/anime';
+import { MoreLikeThis, PersonalStateEditor, CastSection, ProvenanceChip } from '@/components/anime';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 /**
@@ -37,6 +38,15 @@ interface Props {
    *  `anime` because cast lives in its own slice, off the hydration path
    *  (see `AniListCastEntry`). */
   cast: AniListCharacterEntry[] | null;
+  /**
+   * Per-catalog-field origin, for the inline provenance chips — which provider
+   * supplied each displayed value, and whether precedence had to arbitrate.
+   * Computed server-side under the *resolved* per-field ordering (the user's
+   * `/settings` overrides included), for the same reason `/precedence` reads it
+   * rather than the shipped constant: the page must describe the merge the
+   * record was actually built with.
+   */
+  origins: Partial<Record<keyof AnimeCatalog, CatalogFieldOrigin>>;
   /** No writable external provider connected — gates the status "clear"
    *  affordance (see `PersonalPatch`). */
   canClearStatus: boolean;
@@ -103,7 +113,7 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, related, cast, canClearStatus }: Props) {
+export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -216,8 +226,11 @@ export default function AnimeDetailPage({ anime, similar, related, cast, canClea
             ? <img className="poster" src={poster} alt={primaryTitle} />
             : <div className="poster noimg">{t('common.noImage')}</div>}
           <div className="head-info">
-            <h1>{primaryTitle}</h1>
-            {secondaryTitle && <div className="alt">{secondaryTitle}</div>}
+            {/* The displayed title is `alternativeTitles.en` when there is one and
+                `catalog.title` otherwise — two different catalog fields, so the
+                chip has to name whichever one actually supplied this string. */}
+            <h1>{primaryTitle}<ProvenanceChip field={en ? 'alternativeTitles' : 'title'} origin={en ? origins.alternativeTitles : origins.title} /></h1>
+            {secondaryTitle && <div className="alt">{secondaryTitle}<ProvenanceChip field="title" origin={origins.title} /></div>}
             {ja && <div className="alt ja">{ja}</div>}
             {synonyms.length > 0 && <div className="synonyms">{t('detail.alsoKnown', { names: synonyms.join(' · ') })}</div>}
             <div className="badges">
@@ -231,13 +244,22 @@ export default function AnimeDetailPage({ anime, similar, related, cast, canClea
               {anime.catalog.nsfw && anime.catalog.nsfw !== 'white' && <span className="pill nsfw">NSFW: {anime.catalog.nsfw}</span>}
               {anime.hidden && <span className="pill hidden">{t('detail.hidden')}</span>}
             </div>
-            {anime.catalog.synopsis && <p className="prose synopsis">{anime.catalog.synopsis}</p>}
+            {anime.catalog.synopsis && (
+              <p className="prose synopsis">
+                {anime.catalog.synopsis}
+                <ProvenanceChip field="synopsis" origin={origins.synopsis} />
+              </p>
+            )}
           </div>
           {/* Third column, sitting under the action buttons of the topbar. */}
           {((anime.catalog.genres && anime.catalog.genres.length > 0) || (anime.catalog.studios && anime.catalog.studios.length > 0)) && (
             <div className="head-meta">
               {anime.catalog.genres && anime.catalog.genres.length > 0 && (
                 <div className="head-chips">
+                  {/* One chip for the whole group, not one per genre: the list is
+                      unioned element-wise, so provenance is a property of the list
+                      rather than of any one name. */}
+                  <ProvenanceChip field="genres" origin={origins.genres} />
                   {/* keyed on name, not id: unioned AniList genres all carry the
                       synthetic id 0, so two of them on one title would collide */}
                   {anime.catalog.genres.map(g => <span key={g.name} className="chip">{g.name}</span>)}
@@ -245,6 +267,7 @@ export default function AnimeDetailPage({ anime, similar, related, cast, canClea
               )}
               {anime.catalog.studios && anime.catalog.studios.length > 0 && (
                 <div className="head-chips">
+                  <ProvenanceChip field="studios" origin={origins.studios} />
                   {anime.catalog.studios.map(s => (
                     <Link key={s.id} href={`/credits/studio/${s.id}`} className="chip studio">🎬 {s.name}</Link>
                   ))}
@@ -389,17 +412,19 @@ export default function AnimeDetailPage({ anime, similar, related, cast, canClea
             <Link href={`/precedence?id=${anime.id}`} className="inspect">{t('detail.inspectPrecedence')}</Link>
           </h2>
           <div className="grid">
-            <Field label={t('detail.meanScore')} value={anime.catalog.mean != null ? anime.catalog.mean.toFixed(2) : '—'} />
-            <Field label={t('field.rank')} value={anime.catalog.rank != null ? `#${anime.catalog.rank}` : '—'} />
-            <Field label={t('field.popularity')} value={anime.catalog.popularity != null ? `#${anime.catalog.popularity}` : '—'} />
-            <Field label={t('field.users')} value={fmtNum(anime.catalog.numListUsers)} />
-            <Field label={t('field.scorers')} value={fmtNum(anime.catalog.numScoringUsers)} />
-            <Field label={t('field.episodes')} value={anime.catalog.numEpisodes ? String(anime.catalog.numEpisodes) : t('common.tba')} />
-            <Field label={t('detail.durationPerEp')} value={fmtDuration(anime.catalog.averageEpisodeDuration)} />
-            <Field label={t('detail.source')} value={anime.catalog.source ? formatUserStatus(anime.catalog.source) : '—'} />
-            <Field label={t('detail.rating')} value={anime.catalog.rating || '—'} />
-            <Field label={t('detail.start')} value={fmtDate(anime.catalog.startDate)} />
-            <Field label={t('detail.end')} value={fmtDate(anime.catalog.endDate)} />
+            <Field label={t('detail.meanScore')} value={anime.catalog.mean != null ? anime.catalog.mean.toFixed(2) : '—'} field="mean" origin={origins.mean} />
+            <Field label={t('field.rank')} value={anime.catalog.rank != null ? `#${anime.catalog.rank}` : '—'} field="rank" origin={origins.rank} />
+            <Field label={t('field.popularity')} value={anime.catalog.popularity != null ? `#${anime.catalog.popularity}` : '—'} field="popularity" origin={origins.popularity} />
+            <Field label={t('field.users')} value={fmtNum(anime.catalog.numListUsers)} field="numListUsers" origin={origins.numListUsers} />
+            <Field label={t('field.scorers')} value={fmtNum(anime.catalog.numScoringUsers)} field="numScoringUsers" origin={origins.numScoringUsers} />
+            <Field label={t('field.episodes')} value={anime.catalog.numEpisodes ? String(anime.catalog.numEpisodes) : t('common.tba')} field="numEpisodes" origin={origins.numEpisodes} />
+            <Field label={t('detail.durationPerEp')} value={fmtDuration(anime.catalog.averageEpisodeDuration)} field="averageEpisodeDuration" origin={origins.averageEpisodeDuration} />
+            <Field label={t('detail.source')} value={anime.catalog.source ? formatUserStatus(anime.catalog.source) : '—'} field="source" origin={origins.source} />
+            <Field label={t('detail.rating')} value={anime.catalog.rating || '—'} field="rating" origin={origins.rating} />
+            <Field label={t('detail.start')} value={fmtDate(anime.catalog.startDate)} field="startDate" origin={origins.startDate} />
+            <Field label={t('detail.end')} value={fmtDate(anime.catalog.endDate)} field="endDate" origin={origins.endDate} />
+            {/* No chip on these two: they read a raw MAL slice by nature (K7),
+                so there is no precedence question to report. */}
             <Field label={t('detail.addedMal')} value={fmtDate(anime.sources.mal?.created_at)} />
             <Field label={t('detail.updatedMal')} value={fmtDate(anime.sources.mal?.updated_at)} />
           </div>
@@ -681,14 +706,32 @@ export default function AnimeDetailPage({ anime, similar, related, cast, canClea
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+/**
+ * One labelled catalog fact, with its provenance chip beside the label rather
+ * than the value — the chip qualifies where the fact came from, and hanging it
+ * off the value made it read as part of the value.
+ *
+ * `field` is the catalog field name, so the chip's tooltip names the same
+ * identifier `/precedence` does. Omitting it (the two "on MAL" dates, which read
+ * a raw MAL slice by nature — K7) simply renders no chip.
+ */
+function Field({ label, value, field, origin }: {
+  label: string;
+  value: string;
+  field?: keyof AnimeCatalog;
+  origin?: CatalogFieldOrigin;
+}) {
   return (
     <div className="field">
-      <span className="field-label">{label}</span>
+      <span className="field-label">
+        {label}
+        {field && <ProvenanceChip field={field} origin={origin} />}
+      </span>
       <span className="field-value">{value}</span>
       <style jsx>{`
         .field { display: flex; flex-direction: column; gap: 2px; }
-        .field-label { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        .field-label { display: flex; align-items: center; gap: 0.35rem;
+          color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
         .field-value { color: var(--text-primary); font-size: 0.95rem; }
       `}</style>
     </div>
@@ -737,6 +780,11 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       similar: JSON.parse(JSON.stringify(similar)),
       related: JSON.parse(JSON.stringify(related)),
       cast: cast ? JSON.parse(JSON.stringify(cast)) : null,
+      // Built under the RESOLVED per-field ordering (`/settings` overrides
+      // layered over the shipped defaults) — the same map `getAnimeForDisplay`
+      // threads into the merge, so a chip cannot name a winner the record was
+      // not actually built with.
+      origins: JSON.parse(JSON.stringify(catalogFieldOrigins(anime, undefined, getCatalogPrecedenceByField()))),
       // Offered only when every enabled provider declares it can clear a status
       // (`personal.clearStatus` in providerCapabilities.ts) — in practice, when
       // local is the only one on. MAL models a clear as a list DELETE and SIMKL

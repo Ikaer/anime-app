@@ -10,5 +10,6 @@ export { default as ConnectionLogPanel } from './ConnectionLogPanel';
 export { default as MoreLikeThis } from './MoreLikeThis';
 export { default as CastSection } from './CastSection';
 export { default as PersonalStateEditor } from './PersonalStateEditor';
+export { default as ProvenanceChip } from './ProvenanceChip';
 export { default as ConnectionBadges } from './ConnectionBadges';
 export { default as FirstRunOnboarding } from './FirstRunOnboarding';

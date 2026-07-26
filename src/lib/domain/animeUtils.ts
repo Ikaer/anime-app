@@ -690,6 +690,44 @@ export function explainCatalogPrecedence(
   );
 }
 
+/** What an inline provenance chip needs to say about one catalog field. */
+export interface CatalogFieldOrigin {
+  /** Provider that supplied the effective value. Absent on a unioned field. */
+  source?: ProvenanceSource;
+  /** More than one provider offered a value — precedence really arbitrated. */
+  contested: boolean;
+  /** Merged element-wise (`genres`), so "who won" is the wrong question. */
+  union: boolean;
+}
+
+/**
+ * The lean, per-field projection of `explainCatalogPrecedence` — enough to label
+ * a displayed value with its origin, without the losing values.
+ *
+ * Derived from the same function `/precedence` renders rather than read straight
+ * off `record.provenance.catalog`, so the inline chips and the inspector cannot
+ * disagree about `genres` (whose provenance entry names whoever the merge picked
+ * before `unionGenres` overrode it) or about which fields were contested.
+ *
+ * A field no provider produced is simply absent — the caller then renders no
+ * chip, rather than one claiming a source for a `—`.
+ */
+export function catalogFieldOrigins(
+  record: AnimeRecord,
+  base: CatalogSource[] = DEFAULT_CATALOG_PRECEDENCE,
+  byField: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = CATALOG_PRECEDENCE_BY_FIELD
+): Partial<Record<keyof AnimeCatalog, CatalogFieldOrigin>> {
+  const out: Partial<Record<keyof AnimeCatalog, CatalogFieldOrigin>> = {};
+  for (const row of explainCatalogPrecedence(record, base, byField)) {
+    out[row.field] = {
+      source: row.winner,
+      contested: row.contested,
+      union: row.mergeMode === 'union',
+    };
+  }
+  return out;
+}
+
 /**
  * Build the provider-neutral `AnimeRecord` from a canonical id's raw slices
  * via the generic hydration engine above. `personal` reproduces the exact

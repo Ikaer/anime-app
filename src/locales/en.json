@@ -211,6 +211,10 @@
   "disc.provider.local": "Local",
   "disc.provider.anilist": "AniList",
 
+  "prov.settled": "{field} — supplied by {provider}, the only source that has it",
+  "prov.contested": "{field} — {provider} won over the other sources",
+  "prov.union": "{field} — merged from every source, no arbitration",
+
   "discPage.countOne": "{count} title",
   "discPage.countOther": "{count} titles",
   "discPage.empty": "No discrepancies between your sources. 🎉",
@@ -328,7 +332,7 @@
   "detail.simklWatched": "SIMKL watched on: {date}",
   "detail.discTitle": "⚠ Your sources disagree",
   "detail.discAbsent": "Present on {present} but absent from {absent}",
-  "detail.catalogSheet": "Catalog sheet (MAL)",
+  "detail.catalogSheet": "Catalog sheet",
   "detail.inspectPrecedence": "⚖ Field provenance",
   "detail.meanScore": "Mean score",
   "detail.durationPerEp": "Duration / ep.",

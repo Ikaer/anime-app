@@ -1,0 +1,36 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+  /* Sits beside a field label at 0.75rem — small enough to read as an
+     annotation, not as part of the value. */
+  font-size: 0.62rem;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+/* One provider had it: true, but precedence decided nothing. Same greying-out
+   the inspector applies to its settled rows. */
+.settled {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+/* Several providers offered a value — the informative case. Amber, matching
+   the inspector's contested marker. */
+.contested {
+  color: #facc15;
+  border-color: rgba(250, 204, 21, 0.4);
+}
+
+/* Merged element-wise, no winner to name. */
+.union {
+  color: #facc15;
+  border-color: rgba(250, 204, 21, 0.4);
+  font-weight: 700;
+}

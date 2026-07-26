@@ -5,9 +5,6 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
 
 ## Features
 
-- **Provenance chips** — surface which provider each displayed field came from.
-  The data is already on `record.provenance`; `/precedence` renders it densely for
-  debugging, this would be the in-line version.
 - **Entry deletion across providers.** Removing a status is a distinct *Delete*
   action on the list entry in both AniList and MAL, not a status value, so every
   remote writer currently refuses `status: null` with a reason. The fix belongs in
