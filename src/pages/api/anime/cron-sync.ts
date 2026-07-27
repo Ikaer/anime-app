@@ -3,6 +3,7 @@ import { getValidMalToken } from '@/lib/providers/mal/client';
 import { performHistoricalCrawl } from '@/lib/providers/mal/sync';
 import { performSimklSync } from '@/lib/providers/simkl/sync';
 import { importAnilistPersonalList } from '@/lib/providers/anilist/personalSync';
+import { performAnilistPersonalPush } from '@/lib/providers/anilist/push';
 import {
   isAnilistMetaSyncRunning,
   performAnilistMetaSync,
@@ -34,6 +35,10 @@ import { getCronSecret } from '@/lib/config/settings';
  * requirement, and each returns a `CronStepOutcome`. Every block is isolated and
  * non-fatal: one provider failing must not cost the others their tick.
  *
+ * **All but one step READS.** `anilistPush` is the exception, and the only place
+ * this app writes to a provider outside a user-initiated edit — see its comment
+ * for why a scheduled write earns its place.
+ *
  * **No provider gates the run.** Do not put an auth check in front of the
  * handler: a MAL-token gate costs a SIMKL-only, AniList-only or keyless install
  * its entire tick, including the recommendations refresh, which needs no MAL
@@ -57,6 +62,7 @@ type CronSteps = Record<
   | 'malCatalog'
   | 'simklPersonal'
   | 'anilistPersonal'
+  | 'anilistPush'
   | 'anilistDiscovery'
   | 'anilistHistorical'
   | 'anilistCatalog'
@@ -168,6 +174,62 @@ async function syncAnilistPersonal(): Promise<CronStepOutcome> {
     skippedNoMal: result.skippedNoMal,
   });
   return { ok: true, detail: { imported: result.imported, skippedNoMal: result.skippedNoMal } };
+}
+
+/**
+ * AniList's personal role, WRITE half — push local state up to AniList.
+ *
+ * `writers.ts` already mirrors every edit made *in this app* to AniList, so this
+ * step exists for the edits that never pass through it: a rating made directly
+ * on the SIMKL website arrives here via the SIMKL delta above and would
+ * otherwise sit in the local record forever, with AniList drifting until someone
+ * pressed the Connections button. Scheduling the sweep is what makes SIMKL →
+ * AniList an automatic path rather than a manual one.
+ *
+ * **Ordering is the point**: it runs after the SIMKL delta (which lands the new
+ * ratings) and after the AniList import (a full-replace write that would
+ * otherwise clobber the slice updates `reflectLocally` makes as it pushes).
+ * One ordering it does NOT get is against MAL: `startBigSync` is
+ * fire-and-forget over HTTP, so `upsertAnime` is still splitting `my_list_status`
+ * into `personal/mal.json` while this reads `getEffective*`. That race is
+ * benign and left alone — MAL sits *below* SIMKL in personal precedence, so a
+ * late MAL write can only move the effective value on a title SIMKL doesn't
+ * hold, and the next tick's fresh `buildQueue` diff pushes it then.
+ *
+ * Awaited and uncapped, unlike the two fire-and-forget sweeps at the end. It can
+ * afford to be: `buildQueue` diffs against a fresh remote read and pushes only
+ * what actually differs, so a converged install spends ONE GraphQL request per
+ * tick and writes nothing. A day's worth of SIMKL ratings is a handful of
+ * throttled writes. Only the first-ever run is long, and it is resumable by
+ * construction — an interrupted sweep just finds fewer disagreements next time.
+ */
+async function pushAnilist(): Promise<CronStepOutcome> {
+  if (!isPersonalProviderEnabled('anilist')) return notConnected('AniList');
+
+  const result = await performAnilistPersonalPush();
+  if (result.alreadyRunning) {
+    // The Connections button holds the same lock — a normal outcome, not a miss.
+    return { ok: true, skipped: true, reason: 'A push is already running' };
+  }
+  if (!result.ok) {
+    appendLog('cron-sync', 'error', 'Cron sync AniList push failed', { error: result.error });
+    return { ok: false, reason: result.error };
+  }
+  // Nothing queued is the converged steady state, and the common case — say so
+  // rather than reporting a run that wrote nothing as if it had done work.
+  if (result.queued === 0) {
+    return { ok: true, detail: { queued: 0, pushed: 0, failed: 0, inSync: true } };
+  }
+  appendLog(
+    'cron-sync',
+    'success',
+    `Cron sync pushed ${result.pushed} entries to AniList (${result.failed} failed of ${result.queued} queued)`,
+    { queued: result.queued, pushed: result.pushed, failed: result.failed }
+  );
+  return {
+    ok: true,
+    detail: { queued: result.queued, pushed: result.pushed, failed: result.failed },
+  };
 }
 
 /**
@@ -367,6 +429,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   steps.malCatalog = await step('mal', syncMal);
   steps.simklPersonal = await step('simkl', syncSimkl);
   steps.anilistPersonal = await step('anilist-personal', syncAnilistPersonal);
+  // The only WRITE step in the run, and it goes last among the personal ones: it
+  // needs the SIMKL delta's new ratings landed, and it must follow the AniList
+  // import, whose full-replace write would clobber the slice updates the push
+  // makes as it goes.
+  steps.anilistPush = await step('anilist-push', pushAnilist);
   // Before the enrichment sweeps, and awaited: it is what supplies the AniList
   // ids they queue on. Ungated for the same reason they are — AniList's catalog
   // role is anonymous.

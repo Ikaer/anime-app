@@ -4,7 +4,10 @@ import { useT } from '@/lib/i18n';
 
 type RefreshOutcome = {
   mal: { ok: boolean; error?: string };
+  /** AniList's CATALOG pipe: tags / staff / banner / relations. */
   anilist: { ok: boolean; tagged: number; error?: string };
+  /** AniList's PERSONAL pipe: the viewer's list import. `skipped` = not connected. */
+  anilistPersonal: { ok: boolean; skipped?: boolean; imported: number; error?: string };
   simkl: { ok: boolean; phase: string; added: number; removed: number; error?: string };
 };
 
@@ -20,10 +23,10 @@ export interface RefreshButtonProps {
 }
 
 /**
- * Triggers the per-anime refresh (MAL single-title + AniList tags/staff + SIMKL
- * incremental delta) and reports a compact per-source outcome so a failed pipe
- * is visible, not silent. The host decides how to reflect the new data via
- * `onRefreshed`.
+ * Triggers the per-anime refresh (MAL single-title + AniList tags/staff +
+ * AniList list import + SIMKL incremental delta) and reports a compact
+ * per-source outcome so a failed pipe is visible, not silent. The host decides
+ * how to reflect the new data via `onRefreshed`.
  */
 export default function RefreshButton({ animeId, onRefreshed, compact }: RefreshButtonProps) {
   const t = useT();
@@ -50,6 +53,22 @@ export default function RefreshButton({ animeId, onRefreshed, compact }: Refresh
 
   const flag = (ok: boolean) => (ok ? '✓' : '✗');
 
+  // AniList runs two pipes (catalog metadata + the list import), but the badge
+  // sits in a table cell and a fourth entry wraps it. One flag, the AND of both,
+  // with the split in the tooltip — the failure mode this replaces is the badge
+  // showing "AniList ✓" off the catalog refetch while the list never re-read.
+  const anilistOk = result
+    ? result.anilist.ok && (result.anilistPersonal.skipped || result.anilistPersonal.ok)
+    : false;
+  const tip = result
+    ? [
+        `MAL ${flag(result.mal.ok)}`,
+        `AniList catalog ${flag(result.anilist.ok)}`,
+        `AniList list ${result.anilistPersonal.skipped ? '–' : flag(result.anilistPersonal.ok)}`,
+        `SIMKL ${flag(result.simkl.ok)}`,
+      ].join(' · ')
+    : '';
+
   return (
     <span className={styles.wrap}>
       <button
@@ -61,8 +80,8 @@ export default function RefreshButton({ animeId, onRefreshed, compact }: Refresh
         {busy ? (compact ? '⏳' : t('refresh.refreshing')) : (compact ? '🔄' : t('refresh.refresh'))}
       </button>
       {result && (
-        <span className={styles.status} title="MAL · AniList · SIMKL">
-          MAL {flag(result.mal.ok)} · AniList {flag(result.anilist.ok)} · SIMKL {flag(result.simkl.ok)}
+        <span className={styles.status} title={tip}>
+          MAL {flag(result.mal.ok)} · AniList {flag(anilistOk)} · SIMKL {flag(result.simkl.ok)}
         </span>
       )}
       {error && <span className={`${styles.status} ${styles.err}`}>{error}</span>}

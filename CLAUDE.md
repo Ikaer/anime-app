@@ -380,7 +380,7 @@ genres.
 - **`local` has a card**: active/inactive, entry count, precedence rank, why `auto` switched it off, and a link to `/settings`. On a keyless install it is the only active personal provider, and it previously appeared nowhere in the UI.
 - **Actions are NOT abstracted.** Each provider's sync stays its own block in [CatalogRoleActions](src/components/anime/connections/CatalogRoleActions.tsx) / [PersonalRoleActions](src/components/anime/connections/PersonalRoleActions.tsx), passed to the card as children — MAL's seasonal crawl, SIMKL's delta and AniList's GraphQL batch are different operations (docs/DECISIONS.md). Only the card around them is uniform. Note MAL's list sync is a *personal*-role action while big-sync/historical-crawl are *catalog* ones; the sync-error state is split the same way.
 
-### Scheduled sync (cron-sync) — eight steps, none of them a gate
+### Scheduled sync (cron-sync) — nine steps, none of them a gate
 
 [cron-sync.ts](src/pages/api/anime/cron-sync.ts) is the one place scheduled work
 is orchestrated, and since F1 it covers every provider, not
@@ -388,16 +388,29 @@ just MAL. It is **not** a generic loop (docs/DECISIONS.md): MAL's
 seasonal crawl, SIMKL's two-phase delta and AniList's GraphQL batch are
 genuinely different operations. What is uniform is *enablement* and *reporting*.
 
-- **Eight steps, each isolated and non-fatal**: MAL catalog (big-sync via HTTP,
+- **Nine steps, each isolated and non-fatal**: MAL catalog (big-sync via HTTP,
   which owns the run lock, then a 5-season historical crawl), SIMKL delta,
-  AniList list import, the AniList season crawl (`anilistDiscovery`), the AniList
-  back-catalog crawl (`anilistHistorical`, 3 years a tick), the
-  recommendations refresh, then the AniList metadata sync and catalog sweep.
+  AniList list import, the **AniList push** (`anilistPush`), the AniList season
+  crawl (`anilistDiscovery`), the AniList back-catalog crawl
+  (`anilistHistorical`, 3 years a tick), the recommendations refresh, then the
+  AniList metadata sync and catalog sweep.
   Each returns a `CronStepOutcome` and they are all echoed in the response
   — same "declare the degraded mode" shape as `RecoRefreshSources` (B4).
   `skipped: true` = not applicable (no account); `ok: false` = it should have run
   and didn't. **The handler answers 200 even when a step failed** — a non-2xx
   would tell the NAS cron job "nothing ran", which is exactly what F1 removed.
+- **`anilistPush` is the one step that WRITES**, and the only provider write in
+  this app outside a user-initiated edit. `writers.ts` already mirrors every edit
+  made *here* to AniList; this step exists for the edits that never pass through
+  it — **a rating made directly on the SIMKL website**, which arrives via the
+  SIMKL delta and would otherwise leave AniList drifting until someone pressed
+  the Connections button. It runs after the SIMKL delta (which lands the
+  ratings) and after the AniList import, whose **full-replace** write would
+  otherwise clobber the slice updates `performAnilistPersonalPush` makes as it
+  goes. Awaited and uncapped, unlike the two fire-and-forget sweeps: it diffs
+  against a fresh remote read and pushes only what differs, so a converged
+  install spends **one GraphQL request per tick and writes nothing**. Only the
+  first run is long, and it is resumable by construction.
 - **No provider gates the run.** Until F1 a missing or expired MAL token was a
   400 for the whole handler, so a SIMKL-only, AniList-only or keyless install got
   nothing at all — including the recommendations refresh, which B4 had already

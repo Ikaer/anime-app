@@ -3,20 +3,31 @@ import { getAllAnime, upsertAnime, getMalIdForCanonical, isCanonicalId, getAllAn
 import { getValidMalToken, fetchAnimeById } from '@/lib/providers/mal/client';
 import { refreshAnilistMetaForIds } from '@/lib/providers/anilist/sync';
 import { getOrFetchAnilistCast } from '@/lib/providers/anilist/cast';
+import { importAnilistPersonalList } from '@/lib/providers/anilist/personalSync';
 import { performSimklSync } from '@/lib/providers/simkl/sync';
+import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { appendLog } from '@/lib/config/connectionLog';
 
 /**
- * Refresh a single anime's data from all three sources, on demand (detail page).
- * Each source is independent and non-fatal — the response carries a per-source
- * outcome so the client can show which pipes refilled.
+ * Refresh a single anime's data from all three sources, on demand (detail page,
+ * discrepancies table). Each source is independent and non-fatal — the response
+ * carries a per-source outcome so the client can show which pipes refilled.
  *
  * - MAL: GET /v2/anime/{id} (single-title catalog + personal status), merged
  *   over the existing local record so unreturned fields are preserved.
- * - AniList: force-refetch tags + staff + banner + relations, **by AniList id**
- *   — the only id space AniList is queried in (E8). A title with no AniList id
- *   is one AniList has never returned; finding it is the season crawl's job, not
- *   this button's.
+ * - AniList catalog: force-refetch tags + staff + banner + relations, **by
+ *   AniList id** — the only id space AniList is queried in (E8). A title with no
+ *   AniList id is one AniList has never returned; finding it is the season
+ *   crawl's job, not this button's.
+ * - AniList personal: the viewer's list import. **Every provider whose PERSONAL
+ *   state this button is expected to re-read has to be here** — that is the
+ *   whole point on the discrepancies page, where the button exists to make a
+ *   resolved disagreement go away. Leaving AniList out made it the one provider
+ *   a refresh could never clear, while the badge still reported "AniList ✓" off
+ *   the catalog refetch above. Like SIMKL below it has no per-title read, so the
+ *   whole-list call is what a single-title refresh runs — and unlike SIMKL's
+ *   delta that is a SINGLE GraphQL request (`MediaListCollection` is not
+ *   paginated), so it is the cheapest pipe here, not the most expensive.
  * - SIMKL: the standard incremental library delta (SIMKL has no per-id read; the
  *   user accepted the incremental sync for the refresh).
  */
@@ -24,6 +35,13 @@ import { appendLog } from '@/lib/config/connectionLog';
 const NO_MAL_ID: { ok: false; error: string } = { ok: false, error: 'No MAL id known for this title' };
 const NO_ANILIST_HANDLE: { ok: false; tagged: number; error: string } =
   { ok: false, tagged: 0, error: 'No AniList id known for this title' };
+
+/**
+ * Not connected is `ok: true, skipped: true` — the same distinction cron-sync
+ * draws. A provider the user never linked must not render as a failed pipe.
+ */
+const NO_ANILIST_ACCOUNT: { ok: true; skipped: true; imported: number; reason: string } =
+  { ok: true, skipped: true, imported: 0, reason: 'No AniList account connected' };
 
 async function refreshMal(
   canonicalId: string,
@@ -67,7 +85,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ?? toNum(getRegistry()[canonicalId]?.anilist);
 
   // Each source is isolated: one failing must not sink the others.
-  const [malResult, anilistResult, simklResult, castResult] = await Promise.all([
+  const [malResult, anilistResult, anilistPersonalResult, simklResult, castResult] = await Promise.all([
     malId !== undefined
       ? refreshMal(canonicalId, malId).catch(e => ({ ok: false, error: e instanceof Error ? e.message : 'MAL refresh failed' }))
       : Promise.resolve(NO_MAL_ID),
@@ -78,6 +96,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? refreshAnilistMetaForIds([anilistId])
           .catch(e => ({ ok: false, tagged: 0, error: e instanceof Error ? e.message : 'AniList refresh failed' }))
       : Promise.resolve(NO_ANILIST_HANDLE),
+    // Full-replace list import, gated on the one enablement predicate rather
+    // than on this title having an AniList id: the import is by viewer, not by
+    // title, and a title absent from the list is exactly what a full replace
+    // has to be able to express.
+    isPersonalProviderEnabled('anilist')
+      ? importAnilistPersonalList()
+          .catch(e => ({ ok: false, imported: 0, error: e instanceof Error ? e.message : 'AniList list import failed' }))
+      : Promise.resolve(NO_ANILIST_ACCOUNT),
     performSimklSync().catch(e => ({ ok: false, phase: 'noop' as const, added: 0, removed: 0, orphansSkipped: 0, error: e instanceof Error ? e.message : 'SIMKL sync failed' })),
     // `force` — the point of a manual refresh is to re-pull, and an existing
     // cast entry would otherwise short-circuit the fetch.
@@ -90,6 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     malId,
     mal: malResult.ok,
     anilist: anilistResult.ok,
+    anilistPersonal: anilistPersonalResult.ok,
     simkl: simklResult.ok,
     cast: castResult.ok,
   });
@@ -98,6 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ok: true,
     mal: malResult,
     anilist: anilistResult,
+    anilistPersonal: anilistPersonalResult,
     simkl: simklResult,
     cast: castResult,
   });
