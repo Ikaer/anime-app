@@ -119,6 +119,31 @@ The anonymous by-username tier shipped and was removed: post-OAuth it read a lis
 the user could not write back to. Removing it closed the discrepancy actionability
 gate for free — every entry in the slice now belongs to a connected account.
 
+**SIMKL's write carve-out is TWO operations, not one — ratings and removals.**
+The one-way-in rule stands (nothing automatic ever writes to SIMKL); this is the
+second *user-initiated* exception. Excluding removal was considered and is wrong
+for a structural reason, not a convenience one: SIMKL is **first** in personal
+precedence, so an entry left behind there keeps `getEffectiveStatus` returning a
+status after every other provider has cleared theirs — a "clear status" that
+visibly does nothing. And `canClearStatus()` requires *every* enabled provider,
+so leaving SIMKL out would mean the control never renders on a SIMKL install at
+all.
+
+**Entry deletion is remote-first, inverting local-cache authority — deliberately.**
+Everywhere else the local slice is written before any remote, so a hung remote
+can't cost the user their edit. For a *removal* that is actively harmful: a local
+entry deleted while the remote survives doesn't persist as a visible discrepancy,
+it **silently reverts** on the next sync (`importAnilistPersonalList` full-replaces
+the AniList slice; MAL's list sync rewrites `my_list_status`), after the UI
+reported success. A visible discrepancy is the better failure, so the local drop
+is conditional on the remote confirming.
+
+**No shared "already gone" convention across providers.** Live-measured, they
+disagree completely: MAL's DELETE is idempotent (200 on an absent entry),
+AniList's second delete is a 400 validation error, and SIMKL's `deleted` counter
+reports 1 either way and cannot be read as an effect signal at all. Each writer
+normalizes its own; a shared helper would get two of the three wrong.
+
 ## Store & code layout
 
 **Role folders, not provider folders.** The alternative files a 39 MB catalog

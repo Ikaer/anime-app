@@ -37,9 +37,13 @@ const STATUS_MAP: Record<string, UserAnimeStatus> = {
 // score(format: POINT_10) is load-bearing: it normalizes a user on a
 // POINT_100 / POINT_5 / stars profile down onto the shared 1-10 scale, so a
 // "85" can never poison getEffectiveScore's scale.
+// `id` here is the LIST ENTRY id, not the media id — the id
+// `DeleteMediaListEntry(id:)` takes. It rides along free on a query we already
+// run, which is why the delete path needs no extra call in the common case.
 const LIST_SELECTION = `
   lists {
     entries {
+      id
       status
       score(format: POINT_10)
       progress
@@ -99,6 +103,8 @@ class AniListPersonalError extends Error {
 }
 
 interface RawEntry {
+  /** The list-entry id (not the media id). */
+  id?: number | null;
   status?: string;
   score?: number | null;
   progress?: number | null;
@@ -145,6 +151,8 @@ export interface AniListRemoteEntry {
   anilistId: number;
   /** Absent for an AniList-only title (no MAL counterpart to join by). */
   malId?: number;
+  /** The LIST ENTRY id — what `DeleteMediaListEntry(id:)` takes. */
+  entryId?: number;
   status?: UserAnimeStatus;
   score?: number;
   progress?: number;
@@ -158,6 +166,7 @@ function normalizeLists(lists: RawList[]): AniListRemoteEntry[] {
       out.push({
         anilistId: e.media?.id ?? 0,
         malId: e.media?.idMal ?? undefined,
+        entryId: e.id ?? undefined,
         status: STATUS_MAP[(e.status ?? '').toUpperCase()],
         score: typeof e.score === 'number' && e.score > 0 ? e.score : undefined,
         progress: typeof e.progress === 'number' ? e.progress : undefined,
@@ -219,6 +228,7 @@ export async function importAnilistPersonalList(): Promise<AniListPersonalImport
       // Custom lists can repeat a title across lists — the MAL-id key dedupes.
       byMalId[e.malId.toString()] = {
         anilist_id: e.anilistId,
+        entry_id: e.entryId,
         status: e.status,
         score: e.score,
         progress: e.progress,

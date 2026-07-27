@@ -61,6 +61,7 @@ export {
   getAnilistPersonalCount,
   replaceAnilistPersonalEntries,
   upsertAnilistPersonalEntries,
+  removeAnilistPersonalEntries,
   getAllLocalEntries,
   upsertLocalEntries,
   removeLocalEntries,

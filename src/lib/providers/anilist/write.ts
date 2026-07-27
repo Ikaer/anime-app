@@ -18,7 +18,7 @@
  * Server-only.
  */
 import type { UserAnimeStatus } from '@/models/anime';
-import { getAnilistAccessToken } from '@/lib/providers/anilist/auth';
+import { getAnilistAccessToken, getAnilistAuthData, fetchAnilistViewer } from '@/lib/providers/anilist/auth';
 import { anilistGraphQL } from '@/lib/providers/anilist/client';
 import { appendLog } from '@/lib/config/connectionLog';
 
@@ -46,6 +46,17 @@ const MEDIA_BY_MAL_QUERY = `
 query ($idMal: Int) {
   Media(idMal: $idMal, type: ANIME) { id }
 }`;
+
+// The LIST ENTRY id for one media, for the viewer the token identifies. Answers
+// 404 + `data.MediaList: null` when the entry doesn't exist — the same
+// absence-as-404 idiom `cast.ts` handles, NOT an error.
+const ENTRY_BY_MEDIA_QUERY = `
+query ($userId: Int, $mediaId: Int) {
+  MediaList(userId: $userId, mediaId: $mediaId) { id }
+}`;
+
+const DELETE_MUTATION = `
+mutation ($id: Int) { DeleteMediaListEntry(id: $id) { deleted } }`;
 
 export interface AnilistWriteResult {
   ok: boolean;
@@ -77,6 +88,101 @@ export async function resolveAnilistMediaId(
   // A MAL id AniList doesn't carry comes back as a `Not Found` error, not a throw.
   if (result.errors?.length || !result.data?.Media) return null;
   return result.data.Media.id;
+}
+
+/**
+ * The LIST ENTRY id for a media, live. Returns `null` when the viewer has no
+ * entry for it — AniList reports that as a GraphQL 404 with
+ * `data.MediaList: null`, which is an absence, not a failure.
+ */
+async function fetchAnilistEntryId(mediaId: number, accessToken: string): Promise<number | null> {
+  let viewerId = getAnilistAuthData().user?.id;
+  // Stored at callback time; re-fetch only if missing, so the common path is one
+  // request rather than two.
+  if (!viewerId) viewerId = (await fetchAnilistViewer(accessToken))?.id;
+  if (!viewerId) return null;
+
+  const result = await anilistGraphQL<{ MediaList: { id: number } | null }>(
+    ENTRY_BY_MEDIA_QUERY,
+    { userId: viewerId, mediaId },
+    accessToken
+  );
+  if (result.errors?.length || !result.data?.MediaList) return null;
+  return result.data.MediaList.id;
+}
+
+/**
+ * Remove the whole list entry — AniList's only way to clear a status, and it
+ * takes the score and progress with it.
+ *
+ * Two live-measured behaviours drive the shape here:
+ *
+ *  1. **The id is the LIST ENTRY id, and a stored one goes stale.** Deleting and
+ *     recreating mints a new one (576959147 -> 583805092 on the same media), and
+ *     `push.ts`'s `reflectLocally` writes entries carrying none at all. So a
+ *     caller-supplied `entryId` is a *hint*: on a miss we re-resolve live rather
+ *     than reporting a failure the user can't act on.
+ *  2. **Delete is NOT idempotent.** A second delete of a gone entry is HTTP 400
+ *     `validation: { id: ["The selected id is invalid."] }` — not `deleted:
+ *     false`. That is "already absent", which is exactly the state the caller
+ *     asked for, so it is reported as success. MAL's DELETE answers 200 in the
+ *     same situation; the two cannot share a convention.
+ */
+export async function deleteAnilistEntry(ids: {
+  anilistId?: number | string;
+  malId?: number;
+  entryId?: number;
+}): Promise<AnilistWriteResult> {
+  const accessToken = getAnilistAccessToken();
+  if (!accessToken) return { ok: false, error: 'Not connected to AniList (or token expired)' };
+
+  let mediaId: number | null;
+  try {
+    mediaId = await resolveAnilistMediaId(ids.anilistId, ids.malId, accessToken);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'AniList id resolution failed';
+    return { ok: false, error };
+  }
+  if (mediaId === null) return { ok: false, matched: false, error: 'No AniList id for this title' };
+
+  try {
+    // Re-resolve unless the caller handed us an id. A stale hint is caught below
+    // by the invalid-id branch, which then reads as "already gone".
+    const entryId = ids.entryId ?? (await fetchAnilistEntryId(mediaId, accessToken));
+    if (entryId === null) {
+      // No entry to delete — the requested end state already holds.
+      appendLog('anilist-rating', 'success', `AniList entry already absent for media ${mediaId}`, { mediaId });
+      return { ok: true, matched: false };
+    }
+
+    const result = await anilistGraphQL<{ DeleteMediaListEntry: { deleted: boolean } | null }>(
+      DELETE_MUTATION,
+      { id: entryId },
+      accessToken
+    );
+
+    if (result.errors?.length) {
+      const error = result.errors.map(e => e.message).join('; ');
+      // "The selected id is invalid" = the entry is gone (or the hint was stale).
+      // Either way the end state is the one asked for.
+      if (/invalid/i.test(error)) {
+        appendLog('anilist-rating', 'success', `AniList entry already absent for media ${mediaId}`, {
+          mediaId, entryId, note: error,
+        });
+        return { ok: true, matched: false };
+      }
+      appendLog('anilist-rating', 'error', `AniList delete failed for media ${mediaId}`, { error });
+      return { ok: false, error };
+    }
+
+    appendLog('anilist-rating', 'success', `AniList entry deleted for media ${mediaId}`, { mediaId, entryId });
+    return { ok: true, matched: true };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'AniList delete failed';
+    console.error(`[anilist-write] delete failed for media ${mediaId}:`, e);
+    appendLog('anilist-rating', 'error', `AniList delete failed for media ${mediaId}`, { error });
+    return { ok: false, error };
+  }
 }
 
 /**

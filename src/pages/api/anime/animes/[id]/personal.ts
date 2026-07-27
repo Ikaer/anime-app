@@ -15,8 +15,10 @@ import { UserAnimeStatus } from '@/models/anime';
  * and the body now speak `PersonalPatch`'s neutral vocabulary
  * (`{ status?, score?, progress? }`) instead of MAL's.
  *
- * An explicit `status: null` (or `''`) CLEARS the status — only meaningful for a
- * local-only user, since no remote writer can express it (see `PersonalPatch`).
+ * An explicit `status: null` (or `''`) CLEARS the status, which every provider
+ * models as **removing the whole list entry** — so it takes the score and
+ * progress with it, and combining it with either is rejected rather than
+ * silently discarding them (see `PersonalPatch` / `deletePersonal`).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
@@ -44,6 +46,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (body.progress !== undefined && body.progress < 0) {
       return res.status(400).json({ error: 'Progress cannot be negative' });
+    }
+    // Clearing removes the entry, so a score/progress in the same patch has
+    // nowhere to land. Reject rather than apply half of a contradictory request.
+    if (clearStatus && (body.score !== undefined || body.progress !== undefined)) {
+      return res.status(400).json({
+        error: 'Clearing a status removes the whole list entry — it cannot be combined with score or progress',
+      });
     }
 
     const patch: PersonalPatch = {

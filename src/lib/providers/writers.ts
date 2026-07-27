@@ -10,6 +10,9 @@
  *      so a subsequent read — or a hung/failed remote — already reflects the edit.
  *   2. **Remote fan-out**, serial (SIMKL holds a 20s per-user write-lock and caps
  *      POSTs at 1 req/s), collecting a `WriteOutcome` per provider.
+ *
+ * **`status: null` is the one path that inverts that order** — see
+ * `deletePersonal` below for why local-first is actively wrong for a removal.
  */
 import type {
   AnimeRecord,
@@ -23,16 +26,20 @@ import {
   getAllAnime,
   getAllMalPersonal,
   upsertMalPersonal,
+  removeMalPersonal,
   getAllSimklEntries,
   upsertSimklEntries,
+  removeSimklEntries,
   getAllLocalEntries,
   upsertLocalEntries,
+  removeLocalEntries,
   upsertAnilistPersonalEntries,
+  removeAnilistPersonalEntries,
   getAnimeByCanonicalId,
 } from '@/lib/store';
-import { updateMalListStatus } from '@/lib/providers/mal/write';
-import { pushSimklRating } from '@/lib/providers/simkl/write';
-import { pushAnilistEntry } from '@/lib/providers/anilist/write';
+import { updateMalListStatus, deleteMalListEntry } from '@/lib/providers/mal/write';
+import { pushSimklRating, removeSimklEntry } from '@/lib/providers/simkl/write';
+import { pushAnilistEntry, deleteAnilistEntry } from '@/lib/providers/anilist/write';
 import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { supportsDimension, type PersonalDimension } from '@/lib/providers/capabilities';
 
@@ -40,13 +47,12 @@ import { supportsDimension, type PersonalDimension } from '@/lib/providers/capab
  * The provider-neutral edit. `score` 0 clears the rating; `status: null` clears
  * the status.
  *
- * Clearing a status has **no remote equivalent** — MAL models it as a list DELETE
- * (which would also drop the score) and SIMKL is score-only — so the remote
- * writers refuse it explicitly with `ok: false` and a reason. That is distinct
- * from `WriteOutcome.unsupported`: clearing is a *shape* of the `status`
- * dimension both providers do claim, not a dimension they never claimed. The
- * detail-page control only offers "clear" to a local-only user (see
- * `hasWritableExternal`), where there is no remote to diverge from.
+ * **`status: null` is not a status write — it removes the whole list entry** on
+ * every provider, taking the score and progress with it. Hence it routes to
+ * `deletePersonal` rather than the normal fan-out; it bypasses `narrowPatch`
+ * (removal is not a *dimension*, so SIMKL's score-only declaration does not
+ * exclude it from a removal); and it may not be combined with `score`/`progress`
+ * — `personal.ts` rejects that combination rather than silently discarding them.
  */
 export interface PersonalPatch {
   status?: UserAnimeStatus | null;
@@ -92,6 +98,17 @@ interface PersonalWriter {
   writeLocal(ctx: WriteContext, patch: PersonalPatch): void;
   /** Remote push. Local writer is a no-op ({ ok: true }). */
   writeRemote(ctx: WriteContext, patch: PersonalPatch): Promise<WriteOutcome>;
+  /**
+   * Remove the provider's whole list entry. Every provider implements this
+   * (they all declare `clearStatus`), but each normalizes its own "already
+   * gone" — the three disagree completely, see the `delete*` functions.
+   */
+  deleteRemote(ctx: WriteContext): Promise<WriteOutcome>;
+  /**
+   * Drop the local slice entry. Called ONLY after `deleteRemote` reports
+   * success — see `deletePersonal`.
+   */
+  deleteLocal(ctx: WriteContext): void;
 }
 
 /** The real MAL id for a record, coerced (crosswalk may carry it as a string). */
@@ -138,6 +155,21 @@ const malWriter: PersonalWriter = {
       return { ok: false, error };
     }
   },
+  async deleteRemote({ record }) {
+    const malId = malIdOf(record);
+    if (malId === undefined) return { ok: false, error: 'No MAL id for this title' };
+    try {
+      await deleteMalListEntry(malId);
+      return { ok: true, matched: true };
+    } catch (e) {
+      const error = e instanceof Error ? e.message : 'MAL delete failed';
+      console.error(`[personalWriters] MAL delete failed for ${malId}:`, e);
+      return { ok: false, error };
+    }
+  },
+  deleteLocal({ canonicalId }) {
+    removeMalPersonal([canonicalId]);
+  },
 };
 
 // ── SIMKL ────────────────────────────────────────────────────────────────────
@@ -165,6 +197,22 @@ const simklWriter: PersonalWriter = {
       mediaType: record?.catalog.mediaType,
     });
     return { ok: result.ok, matched: result.matched, error: result.error };
+  },
+  // Removal is NOT narrowed away by the score-only `write` declaration: that
+  // lists patch *dimensions*, and removing an entry is not one. SIMKL has to
+  // participate — it is precedence rank 0, so an entry left behind here would
+  // keep supplying a status after every other provider cleared theirs.
+  async deleteRemote({ record }) {
+    const malId = malIdOf(record);
+    if (malId === undefined) return { ok: false, error: 'No MAL id for this title' };
+    const result = await removeSimklEntry(malId, {
+      simklId: record?.sources.simkl?.simkl_id,
+      mediaType: record?.catalog.mediaType,
+    });
+    return { ok: result.ok, matched: result.matched, error: result.error };
+  },
+  deleteLocal({ canonicalId }) {
+    removeSimklEntries([canonicalId]);
   },
 };
 
@@ -194,6 +242,19 @@ const anilistWriter: PersonalWriter = {
       malId: malIdOf(record),
     });
   },
+  async deleteRemote({ record }) {
+    // `entry_id` is a hint only — absent on entries written by push.ts's
+    // reflectLocally, and stale after any delete/recreate. deleteAnilistEntry
+    // re-resolves on a miss rather than failing.
+    return deleteAnilistEntry({
+      anilistId: record?.crosswalk.anilist ?? record?.sources.anilistPersonal?.anilist_id,
+      malId: malIdOf(record),
+      entryId: record?.sources.anilistPersonal?.entry_id,
+    });
+  },
+  deleteLocal({ canonicalId }) {
+    removeAnilistPersonalEntries([canonicalId]);
+  },
 };
 
 // ── Local ────────────────────────────────────────────────────────────────────
@@ -216,6 +277,12 @@ const localWriter: PersonalWriter = {
   },
   async writeRemote() {
     return { ok: true }; // no remote — the local slice IS the store
+  },
+  async deleteRemote() {
+    return { ok: true }; // no remote; deleteLocal below is the whole operation
+  },
+  deleteLocal({ canonicalId }) {
+    removeLocalEntries([canonicalId]);
   },
 };
 
@@ -274,6 +341,10 @@ export async function writePersonal(canonicalId: string, patch: PersonalPatch): 
   const found = record !== undefined || active.some(w => w.id === 'local');
   if (!found) return { found: false, outcomes: {} };
 
+  // Clearing a status is a whole-entry removal, not a dimension write — a
+  // different operation with a different ordering. Route it before any narrowing.
+  if (patch.status === null) return deletePersonal(ctx, active);
+
   const narrowed = new Map(active.map(w => [w.id, narrowPatch(w.id, patch)]));
   const applicable = active.filter(w => Object.keys(narrowed.get(w.id)!.applied).length > 0);
 
@@ -294,5 +365,39 @@ export async function writePersonal(canonicalId: string, patch: PersonalPatch): 
     outcomes[w.id] = unsupported.length > 0 ? { ...outcome, unsupported } : outcome;
   }
 
+  return { found: true, outcomes };
+}
+
+/**
+ * Remove the list entry from every enabled provider — what `status: null` means.
+ *
+ * **The ordering is inverted on purpose, and this is the load-bearing part.**
+ * Everywhere else in this module the local slice is written first, because it is
+ * the authority and a hung remote must not cost the user their edit. For a
+ * removal that reasoning breaks down completely: a local slice entry that is
+ * deleted while the remote entry survives does not *persist* as a visible
+ * discrepancy — it **silently reverts**. `importAnilistPersonalList`
+ * full-replaces `personal/anilist.json` (on the refresh button AND every cron
+ * tick) and MAL's list sync rewrites `my_list_status` on existing entries, so
+ * the next sync restores exactly the status the user just cleared, after the UI
+ * told them it worked. A visible discrepancy would be the *better* failure.
+ *
+ * So: remote first, and the local slice is dropped only for providers whose
+ * remote actually confirmed. A provider that failed keeps its local entry, which
+ * is then honestly reported as a failure AND visibly still there.
+ *
+ * Serial for the same reason the write fan-out is (SIMKL's 20s per-user write
+ * lock, 1 req/s POST cap).
+ */
+async function deletePersonal(
+  ctx: WriteContext,
+  active: readonly PersonalWriter[]
+): Promise<WritePersonalResult> {
+  const outcomes: Partial<Record<ProvenanceSource, WriteOutcome>> = {};
+  for (const w of active) {
+    const outcome = await w.deleteRemote(ctx);
+    if (outcome.ok) w.deleteLocal(ctx);
+    outcomes[w.id] = outcome;
+  }
   return { found: true, outcomes };
 }

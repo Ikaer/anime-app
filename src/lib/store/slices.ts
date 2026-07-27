@@ -385,6 +385,21 @@ export function upsertAnilistPersonalEntries(entriesByCanonicalId: Record<string
   invalidateRecordCache();
 }
 
+/** Delete AniList personal entries by canonical id. */
+export function removeAnilistPersonalEntries(canonicalIds: string[]): void {
+  const existing = getAllAnilistPersonalEntries();
+  let changed = false;
+  for (const id of canonicalIds) {
+    if (existing[id]) {
+      delete existing[id];
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  writeJsonFile(ANIME_ANILIST_PERSONAL_FILE, existing);
+  invalidateRecordCache();
+}
+
 // ============================================================================
 // Local personal-state slice, keyed DIRECTLY by canonical id — unlike the
 // external slices, a local edit has no provider crosswalk to resolve from, and

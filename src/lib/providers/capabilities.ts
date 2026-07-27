@@ -70,9 +70,17 @@ export interface PersonalCapability {
   write: readonly PersonalDimension[];
   /**
    * Can a status be **cleared** (`PersonalPatch.status = null`)? Distinct from
-   * writing `status`: MAL and AniList happily set one but model removal as a
-   * list DELETE, which would drop the score with it. Only the local slice can
-   * express "no status" without losing anything else.
+   * writing `status`: every external provider models removal as a DELETE of the
+   * whole list entry, taking the score and progress with it, which is why this
+   * is a separate flag rather than a shape of the `status` dimension.
+   *
+   * All four are `true` since the `deleteEntry` work — each provider's removal
+   * call is implemented and live-verified. **They agree on nothing else**: MAL's
+   * DELETE is idempotent (200 on an absent entry), AniList's answers 400
+   * `"The selected id is invalid."`, and SIMKL's `deleted` counter reports 1
+   * either way and cannot be read as an effect signal. Each writer normalizes
+   * its own provider's "already gone" to success; see the three `delete*`
+   * functions.
    */
   clearStatus: boolean;
 }
@@ -111,7 +119,7 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
       auth: 'oauth',
       listCoverage: 'full',
       write: ALL_DIMENSIONS,
-      clearStatus: false, // list removal only — would drop the score too
+      clearStatus: true, // DELETE /v2/anime/{id}/my_list_status — idempotent
     },
   },
   anilist: {
@@ -129,7 +137,7 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
       // entries included — a full list by construction, not a subset feed.
       listCoverage: 'full',
       write: ALL_DIMENSIONS, // SaveMediaListEntry is an upsert over all three
-      clearStatus: false,
+      clearStatus: true, // DeleteMediaListEntry(id:) — takes the LIST ENTRY id
     },
   },
   simkl: {
@@ -142,8 +150,17 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
     personal: {
       auth: 'oauth+secret',
       listCoverage: 'subset',
-      write: ['score'], // the ONE write carve-out — sync is otherwise one-way in
-      clearStatus: false,
+      // The write carve-out, now TWO operations rather than one: a user-initiated
+      // rating, and a user-initiated removal. Sync is still one-way in and
+      // nothing automatic ever writes to SIMKL.
+      //
+      // `write` stays score-only because it lists the *dimensions a patch can
+      // carry*, and removal is not a dimension — it is the whole entry. Removal
+      // has to be here: SIMKL is precedence rank 0, so clearing MAL + AniList
+      // while leaving SIMKL's entry would leave `getEffectiveStatus` still
+      // returning a status, i.e. a clear that visibly does nothing.
+      write: ['score'],
+      clearStatus: true, // POST /sync/history/remove
     },
   },
   local: {

@@ -141,6 +141,18 @@ export interface AniListPersonalEntry {
   score?: number;            // 1-10 scale (AniList POINT_10); 0/undefined = unrated
   progress?: number;         // episodes watched
   anilist_id: number;        // AniList media id
+  /**
+   * The LIST ENTRY id — a different id space from `anilist_id`, and the one
+   * `DeleteMediaListEntry(id:)` takes. Free: `MediaListCollection` returns it on
+   * the import's own query.
+   *
+   * Optional and **never trusted alone**: it is absent on entries written by
+   * `push.ts`'s `reflectLocally`, and it goes STALE whenever an entry is deleted
+   * and recreated (live-measured: 576959147 -> 583805092 on the same media). So
+   * the delete path treats it as a hint and falls back to a live
+   * `MediaList(userId:, mediaId:)` lookup — same shape as `resolveAnilistMediaId`.
+   */
+  entry_id?: number;
 }
 
 /**

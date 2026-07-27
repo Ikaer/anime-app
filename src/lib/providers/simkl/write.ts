@@ -1,7 +1,13 @@
 /**
- * SIMKL rating writes (server-only) — the ONE deliberate exception to the
- * otherwise read-only SIMKL integration. Only user-initiated ratings are ever
- * pushed; nothing else is written to SIMKL. See docs/simkl/apirules.md.
+ * SIMKL writes (server-only) — the deliberate exception to the otherwise
+ * read-only SIMKL integration. **Two user-initiated operations, and only those:
+ * a rating, and a removal from the list.** Nothing automatic ever writes to
+ * SIMKL, and sync remains one-way in. See docs/simkl/apirules.md.
+ *
+ * Removal is here rather than excluded-on-principle because SIMKL sits FIRST in
+ * personal precedence: clearing MAL + AniList while leaving SIMKL's entry would
+ * leave `getEffectiveStatus` still returning a status, i.e. a "clear status"
+ * that visibly does nothing.
  *
  * Type-key note: SIMKL's /sync/ratings example groups items by media root key
  * (`movies` / `shows` / `episodes`). Anime are first-class in the READ API
@@ -87,6 +93,62 @@ export async function pushSimklRating(
 
     // Self-correct the bucket unknown: retry under the other root key.
     res = await attempt(endpoint, secondary, item, token.access_token);
+    if (res.status >= 200 && res.status < 300 && !res.unmatched) {
+      return { ok: true, matched: true, status: res.status, bucket: secondary };
+    }
+
+    return {
+      ok: false,
+      matched: false,
+      status: res.status,
+      error: res.status >= 400 ? `SIMKL ${res.status}: ${res.text}` : 'SIMKL did not match this title',
+    };
+  } catch (error) {
+    return { ok: false, matched: false, error: error instanceof Error ? error.message : 'Unknown SIMKL error' };
+  }
+}
+
+/**
+ * Remove one anime from the SIMKL list entirely — the removal half of the
+ * carve-out, and SIMKL's only way to express a cleared status. The rating goes
+ * with the entry (SIMKL wipes it on removal), so no separate
+ * `/sync/ratings/remove` is needed.
+ *
+ * ⚠️ **`deleted` is NOT an effect signal.** Live-measured: removing an
+ * already-absent entry still answered `201 { deleted: { shows: 1 } }` — the
+ * counter echoes the request, not what changed. So this function deliberately
+ * does NOT try to report whether an entry really went away; it reports whether
+ * SIMKL *matched the title*, read off `not_found`, which is the only meaningful
+ * field. "Was it removed" is answered by the next sync's `removed_from_list`
+ * reconciliation, which already exists.
+ *
+ * A consequence worth knowing: this makes the operation naturally idempotent
+ * from the caller's side, unlike AniList's 400.
+ */
+export async function removeSimklEntry(
+  malId: number,
+  opts: { simklId?: number; mediaType?: string } = {},
+): Promise<SimklRatingResult> {
+  const { token } = getSimklAuthData();
+  if (!token || !isSimklTokenValid(token)) {
+    return { ok: false, matched: false, error: 'Not authenticated with SIMKL' };
+  }
+
+  const ids: SourceIds = { mal: malId };
+  if (opts.simklId) ids.simkl = opts.simklId;
+  const item: Record<string, unknown> = { ids };
+
+  try {
+    // Same bucket-unknown self-correction as the rating path: anime are
+    // first-class on the READ side but the write root key is undocumented.
+    const [primary, secondary] = bucketOrder(opts.mediaType);
+
+    let res = await attempt('/sync/history/remove', primary, item, token.access_token);
+    if (res.status >= 200 && res.status < 300 && !res.unmatched) {
+      return { ok: true, matched: true, status: res.status, bucket: primary };
+    }
+
+    res = await attempt('/sync/history/remove', secondary, item, token.access_token);
     if (res.status >= 200 && res.status < 300 && !res.unmatched) {
       return { ok: true, matched: true, status: res.status, bucket: secondary };
     }
