@@ -33,10 +33,19 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
     a retry reports a failure that isn't one.
   - **Absence reads as 404 + `data.MediaList: null`** — the same idiom `cast.ts`
     already treats as "AniList doesn't have this", not as an error. Reuse it.
-  - **MAL's leg is UNVERIFIED**: the stored MAL token is expired
-    (`tokenValid: false`), so `DELETE /v2/anime/{id}/my_list_status` was desk-checked
-    only — same URL `updateMalListStatus` already builds, different method. Re-auth
-    MAL before implementing, and confirm what it answers for an absent entry.
+  - **MAL behaves the OPPOSITE way to AniList on both counts** (verified live on
+    anime 31933 after pulling a prod token). `DELETE /v2/anime/{id}/my_list_status`
+    → **200** with an empty-array body; absence is then the single-title GET simply
+    **omitting `my_list_status`** (the anime still resolves 200 — no 404); and a
+    second DELETE is **also 200**, i.e. it IS idempotent. So `deleteEntry` cannot
+    share one error convention across the two providers: MAL's "already gone" is a
+    success code, AniList's is a 400 validation error. Note MAL's PUT restore
+    returns fields the app doesn't model (`priority`, `tags`, `comments`,
+    `num_times_rewatched`, `rewatch_value`) — a delete drops those too, and the
+    app cannot put them back.
+  - **Checked and cleared**: a score-only `PUT /my_list_status` does NOT reset the
+    status (`dropped` survived a `score=5` write). `updateMalListStatus`'s
+    partial-patch assumption is correct — MAL's PUT is not a full replace.
   - **SIMKL is not simply "no equivalent"**: `POST /sync/history/remove` exists
     (docs/simkl/apirules.md), and `activities.anime.removed_from_list` is how the
     app already detects removals. The real reason to leave SIMKL out is narrower —
@@ -44,6 +53,15 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
     in an otherwise one-way-in sync. Note also that a registry SIMKL id exists
     **iff** the title is in the SIMKL list (663 of 25,382, exactly the 663 personal
     entries), so "has a SIMKL id" and "has an entry to delete" are one condition.
+  - ⚠️ **A SIMKL rating is not score-only in effect — it CREATES the list entry,
+    with status `watching`.** Verified live: rating a title SIMKL had never seen
+    (`a_10130`, matched by MAL id since the crosswalk had no SIMKL id) added it to
+    the list as `watching`, and the registry gained `simkl: 532312` + slug/kitsu/
+    anidb. So `PROVIDER_CAPABILITIES.simkl.personal.write = ['score']` describes
+    what the app *sends*, not what SIMKL *does* — a score write has a
+    list-membership side effect the app neither models nor can undo (it has no
+    status write to correct the `watching` with). Whatever `deleteEntry` does for
+    SIMKL, this is the asymmetry it lands in.
   - **Trap in the current code**: `writePersonal` runs every `writeLocal` before
     any remote, and both `malWriter.writeLocal` and `anilistWriter.writeLocal`
     happily apply `status: null` — while every `writeRemote` refuses it. Reachable
