@@ -60,17 +60,62 @@ function refilter(
   return out;
 }
 
-const malUrl = (id: number | string | undefined) => `https://myanimelist.net/anime/${id}`;
-const simklUrl = (anime: AnimeRecord): string | null => {
-  const simklId = anime.sources.simkl?.simkl_id ?? anime.crosswalk?.simkl;
-  return simklId ? `https://simkl.com/anime/${simklId}` : null;
-};
+/**
+ * The provider's own page for this title, or null when we hold no id for it
+ * (and for `local`, which is this app — there is nowhere to link).
+ *
+ * Ids come from the raw slice first, the crosswalk second: a slice that synced
+ * carries the id the provider itself reported, while the crosswalk may hold a
+ * value mirrored from another provider.
+ */
+function providerUrl(anime: AnimeRecord, provider: ProvenanceSource): string | null {
+  switch (provider) {
+    case 'mal': {
+      const id = anime.crosswalk?.mal;
+      return id ? `https://myanimelist.net/anime/${id}` : null;
+    }
+    case 'simkl': {
+      const id = anime.sources.simkl?.simkl_id ?? anime.crosswalk?.simkl;
+      return id ? `https://simkl.com/anime/${id}` : null;
+    }
+    case 'anilist': {
+      // `sources.anilist` is the CATALOG slice — a title the meta sweep hasn't
+      // reached has none, so the personal entry's own id comes first here.
+      const id =
+        anime.sources.anilistPersonal?.anilist_id ??
+        anime.sources.anilist?.anilist_id ??
+        anime.crosswalk?.anilist;
+      return id ? `https://anilist.co/anime/${id}` : null;
+    }
+    case 'local':
+      return null;
+  }
+}
 
 /** Render a value, highlighting it when the MAL/SIMKL sides disagree. */
 function Cell({ value, mismatch }: { value: React.ReactNode; mismatch?: boolean }) {
   const isEmpty = value === '—' || value === null || value === undefined || value === '';
   const cls = mismatch ? styles.mismatch : isEmpty ? styles.muted : undefined;
   return <span className={cls}>{isEmpty ? '—' : value}</span>;
+}
+
+/** The provider's page for this title, on that provider's own sub-row. */
+function ProviderLink({
+  anime,
+  provider,
+  t,
+}: {
+  anime: AnimeRecord;
+  provider: ProvenanceSource;
+  t: TFunction;
+}) {
+  const url = providerUrl(anime, provider);
+  if (!url) return <span className={styles.muted}>—</span>;
+  return (
+    <a className={styles.linkBtn} href={url} target="_blank" rel="noopener noreferrer">
+      {t(`disc.provider.${provider}` as TranslationKey)}
+    </a>
+  );
 }
 
 export default function DiscrepanciesPage() {
@@ -198,7 +243,6 @@ export default function DiscrepanciesPage() {
               <tbody>
                 {rows.map(({ anime, disc: d }) => {
                   const img = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
-                  const sUrl = simklUrl(anime);
                   const subRows = providerRows(d);
                   const absent = d.presence?.absent ?? [];
 
@@ -255,34 +299,15 @@ export default function DiscrepanciesPage() {
                           mismatch={d.disagree.progress}
                         />
                       </td>
+                      {/* Per-provider, NOT spanned: the link belongs to the row
+                          whose numbers it lets you go and check. */}
+                      <td>
+                        <ProviderLink anime={anime} provider={provider} t={t} />
+                      </td>
                       {i === 0 && (
-                        <>
-                          <td rowSpan={subRows.length}>
-                            <div className={styles.links}>
-                              <a
-                                className={styles.linkBtn}
-                                href={malUrl(anime.crosswalk.mal)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                MAL
-                              </a>
-                              {sUrl && (
-                                <a
-                                  className={styles.linkBtn}
-                                  href={sUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  SIMKL
-                                </a>
-                              )}
-                            </div>
-                          </td>
-                          <td rowSpan={subRows.length}>
-                            <RefreshButton animeId={anime.id} compact onRefreshed={load} />
-                          </td>
-                        </>
+                        <td rowSpan={subRows.length}>
+                          <RefreshButton animeId={anime.id} compact onRefreshed={load} />
+                        </td>
                       )}
                     </tr>
                   ));

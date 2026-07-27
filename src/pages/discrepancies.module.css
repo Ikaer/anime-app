@@ -151,11 +151,6 @@
   color: var(--text-muted);
 }
 
-.links {
-  display: flex;
-  gap: 0.5rem;
-}
-
 .linkBtn {
   padding: 0.25rem 0.6rem;
   border: 1px solid var(--border-color);

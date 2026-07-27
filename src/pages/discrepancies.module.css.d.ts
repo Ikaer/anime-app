@@ -10,7 +10,6 @@ declare const styles: {
   readonly "groupStart": string;
   readonly "header": string;
   readonly "linkBtn": string;
-  readonly "links": string;
   readonly "mismatch": string;
   readonly "muted": string;
   readonly "page": string;
