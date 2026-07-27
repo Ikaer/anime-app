@@ -46,13 +46,30 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
   - **Checked and cleared**: a score-only `PUT /my_list_status` does NOT reset the
     status (`dropped` survived a `score=5` write). `updateMalListStatus`'s
     partial-patch assumption is correct — MAL's PUT is not a full replace.
-  - **SIMKL is not simply "no equivalent"**: `POST /sync/history/remove` exists
-    (docs/simkl/apirules.md), and `activities.anime.removed_from_list` is how the
-    app already detects removals. The real reason to leave SIMKL out is narrower —
-    its declared `write` is `['score']`, so a delete would be a *second* carve-out
-    in an otherwise one-way-in sync. Note also that a registry SIMKL id exists
-    **iff** the title is in the SIMKL list (663 of 25,382, exactly the 663 personal
-    entries), so "has a SIMKL id" and "has an entry to delete" are one condition.
+  - **SIMKL has an equivalent and it WORKS** — the item's "no equivalent" is
+    wrong. `POST /sync/history/remove` with `{ shows: [{ ids: { simkl, mal } }] }`
+    → **201**, `deleted.shows: 1`, empty `not_found`; the list went 663 → 662 and
+    the rating went with the entry. The real reason to leave SIMKL out is
+    narrower: its declared `write` is `['score']`, so a delete would be a *second*
+    carve-out in an otherwise one-way-in sync.
+  - ⚠️ **SIMKL's `deleted` count is NOT an effect signal.** A second remove of an
+    already-absent entry ALSO answered `201 deleted.shows: 1` — it echoes the
+    request, not what changed. `not_found` (empty both times) only tells you SIMKL
+    *knows the title*. So a SIMKL `deleteEntry` cannot report "was it actually
+    removed" from the response; it must re-read, or treat the call as
+    fire-and-confirm-later via the existing `removed_from_list` reconciliation.
+    `/sync/ratings/remove` behaves the same way and is redundant after a history
+    removal.
+  - **Removal does NOT retract the crosswalk id.** After reconciliation
+    `personal/simkl.json` lost `a_10130` but `registry.json` kept
+    `simkl: 532312`. So "has a SIMKL id" and "has an entry to delete" are NOT one
+    condition — the 663-of-25,382 correlation was an artifact of nothing ever
+    having been removed. A `deleteEntry` keyed off crosswalk presence would target
+    titles with no entry; key it off the personal slice.
+  - **The app's reconciliation handles the removal correctly, end to end**: one
+    `POST /api/anime/simkl/sync` reported `removed: 1`, dropped the slice entry,
+    and `a_10130`'s effective status fell back from SIMKL's `watching` to MAL/
+    AniList's `dropped` with the discrepancy cleared.
   - ⚠️ **A SIMKL rating is not score-only in effect — it CREATES the list entry,
     with status `watching`.** Verified live: rating a title SIMKL had never seen
     (`a_10130`, matched by MAL id since the crosswalk had no SIMKL id) added it to
