@@ -79,12 +79,19 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
     list-membership side effect the app neither models nor can undo (it has no
     status write to correct the `watching` with). Whatever `deleteEntry` does for
     SIMKL, this is the asymmetry it lands in.
-  - **Trap in the current code**: `writePersonal` runs every `writeLocal` before
-    any remote, and both `malWriter.writeLocal` and `anilistWriter.writeLocal`
-    happily apply `status: null` — while every `writeRemote` refuses it. Reachable
-    only because `canClearStatus()` gates the UI to local-only installs today;
-    routing `status: null` to `deleteEntry` without fixing that asymmetry turns a
-    refused remote delete into a permanent phantom discrepancy.
+  - **Trap in the current code, and it is worse than a visible discrepancy**:
+    `writePersonal` runs every `writeLocal` before any remote, and both
+    `malWriter.writeLocal` and `anilistWriter.writeLocal` happily apply
+    `status: null` — while every `writeRemote` refuses it. It does not leave a
+    lasting mismatch; it **silently reverts**. `importAnilistPersonalList`
+    full-replaces `personal/anilist.json` (now on the refresh button AND the cron
+    tick) and MAL's list sync rewrites `my_list_status` on existing entries, so
+    the next sync re-populates the status the user just cleared — while the UI
+    reported success. A phantom discrepancy would at least be visible on
+    /discrepancies; this isn't. Consequence for the design: **the local clear must
+    not land unless the remote delete did**, so `deleteEntry` cannot reuse
+    `writePersonal`'s local-first ordering. Unreachable today only because
+    `canClearStatus()` gates the UI to local-only installs.
 - **Settable preferences** — main title language, etc. `defaultTitleLanguage` is
   the real one: its rendering seam `getPrimaryTitle` is English-hardcoded across
   ~15 server + client call sites, so it is a cross-cutting change. Note it is a
