@@ -11,8 +11,45 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
   the registry, not per provider: add an optional `deleteEntry(ctx)` to
   `PersonalWriter`, route `status: null` to it in `writePersonal`, then implement
   `DeleteMediaListEntry(id:)` for AniList — it takes the **list entry** id, not the
-  media id — and `DELETE /v2/anime/{id}/my_list_status` for MAL. SIMKL has no
-  equivalent. Until then the UI correctly offers "clear" only to a local-only user.
+  media id — and `DELETE /v2/anime/{id}/my_list_status` for MAL. Until then the UI
+  correctly offers "clear" only to a local-only user.
+
+  **Investigated 2026-07-27 against the live account** (AniList media 21450,
+  JoJo Part 4 / `a_10130`; deleted and restored in one run). What the design
+  now has to account for:
+
+  - **The list-entry id is free, so it is not the obstacle the item assumed.**
+    `MediaListCollection` returns `entries { id }` for all 680 entries on the
+    query `importAnilistPersonalList` **already runs** — one extra field in
+    `LIST_SELECTION` plus an `entry_id` on `AniListPersonalEntry`, no second call.
+  - **…but a stored entry id goes stale.** Delete-then-recreate mints a NEW one
+    (576959147 → 583805092 on the same media). And `reflectLocally` in `push.ts`
+    writes entries with no `entry_id` at all. So `deleteEntry` needs the shape
+    `resolveAnilistMediaId` already has: use the slice value, fall back to a live
+    `MediaList(userId:, mediaId:)` lookup, which returns the id directly.
+  - **Delete is NOT idempotent.** A second `DeleteMediaListEntry` on a gone id is
+    HTTP **400** `validation: { id: ["The selected id is invalid."] }`, not
+    `deleted: false`. The writer must map that to success ("already absent"), or
+    a retry reports a failure that isn't one.
+  - **Absence reads as 404 + `data.MediaList: null`** — the same idiom `cast.ts`
+    already treats as "AniList doesn't have this", not as an error. Reuse it.
+  - **MAL's leg is UNVERIFIED**: the stored MAL token is expired
+    (`tokenValid: false`), so `DELETE /v2/anime/{id}/my_list_status` was desk-checked
+    only — same URL `updateMalListStatus` already builds, different method. Re-auth
+    MAL before implementing, and confirm what it answers for an absent entry.
+  - **SIMKL is not simply "no equivalent"**: `POST /sync/history/remove` exists
+    (docs/simkl/apirules.md), and `activities.anime.removed_from_list` is how the
+    app already detects removals. The real reason to leave SIMKL out is narrower —
+    its declared `write` is `['score']`, so a delete would be a *second* carve-out
+    in an otherwise one-way-in sync. Note also that a registry SIMKL id exists
+    **iff** the title is in the SIMKL list (663 of 25,382, exactly the 663 personal
+    entries), so "has a SIMKL id" and "has an entry to delete" are one condition.
+  - **Trap in the current code**: `writePersonal` runs every `writeLocal` before
+    any remote, and both `malWriter.writeLocal` and `anilistWriter.writeLocal`
+    happily apply `status: null` — while every `writeRemote` refuses it. Reachable
+    only because `canClearStatus()` gates the UI to local-only installs today;
+    routing `status: null` to `deleteEntry` without fixing that asymmetry turns a
+    refused remote delete into a permanent phantom discrepancy.
 - **Settable preferences** — main title language, etc. `defaultTitleLanguage` is
   the real one: its rendering seam `getPrimaryTitle` is English-hardcoded across
   ~15 server + client call sites, so it is a cross-cutting change. Note it is a
