@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeListHeader } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
+import SeasonSelector from '@/components/anime/SeasonSelector';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize } from '@/models/anime';
@@ -232,8 +233,15 @@ export default function TierPage() {
         return !!s && wanted.has(s);
       });
     }
+    if (state.seasons.length > 0) {
+      const wanted = new Set(state.seasons.map(s => `${s.year}-${s.season}`));
+      out = out.filter(a => {
+        const ss = a.catalog.startSeason;
+        return !!ss && wanted.has(`${ss.year}-${ss.season}`);
+      });
+    }
     return out;
-  }, [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres, state.statuses]);
+  }, [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres, state.statuses, state.seasons]);
 
   // Distinct MAL genre names (not AniList tags) across the loaded list, alphabetized.
   const availableGenres = useMemo(() => {
@@ -449,6 +457,11 @@ export default function TierPage() {
               </label>
             ))}
           </div>
+        </div>
+
+        <div className={filterStyles.fieldGroup}>
+          <label className={filterStyles.label}>{t('filters.season')}</label>
+          <SeasonSelector value={state.seasons} onChange={(seasons) => update({ seasons })} />
         </div>
 
         {availableGenres.length > 0 && (

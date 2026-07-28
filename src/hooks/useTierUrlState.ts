@@ -8,7 +8,24 @@
  */
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ImageSize } from '@/models/anime';
+import { ImageSize, SeasonInfo, SeasonName } from '@/models/anime';
+
+// Season codes: w=winter, sp=spring, su=summer, f=fall — same scheme as
+// url/animeParams.ts's (unexported) encodeSeasons/decodeSeasons, duplicated
+// here rather than shared because this module's encode/decode are otherwise
+// self-contained per-field functions with no shared helper module.
+const SEASON_TO_CODE: Record<SeasonName, string> = {
+  winter: 'w',
+  spring: 'sp',
+  summer: 'su',
+  fall: 'f',
+};
+const CODE_TO_SEASON: Record<string, SeasonName> = {
+  w: 'winter',
+  sp: 'spring',
+  su: 'summer',
+  f: 'fall',
+};
 
 /**
  * What the board's rows mean.
@@ -33,6 +50,8 @@ export interface TierUrlState {
   genres: string[];
   /** Effective (SIMKL-first) personal status — OR semantics, empty = no filter (show all). */
   statuses: string[];
+  /** Start-season filter, OR semantics, empty = no filter. Matches `catalog.startSeason`. */
+  seasons: SeasonInfo[];
   /** Thumbnail size for the board (small by default — hover zooms to large). */
   thumbSize: ImageSize;
   /** What the rows mean. Anything but `me` makes the board read-only. */
@@ -50,6 +69,7 @@ export const TIER_DEFAULTS: TierUrlState = {
   maxYear: null,
   genres: [],
   statuses: [],
+  seasons: [],
   thumbSize: 1,
   by: 'me',
   vs: 'mal',
@@ -67,10 +87,29 @@ const KEYS = {
   maxYear: 'maxy',
   genres: 'g',
   statuses: 'st',
+  seasons: 'sn',
   thumbSize: 'ts',
   by: 'by',
   vs: 'vs',
 } as const;
+
+function encodeSeasons(seasons: SeasonInfo[]): string | null {
+  if (seasons.length === 0) return null;
+  return seasons.map(s => `${s.year}${SEASON_TO_CODE[s.season]}`).join(',');
+}
+
+function decodeSeasons(value: string | null): SeasonInfo[] {
+  if (!value) return [];
+  const result: SeasonInfo[] = [];
+  for (const token of value.split(',')) {
+    const match = token.match(/^(\d{4})(w|sp|su|f)$/);
+    if (match) {
+      const season = CODE_TO_SEASON[match[2]];
+      if (season) result.push({ year: parseInt(match[1], 10), season });
+    }
+  }
+  return result;
+}
 
 function decode(params: URLSearchParams): TierUrlState {
   const num = (v: string | null): number | null => {
@@ -87,6 +126,7 @@ function decode(params: URLSearchParams): TierUrlState {
     maxYear: num(params.get(KEYS.maxYear)),
     genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
     statuses: (params.get(KEYS.statuses) || '').split(',').map(s => s.trim()).filter(Boolean),
+    seasons: decodeSeasons(params.get(KEYS.seasons)),
     thumbSize: params.has(KEYS.thumbSize)
       ? (parseInt(params.get(KEYS.thumbSize)!, 10) as ImageSize)
       : TIER_DEFAULTS.thumbSize,
@@ -110,6 +150,8 @@ function encode(state: TierUrlState): string {
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
   if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
+  const encodedSeasons = encodeSeasons(state.seasons);
+  if (encodedSeasons) params.set(KEYS.seasons, encodedSeasons);
   if (state.thumbSize !== TIER_DEFAULTS.thumbSize) params.set(KEYS.thumbSize, String(state.thumbSize));
   if (state.by !== TIER_DEFAULTS.by) params.set(KEYS.by, state.by);
   if (state.vs !== TIER_DEFAULTS.vs) params.set(KEYS.vs, state.vs);
