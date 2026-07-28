@@ -114,9 +114,6 @@ export default function Layout({ children }: LayoutProps) {
       <header className="header">
         <div className="container">
           <div className="header-content">
-            <Link href="/" className="logo">
-              {t('brand')}
-            </Link>
             <GlobalSearch />
             <div className="header-right">
               <nav className="nav">

@@ -59,14 +59,18 @@ interface DesiredState {
  * True when AniList already agrees and the write can be skipped. A remote entry
  * we've never seen (`undefined`) always needs the push.
  *
- * Progress is deliberately NOT compared: AniList auto-fills it to the episode
- * count on COMPLETED, so its value there is provider-derived rather than ours,
- * and treating a difference as a disagreement would re-push most of a completed
- * list on every run for no change.
+ * Progress is compared EXCEPT on COMPLETED: AniList auto-fills it to the
+ * episode count there, so its value is provider-derived rather than ours, and
+ * treating a difference as a disagreement would re-push most of a completed
+ * list on every run for no change. For every other status (chiefly WATCHING)
+ * a stale remote progress is exactly the drift this sweep exists to fix.
  */
 function agrees(remote: AniListRemoteEntry | undefined, desired: DesiredState): boolean {
   if (!remote) return false;
-  return remote.status === desired.status && (remote.score ?? 0) === desired.score;
+  if (remote.status !== desired.status) return false;
+  if ((remote.score ?? 0) !== desired.score) return false;
+  if (desired.status === 'completed') return true;
+  return (remote.progress ?? 0) === (desired.progress ?? 0);
 }
 
 /**
