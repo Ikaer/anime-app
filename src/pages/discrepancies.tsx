@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
@@ -253,15 +254,17 @@ export default function DiscrepanciesPage() {
                       {i === 0 && (
                         <>
                           <td rowSpan={subRows.length}>
-                            {img ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img className={styles.thumb} src={img} alt="" loading="lazy" />
-                            ) : (
-                              <div className={styles.thumbPlaceholder} />
-                            )}
+                            <Link href={`/anime/${anime.id}`}>
+                              {img ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img className={styles.thumb} src={img} alt="" loading="lazy" />
+                              ) : (
+                                <div className={styles.thumbPlaceholder} />
+                              )}
+                            </Link>
                           </td>
                           <td className={styles.titleCell} rowSpan={subRows.length}>
-                            {getPrimaryTitle(anime)}
+                            <Link href={`/anime/${anime.id}`}>{getPrimaryTitle(anime)}</Link>
                             {absent.length > 0 && (
                               <>
                                 {' '}
