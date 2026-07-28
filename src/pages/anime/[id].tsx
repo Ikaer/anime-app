@@ -277,6 +277,27 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
           )}
         </header>
 
+        {/* ---------- Cast (AniList) & Staff (AniList) — a row of their own,
+            directly under the hero, cast on the left, staff on the right ---------- */}
+        {(staff.length > 0 || cast) && (
+          <div className="credits-row">
+            <CastSection animeId={anime.id} initialCast={cast} />
+            {staff.length > 0 && (
+              <section className="section">
+                <h2>{t('detail.staffCount', { count: staff.length })}</h2>
+                <div className="staff-list">
+                  {staff.map(s => (
+                    <Link key={`${s.id}-${s.role}`} href={`/credits/staff/${s.id}`} className="staff-row">
+                      <span className="staff-role">{s.role}</span>
+                      <span className="staff-name">{s.name}</span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        )}
+
         <div className="columns">
         <aside className="col-side">
           {/* ---------- Crowd drill-down (MAL + AniList recos anchored on this title) ---------- */}
@@ -430,40 +451,19 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
           </div>
         </section>
 
-        {/* ---------- AniList tags & staff ---------- */}
-        {(tags.length > 0 || staff.length > 0) && (
+        {/* ---------- AniList tags ---------- */}
+        {tags.length > 0 && (
           <section className="section">
-            <h2>AniList</h2>
-            {tags.length > 0 && (
-              <>
-                <h3>{t('detail.tagsCount', { count: tags.length })}</h3>
-                <div className="chips">
-                  {tags.map(tag => (
-                    <span key={tag.name} className="chip tag" title={tag.category ? t('detail.tagRankCategory', { category: tag.category, rank: tag.rank }) : t('detail.tagRank', { rank: tag.rank })}>
-                      {tag.name}<span className="rank">{tag.rank}</span>
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
-            {staff.length > 0 && (
-              <>
-                <h3>{t('detail.staffCount', { count: staff.length })}</h3>
-                <div className="staff-list">
-                  {staff.map(s => (
-                    <Link key={`${s.id}-${s.role}`} href={`/credits/staff/${s.id}`} className="staff-row">
-                      <span className="staff-role">{s.role}</span>
-                      <span className="staff-name">{s.name}</span>
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )}
+            <h2>{t('detail.anilistTagsTitle', { count: tags.length })}</h2>
+            <div className="chips">
+              {tags.map(tag => (
+                <span key={tag.name} className="chip tag" title={tag.category ? t('detail.tagRankCategory', { category: tag.category, rank: tag.rank }) : t('detail.tagRank', { rank: tag.rank })}>
+                  {tag.name}<span className="rank">{tag.rank}</span>
+                </span>
+              ))}
+            </div>
           </section>
         )}
-
-        {/* ---------- Cast: characters & Japanese seiyuu (AniList) ---------- */}
-        <CastSection animeId={anime.id} initialCast={cast} />
 
         {/* ---------- Cross-source id crosswalk ---------- */}
         <section className="section">
@@ -565,6 +565,10 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         .columns { display: grid; grid-template-columns: minmax(340px, 520px) minmax(0, 1100px); gap: 1.25rem;
           align-items: start; justify-content: center; }
         .col-main, .col-side { min-width: 0; }
+        /* Same two-column split as .columns below it, so the cast/staff row
+           lines up with the aside/main columns it sits directly above. */
+        .credits-row { display: grid; grid-template-columns: minmax(340px, 520px) minmax(0, 1100px); gap: 1.25rem;
+          align-items: start; justify-content: center; margin-bottom: 1.25rem; }
         .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
         .back { color: var(--accent-primary); text-decoration: none; font-weight: 600; }
         .back:hover { text-decoration: underline; }
@@ -693,6 +697,7 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
 
         @media (max-width: 1100px) {
           .columns { grid-template-columns: minmax(0, 1fr); }
+          .credits-row { grid-template-columns: minmax(0, 1fr); }
         }
 
         @media (max-width: 640px) {

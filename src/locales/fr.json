@@ -342,7 +342,7 @@
   "detail.end": "Fin",
   "detail.addedMal": "Ajouté (MAL)",
   "detail.updatedMal": "Maj (MAL)",
-  "detail.tagsCount": "Tags ({count})",
+  "detail.anilistTagsTitle": "AniList — Tags ({count})",
   "detail.staffCount": "Staff ({count})",
   "cast.heading": "Personnages & voix",
   "cast.headingCount": "Personnages & voix ({count})",

@@ -342,7 +342,7 @@
   "detail.end": "End",
   "detail.addedMal": "Added (MAL)",
   "detail.updatedMal": "Updated (MAL)",
-  "detail.tagsCount": "Tags ({count})",
+  "detail.anilistTagsTitle": "AniList — Tags ({count})",
   "detail.staffCount": "Staff ({count})",
   "cast.heading": "Characters & voice actors",
   "cast.headingCount": "Characters & voice actors ({count})",
