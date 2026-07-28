@@ -30,6 +30,8 @@ export interface RecoUrlState {
   maxScore: number | null;
   minYear: number | null;
   maxYear: number | null;
+  /** MAL genre names (all three axes in one list) — AND semantics, empty = no filter. */
+  genres: string[];
   /** Forced cards per row in card layout; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
 }
@@ -46,6 +48,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   maxScore: null,
   minYear: 2000,
   maxYear: null,
+  genres: [],
   cardsPerRow: null,
 };
 
@@ -61,6 +64,7 @@ const KEYS = {
   maxScore: 'max',
   minYear: 'miny',
   maxYear: 'maxy',
+  genres: 'g',
   cardsPerRow: 'cpr',
 } as const;
 
@@ -82,6 +86,7 @@ function decode(params: URLSearchParams): RecoUrlState {
     maxScore: num(params.get(KEYS.maxScore)),
     minYear: params.has(KEYS.minYear) ? num(params.get(KEYS.minYear)) : RECO_DEFAULTS.minYear,
     maxYear: num(params.get(KEYS.maxYear)),
+    genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
     cardsPerRow: (() => {
       const n = num(params.get(KEYS.cardsPerRow));
       return n !== null && n > 0 ? Math.floor(n) : RECO_DEFAULTS.cardsPerRow;
@@ -103,6 +108,7 @@ function encode(state: RecoUrlState): string {
   if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
   if (state.minYear !== null && state.minYear !== RECO_DEFAULTS.minYear) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
+  if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
   if (state.cardsPerRow !== null) params.set(KEYS.cardsPerRow, String(state.cardsPerRow));
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';

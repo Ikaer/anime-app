@@ -6,6 +6,7 @@ import {
   RecoFiltersSection,
   RecoWeightPresetsSection,
   RecoWeightsSection,
+  GenresSection,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord } from '@/models/anime';
@@ -36,7 +37,7 @@ export default function RecommendationsPage() {
 
   // Sidebar collapse state (local — not URL-persisted on this page).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    recos: true, views: true, weights: false, filters: true, display: true,
+    recos: true, views: true, weights: false, filters: true, genres: false, display: true,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -56,6 +57,8 @@ export default function RecommendationsPage() {
       if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
       if (state.minYear !== null) params.set('minYear', String(state.minYear));
       if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
+      // All three genre axes ride in one param — the split is presentation only.
+      if (state.genres.length > 0) params.set('genres', state.genres.join(','));
 
       // Per-source weights (only non-defaults are emitted).
       const wStr = encodeSourceWeights(state.weights);
@@ -213,6 +216,14 @@ export default function RecommendationsPage() {
           maxYear={state.maxYear}
           onYearChange={(min, max) => update({ minYear: min, maxYear: max })}
         />
+      </CollapsibleSection>
+
+      {/* Its own section rather than a block inside Filters, same reason as the
+          main list: 78 values across three axes is the longest control here, and
+          collapsing it independently keeps the weight sliders reachable. Starts
+          collapsed — this page's headline controls are the engine knobs. */}
+      <CollapsibleSection title={t('section.genres')} isExpanded={expanded.genres} onToggle={() => toggle('genres')}>
+        <GenresSection genres={state.genres} onGenresChange={(v) => update({ genres: v })} />
       </CollapsibleSection>
 
     </div>
