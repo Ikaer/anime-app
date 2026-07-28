@@ -1,4 +1,6 @@
 declare const styles: {
+  readonly "applyError": string;
+  readonly "applyWrap": string;
   readonly "check": string;
   readonly "checkOn": string;
   readonly "count": string;

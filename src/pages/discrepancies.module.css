@@ -166,6 +166,22 @@
   text-decoration: none;
 }
 
+.linkBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.applyWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.applyError {
+  color: var(--score-3);
+  cursor: help;
+}
+
 .presenceTag {
   display: inline-block;
   padding: 0.1rem 0.45rem;

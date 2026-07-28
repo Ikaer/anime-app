@@ -228,6 +228,10 @@
   "discPage.filterHint": "Unchecking a source removes its discrepancies from the table",
   "discPage.ofTotal": "of {total}",
   "discPage.emptyFiltered": "No discrepancies between the selected sources.",
+  "discPage.actions": "Actions",
+  "discPage.applySimkl": "Apply SIMKL",
+  "discPage.applying": "Applying…",
+  "discPage.applyFailed": "Failed to apply",
 
   "conn.pageTitle": "Connections - MyHomeApp",
   "conn.metaDescription": "Manage catalog sources and personal-list providers",

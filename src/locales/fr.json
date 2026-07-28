@@ -228,6 +228,10 @@
   "discPage.filterHint": "Décocher une source retire ses écarts du tableau",
   "discPage.ofTotal": "sur {total}",
   "discPage.emptyFiltered": "Aucun écart entre les sources sélectionnées.",
+  "discPage.actions": "Actions",
+  "discPage.applySimkl": "Appliquer SIMKL",
+  "discPage.applying": "Envoi…",
+  "discPage.applyFailed": "Échec de l'application",
 
   "conn.pageTitle": "Connexions - MyHomeApp",
   "conn.metaDescription": "Gérer les sources de catalogue et de listes personnelles",

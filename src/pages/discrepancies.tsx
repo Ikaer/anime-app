@@ -119,6 +119,63 @@ function ProviderLink({
   );
 }
 
+/** Targets "Apply SIMKL" can push onto — never SIMKL itself. */
+const APPLY_TARGETS: ProvenanceSource[] = ['mal', 'anilist'];
+
+/**
+ * Per-row "Apply SIMKL" action on the MAL/AniList sub-rows: copies SIMKL's
+ * raw status/score/progress onto that one provider via
+ * `POST .../apply-simkl`, which restricts `writePersonal` to a single writer
+ * (server-side) so it never touches the other providers. Reloads the table on
+ * success so the just-applied row stops showing a mismatch.
+ */
+function ApplySimklButton({
+  animeId,
+  provider,
+  t,
+  onApplied,
+}: {
+  animeId: string;
+  provider: ProvenanceSource;
+  t: TFunction;
+  onApplied: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/anime/animes/${animeId}/apply-simkl`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: provider }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || t('discPage.applyFailed'));
+      await onApplied();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('discPage.applyFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <span className={styles.applyWrap}>
+      <button type="button" className={styles.linkBtn} onClick={apply} disabled={busy}>
+        {busy ? t('discPage.applying') : t('discPage.applySimkl')}
+      </button>
+      {error && (
+        <span className={styles.applyError} title={error}>
+          ⚠
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function DiscrepanciesPage() {
   const t = useT();
   const router = useRouter();
@@ -238,6 +295,7 @@ export default function DiscrepanciesPage() {
                   <th>{t('discPage.status')}</th>
                   <th>{t('discPage.episodes')}</th>
                   <th>{t('table.links')}</th>
+                  <th>{t('discPage.actions')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -306,6 +364,19 @@ export default function DiscrepanciesPage() {
                           whose numbers it lets you go and check. */}
                       <td>
                         <ProviderLink anime={anime} provider={provider} t={t} />
+                      </td>
+                      <td>
+                        {/* Reads the anime's RAW discrepancy, not the filtered
+                            `d` — the button must stay available even when the
+                            "compared sources" checkboxes exclude SIMKL. */}
+                        {APPLY_TARGETS.includes(provider) && anime.discrepancy?.providers.simkl?.present && (
+                          <ApplySimklButton
+                            animeId={anime.id}
+                            provider={provider}
+                            t={t}
+                            onApplied={load}
+                          />
+                        )}
                       </td>
                       {i === 0 && (
                         <td rowSpan={subRows.length}>

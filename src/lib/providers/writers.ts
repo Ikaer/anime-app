@@ -325,15 +325,26 @@ function narrowPatch(id: ProvenanceSource, patch: PersonalPatch): {
 }
 
 /**
- * Fan a personal-state edit out to every enabled writer. Local-cache authority
- * writes land first (so `getEffective*` reflects the edit immediately), then the
- * remote pushes fire serially. Returns a per-provider outcome map, in which a
- * provider that could only apply part of the patch (or none of it) says so —
- * see `WriteOutcome.unsupported`.
+ * Fan a personal-state edit out to every enabled writer, or — with
+ * `options.only` — to exactly one (the discrepancies page's "Apply SIMKL"
+ * action: copy SIMKL's raw state onto MAL or AniList alone, never the whole
+ * fan-out). Local-cache authority writes land first (so `getEffective*`
+ * reflects the edit immediately), then the remote pushes fire serially.
+ * Returns a per-provider outcome map, in which a provider that could only
+ * apply part of the patch (or none of it) says so — see
+ * `WriteOutcome.unsupported`.
  */
-export async function writePersonal(canonicalId: string, patch: PersonalPatch): Promise<WritePersonalResult> {
+export async function writePersonal(
+  canonicalId: string,
+  patch: PersonalPatch,
+  options?: { only?: ProvenanceSource }
+): Promise<WritePersonalResult> {
   const record = getAnimeByCanonicalId(canonicalId);
-  const active = REGISTRY.filter(w => isPersonalProviderEnabled(w.id));
+  let active = REGISTRY.filter(w => isPersonalProviderEnabled(w.id));
+  // Restrict the fan-out to a single writer — the discrepancies page's
+  // "Apply SIMKL" action, which must touch only the one target provider and
+  // never the others (or SIMKL itself, which is the source here, not a target).
+  if (options?.only) active = active.filter(w => w.id === options.only);
   const ctx: WriteContext = { canonicalId, record };
 
   // A title is "found" if it assembles a row, or the local provider can create
