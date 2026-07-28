@@ -125,7 +125,8 @@ export const PROVIDER_CAPABILITIES: Record<ProvenanceSource, ProviderCapabilitie
   anilist: {
     id: 'anilist',
     label: 'AniList',
-    shortLabel: 'AL', // no brand asset shipped
+    iconSrc: '/anilist.svg',
+    shortLabel: 'AL',
 
     // The keyless default catalog provider: the tags/staff/relations sync and
     // the bulk season crawl need no account and no key. Only the LIST half is
