@@ -495,8 +495,6 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
       </div>
 
       <style jsx>{`
-        /* 520 (side) + 20 (gap) + 1100 (main) + the 1.5rem padding on each side, so the
-           hero and the topbar line up exactly with the two columns underneath. */
         .page { position: relative; z-index: 1;
           max-width: 1688px; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; color: var(--text-primary); }
 
@@ -560,14 +558,13 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         /* Panels go translucent so the backdrop tints through instead of being boxed out. */
         .hero, .section { background: rgba(26, 26, 26, 0.62); backdrop-filter: blur(8px); }
 
-        /* Two columns: discovery blocks on the left, facts on the right. The side
-           column is capped so the recommendation cards never stretch at 4K. */
-        .columns { display: grid; grid-template-columns: minmax(340px, 520px) minmax(0, 1100px); gap: 1.25rem;
+        /* Two even columns: discovery blocks on the left, facts on the right. */
+        .columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem;
           align-items: start; justify-content: center; }
         .col-main, .col-side { min-width: 0; }
-        /* Same two-column split as .columns below it, so the cast/staff row
-           lines up with the aside/main columns it sits directly above. */
-        .credits-row { display: grid; grid-template-columns: minmax(340px, 520px) minmax(0, 1100px); gap: 1.25rem;
+        /* Same even split as .columns below it, so the cast/staff row lines up
+           with the aside/main columns it sits directly above. */
+        .credits-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem;
           align-items: start; justify-content: center; margin-bottom: 1.25rem; }
         .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
         .back { color: var(--accent-primary); text-decoration: none; font-weight: 600; }
