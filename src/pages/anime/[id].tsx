@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId, getAnilistCast } from '@/lib/store';
-import type { AnimeRecord, AnimeCatalog, AniListCharacterEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
+import type { AnimeRecord, AnimeCatalog, AniListCharacterEntry, AniListStaffEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle, catalogFieldOrigins, type CatalogFieldOrigin } from '@/lib/domain/animeUtils';
+import { groupStaffByTier, getStaffAffinity, pickStaffAffinity, type StaffRoleTier } from '@/lib/domain/staffRole';
 import { getCatalogPrecedenceByField } from '@/lib/config/settings';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/reco/byCredits';
@@ -50,6 +51,17 @@ interface Props {
   /** No writable external provider connected — gates the status "clear"
    *  affordance (see `PersonalPatch`). */
   canClearStatus: boolean;
+  /**
+   * `{ staffId: count }` — how many of the user's statused titles each headline
+   * (T1) credit on this title also holds a T1 credit on, for the "N dans ta
+   * liste" mark. Only entries clearing `STAFF_AFFINITY_MIN` are sent.
+   *
+   * **Empty on a title the user has already watched**, deliberately: measured,
+   * the mark fires on 56% of T1 rows there (of course a watched show's staff
+   * recur in your list) versus 15.8% on unseen ones, where it is a genuine
+   * discovery signal rather than decoration.
+   */
+  staffAffinity: Record<number, number>;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +125,7 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus }: Props) {
+export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, staffAffinity }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -128,6 +140,9 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
   const disc = anime.discrepancy;
   const tags = anime.sources.anilist?.tags || [];
   const staff = anime.sources.anilist?.staff || [];
+  // Pure lookup over ≤50 entries — cheap enough to run on render rather than
+  // shipping a fifth pre-grouped prop.
+  const staffTiers = groupStaffByTier(staff);
   const crosswalk = anime.crosswalk || {};
 
   // Raw per-provider personal state, in precedence-ish reading order. Raw on
@@ -285,14 +300,49 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
             {staff.length > 0 && (
               <section className="section">
                 <h2>{t('detail.staffCount', { count: staff.length })}</h2>
-                <div className="staff-list">
-                  {staff.map(s => (
-                    <Link key={`${s.id}-${s.role}`} href={`/credits/staff/${s.id}`} className="staff-row">
-                      <span className="staff-role">{s.role}</span>
-                      <span className="staff-name">{s.name}</span>
-                    </Link>
-                  ))}
-                </div>
+
+                {/* T1 — the auteur block. Full-width rows, name leading, so the
+                    five or so names that define the show read before the crew.
+                    Can legitimately be empty (shorts, anthologies), hence the
+                    guard rather than an assumed head. */}
+                {staffTiers[1].length > 0 && (
+                  <div className="staff-headline">
+                    {staffTiers[1].map(s => (
+                      <Link key={`${s.id}-${s.role}`} href={`/credits/staff/${s.id}`} className="headline-row">
+                        <span className="headline-name">{s.name}</span>
+                        <span className="headline-meta">
+                          <span className="headline-role">{s.role}</span>
+                          {staffAffinity[s.id] > 0 && (
+                            <span className="affinity" title={t('detail.staffInListTitle', { count: staffAffinity[s.id] })}>
+                              {t('detail.staffInList', { count: staffAffinity[s.id] })}
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                {/* T2 then T3 — same grid, T3 dimmed. Labelled so the weighting
+                    is legible rather than merely felt. */}
+                {([2, 3] as StaffRoleTier[]).map(tier => staffTiers[tier].length > 0 && (
+                  <div key={tier} className="staff-group">
+                    <h3 className="staff-group-label">{t(`detail.staffTier.${tier}` as TranslationKey)}</h3>
+                    <StaffRows credits={staffTiers[tier]} dim={tier === 3} />
+                  </div>
+                ))}
+
+                {/* T4 — key animation, in-betweens, dub crew, promo, admin.
+                    Collapsed: it is a third of all credits and none of it is
+                    what anyone opened this page for. */}
+                {staffTiers[4].length > 0 && (
+                  <details className="staff-more">
+                    <summary>{t('detail.staffTierMore', { count: staffTiers[4].length })}</summary>
+                    {/* Dimmed like T3, not plain: expanded T4 sitting at full
+                        weight below a dimmed T3 inverted the whole hierarchy. */}
+                    <StaffRows credits={staffTiers[4]} dim />
+                  </details>
+                )}
               </section>
             )}
           </div>
@@ -645,16 +695,32 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         :global(.chip.studio) { color: var(--text-secondary); text-decoration: none; }
         :global(.chip.studio):hover { border-color: var(--border-hover); color: var(--accent-primary); }
 
-        .staff-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem 1rem; }
-        /* .staff-row is a next/link <a> too — see .chip.studio note above. Scoped through
-           the parent class rather than bare :global(.staff-row): a single class has lower
-           specificity than globals.css's a:hover underline reset, which was winning on
-           hover and underlining the whole row instead of just .staff-name below. */
-        .staff-list :global(.staff-row) { display: flex; justify-content: space-between; gap: 0.75rem; padding: 3px 0;
-          border-bottom: 1px dashed var(--border-color); text-decoration: none; }
-        .staff-list :global(.staff-row):hover .staff-name { text-decoration: underline; }
-        .staff-role { color: var(--text-muted); font-size: 0.8rem; }
-        .staff-name { color: var(--text-primary); font-size: 0.85rem; text-align: right; }
+        /* ---------- Staff, by importance tier (domain/staffRole.ts) ---------- */
+        /* T1: name first and large, role beneath it — the inverse of the crew grid
+           below, where the role is the scanning key. Here the NAME is. */
+        .staff-headline { display: flex; flex-direction: column; gap: 0.15rem; margin-bottom: 1.1rem; }
+        .staff-headline :global(.headline-row) { display: flex; flex-direction: column; gap: 1px;
+          padding: 0.3rem 0.6rem; margin: 0 -0.6rem; border-radius: 6px; text-decoration: none; }
+        .staff-headline :global(.headline-row):hover { background: rgba(255, 255, 255, 0.045); }
+        .staff-headline :global(.headline-row):hover .headline-name { text-decoration: underline; }
+        .headline-name { color: var(--text-primary); font-size: 1rem; font-weight: 600; line-height: 1.3; }
+        .headline-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+        .headline-role { color: var(--text-secondary); font-size: 0.78rem; }
+        /* "12 dans ta liste" — only on unseen titles, only past the threshold, so it
+           stays a rare mark. Accent-tinted because it is about the USER, not the show. */
+        .affinity { font-size: 0.7rem; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+          color: var(--accent-primary); background: rgba(88, 166, 255, 0.12);
+          border: 1px solid rgba(88, 166, 255, 0.3); }
+
+        .staff-group { margin-bottom: 0.9rem; }
+        .staff-group-label { margin: 0 0 0.35rem !important; font-size: 0.7rem !important;
+          text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted) !important; }
+
+        .staff-more { margin-top: 0.25rem; }
+        .staff-more summary { cursor: pointer; font-size: 0.75rem; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 0; }
+        .staff-more summary:hover { color: var(--text-secondary); }
+        .staff-more[open] summary { margin-bottom: 0.5rem; }
 
         .prose { color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap; margin: 0; }
         /* The header spans both columns, so cap the measure rather than the container. */
@@ -705,6 +771,44 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         }
       `}</style>
     </>
+  );
+}
+
+/**
+ * The two-column role/name grid used by staff tiers 2-4.
+ *
+ * Its own component with its own `<style jsx>` — the same reason `Field` below is
+ * one: styled-jsx scopes to the JSX it can see, so rows rendered from a child
+ * component never match the page's rules. `dim` is a prop rather than a parent
+ * class for exactly that reason (a `.tier-3 .staff-row` descendant selector would
+ * have to cross the scope boundary via `:global`).
+ */
+function StaffRows({ credits, dim }: { credits: AniListStaffEntry[]; dim?: boolean }) {
+  return (
+    <div className={`staff-list ${dim ? 'dim' : ''}`}>
+      {credits.map(s => (
+        <Link key={`${s.id}-${s.role}`} href={`/credits/staff/${s.id}`} className="staff-row">
+          <span className="staff-role">{s.role}</span>
+          <span className="staff-name">{s.name}</span>
+        </Link>
+      ))}
+      <style jsx>{`
+        .staff-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.4rem 1rem; }
+        /* .staff-row is a next/link <a>, which styled-jsx can't scope — reached
+           through the parent class rather than a bare :global(.staff-row): a single
+           class loses to globals.css's a:hover underline reset, which was
+           underlining the whole row instead of just .staff-name. */
+        .staff-list :global(.staff-row) { display: flex; justify-content: space-between; gap: 0.75rem; padding: 3px 0;
+          border-bottom: 1px dashed var(--border-color); text-decoration: none; }
+        .staff-list :global(.staff-row):hover .staff-name { text-decoration: underline; }
+        .staff-role { color: var(--text-muted); font-size: 0.8rem; }
+        .staff-name { color: var(--text-primary); font-size: 0.85rem; text-align: right; }
+        /* Tier 3: present and readable, but visibly subordinate to the tiers above. */
+        .staff-list.dim .staff-role { color: #6b6b6b; font-size: 0.75rem; }
+        .staff-list.dim .staff-name { color: var(--text-secondary); font-size: 0.8rem; }
+        .staff-list.dim :global(.staff-row) { border-bottom-color: transparent; padding: 1px 0; }
+      `}</style>
+    </div>
   );
 }
 
@@ -792,6 +896,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       // local is the only one on. MAL models a clear as a list DELETE and SIMKL
       // is score-only, so neither can express it without losing the score.
       canClearStatus: canClearStatus(),
+      // "N dans ta liste" on the headline credits — deliberately EMPTY once the
+      // title is statused. Measured, the mark fires on 56% of T1 rows on a
+      // watched title (its staff recur in your list by definition) against 15.8%
+      // on an unseen one, where it actually reads as a reason to watch. The
+      // index itself is memoized on `catalog`'s identity, so this is a map
+      // lookup on all but the first view after a slice changes.
+      staffAffinity: getEffectiveStatus(anime)
+        ? {}
+        : pickStaffAffinity(anime.sources.anilist?.staff || [], getStaffAffinity(catalog)),
     },
   };
 };

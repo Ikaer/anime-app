@@ -277,6 +277,51 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
   *production* credits — voice actors are never in it, so an internal link would
   resolve to nothing.
 
+### Staff importance tiers — a lookup, not a data field
+
+The detail page ranks `sources.anilist.staff` into four tiers via
+[src/lib/domain/staffRole.ts](src/lib/domain/staffRole.ts) (`staffRoleTier`), because AniList's
+RELEVANCE sort is only loosely importance-first and the flat list gave
+`Episode Director (eps 8, 13, 20)` the same weight as `Director`. Full extraction
+and the rejected alternatives are in docs/staffRoleTiers.md.
+
+**Same shape as `genreAxis`, deliberately**: a pure function of the role string,
+closed whitelists for T1/T2/T4 with an open **fall-through to T3**, so no new
+catalog field, no precedence entry, no migration, and a misclassification is fixed
+by editing an array. Live split: 298,362 credits → 16 / 23 / 32 / 30 %.
+
+- **The qualifier rules carry more of the value than the whitelists.** 28,812
+  distinct raw role strings collapse to 2,502 once trailing parentheticals are
+  parsed off. `ADR *` or a dub-language qualifier → **T4 unconditionally** (~7% of
+  all credits); an `ep`/`eps` qualifier **demotes exactly one tier** (not a floor —
+  that keeps an anthology's per-segment directors visible in T2); `OP`/`ED` are
+  **ignored** (15,486 instances — on `Theme Song Performance (ED)` the qualifier
+  says *which song*).
+- ⚠️ **`parseStaffRole` must trim, and that is load-bearing.** The store holds
+  `"Producer "` (766), `"Director "` (430) and `"Music "` (307) as distinct
+  strings; matching unnormalized drops ~1,500 credits out of T1/T2 into the
+  fall-through — silently misfiled, the `GENRE_ALIASES` failure mode.
+- **The producer/planning family is pinned to T3 as a group.** Left to the
+  whitelists it scattered across three tiers; consolidating it cut JoJo Part 4's
+  T2 from 18 rows to 11 of pure creative crew. `Animation Producer` stays in T2 —
+  a creative anchor, not a committee seat.
+- ⚠️ **T1 can be empty; the render must tolerate it.** 1,690 titles with staff
+  carry no T1 credit (shorts, music videos, and anthologies where every `Director`
+  is `(ep N)`). *JAA Meets Yokohama* genuinely credits 36 directors.
+- **"N dans ta liste" counts T1 credits only, and the scoping is structural.**
+  `buildStaffAffinity` counts the user's statused titles where a person holds a
+  **T1** credit. Raw prolificacy measures the *role's* throughput, not the person
+  (a 95th-percentile Sound Director holds 77 credits; a Chief Director, 6) — over
+  T1+T2, 15 of the top 25 were sound directors and editors, so the mark would have
+  read "98" beside Jin Aketagawa and "30" beside Sawano. T1-only excludes those
+  roles by construction; **do not "improve" this with a within-role percentile**,
+  which was measured and rejected (it marks 19 of 23 rows on Cowboy Bebop, and
+  Watanabe fails the p99 Director cut while the pseudonym `Hajime Yatate` tops it).
+- **The mark is sent only for titles with no effective status.** It fires on 56% of
+  T1 rows on a watched title — its staff recur in your list by definition — versus
+  15.8% on an unseen one, where it is a reason to watch. Index memoized on the row
+  array's identity (the `byCredits` / `api/anime/genres` WeakMap trick).
+
 ### AniList OAuth (login tier: write-back)
 
 AniList is a fourth **writable** personal provider, OAuth'd
@@ -469,7 +514,7 @@ A lightweight, dependency-free i18n built for GitHub visibility (the app is sing
 
 - **`fr` is the canonical key set.** `TranslationKey = keyof typeof fr`, and `DICTS` is typed `Record<Lang, Record<TranslationKey, string>>` so a key present in `fr.json` but missing from `en.json` is a **compile error**. A contributor adds a language by copying a JSON file and registering it in `DICTS`.
 - **Active language lives in `localStorage`** (`anime-app.lang`), not the URL. To stay hydration-safe, the **server and first client render always use `DEFAULT_LANG` (`fr`)**; `I18nProvider`'s mount effect then reads `localStorage` and swaps. So EN only ever appears after client hydration — SSR HTML is always FR. `LanguageToggle` (in [Layout.tsx](src/components/Layout.tsx)) flips + persists.
-- **Client usage:** `useT()` → `t(key, params?)`; `{name}` placeholders interpolate via the `params` object. **Dynamic keys** built from stable data ids use a cast: `` t(`statusShort.${status}` as TranslationKey) `` — the cast **bypasses the missing-key compile check**, so those families (`airing.*`, `seasonName.*`, `status.*`/`statusShort.*`, `field.*`, `reco.source.*`, `reco.preset.*`, `views.*`, `tierWord.*`, `tierGap.*`, `tier.axis.*`, `tier.vs.*`) must be kept exhaustive by hand. The shared data files (`reco/weights.ts` `SOURCE_META`, `url/animeParams.ts` `VIEW_PRESETS`) are **not** translated — keys are derived from their stable `source`/`key` fields in the rendering components, keeping those modules server-safe.
+- **Client usage:** `useT()` → `t(key, params?)`; `{name}` placeholders interpolate via the `params` object. **Dynamic keys** built from stable data ids use a cast: `` t(`statusShort.${status}` as TranslationKey) `` — the cast **bypasses the missing-key compile check**, so those families (`airing.*`, `seasonName.*`, `status.*`/`statusShort.*`, `field.*`, `reco.source.*`, `reco.preset.*`, `views.*`, `tierWord.*`, `tierGap.*`, `tier.axis.*`, `tier.vs.*`, `detail.staffTier.*`) must be kept exhaustive by hand. The shared data files (`reco/weights.ts` `SOURCE_META`, `url/animeParams.ts` `VIEW_PRESETS`) are **not** translated — keys are derived from their stable `source`/`key` fields in the rendering components, keeping those modules server-safe.
 - **Server usage:** `translate(lang, key, params?)` / `makeT(lang)` are framework-free (no React context) for the reco **"Pourquoi ?"** detail strings built in [feed.ts](src/lib/reco/feed.ts) / [similar.ts](src/lib/reco/similar.ts) (`computeFeed` / `computeSimilarTo` take a `lang`, keyed `recoDetail.*`). The client passes `?lang=` to `/api/anime/recommendations` and `…/similar/[id]`; both default to `fr`.
 - **Deliberately left French-only:** the `/rate` rubric ([ratingGrids.ts](src/lib/domain/ratingGrids.ts), subjective prose) — only the calculator's chrome is translated. `formatUserStatus` is still used for the catalog `source` field (language-neutral prettify), not for watch statuses.
 
