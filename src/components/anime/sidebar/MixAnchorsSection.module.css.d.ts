@@ -14,12 +14,15 @@ declare const styles: {
   readonly "hitPicked": string;
   readonly "hitPoster": string;
   readonly "hitPosterEmpty": string;
+  readonly "hitSecondary": string;
   readonly "hitText": string;
   readonly "hitTitle": string;
   readonly "hits": string;
   readonly "icon": string;
   readonly "input": string;
   readonly "note": string;
+  readonly "panel": string;
+  readonly "panelNote": string;
   readonly "section": string;
 };
 export = styles;
