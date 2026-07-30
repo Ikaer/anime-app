@@ -45,6 +45,25 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
 };
 
 /**
+ * Base weights for an ANCHORED ranking — "Plus comme ça" and the "/mix" page.
+ * `suggestions` and `feedback` are user-global sources with no per-anchor
+ * meaning, so they are off; everything else holds for any candidate.
+ *
+ * It lives here rather than in `reco/anchored.ts` for the reason the whole
+ * module does: the "/mix" URL state and its sliders are client-side and need
+ * the same base the server ranks with, and `anchored.ts` is `fs`-bound.
+ */
+export const ANCHORED_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0, feedback: 0 };
+
+/**
+ * The sources worth a slider on an anchored surface — the complement of the two
+ * `ANCHORED_WEIGHTS` zeroes. Offering the other two would be a knob attached to
+ * nothing (same argument as `CATALOG_CONTRIBUTORS` on the precedence editor).
+ */
+export const ANCHORED_SOURCES: RecoSource[] = (Object.keys(ANCHORED_WEIGHTS) as RecoSource[])
+  .filter(src => src !== 'suggestions' && src !== 'feedback');
+
+/**
  * Diversity re-rank (MMR) slider bound. `λ = 0` reproduces the pure affinity
  * ordering (backward-compatible default); higher λ trades affinity for variety
  * across the ranked list. Client-safe so the URL hook and the sidebar slider
@@ -98,17 +117,22 @@ export function parseSourceWeights(packed: string | null | undefined): Partial<S
   return out;
 }
 
-/** Encode weights back to the packed `w` param, emitting only non-default values. */
-export function encodeSourceWeights(weights: SourceWeights): string {
+/**
+ * Encode weights back to the packed `w` param, emitting only values that differ
+ * from `base`. Anchored surfaces pass `ANCHORED_WEIGHTS` so their URL stays as
+ * clean as the feed's — with the feed's base they would always emit the two
+ * zeroed sources.
+ */
+export function encodeSourceWeights(weights: SourceWeights, base: SourceWeights = DEFAULT_WEIGHTS): string {
   return ALL_SOURCES
-    .filter(src => weights[src] !== DEFAULT_WEIGHTS[src])
+    .filter(src => weights[src] !== base[src])
     .map(src => `${src}:${weights[src]}`)
     .join(',');
 }
 
-/** Merge sparse overrides onto the defaults into a full weight set. */
-export function resolveWeights(overrides: Partial<SourceWeights>): SourceWeights {
-  return { ...DEFAULT_WEIGHTS, ...overrides };
+/** Merge sparse overrides onto a base (the feed's defaults unless told otherwise). */
+export function resolveWeights(overrides: Partial<SourceWeights>, base: SourceWeights = DEFAULT_WEIGHTS): SourceWeights {
+  return { ...base, ...overrides };
 }
 
 /** A named, one-click starting point for the weights sliders — not a replacement for manual tuning. */

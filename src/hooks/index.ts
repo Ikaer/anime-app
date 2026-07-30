@@ -4,6 +4,9 @@ export type { UseAnimeUrlStateReturn } from './useAnimeUrlState';
 export { useRecommendationsUrlState, RECO_DEFAULTS } from './useRecommendationsUrlState';
 export type { RecoUrlState, UseRecommendationsUrlStateReturn } from './useRecommendationsUrlState';
 
+export { useMixUrlState, MIX_DEFAULTS, MAX_ANCHORS } from './useMixUrlState';
+export type { MixUrlState, UseMixUrlStateReturn } from './useMixUrlState';
+
 export { useTierUrlState, TIER_DEFAULTS } from './useTierUrlState';
 export type { TierUrlState, UseTierUrlStateReturn } from './useTierUrlState';
 

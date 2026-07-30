@@ -15,6 +15,7 @@ const SERVER_ONLY = [
   '@/lib/providers/mal/**',
   '@/lib/providers/simkl/**',
   '@/lib/providers/anilist/**',
+  '@/lib/reco/anchored',
   '@/lib/reco/data',
   '@/lib/reco/feed',
   '@/lib/reco/feedback',

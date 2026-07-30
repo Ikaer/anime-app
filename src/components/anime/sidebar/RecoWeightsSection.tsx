@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { SourceWeights } from '@/models/anime';
+import React, { useEffect, useMemo, useState } from 'react';
+import { RecoSource, SourceWeights } from '@/models/anime';
 import { SOURCE_META } from '@/lib/reco/weights';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './RecoWeightsSection.module.css';
@@ -18,11 +18,22 @@ import styles from './RecoWeightsSection.module.css';
 interface RecoWeightsSectionProps {
   weights: SourceWeights;
   onWeightsChange: (w: SourceWeights) => void;
+  /**
+   * Restrict the sliders to these sources, in `SOURCE_META`'s order. Anchored
+   * surfaces ("/mix") pass `ANCHORED_SOURCES`: they force `suggestions` and
+   * `feedback` to 0, and a slider on a source the ranking ignores is a knob
+   * attached to nothing. Omitted = every source (the "Pour toi" feed).
+   */
+  sources?: RecoSource[];
 }
 
-const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeightsChange }) => {
+const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeightsChange, sources }) => {
   const t = useT();
   const [draft, setDraft] = useState<SourceWeights>(weights);
+  const shown = useMemo(
+    () => (sources ? SOURCE_META.filter(m => sources.includes(m.source)) : SOURCE_META),
+    [sources]
+  );
 
   // Resync when the committed weights change externally (preset, URL nav).
   useEffect(() => { setDraft(weights); }, [weights]);
@@ -31,7 +42,7 @@ const RecoWeightsSection: React.FC<RecoWeightsSectionProps> = ({ weights, onWeig
 
   return (
     <div className={styles.weightsSection}>
-      {SOURCE_META.map(({ source, min, max, step }) => {
+      {shown.map(({ source, min, max, step }) => {
         const label = t(`reco.source.${source}.label` as TranslationKey);
         const hint = t(`reco.source.${source}.hint` as TranslationKey);
         return (

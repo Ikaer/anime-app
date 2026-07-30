@@ -7,3 +7,5 @@ export { default as RecoWeightPresetsSection } from './RecoWeightPresetsSection'
 export { default as DisplaySection } from './DisplaySection';
 export { default as FiltersSection } from './FiltersSection';
 export { default as GenresSection } from './GenresSection';
+export { default as MixAnchorsSection } from './MixAnchorsSection';
+export type { MixAnchor } from './MixAnchorsSection';

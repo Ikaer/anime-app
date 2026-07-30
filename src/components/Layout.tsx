@@ -137,6 +137,12 @@ export default function Layout({ children }: LayoutProps) {
                   {t('nav.forYou')}
                 </Link>
                 <Link
+                  href="/mix"
+                  className={`nav-link ${router.pathname === '/mix' ? 'active' : ''}`}
+                >
+                  {t('nav.mix')}
+                </Link>
+                <Link
                   href="/tier"
                   className={`nav-link ${router.pathname === '/tier' ? 'active' : ''}`}
                 >
