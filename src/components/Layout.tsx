@@ -72,6 +72,13 @@ function OthersDropdown() {
             {t('nav.stats')}
           </Link>
           <Link
+            href="/graph"
+            role="menuitem"
+            className={`nav-dropdown-item ${router.pathname === '/graph' ? 'active' : ''}`}
+          >
+            {t('nav.graph')}
+          </Link>
+          <Link
             href="/rate"
             role="menuitem"
             className={`nav-dropdown-item ${router.pathname === '/rate' ? 'active' : ''}`}
