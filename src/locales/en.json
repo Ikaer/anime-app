@@ -112,6 +112,13 @@
   "season.addBtn": "Add",
   "season.seasonLabel": "Season:",
   "season.yearLabel": "Year:",
+  "season.pickPlaceholder": "Pick a season…",
+  "season.prevSeason": "Previous season",
+  "season.nextSeason": "Next season",
+  "season.noMatch": "No season",
+  "season.modeAdvanced": "Advanced mode (multiple seasons)",
+  "season.modeSimple": "Simple mode (single season)",
+  "season.simpleExtraIgnored": "+{count} more season(s) selected — switch to advanced mode to see them.",
 
   "table.image": "Image",
   "table.startingSeason": "Starting Season",

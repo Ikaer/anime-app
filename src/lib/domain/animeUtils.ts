@@ -170,6 +170,48 @@ export function getSeasonInfos(): SeasonInfos {
   };
 }
 
+/** Chronological order within a year — the axis every helper below counts on. */
+const SEASON_ORDER: SeasonName[] = ['winter', 'spring', 'summer', 'fall'];
+
+/**
+ * The oldest season the pickers offer. Matches MAL's historical crawl floor
+ * (`/api/anime/mal/historical-crawl` goes back to 1960), so the list never
+ * proposes a season the store cannot possibly hold.
+ */
+export const EARLIEST_SEASON_YEAR = 1960;
+
+/** `"2026-summer"` — the identity key for a season, as used by the URL codec. */
+export function seasonKey(s: SeasonInfo): string {
+  return `${s.year}-${s.season}`;
+}
+
+export function sameSeason(a: SeasonInfo, b: SeasonInfo): boolean {
+  return a.year === b.year && a.season === b.season;
+}
+
+/**
+ * Move `delta` seasons forward (positive) or back (negative), rolling the year.
+ * Seasons are a single ordinal axis (`year * 4 + index`), so the arithmetic is
+ * one line rather than the four-branch cascade `getSeasonInfos` grew.
+ */
+export function shiftSeason({ year, season }: SeasonInfo, delta: number): SeasonInfo {
+  const abs = year * 4 + SEASON_ORDER.indexOf(season) + delta;
+  return { year: Math.floor(abs / 4), season: SEASON_ORDER[((abs % 4) + 4) % 4] };
+}
+
+/**
+ * Every season from the NEXT one (the furthest ahead the catalog is crawled)
+ * down to winter `EARLIEST_SEASON_YEAR`, newest first — the vocabulary of the
+ * simple season picker. ~270 entries, derived rather than read from the store:
+ * a season with no rows is a legitimate (empty) answer, and asking the catalog
+ * would cost a request for a list that never changes within a session.
+ */
+export function listSeasonsDesc(): SeasonInfo[] {
+  const newest = getSeasonInfos().next;
+  const count = (newest.year - EARLIEST_SEASON_YEAR) * 4 + SEASON_ORDER.indexOf(newest.season) + 1;
+  return Array.from({ length: count }, (_, i) => shiftSeason(newest, -i));
+}
+
 // ============================================================================
 // Effective personal state (the "local cache authority" seam)
 // ============================================================================

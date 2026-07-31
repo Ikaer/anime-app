@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './FiltersSection.module.css';
 import { UserAnimeStatus } from '@/models/anime';
-import SeasonSelector from '../SeasonSelector';
+import SeasonFilter from '../SeasonFilter';
 import type { SeasonInfo } from '@/models/anime';
 import { useT, type TranslationKey } from '@/lib/i18n';
 
@@ -65,7 +65,7 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
 
       <div className={styles.fieldGroup}>
         <label className={styles.label}>{t('filters.season')}</label>
-        <SeasonSelector value={seasons} onChange={onSeasonsChange} />
+        <SeasonFilter value={seasons} onChange={onSeasonsChange} />
       </div>
 
       <div className={styles.filterGroup}>

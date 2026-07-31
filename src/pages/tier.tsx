@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeListHeader } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
-import SeasonSelector from '@/components/anime/SeasonSelector';
+import SeasonFilter from '@/components/anime/SeasonFilter';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize } from '@/models/anime';
@@ -461,7 +461,7 @@ export default function TierPage() {
 
         <div className={filterStyles.fieldGroup}>
           <label className={filterStyles.label}>{t('filters.season')}</label>
-          <SeasonSelector value={state.seasons} onChange={(seasons) => update({ seasons })} />
+          <SeasonFilter value={state.seasons} onChange={(seasons) => update({ seasons })} />
         </div>
 
         {availableGenres.length > 0 && (
