@@ -11,6 +11,7 @@ import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SourceWeights, RecoVerdict } from '@/models/anime';
 import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/reco/weights';
+import useViewDefaults from '@/hooks/useViewDefaults';
 
 export interface RecoUrlState {
   /** Engine: include 2-hop edges (damped) in the ranking. */
@@ -32,7 +33,11 @@ export interface RecoUrlState {
   maxYear: number | null;
   /** MAL genre names (all three axes in one list) — AND semantics, empty = no filter. */
   genres: string[];
-  /** Forced cards per row in card layout; null = adaptive (auto-fill). */
+  /**
+   * Forced cards per row; null = adaptive. NOT a URL key — it is a view default
+   * (see lib/url/viewDefaults.ts), merged in here so the page reads one state
+   * object. The `cpr` param was removed along with `/`'s.
+   */
   cardsPerRow: number | null;
 }
 
@@ -65,10 +70,9 @@ const KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   genres: 'g',
-  cardsPerRow: 'cpr',
 } as const;
 
-function decode(params: URLSearchParams): RecoUrlState {
+function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlState {
   const num = (v: string | null): number | null => {
     if (v === null || v.trim() === '') return null;
     const n = parseFloat(v);
@@ -87,10 +91,7 @@ function decode(params: URLSearchParams): RecoUrlState {
     minYear: params.has(KEYS.minYear) ? num(params.get(KEYS.minYear)) : RECO_DEFAULTS.minYear,
     maxYear: num(params.get(KEYS.maxYear)),
     genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
-    cardsPerRow: (() => {
-      const n = num(params.get(KEYS.cardsPerRow));
-      return n !== null && n > 0 ? Math.floor(n) : RECO_DEFAULTS.cardsPerRow;
-    })(),
+    cardsPerRow,
   };
 }
 
@@ -109,7 +110,6 @@ function encode(state: RecoUrlState): string {
   if (state.minYear !== null && state.minYear !== RECO_DEFAULTS.minYear) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
-  if (state.cardsPerRow !== null) params.set(KEYS.cardsPerRow, String(state.cardsPerRow));
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';
 }
@@ -117,11 +117,14 @@ function encode(state: RecoUrlState): string {
 export interface UseRecommendationsUrlStateReturn {
   state: RecoUrlState;
   update: (updates: Partial<RecoUrlState>) => void;
+  /** Persist the cards-per-row default (shared with `/` and `/mix`). */
+  setCardsPerRow: (value: number | null) => void;
   isReady: boolean;
 }
 
 export function useRecommendationsUrlState(): UseRecommendationsUrlStateReturn {
   const router = useRouter();
+  const { defaults, save } = useViewDefaults();
 
   // Deterministic across SSR + first client render (starts false on both) to
   // avoid a hydration mismatch; flips true only after mount once the router is
@@ -142,16 +145,20 @@ export function useRecommendationsUrlState(): UseRecommendationsUrlStateReturn {
   }, [router.isReady, router.query]);
 
   const state = useMemo<RecoUrlState>(() => {
-    if (!router.isReady) return { ...RECO_DEFAULTS };
-    return decode(new URLSearchParams(queryString));
-  }, [router.isReady, queryString]);
+    if (!router.isReady) return { ...RECO_DEFAULTS, cardsPerRow: defaults.cardsPerRow };
+    return decode(new URLSearchParams(queryString), defaults.cardsPerRow);
+  }, [router.isReady, queryString, defaults.cardsPerRow]);
 
   const update = useCallback((updates: Partial<RecoUrlState>) => {
     const next = { ...state, ...updates };
     router.push(encode(next), undefined, { shallow: true });
   }, [state, router]);
 
-  return { state, update, isReady };
+  const setCardsPerRow = useCallback((cardsPerRow: number | null) => {
+    save({ cardsPerRow });
+  }, [save]);
+
+  return { state, update, setCardsPerRow, isReady };
 }
 
 export default useRecommendationsUrlState;

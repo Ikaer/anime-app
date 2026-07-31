@@ -41,7 +41,7 @@ interface MixSources {
 
 export default function MixPage() {
   const { t, lang } = useI18n();
-  const { state, update, addAnchor, removeAnchor, isReady } = useMixUrlState();
+  const { state, update, addAnchor, removeAnchor, setCardsPerRow, isReady } = useMixUrlState();
 
   const [animes, setAnimes] = useState<RecoCard[]>([]);
   /** Resolved server-side, so a bookmarked `?a=a_1,a_2` renders real chips. */
@@ -173,7 +173,7 @@ export default function MixPage() {
             count={t('reco.countTitles', { count: animes.length })}
             display={{
               cardsPerRow: state.cardsPerRow,
-              onCardsPerRowChange: (value: number | null) => update({ cardsPerRow: value }),
+              onCardsPerRowChange: setCardsPerRow,
             }}
           >
             <Button

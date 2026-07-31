@@ -16,6 +16,7 @@ import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SourceWeights } from '@/models/anime';
 import { ANCHORED_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/reco/weights';
+import useViewDefaults from '@/hooks/useViewDefaults';
 
 export interface MixUrlState {
   /** Canonical ids of the picked anime, in pick order. The whole point of the page. */
@@ -66,12 +67,11 @@ const KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   genres: 'g',
-  cardsPerRow: 'cpr',
 } as const;
 
 const list = (v: string | null): string[] => (v || '').split(',').map(s => s.trim()).filter(Boolean);
 
-function decode(params: URLSearchParams): MixUrlState {
+function decode(params: URLSearchParams, cardsPerRow: number | null): MixUrlState {
   const num = (v: string | null): number | null => {
     if (v === null || v.trim() === '') return null;
     const n = parseFloat(v);
@@ -88,10 +88,7 @@ function decode(params: URLSearchParams): MixUrlState {
     minYear: num(params.get(KEYS.minYear)),
     maxYear: num(params.get(KEYS.maxYear)),
     genres: list(params.get(KEYS.genres)),
-    cardsPerRow: (() => {
-      const n = num(params.get(KEYS.cardsPerRow));
-      return n !== null && n > 0 ? Math.floor(n) : MIX_DEFAULTS.cardsPerRow;
-    })(),
+    cardsPerRow,
   };
 }
 
@@ -108,7 +105,6 @@ function encode(state: MixUrlState): string {
   if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
-  if (state.cardsPerRow !== null) params.set(KEYS.cardsPerRow, String(state.cardsPerRow));
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/mix?${qs}` : '/mix';
 }
@@ -119,6 +115,8 @@ export interface UseMixUrlStateReturn {
   /** Add an anchor (no-op when already picked or at the cap). */
   addAnchor: (id: string) => void;
   removeAnchor: (id: string) => void;
+  /** Persist the cards-per-row default (shared with `/` and `/recommendations`). */
+  setCardsPerRow: (value: number | null) => void;
   isReady: boolean;
 }
 
@@ -127,6 +125,7 @@ export const MAX_ANCHORS = 12;
 
 export function useMixUrlState(): UseMixUrlStateReturn {
   const router = useRouter();
+  const { defaults, save } = useViewDefaults();
 
   // Deterministic across SSR + first client render (false on both), flipping
   // true after mount — same readiness pattern as the other page hooks.
@@ -146,14 +145,18 @@ export function useMixUrlState(): UseMixUrlStateReturn {
   }, [router.isReady, router.query]);
 
   const state = useMemo<MixUrlState>(() => {
-    if (!router.isReady) return { ...MIX_DEFAULTS };
-    return decode(new URLSearchParams(queryString));
-  }, [router.isReady, queryString]);
+    if (!router.isReady) return { ...MIX_DEFAULTS, cardsPerRow: defaults.cardsPerRow };
+    return decode(new URLSearchParams(queryString), defaults.cardsPerRow);
+  }, [router.isReady, queryString, defaults.cardsPerRow]);
 
   const update = useCallback((updates: Partial<MixUrlState>) => {
     const next = { ...state, ...updates };
     router.push(encode(next), undefined, { shallow: true });
   }, [state, router]);
+
+  const setCardsPerRow = useCallback((cardsPerRow: number | null) => {
+    save({ cardsPerRow });
+  }, [save]);
 
   const addAnchor = useCallback((id: string) => {
     if (state.anchors.includes(id) || state.anchors.length >= MAX_ANCHORS) return;
@@ -164,7 +167,7 @@ export function useMixUrlState(): UseMixUrlStateReturn {
     update({ anchors: state.anchors.filter(a => a !== id) });
   }, [state.anchors, update]);
 
-  return { state, update, addAnchor, removeAnchor, isReady };
+  return { state, update, addAnchor, removeAnchor, setCardsPerRow, isReady };
 }
 
 export default useMixUrlState;

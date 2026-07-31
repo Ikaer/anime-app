@@ -10,6 +10,12 @@ import {
   type LocalPrecedenceMode,
 } from '@/lib/domain/animeUtils';
 import type { AnimeCatalog, CatalogSource } from '@/models/anime';
+import {
+  SHIPPED_VIEW_DEFAULTS,
+  resolveViewDefaults,
+  sparseViewDefaults,
+  type ViewDefaults,
+} from '@/lib/url/viewDefaults';
 
 export type { LocalPrecedenceMode };
 export type LocalProviderEnabled = 'auto' | 'on' | 'off';
@@ -50,6 +56,12 @@ export interface AppSettings {
    * own validation + persistence below.
    */
   catalogPrecedence?: CatalogPrecedenceOverrides;
+  /**
+   * View defaults — the landing preset, sparse filter overrides, and the display
+   * preferences that used to be URL keys (see `lib/url/viewDefaults.ts`). Stored
+   * sparsely like everything else here: only what differs from shipped.
+   */
+  viewDefaults?: Record<string, unknown>;
 }
 
 /**
@@ -179,6 +191,10 @@ export function saveSettings(next: AppSettings): void {
   // isn't real. An empty map is omitted entirely — sparse, like everything else.
   const catalogPrecedence = sanitizeCatalogPrecedence(next.catalogPrecedence);
   if (Object.keys(catalogPrecedence).length > 0) sparse.catalogPrecedence = catalogPrecedence;
+  // View defaults: sanitized down to what differs from shipped, and omitted
+  // entirely when nothing does — same sparse rule as the rest of this file.
+  const viewDefaults = sparseViewDefaults(resolveViewDefaults(next.viewDefaults));
+  if (viewDefaults) sparse.viewDefaults = viewDefaults;
   writeJsonFile(SETTINGS_FILE, sparse);
   try {
     fs.chmodSync(SETTINGS_FILE, 0o600);
@@ -265,4 +281,15 @@ export function getStoredCatalogPrecedence(): CatalogPrecedenceOverrides {
  */
 export function getCatalogPrecedenceByField(): CatalogPrecedenceOverrides {
   return { ...CATALOG_PRECEDENCE_BY_FIELD, ...getStoredCatalogPrecedence() };
+}
+
+/**
+ * The view defaults actually in force — stored values resolved over the shipped
+ * ones. The single seam: `GET /api/anime/view-defaults` serves this, and the
+ * settings page edits it. Never read `settings.json.viewDefaults` raw, or a
+ * hand-edited or partial object would reach the UI unsanitized.
+ */
+export function getViewDefaults(): ViewDefaults {
+  const stored = readSettings().viewDefaults;
+  return stored ? resolveViewDefaults(stored) : SHIPPED_VIEW_DEFAULTS;
 }

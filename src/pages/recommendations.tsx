@@ -19,7 +19,7 @@ type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
 
 export default function RecommendationsPage() {
   const { t, lang } = useI18n();
-  const { state, update, isReady } = useRecommendationsUrlState();
+  const { state, update, setCardsPerRow, isReady } = useRecommendationsUrlState();
 
   // Feed data.
   const [animes, setAnimes] = useState<RecoCard[]>([]);
@@ -260,7 +260,7 @@ export default function RecommendationsPage() {
               : t('reco.countTitles', { count: animes.length })}
             display={{
               cardsPerRow: state.cardsPerRow,
-              onCardsPerRowChange: (value: number | null) => update({ cardsPerRow: value }),
+              onCardsPerRowChange: setCardsPerRow,
             }}
           >
             <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>

@@ -7,7 +7,7 @@ import { useT } from '@/lib/i18n';
 
 export default function AnimePage() {
   const t = useT();
-  const { filters, display, updateFilters, updateDisplay, isReady } = useAnimeUrlState();
+  const { filters, display, updateFilters, setSidebarExpanded, setCardsPerRow, isReady } = useAnimeUrlState();
 
   // Data state
   const [animes, setAnimes] = useState<AnimeRecord[]>([]);
@@ -142,14 +142,14 @@ export default function AnimePage() {
     updateFilters({ sortDir });
   };
 
-  // Display handlers - update URL
+  // Display handlers — these save DEFAULTS, not URL state: cards-per-row and
+  // sidebar collapse are preferences, and their `cpr`/`sb` URL keys are gone.
   const handleCardsPerRowChange = (cardsPerRow: number | null) => {
-    updateDisplay({ cardsPerRow });
+    setCardsPerRow(cardsPerRow);
   };
 
   const handleSidebarExpandedChange = (section: string, isExpanded: boolean) => {
-    const newExpanded = { ...display.sidebarExpanded, [section]: isExpanded };
-    updateDisplay({ sidebarExpanded: newExpanded });
+    setSidebarExpanded({ ...display.sidebarExpanded, [section]: isExpanded });
   };
 
   // Anime action handlers

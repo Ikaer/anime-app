@@ -4,6 +4,7 @@ import { UserAnimeStatus } from '@/models/anime';
 import SeasonFilter from '../SeasonFilter';
 import type { SeasonInfo } from '@/models/anime';
 import { useT, type TranslationKey } from '@/lib/i18n';
+import { MEDIA_TYPES } from '@/lib/url/animeParams';
 
 const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
   "watching", 
@@ -70,7 +71,7 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
 
       <div className={styles.filterGroup}>
         <label className={styles.label}>{t('filters.mediaType')}</label>
-        {['tv', 'movie', 'ona', 'ova', 'special', 'music'].map(mt => (
+        {MEDIA_TYPES.map(mt => (
           <label key={mt} className={styles.checkboxLabel}>
             <input
               type="checkbox"

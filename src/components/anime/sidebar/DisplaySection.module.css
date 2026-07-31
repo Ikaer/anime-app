@@ -36,6 +36,7 @@
   flex-shrink: 0;
 }
 
+
 /* Inline variant — same markup on one row, for AnimeListHeader. The input
    stops stretching (no `flex: 1` to fill a sidebar's width) and takes a
    fixed, content-sized width instead. */

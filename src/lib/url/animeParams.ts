@@ -1,8 +1,18 @@
 /**
- * URL Parameter encoding/decoding for anime filters and display settings
- * 
- * All state is controlled via URL - this is the single source of truth.
- * Short param keys and values are used for compact, shareable URLs.
+ * URL Parameter encoding/decoding for anime FILTERS.
+ *
+ * Filter state is controlled via the URL — this is the single source of truth,
+ * and every key here is absolute: an absent `mt` means *no media-type filter*,
+ * never "whatever the user prefers". Short param keys and values are used for
+ * compact, shareable URLs.
+ *
+ * Display settings (cards per row, sidebar sections) used to live here too, as
+ * the `cpr` and `sb` keys. They are gone: those are preferences, not view state,
+ * and they now come from [viewDefaults.ts](./viewDefaults.ts) via `settings.json`.
+ * An old `?cpr=6` bookmark simply ignores the param.
+ *
+ * What the defaults DO shape here is the landing state — `getDefaultViewUrl`,
+ * the URL an empty `/` redirects to, and the `applyPreset` baseline.
  */
 
 import {
@@ -13,6 +23,7 @@ import {
   SeasonInfo
 } from '@/models/anime';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
+import { SHIPPED_VIEW_DEFAULTS, ViewDefaults, ViewFilterDefaults } from '@/lib/url/viewDefaults';
 
 // ============================================================================
 // Types
@@ -40,13 +51,18 @@ export interface AnimeFiltersState {
   sortDir: SortDirection;
 }
 
+/**
+ * Display state, sourced from the user's view defaults rather than the URL.
+ * Kept as a named type because pages still receive it as one block.
+ */
 export interface AnimeDisplayState {
   sidebarExpanded: Record<string, boolean>;
   /** Forced cards per row; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
 }
 
-export interface AnimeUrlState extends AnimeFiltersState, AnimeDisplayState { }
+/** Only filters live in the URL now — the alias is kept for the many call sites. */
+export type AnimeUrlState = AnimeFiltersState;
 
 // ============================================================================
 // Short Code Mappings
@@ -103,22 +119,6 @@ const CODE_TO_SORT: Record<string, SortColumn> = Object.fromEntries(
 const DIR_TO_CODE: Record<SortDirection, string> = { asc: 'a', desc: 'd' };
 const CODE_TO_DIR: Record<string, SortDirection> = { a: 'asc', d: 'desc' };
 
-// Sidebar section codes
-const SIDEBAR_TO_CODE: Record<string, string> = {
-  account: 'a',
-  sync: 'sy',
-  views: 'v',
-  display: 'd',
-  filters: 'f',
-  genres: 'g',
-  sort: 'so',
-  stats: 'st',
-  simkl: 'sk',
-};
-const CODE_TO_SIDEBAR: Record<string, string> = Object.fromEntries(
-  Object.entries(SIDEBAR_TO_CODE).map(([k, v]) => [v, k])
-);
-
 // ============================================================================
 // Default Values
 // ============================================================================
@@ -127,19 +127,12 @@ const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
   'watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch', 'not_defined'
 ];
 
-const DEFAULT_SIDEBAR_EXPANDED: Record<string, boolean> = {
-  account: true,
-  sync: true,
-  views: true,
-  display: true,
-  filters: true,
-  // Collapsed by default: it is the tallest section in the sidebar, and the
-  // default view (current-season TV) is not a genre-driven one.
-  genres: false,
-  sort: true,
-  stats: true,
-  simkl: true,
-};
+/**
+ * The media-type vocabulary, shared by the sidebar filter and the view-defaults
+ * editor on `/settings` so the two cannot offer different sets. Values are MAL's
+ * own `media_type` strings, which is what the API filters on.
+ */
+export const MEDIA_TYPES = ['tv', 'movie', 'ona', 'ova', 'special', 'music'] as const;
 
 export const DEFAULT_FILTERS: AnimeFiltersState = {
   statusFilters: ALL_STATUSES,
@@ -156,19 +149,50 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   sortDir: 'desc',
 };
 
+/** The shipped display block, for SSR and the first render before defaults load. */
 export const DEFAULT_DISPLAY: AnimeDisplayState = {
-  sidebarExpanded: DEFAULT_SIDEBAR_EXPANDED,
-  cardsPerRow: null,
+  sidebarExpanded: SHIPPED_VIEW_DEFAULTS.sidebarExpanded,
+  cardsPerRow: SHIPPED_VIEW_DEFAULTS.cardsPerRow,
 };
 
 // ============================================================================
-// Default Preset URL (new_season_strict)
+// Landing state
 // ============================================================================
 
-export function getDefaultPresetUrl(): string {
-  const seasonInfos = getSeasonInfos();
-  const currentSeason = `${seasonInfos.current.year}${SEASON_TO_CODE[seasonInfos.current.season as SeasonName]}`;
-  return `/?sn=${currentSeason}&mt=tv&so=m&d=d`;
+/**
+ * Apply the user's sparse filter defaults ON TOP of a preset's own state.
+ *
+ * On top rather than underneath because four of the eleven presets pin
+ * `mediaTypes` themselves — underneath, a media-type default would be shadowed
+ * exactly where it is most wanted. Sparse, so a key the user never set leaves
+ * every preset's own choice intact.
+ */
+export function withFilterDefaults(
+  state: Partial<AnimeUrlState>,
+  filters: ViewFilterDefaults
+): Partial<AnimeUrlState> {
+  const out = { ...state };
+  if (filters.mediaTypes !== undefined) out.mediaTypes = filters.mediaTypes;
+  if (filters.minScore !== undefined) out.minScore = filters.minScore;
+  if (filters.maxScore !== undefined) out.maxScore = filters.maxScore;
+  return out;
+}
+
+/**
+ * The URL an empty `/` redirects to: the user's chosen landing preset with their
+ * filter defaults layered over it. An unknown stored preset key falls back to
+ * the shipped one rather than landing on an empty view.
+ */
+export function getDefaultViewUrl(defaults: ViewDefaults = SHIPPED_VIEW_DEFAULTS): string {
+  const preset =
+    VIEW_PRESETS.find(p => p.key === defaults.preset) ??
+    VIEW_PRESETS.find(p => p.key === SHIPPED_VIEW_DEFAULTS.preset) ??
+    VIEW_PRESETS[0];
+
+  return encodeStateToUrl({
+    ...DEFAULT_FILTERS,
+    ...withFilterDefaults(preset.getState(), defaults.filters),
+  });
 }
 
 // ============================================================================
@@ -189,9 +213,6 @@ const PARAM_KEYS = {
   maxScore: 'max',
   sort: 'so',
   direction: 'd',
-  // Display
-  sidebar: 'sb',
-  cardsPerRow: 'cpr',
 } as const;
 
 // ============================================================================
@@ -230,24 +251,6 @@ function encodeMediaTypes(types: string[]): string | null {
 function encodeGenres(genres: string[]): string | null {
   if (genres.length === 0) return null;
   return genres.join(',');
-}
-
-function encodeSidebarExpanded(expanded: Record<string, boolean>): string | null {
-  // Omit from the URL when the state MATCHES THE DEFAULT — compared per key,
-  // not by counting expanded sections. The count test assumed the default was
-  // "everything expanded", which stopped being true when `genres` shipped
-  // collapsed: with all nine expanded the count matched, the param was omitted,
-  // and decoding fell back to the default that re-collapsed `genres` — an
-  // expansion that silently undid itself on reload.
-  const keys = Object.keys(DEFAULT_SIDEBAR_EXPANDED);
-  if (keys.every(k => !!expanded[k] === DEFAULT_SIDEBAR_EXPANDED[k])) {
-    return null;
-  }
-
-  return Object.entries(expanded)
-    .filter(([, v]) => v)
-    .map(([k]) => SIDEBAR_TO_CODE[k] || k)
-    .join(',');
 }
 
 function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchParams {
@@ -308,31 +311,9 @@ function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchPa
   return params;
 }
 
-function encodeDisplayToParams(display: Partial<AnimeDisplayState>): URLSearchParams {
-  const params = new URLSearchParams();
-
-  if (display.sidebarExpanded !== undefined) {
-    const encoded = encodeSidebarExpanded(display.sidebarExpanded);
-    if (encoded !== null) params.set(PARAM_KEYS.sidebar, encoded);
-  }
-
-  if (display.cardsPerRow !== null && display.cardsPerRow !== undefined) {
-    params.set(PARAM_KEYS.cardsPerRow, display.cardsPerRow.toString());
-  }
-
-  return params;
-}
-
 export function encodeStateToUrl(state: Partial<AnimeUrlState>): string {
-  const filterParams = encodeFiltersToParams(state);
-  const displayParams = encodeDisplayToParams(state);
-
-  // Merge params
-  displayParams.forEach((value, key) => {
-    filterParams.set(key, value);
-  });
-
-  const queryString = filterParams.toString()
+  const queryString = encodeFiltersToParams(state)
+    .toString()
     // Decode safe characters for readability
     .replace(/%2C/g, ',');
 
@@ -380,31 +361,6 @@ function decodeGenres(value: string | null): string[] {
   return value.split(',').map(g => g.trim()).filter(Boolean);
 }
 
-function decodeSidebarExpanded(value: string | null): Record<string, boolean> {
-  if (!value) return { ...DEFAULT_SIDEBAR_EXPANDED };
-
-  // Start with all false, then enable specified sections
-  const result: Record<string, boolean> = {
-    account: false,
-    sync: false,
-    views: false,
-    display: false,
-    filters: false,
-    sort: false,
-    stats: false,
-    simkl: false,
-  };
-
-  for (const code of value.split(',')) {
-    const section = CODE_TO_SIDEBAR[code];
-    if (section) {
-      result[section] = true;
-    }
-  }
-
-  return result;
-}
-
 function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
   return {
     statusFilters: decodeStatuses(params.get(PARAM_KEYS.status)),
@@ -422,23 +378,8 @@ function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
   };
 }
 
-function decodeUrlToDisplay(params: URLSearchParams): AnimeDisplayState {
-  const cpr = params.get(PARAM_KEYS.cardsPerRow);
-  const cprNum = cpr !== null ? parseInt(cpr, 10) : NaN;
-
-  return {
-    sidebarExpanded: params.has(PARAM_KEYS.sidebar)
-      ? decodeSidebarExpanded(params.get(PARAM_KEYS.sidebar))
-      : { ...DEFAULT_SIDEBAR_EXPANDED },
-    cardsPerRow: Number.isFinite(cprNum) && cprNum > 0 ? cprNum : DEFAULT_DISPLAY.cardsPerRow,
-  };
-}
-
 export function decodeUrlToState(params: URLSearchParams): AnimeUrlState {
-  return {
-    ...decodeUrlToFilters(params),
-    ...decodeUrlToDisplay(params),
-  };
+  return decodeUrlToFilters(params);
 }
 
 // ============================================================================
@@ -465,11 +406,14 @@ export interface PresetConfig {
   getState: () => Partial<AnimeUrlState>;
 }
 
+/**
+ * Filter keys a preset switch preserves rather than resetting. `sidebarExpanded`
+ * and `cardsPerRow` were here until they stopped being URL state — they are now
+ * defaults, which survive a preset switch by construction.
+ */
 export const PERSISTENT_UI_KEYS: (keyof AnimeUrlState)[] = [
   'minScore',
   'maxScore',
-  'sidebarExpanded',
-  'cardsPerRow'
 ];
 
 export const VIEW_PRESETS: PresetConfig[] = [
