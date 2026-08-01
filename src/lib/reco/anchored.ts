@@ -40,7 +40,7 @@ import {
   TUNING,
   computeIdfSet,
   buildFieldProfileSet,
-  buildRejectionProfiles,
+  buildDiscriminativeProfiles,
   fieldMatch,
   isPrematureSequel,
   SEEN_STATUSES,
@@ -48,6 +48,7 @@ import {
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
+import { staffRoleTier } from '@/lib/domain/staffRole';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 /**
@@ -178,7 +179,12 @@ export function computeAnchored(
   // without a dedicated overlap source.
   const idf = computeIdfSet(all);
   const self = buildFieldProfileSet(anchors, () => 1, idf);
-  const { negGenre, negStudio } = buildRejectionProfiles(all, downCanonical, idf.genre, idf.studio);
+  // No `liked` argument: the netting reference must be the user's global likes,
+  // not the anchors. Subtracting a one-title profile from the dislike rates
+  // would say "this anchor's genres aren't rejections", which is not a claim
+  // about the user at all. `self` above is therefore left un-netted — the
+  // positive side here means "shares a rare value with what you picked".
+  const { negGenre, negStudio, negStaffT1 } = buildDiscriminativeProfiles(all, downCanonical, idf);
 
   // Names/roles as the ANCHORS credit them — the explain says what the candidate
   // shares with the titles you picked. ⚠️ The studio map is keyed by
@@ -214,6 +220,7 @@ export function computeAnchored(
     const staffM = fieldMatch(anime, self.anilistStaff);
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
+    const negStaffM = fieldMatch(anime, negStaffT1);
     const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
 
     const values: SourceWeights = {
@@ -227,7 +234,9 @@ export function computeAnchored(
       rating: ratingM.score,
       anilistTags: tagsM.score,
       anilistStaff: staffM.score,
-      rejection: TUNING.GENRE_WEIGHT * negGenreM.score + TUNING.STUDIO_WEIGHT * negStudioM.score,
+      rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
+        + TUNING.REJECTION_MIX.studio * negStudioM.score
+        + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
       popularity: Math.log10(users) / popDenom,
     };
 
@@ -261,10 +270,23 @@ export function computeAnchored(
             .join(', ') })
         : undefined,
       rejection: (() => {
+        // Candidate-side names throughout: `fieldMatch` extracts from the
+        // candidate, so `anchorStudioNames` / `anchorStaffById` would miss every
+        // value the anchors don't happen to share.
         const candStudioNames = new Map((anime.catalog.studios || []).map(s => [catalogNameKey(s.name), s.name]));
+        const candT1ById = new Map(
+          (anime.sources.anilist?.staff || [])
+            .filter(s => staffRoleTier(s.role) === 1)
+            .map(s => [s.id, s])
+        );
         const parts = [
           ...(negGenreM.matched as string[]),
           ...negStudioM.matched.map(k => candStudioNames.get(k as string) || String(k)),
+          ...negStaffM.matched.map(id => {
+            const s = candT1ById.get(id as number);
+            if (!s) return `#${id}`;
+            return s.role ? `${s.role} : ${s.name}` : s.name;
+          }),
         ];
         return parts.length ? t('recoDetail.closeToRejects', { parts: parts.join(', ') }) : undefined;
       })(),

@@ -27,7 +27,7 @@ import {
   computeIdfSet,
   buildFieldProfile,
   buildFieldProfileSet,
-  buildRejectionProfiles,
+  buildDiscriminativeProfiles,
   fieldMatch,
   isPrematureSequel,
   seedWeight,
@@ -37,6 +37,7 @@ import { getRecommendationsData } from '@/lib/reco/data';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex } from '@/lib/domain/relations';
+import { staffRoleTier } from '@/lib/domain/staffRole';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
 
 export interface RecommendationItem extends AnimeRecord {
@@ -248,7 +249,12 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const seeds = getSeeds(threshold);
   const seedW = (a: AnimeRecord) => seedWeight(getEffectiveScore(a) ?? threshold, threshold);
   const idf = computeIdfSet(all);
-  const pos = buildFieldProfileSet(seeds, seedW, idf);
+  // Genre and studio come from the DISCRIMINATIVE pair (netted against the
+  // dislikes) rather than the plain tally: a genre you complete and drop at the
+  // same rate now scores on neither side instead of on both. The other four
+  // fields have no negative counterpart and keep the plain profile.
+  const disc = buildDiscriminativeProfiles(all, downIds, idf, { animes: seeds, weight: seedW });
+  const pos = { ...buildFieldProfileSet(seeds, seedW, idf), genre: disc.posGenre, studio: disc.posStudio };
   // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
   // numeric score). Its own weighted source, separate from the MAL-seed genre /
   // studio profiles, so the user can dial their explicit likes independently.
@@ -258,7 +264,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
   };
 
-  const { negGenre, negStudio } = buildRejectionProfiles(all, downIds, idf.genre, idf.studio);
+  const { negGenre, negStudio, negStaffT1 } = disc;
 
   // Pass 1: apply hard filters and gather the maxima used to normalize the
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
@@ -302,6 +308,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const fbStudioM = fieldMatch(anime, fb.studio);
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
+    const negStaffM = fieldMatch(anime, negStaffT1);
     const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
     const anilistA = anilistAcc.get(candId);
     const anilistAffinity = anilistA?.affinity ?? 0;
@@ -317,7 +324,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       rating: ratingM.score,
       anilistTags: anilistTagsM.score,
       anilistStaff: anilistStaffM.score,
-      rejection: TUNING.GENRE_WEIGHT * negGenreM.score + TUNING.STUDIO_WEIGHT * negStudioM.score,
+      rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
+        + TUNING.REJECTION_MIX.studio * negStudioM.score
+        + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
       popularity: Math.log10(users) / popDenom,
     };
 
@@ -365,9 +374,23 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
             .join(', ')
         : undefined,
       rejection: (() => {
+        // Staff names resolve against the candidate's T1 credits specifically:
+        // `staffById` keeps whichever credit came last for a person with several
+        // on this title, so it would happily render "Key Animation : X" as the
+        // reason a T1 match fired.
+        const t1ById = new Map(
+          (anime.sources.anilist?.staff || [])
+            .filter(s => staffRoleTier(s.role) === 1)
+            .map(s => [s.id, s])
+        );
         const parts = [
           ...(negGenreM.matched as string[]),
           ...negStudioM.matched.map(k => studioNames.get(k as string) || String(k)),
+          ...negStaffM.matched.map(id => {
+            const s = t1ById.get(id as number);
+            if (!s) return `#${id}`;
+            return s.role ? `${s.role} : ${s.name}` : s.name;
+          }),
         ];
         return parts.length ? parts.join(', ') : undefined;
       })(),

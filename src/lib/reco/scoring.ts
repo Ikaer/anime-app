@@ -14,6 +14,7 @@
 import { AnimeRecord } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, catalogNameKey } from '@/lib/domain/animeUtils';
 import { resolveRelations, type RelationIndex } from '@/lib/domain/relations';
+import { staffRoleTier } from '@/lib/domain/staffRole';
 
 // ============================================================================
 // Tuning constants (all knobs live here — no scattered magic numbers)
@@ -28,9 +29,29 @@ export const TUNING = {
   POPULARITY_FLOOR: 10,
   /** A personal score <= this marks an anime as "rejected" (negative profile). */
   NEGATIVE_SCORE_THRESHOLD: 5,
-  /** Relative weight of genre vs studio overlap in the rejection profile match. */
+  /** Relative weight of genre vs studio overlap in the 👍 feedback profile match. */
   GENRE_WEIGHT: 0.6,
   STUDIO_WEIGHT: 0.4,
+  /**
+   * How much of the OTHER side's rate is subtracted when netting the taste
+   * profiles (see `buildDiscriminativeProfiles`). `1` = full netting: a value
+   * equally represented in what you liked and what you dropped contributes to
+   * neither side. `0` reproduces the pre-netting behaviour, where such a value
+   * scored on both at once.
+   */
+  DISCRIMINATION: 1,
+  /**
+   * Mix of the three fields inside the `rejection` source value. Sums to 1, so
+   * the value stays in [0,1] and the -0.35 default weight keeps its meaning.
+   *
+   * `staffT1` carries the largest share on purpose: genre and studio describe
+   * what a show is ABOUT, and a drop is usually a verdict on how it was
+   * EXECUTED — which is the T1 crew's output (director, series composition,
+   * character design, music). It is also the only one of the three that needs an
+   * AniList sync; on an unsynced store it simply scores 0, which weakens the
+   * penalty rather than skewing it.
+   */
+  REJECTION_MIX: { genre: 0.35, studio: 0.25, staffT1: 0.4 },
   /** How many top seeds to surface per candidate for the match hint. */
   TOP_SEEDS_PER_CANDIDATE: 2,
   /** Synthetic edge weight for a 👍 "bonne pioche" acting as a crowd seed
@@ -59,6 +80,26 @@ export const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[
   anilistTags: a => (a.sources.anilist?.tags || []).map(t => t.name),
   anilistStaff: a => (a.sources.anilist?.staff || []).map(s => s.id),
 };
+
+/**
+ * T1 staff ids — the auteur tier from `domain/staffRole.ts` (director, chief
+ * director, original creator/story, series composition, character design,
+ * music).
+ *
+ * **Deliberately NOT a `MetaField`.** It exists for the REJECTION profile only,
+ * so promoting it would add a seventh IDF pass and a seventh positive profile
+ * that nothing reads. The positive `anilistStaff` source keeps the full top-50
+ * credit list, unchanged.
+ *
+ * Why T1 rather than all 50 on the negative side: `fieldMatch` divides by the
+ * candidate's value COUNT, so a series composer's signal drowns among ~13-50
+ * key animators and sound staff (the ~0.05-vs-0.40 dilution measured in
+ * `weights.ts`). T1 measures median 2 / p90 5 credits per title, which puts a
+ * staff match on roughly the same scale as a genre match — the precondition for
+ * `REJECTION_MIX` summing meaningfully.
+ */
+export const staffT1Extractor = (a: AnimeRecord): FieldValue[] =>
+  (a.sources.anilist?.staff || []).filter(s => staffRoleTier(s.role) === 1).map(s => s.id);
 
 /**
  * Inverse document frequency per value of a discrete field, over the whole
@@ -157,16 +198,96 @@ export function fieldMatch(candidate: AnimeRecord, profile: FieldProfile): { sco
 }
 
 /**
- * Negative taste profiles = MAL dislikes (dropped / low-scored) ∪ 👎 "pas pour
- * moi". Shared by the global feed and the single-target drill-down: both push a
- * candidate down when it resembles what the user has rejected.
+ * Share of a weighted set's total mass carried by each value.
+ *
+ * The scale-free form the netting below needs: raw mass is not comparable
+ * across the two sets (a few hundred liked titles weighted 1-3 against a few
+ * dozen dislikes weighted 1), so subtracting one from the other would simply
+ * erase the smaller set. Rates ask the only question that transfers — "what
+ * FRACTION of this set carries the value" — so a genre in 1 of 30 dislikes
+ * outweighs the same genre in 1 of 200 likes, which is the correct reading.
+ *
+ * The denominator counts (anime, value) pairs, not animes, so a title with five
+ * genres spreads its weight over five slots and the rates sum to 1.
  */
-export function buildRejectionProfiles(
+function valueRates(
+  animes: AnimeRecord[],
+  weightFn: (a: AnimeRecord) => number,
+  extract: (a: AnimeRecord) => FieldValue[]
+): Map<FieldValue, number> {
+  const acc = new Map<FieldValue, number>();
+  let total = 0;
+  for (const a of animes) {
+    const w = weightFn(a);
+    if (w <= 0) continue;
+    for (const v of new Set(extract(a))) {
+      acc.set(v, (acc.get(v) || 0) + w);
+      total += w;
+    }
+  }
+  if (total > 0) acc.forEach((v, k) => acc.set(k, v / total));
+  return acc;
+}
+
+/** One side of a netted pair: `mine - α·theirs`, clamped at 0, then IDF-scaled. */
+function netProfile(
+  mine: Map<FieldValue, number>,
+  theirs: Map<FieldValue, number>,
+  extract: (a: AnimeRecord) => FieldValue[],
+  idf: Map<FieldValue, number>
+): FieldProfile {
+  const acc = new Map<FieldValue, number>();
+  mine.forEach((rate, v) => {
+    const net = rate - TUNING.DISCRIMINATION * (theirs.get(v) ?? 0);
+    if (net > 0) acc.set(v, net * (idf.get(v) ?? 0));
+  });
+  normalize(acc);
+  return { weights: acc, extract };
+}
+
+/** The netted genre/studio pair plus the T1-staff rejection profile. */
+export interface DiscriminativeProfiles {
+  /** Liked-side genre/studio, with the dislike rates netted out. */
+  posGenre: FieldProfile;
+  posStudio: FieldProfile;
+  /** Disliked-side genre/studio, with the like rates netted out. */
+  negGenre: FieldProfile;
+  negStudio: FieldProfile;
+  /** Disliked-side T1 staff (auteur credits). No positive counterpart — see
+   *  `staffT1Extractor`. */
+  negStaffT1: FieldProfile;
+}
+
+/**
+ * Taste profiles built as a DISCRIMINATIVE pair: what separates the titles you
+ * liked from the ones you dropped, rather than two independent tallies.
+ *
+ * The dislike set is unchanged — dropped, or scored <= `NEGATIVE_SCORE_THRESHOLD`,
+ * ∪ 👎 "pas pour moi". What changed is that the two sides now cancel. Before,
+ * a value could sit at 0.8 in the positive profile and 0.7 in the negative and
+ * BOTH fired: a shonen watcher who drops the occasional shonen was scored
+ * `+genre` and `-rejection` on every shonen candidate at once. The value that
+ * appears at the same rate on both sides is precisely the one that predicts
+ * nothing about what you will drop, so it should say nothing.
+ *
+ * This matters more than widening the negative side to more fields. Genre,
+ * studio and tags describe what a show is ABOUT; a drop is usually a verdict on
+ * how it was WRITTEN, which no catalog field encodes. Netting does not need to
+ * know which fields are predictive — the non-predictive values fall out on their
+ * own, and a value concentrated in the drops keeps its full penalty.
+ *
+ * `liked` defaults to the seed rule (completed, scored >= the default threshold,
+ * weighted by `seedWeight`). `computeFeed` passes its own live seed set so the
+ * netting matches the profile it actually ranks with; the anchored surfaces omit
+ * it, because their positive profiles come from the anchors and only the
+ * negatives — a global statement about the user — are wanted here.
+ */
+export function buildDiscriminativeProfiles(
   all: AnimeRecord[],
   downIds: Set<string>,
-  idfGenre: Map<FieldValue, number>,
-  idfStudio: Map<FieldValue, number>
-): { negGenre: FieldProfile; negStudio: FieldProfile } {
+  idf: IdfSet,
+  liked?: { animes: AnimeRecord[]; weight: (a: AnimeRecord) => number }
+): DiscriminativeProfiles {
   const dislikedBase = all.filter(a => {
     const st = getEffectiveStatus(a);
     const sc = getEffectiveScore(a) ?? 0;
@@ -174,9 +295,35 @@ export function buildRejectionProfiles(
   });
   const dislikedSeen = new Set(dislikedBase.map(a => a.id));
   const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
+
+  const likedAnimes = liked?.animes ?? all.filter(a => {
+    if (getEffectiveStatus(a) !== 'completed') return false;
+    const sc = getEffectiveScore(a);
+    return sc != null && sc >= TUNING.DEFAULT_SEED_THRESHOLD;
+  });
+  const likedWeight = liked?.weight
+    ?? ((a: AnimeRecord) => seedWeight(getEffectiveScore(a) ?? TUNING.DEFAULT_SEED_THRESHOLD, TUNING.DEFAULT_SEED_THRESHOLD));
+
+  const posG = valueRates(likedAnimes, likedWeight, FIELD_EXTRACTORS.genre);
+  const negG = valueRates(disliked, () => 1, FIELD_EXTRACTORS.genre);
+  const posS = valueRates(likedAnimes, likedWeight, FIELD_EXTRACTORS.studio);
+  const negS = valueRates(disliked, () => 1, FIELD_EXTRACTORS.studio);
+  // Both sides use the SAME extractor — netting a T1-only rate against a
+  // full-credit rate would compare a fraction of ~3 slots to a fraction of ~40
+  // and penalize every auteur who has ever been credited as a key animator.
+  const posT1 = valueRates(likedAnimes, likedWeight, staffT1Extractor);
+  const negT1 = valueRates(disliked, () => 1, staffT1Extractor);
+
   return {
-    negGenre: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.genre, idfGenre),
-    negStudio: buildFieldProfile(disliked, () => 1, FIELD_EXTRACTORS.studio, idfStudio),
+    posGenre: netProfile(posG, negG, FIELD_EXTRACTORS.genre, idf.genre),
+    posStudio: netProfile(posS, negS, FIELD_EXTRACTORS.studio, idf.studio),
+    negGenre: netProfile(negG, posG, FIELD_EXTRACTORS.genre, idf.genre),
+    negStudio: netProfile(negS, posS, FIELD_EXTRACTORS.studio, idf.studio),
+    // IDF is the full-credit staff map on purpose: it measures how rare the
+    // PERSON is across the corpus, which is the same question whatever role
+    // this particular credit was. A T1-only IDF would also cost a seventh pass
+    // over ~25k records for a near-identical ranking.
+    negStaffT1: netProfile(negT1, posT1, staffT1Extractor, idf.anilistStaff),
   };
 }
 

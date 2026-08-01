@@ -5,8 +5,6 @@ declare const styles: {
   readonly "displaySection": string;
   readonly "inline": string;
   readonly "label": string;
-  readonly "pinButton": string;
-  readonly "pinned": string;
 };
 export = styles;
 
