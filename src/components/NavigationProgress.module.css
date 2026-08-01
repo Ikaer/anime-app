@@ -1,0 +1,20 @@
+/* Top-of-viewport progress bar shown while a route change is in flight. */
+.bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 0 2px 2px 0;
+  /* Above the sticky header (z-index 100) and its dropdown menu (200). */
+  z-index: 1000;
+  background: linear-gradient(90deg, var(--accent-hover), var(--accent-primary));
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
+  pointer-events: none;
+  transition: width 0.3s ease, opacity 0.2s ease;
+}
+
+/* Held at 100% just long enough to read as "arrived", then faded out. */
+.done {
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.3s ease 0.1s;
+}

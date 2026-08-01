@@ -176,6 +176,19 @@ a:hover {
 .main {
   min-height: calc(100vh - 80px);
   padding: 2rem 0;
+  transition: opacity 0.2s ease;
+}
+
+/* Route-change feedback — driven by components/NavigationProgress.tsx. */
+body.route-loading {
+  cursor: progress;
+}
+
+/* Dimmed + inert only for a real page change, so the wait is unmistakable and
+   a second impatient click can't queue another navigation. */
+body.route-loading-page .main {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* Responsive */

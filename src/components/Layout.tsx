@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectionBadges } from '@/components/anime';
 import GlobalSearch from '@/components/GlobalSearch';
+import NavigationProgress from '@/components/NavigationProgress';
 import { useI18n, LANG_LABELS, type Lang } from '@/lib/i18n';
 
 interface LayoutProps {
@@ -118,6 +119,7 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div>
+      <NavigationProgress />
       <header className="header">
         <div className="container">
           <div className="header-content">
