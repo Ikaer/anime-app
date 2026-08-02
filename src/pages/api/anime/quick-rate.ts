@@ -17,26 +17,8 @@ import {
   getEffectiveStatus,
   getPrimaryTitle,
 } from '@/lib/domain/animeUtils';
-import { groupIntoFranchises } from '@/lib/domain/franchise';
+import { getFranchiseIndex } from '@/lib/domain/franchise';
 import type { AnimeRecord } from '@/models/anime';
-
-// Grouping is O(catalog) and the catalog is ~25k rows, so cache the component
-// index on the identity of the row-cache array — `getAnimeForDisplay()` returns
-// the same array until a slice file's mtime actually changes, so this rebuilds
-// exactly when the data does (same trick the row cache itself uses).
-let indexedCatalog: AnimeRecord[] | null = null;
-let franchiseOf: Map<string, AnimeRecord[]> = new Map();
-
-function getFranchiseIndex(catalog: AnimeRecord[]): Map<string, AnimeRecord[]> {
-  if (indexedCatalog === catalog) return franchiseOf;
-  const next = new Map<string, AnimeRecord[]>();
-  for (const group of groupIntoFranchises(catalog)) {
-    for (const member of group) next.set(member.id, group);
-  }
-  indexedCatalog = catalog;
-  franchiseOf = next;
-  return next;
-}
 
 /** Everything a quick-rate card needs, and nothing else. */
 export interface QuickRateMember {

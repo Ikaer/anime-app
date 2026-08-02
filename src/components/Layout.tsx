@@ -145,6 +145,12 @@ export default function Layout({ children }: LayoutProps) {
                   {t('nav.mix')}
                 </Link>
                 <Link
+                  href="/catch-up"
+                  className={`nav-link ${router.pathname === '/catch-up' ? 'active' : ''}`}
+                >
+                  {t('nav.catchUp')}
+                </Link>
+                <Link
                   href="/tier"
                   className={`nav-link ${router.pathname === '/tier' ? 'active' : ''}`}
                 >

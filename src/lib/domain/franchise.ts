@@ -1,9 +1,10 @@
 /**
  * Franchise grouping — connected components over the MAL relation graph
  *
- * Pure and client-safe (no `fs`), though today only the `/api/anime/quick-rate`
- * handler uses it: grouping runs server-side because the input is the whole
- * catalog (~25k records) and only the grouped, lean projection crosses the wire.
+ * Pure and client-safe (no `fs`), though today only server-side handlers use it
+ * (`/api/anime/quick-rate`, `/api/anime/catch-up`): grouping runs there because
+ * the input is the whole catalog (~25k records) and only the grouped, lean
+ * projection crosses the wire.
  */
 import type { AnimeRecord } from '@/models/anime';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
@@ -86,8 +87,32 @@ export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
 }
 
 /**
- * The consumer (`/api/anime/quick-rate`) indexes these components by member id
- * and caches that index on the row-cache array's identity, so the narrowing
- * filters pick *seeds* and the index expands each seed to its whole franchise —
- * which is what pulls in the unstatused seasons a filter would have dropped.
+ * Grouping is O(catalog) and the catalog is ~25k rows, so both consumers index
+ * the components by member id and cache that index on the identity of the row
+ * array `getAnimeForDisplay()` returned — that array is stable until a slice
+ * file's mtime actually changes, so this rebuilds exactly when the data does
+ * (the same trick the row cache itself uses).
+ *
+ * It lives here rather than in either handler because `/api/anime/quick-rate`
+ * and `/api/anime/catch-up` want the identical index; note that in a production
+ * build each route bundle still holds its own copy of this module state, which
+ * is fine — the identity check is per-bundle and self-correcting.
+ *
+ * What each consumer does with it differs: quick-rate lets the narrowing filters
+ * pick *seeds* and expands each to its whole franchise (pulling in the unstatused
+ * seasons a filter would have dropped); catch-up asks each component whether it
+ * holds both a completed entry and an untouched one.
  */
+let indexedCatalog: AnimeRecord[] | null = null;
+let franchiseOf: Map<string, AnimeRecord[]> = new Map();
+
+export function getFranchiseIndex(catalog: AnimeRecord[]): Map<string, AnimeRecord[]> {
+  if (indexedCatalog === catalog) return franchiseOf;
+  const next = new Map<string, AnimeRecord[]>();
+  for (const group of groupIntoFranchises(catalog)) {
+    for (const member of group) next.set(member.id, group);
+  }
+  indexedCatalog = catalog;
+  franchiseOf = next;
+  return next;
+}

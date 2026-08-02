@@ -408,6 +408,38 @@ A drag-and-drop rating surface at [src/pages/tier.tsx](src/pages/tier.tsx) (rout
 - **SIMKL ratings bucket = `shows` for anime** (live-verified 2026-07-05: a TV anime rating returned `201 added.shows:1`, empty `not_found`, `type:"show"` — score-only, status untouched). `pushSimklRating` still tries a bucket by `media_type` and self-corrects on `not_found` (kept as a safety net — anime *movies* under `media_type=movie` try `movies` first and are not yet live-verified). Every write is logged (`[simkl-rating]`).
 - **Client write queue is serial** (`await` each before the next) — sidesteps SIMKL's 20s per-user write-lock and 1 req/s POST cap without batching. Optimistic move with revert-on-failure. Drag/drop is native HTML5 (zero-dep; score is the only persisted state, so within-row order doesn't matter). One shared hover-zoom preview element shows the large poster (not 500 large `<img>`s).
 
+### "/catch-up" — the holes in franchises you finished something of
+
+« À rattraper »: read-only, its own route + [useCatchUpUrlState](src/hooks/useCatchUpUrlState.ts),
+backed by [api/anime/catch-up](src/pages/api/anime/catch-up.ts). The main list
+cannot express it (a connected-component question, not a filter combination) and
+`/quick-rate` reaches the same titles to *rate* them, not to ask what is left.
+
+- **Two membership rules, and every other status is neither.** A franchise is in
+  scope iff it holds an entry with effective status `completed` (the anchor —
+  evidence you like the thing); a hole is an entry with **no effective status at
+  all**. `watching`/`on_hold`/`dropped` are decisions in progress and
+  `plan_to_watch` is a hole you already logged — listing them would make this a
+  second view of the personal list instead of a view of what is absent from it.
+- **The narrowing filters describe the HOLE, not the franchise** (the inverse of
+  `/quick-rate`, where they pick seeds that expand). Search is the exception: you
+  type a franchise name, so it matches any member and keeps the whole group.
+- **A group is named after the first entry you COMPLETED**, not the component's
+  earliest member. Live-measured, that is the difference between calling a
+  franchise "Steins;Gate" and calling it "ChäoS;HEAd" — one graph, but you find
+  it by the thing you actually watched.
+- **`pv` and `cm` are never holes**, whatever the filters say. Only 9 rows of 668
+  on the live store, so this is about not looking like noise — and it cannot be
+  expressed as a filter, since `RecoFiltersSection`'s media-type list doesn't
+  offer them (nor `tv_special`, which IS listed, deliberately).
+- Unaired entries are hidden by default behind the `ua` key and **counted out
+  rather than dropped** (`unairedHidden` per group), so "3 à rattraper" never
+  quietly omits the sequel airing next season. Franchises sort by your best score
+  on the anchor, descending: loved-but-unfinished first.
+- Grouping goes through `getFranchiseIndex` in
+  [domain/franchise.ts](src/lib/domain/franchise.ts) — shared with `/quick-rate`,
+  memoized on the row array's identity.
+
 ### "/stats" — repartition of the statused list
 
 A read-only analysis surface at [src/pages/stats.tsx](src/pages/stats.tsx), its own
