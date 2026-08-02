@@ -117,12 +117,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, unaired, page } =
+    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, unaired, direct, page } =
       req.query;
     const includeUnaired = unaired === '1';
 
+    // `direct` narrows the GRAPH, not the rows: the component is rebuilt over
+    // sequel/prequel edges alone, so an OVA that only hangs off the series stops
+    // being a member rather than being filtered out of one.
     const catalog = getAnimeForDisplay();
-    const index = getFranchiseIndex(catalog);
+    const index = getFranchiseIndex(catalog, direct === '1' ? 'direct' : 'franchise');
 
     // ---- Anchors: a completed entry is what puts a franchise in scope. ------
     // Walking the statused titles rather than the whole catalog keeps this to

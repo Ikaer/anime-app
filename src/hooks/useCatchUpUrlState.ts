@@ -22,6 +22,11 @@ export interface CatchUpUrlState {
   maxYear: number | null;
   /** List entries that haven't aired yet. Default OFF. */
   unaired: boolean;
+  /**
+   * Walk sequel/prequel edges only. Not a row filter — it rebuilds the franchise
+   * graph, so a side story stops being a member of the chain at all.
+   */
+  direct: boolean;
   /** 0-based franchise page. Server-side, like the filters. */
   page: number;
 }
@@ -34,6 +39,7 @@ export const CATCH_UP_DEFAULTS: CatchUpUrlState = {
   minYear: null,
   maxYear: null,
   unaired: false,
+  direct: false,
   page: 0,
 };
 
@@ -45,16 +51,17 @@ const KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   unaired: 'ua',
+  direct: 'dr',
   page: 'p',
 } as const;
 
 /**
- * Every key that narrows the result set — and `unaired` is one of them, unlike
- * quick-rate's `autoComplete`: it adds and removes rows, so a stale page number
- * would strand you the same way a filter change does.
+ * Every key that narrows the result set — `unaired` and `direct` included,
+ * unlike quick-rate's `autoComplete`: both add and remove rows, so a stale page
+ * number would strand you the same way a filter change does.
  */
 const FILTER_KEYS = [
-  'search', 'mediaTypes', 'minScore', 'maxScore', 'minYear', 'maxYear', 'unaired',
+  'search', 'mediaTypes', 'minScore', 'maxScore', 'minYear', 'maxYear', 'unaired', 'direct',
 ] as const satisfies readonly (keyof CatchUpUrlState)[];
 
 function decode(params: URLSearchParams): CatchUpUrlState {
@@ -74,6 +81,7 @@ function decode(params: URLSearchParams): CatchUpUrlState {
     maxYear: num(params.get(KEYS.maxYear)),
     // Default-off, so only the ON state is written to the URL.
     unaired: params.get(KEYS.unaired) === '1',
+    direct: params.get(KEYS.direct) === '1',
     page: Math.max(0, Math.floor(num(params.get(KEYS.page)) ?? 0)),
   };
 }
@@ -87,6 +95,7 @@ function encode(state: CatchUpUrlState): string {
   if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.unaired) params.set(KEYS.unaired, '1');
+  if (state.direct) params.set(KEYS.direct, '1');
   if (state.page > 0) params.set(KEYS.page, String(state.page));
   const qs = params.toString().replace(/%2C/g, ',');
   return qs ? `/catch-up?${qs}` : '/catch-up';
@@ -102,6 +111,7 @@ export function toCatchUpQuery(state: CatchUpUrlState): string {
   if (state.minYear !== null) params.set('minYear', String(state.minYear));
   if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
   if (state.unaired) params.set('unaired', '1');
+  if (state.direct) params.set('direct', '1');
   if (state.page > 0) params.set('page', String(state.page));
   return params.toString();
 }

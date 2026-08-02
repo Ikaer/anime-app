@@ -132,6 +132,14 @@ export default function CatchUpPage() {
         <label className={filterStyles.checkboxLabel}>
           <input
             type="checkbox"
+            checked={state.direct}
+            onChange={e => update({ direct: e.target.checked })}
+          /> {t('catchUp.directOnly')}
+        </label>
+        <p className="hint">{t('catchUp.directOnlyHint')}</p>
+        <label className={filterStyles.checkboxLabel}>
+          <input
+            type="checkbox"
             checked={state.unaired}
             onChange={e => update({ unaired: e.target.checked })}
           /> {t('catchUp.showUnaired')}

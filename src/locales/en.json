@@ -330,6 +330,8 @@
   "catchUp.scopeSection": "Scope",
   "catchUp.intro": "Franchises you completed at least one title of, and the entries you never started.",
   "catchUp.showUnaired": "Include upcoming titles",
+  "catchUp.directOnly": "Direct sequels only",
+  "catchUp.directOnlyHint": "Follows sequel / prequel links only: OVAs, spin-offs and recaps drop out of the chain.",
   "catchUp.filtersHint": "Filters apply to the titles to catch up on; search matches the whole franchise.",
   "catchUp.epCount": "{count} ep.",
   "catchUp.pageOf": "page {page} / {total}",

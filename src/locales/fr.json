@@ -330,6 +330,8 @@
   "catchUp.scopeSection": "Portée",
   "catchUp.intro": "Les franchises dont tu as terminé au moins un titre, et les entrées que tu n’as jamais commencées.",
   "catchUp.showUnaired": "Inclure les titres à venir",
+  "catchUp.directOnly": "Suites directes uniquement",
+  "catchUp.directOnlyHint": "Ne suit que les liens suite / préquelle : les OAV, spin-offs et récapitulatifs sortent de la chaîne.",
   "catchUp.filtersHint": "Les filtres portent sur les titres à rattraper ; la recherche porte sur toute la franchise.",
   "catchUp.epCount": "{count} ép.",
   "catchUp.pageOf": "page {page} / {total}",

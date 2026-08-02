@@ -35,6 +35,29 @@ export const FRANCHISE_RELATIONS = new Set([
 ]);
 
 /**
+ * The **direct line** through a franchise: the entries that continue the story,
+ * with everything hanging off it left out. Not a subset of the rows
+ * `FRANCHISE_RELATIONS` produces but a different graph — dropping `side_story`
+ * also severs the chain wherever a spin-off was the only thing joining two
+ * halves, which is the point (that join is what makes one "franchise" out of a
+ * series and its OVA continuity).
+ *
+ * `parent_story`/`full_story` are out for the same reason they're in the wider
+ * set: they attach an entry to a *containing* work (an OVA to its parent series,
+ * a compilation film to the episodes it recaps), which is precisely "stuff
+ * around" rather than the next thing to watch.
+ */
+export const DIRECT_RELATIONS = new Set(['sequel', 'prequel']);
+
+/** Which edges make a component. `direct` = sequel/prequel only. */
+export type FranchiseScope = 'franchise' | 'direct';
+
+const SCOPE_RELATIONS: Record<FranchiseScope, Set<string>> = {
+  franchise: FRANCHISE_RELATIONS,
+  direct: DIRECT_RELATIONS,
+};
+
+/**
  * Group records into franchises: each returned array is one connected component
  * of the relation graph, in the input's order. A record with no in-catalog
  * relations comes back as its own single-member group.
@@ -43,7 +66,10 @@ export const FRANCHISE_RELATIONS = new Set([
  * as records — is `domain/relations.ts`'s job; this walks what it returns. An
  * edge pointing at a title the catalog doesn't have is dropped there.
  */
-export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
+export function groupIntoFranchises(
+  records: AnimeRecord[],
+  relations: Set<string> = FRANCHISE_RELATIONS
+): AnimeRecord[][] {
   const index = buildRelationIndex(records);
   const byCanonical = index.byCanonical;
 
@@ -58,7 +84,7 @@ export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
   };
   for (const r of records) {
     for (const rel of resolveRelations(r, index)) {
-      if (!FRANCHISE_RELATIONS.has(rel.relationType)) continue;
+      if (!relations.has(rel.relationType)) continue;
       link(r.id, rel.record.id);
     }
   }
@@ -103,16 +129,26 @@ export function groupIntoFranchises(records: AnimeRecord[]): AnimeRecord[][] {
  * seasons a filter would have dropped); catch-up asks each component whether it
  * holds both a completed entry and an untouched one.
  */
-let indexedCatalog: AnimeRecord[] | null = null;
-let franchiseOf: Map<string, AnimeRecord[]> = new Map();
+interface ScopedIndex {
+  catalog: AnimeRecord[];
+  index: Map<string, AnimeRecord[]>;
+}
 
-export function getFranchiseIndex(catalog: AnimeRecord[]): Map<string, AnimeRecord[]> {
-  if (indexedCatalog === catalog) return franchiseOf;
-  const next = new Map<string, AnimeRecord[]>();
-  for (const group of groupIntoFranchises(catalog)) {
-    for (const member of group) next.set(member.id, group);
+// One entry per scope, not one global slot: /catch-up's "suites directes"
+// toggle flips between them on consecutive requests, and a single slot would
+// make every flip a full ~25k regroup.
+const scopedIndexes = new Map<FranchiseScope, ScopedIndex>();
+
+export function getFranchiseIndex(
+  catalog: AnimeRecord[],
+  scope: FranchiseScope = 'franchise'
+): Map<string, AnimeRecord[]> {
+  const cached = scopedIndexes.get(scope);
+  if (cached && cached.catalog === catalog) return cached.index;
+  const index = new Map<string, AnimeRecord[]>();
+  for (const group of groupIntoFranchises(catalog, SCOPE_RELATIONS[scope])) {
+    for (const member of group) index.set(member.id, group);
   }
-  indexedCatalog = catalog;
-  franchiseOf = next;
-  return next;
+  scopedIndexes.set(scope, { catalog, index });
+  return index;
 }

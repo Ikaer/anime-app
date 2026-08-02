@@ -424,6 +424,19 @@ cannot express it (a connected-component question, not a filter combination) and
 - **The narrowing filters describe the HOLE, not the franchise** (the inverse of
   `/quick-rate`, where they pick seeds that expand). Search is the exception: you
   type a franchise name, so it matches any member and keeps the whole group.
+- **« Suites directes » (`dr`) narrows the GRAPH, not the rows.** It re-walks the
+  components over `DIRECT_RELATIONS` (sequel/prequel) instead of
+  `FRANCHISE_RELATIONS`, so a side story stops being a *member* rather than being
+  filtered out of one — which also severs the chain wherever a spin-off was the
+  only thing joining two halves. That severing is the point: it is what stops the
+  Steins;Gate group from dragging in ChäoS;HEAd, Robotics;Notes and ChäoS;Child.
+  Live-measured, 659 holes → 172, and what survives is the actual continuations
+  (Link Click *Season 2* + *Bridon Arc*, Haikyu's *Dumpster Battle*, Kaguya's
+  *First Kiss That Never Ends*). `getFranchiseIndex` therefore caches **one index
+  per scope** — the toggle flips between them on consecutive requests, and a
+  single slot would make every flip a ~25k regroup. Note the edge classification
+  is the providers' (overwhelmingly AniList's): an OVA they label `SEQUEL` stays,
+  by design — this reads their vocabulary, it does not second-guess it.
 - **A group is named after the first entry you COMPLETED**, not the component's
   earliest member. Live-measured, that is the difference between calling a
   franchise "Steins;Gate" and calling it "ChäoS;HEAd" — one graph, but you find
