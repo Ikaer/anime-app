@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
-import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -130,51 +130,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    // Apply sorting. Copy first: when no filter ran above, `animeList` is still
-    // the shared long-lived cache array from getAnimeForDisplay(), and sorting
-    // it in place would mutate every other reader's view of the store.
+    // Apply sorting. The helper copies first — when no filter ran above,
+    // `animeList` is still the shared long-lived cache array from
+    // getAnimeForDisplay(), and sorting it in place would mutate every other
+    // reader's view of the store.
     const sortColumn = sortBy as SortColumn;
     const sortDirection = sortDir as SortDirection;
 
-    animeList = [...animeList];
-    animeList.sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (sortColumn) {
-        case 'title':
-          aValue = getPrimaryTitle(a).toLowerCase();
-          bValue = getPrimaryTitle(b).toLowerCase();
-          break;
-        case 'mean':
-          aValue = a.catalog.mean || 0;
-          bValue = b.catalog.mean || 0;
-          break;
-        case 'start_date':
-          aValue = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : 0;
-          bValue = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : 0;
-          break;
-        case 'status':
-          aValue = a.catalog.airingStatus || '';
-          bValue = b.catalog.airingStatus || '';
-          break;
-        case 'num_episodes':
-          aValue = a.catalog.numEpisodes || 0;
-          bValue = b.catalog.numEpisodes || 0;
-          break;
-        default:
-          aValue = a.catalog.mean || 0;
-          bValue = b.catalog.mean || 0;
-      }
-
-      if (aValue < bValue) {
-        return sortDirection === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortDirection === 'asc' ? 1 : -1;
-      }
-      return 0;
-    });
+    animeList = sortAnimeRecords(animeList, sortColumn, sortDirection);
 
     // Pagination already defaulted to 200; no view-specific overrides
 

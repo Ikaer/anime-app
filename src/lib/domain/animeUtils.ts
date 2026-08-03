@@ -1,7 +1,7 @@
 import type {
   AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
   ProvenanceSource, SeasonName, SeasonInfo, MALAnime, MALPersonalEntry, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
-  LocalPersonalEntry, SourceIds, Discrepancy, Genre,
+  LocalPersonalEntry, SourceIds, Discrepancy, Genre, SortColumn, SortDirection,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 import { buildProviderStates, toAnimePersonal } from '@/lib/providers/personalState';
@@ -105,6 +105,62 @@ export function applyNarrowingFilters<T extends AnimeRecord>(
   }
 
   return out;
+}
+
+// ============================================================================
+// Sorting (shared by /api/anime/animes and the credits pages)
+// ============================================================================
+
+/**
+ * Order a record list by one of `SortColumn`'s catalog fields.
+ *
+ * Always copies first: `applyNarrowingFilters` hands back its input array by
+ * reference when no filter applied, and that array can be the long-lived
+ * `getAnimeForDisplay()` cache — sorting it in place would reorder every other
+ * reader's view of the store.
+ *
+ * The four count/rank columns treat a MISSING value as last in both directions:
+ * `rank` and `popularity` are 1 = best and absent on much of the catalog, so
+ * the `|| 0` idiom the other columns use would float unranked titles to the top
+ * on `asc`. The five original columns are kept byte-identical to what the main
+ * list has always done.
+ */
+export function sortAnimeRecords<T extends AnimeRecord>(
+  items: T[],
+  column: SortColumn,
+  direction: SortDirection,
+): T[] {
+  const dir = direction === 'asc' ? 1 : -1;
+
+  // `null` = no value; sorted last whatever the direction.
+  const numOrNull = (v: number | undefined): number | null => (typeof v === 'number' ? v : null);
+
+  const valueOf = (a: T): string | number | null => {
+    switch (column) {
+      case 'title': return getPrimaryTitle(a).toLowerCase();
+      case 'mean': return a.catalog.mean || 0;
+      case 'start_date': return a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : 0;
+      case 'status': return a.catalog.airingStatus || '';
+      case 'num_episodes': return a.catalog.numEpisodes || 0;
+      case 'rank': return numOrNull(a.catalog.rank);
+      case 'popularity': return numOrNull(a.catalog.popularity);
+      case 'num_list_users': return numOrNull(a.catalog.numListUsers);
+      case 'num_scoring_users': return numOrNull(a.catalog.numScoringUsers);
+      default: return a.catalog.mean || 0;
+    }
+  };
+
+  return [...items].sort((a, b) => {
+    const av = valueOf(a);
+    const bv = valueOf(b);
+    if (av === null || bv === null) {
+      if (av === bv) return 0;
+      return av === null ? 1 : -1;
+    }
+    if (av < bv) return -dir;
+    if (av > bv) return dir;
+    return 0;
+  });
 }
 
 // Utility function to format season display with nice labels and colors

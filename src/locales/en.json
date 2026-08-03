@@ -419,6 +419,9 @@
   "credits.staffHeading": "Anime with {name}",
   "credits.countOne": "{count} anime",
   "credits.countOther": "{count} anime",
+  "credits.countFiltered": "{count} of {total} anime",
+  "credits.statusFilter": "My status",
+  "credits.empty": "No anime matches the filters.",
 
   "search.placeholder": "Search an anime, studio, staff…",
   "search.group.anime": "Anime",
