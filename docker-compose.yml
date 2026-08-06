@@ -16,7 +16,12 @@ services:
       - NODE_ENV=production
       - DATA_PATH=/app/data
       - LOGS_PATH=/app/logs
-      - CRON_SECRET=mysecretcronjobkey # Change this in production
+      # Substituted from the stack's CRON_SECRET variable, so the app and the
+      # cron container below can never drift apart. NOTE: a `cronSecret` stored
+      # in settings.json takes PRECEDENCE over this (resolveSetting reads stored
+      # before env), so the two must hold the same value — or clear the stored
+      # one and let this be the single source.
+      - CRON_SECRET=${CRON_SECRET}
     restart: unless-stopped
     container_name: anime-tracker
     user: "0:0"
@@ -25,7 +30,11 @@ services:
     image: alpine:latest
     depends_on:
       - anime-tracker
+    # `${CRON_SECRET}` is expanded by compose when the stack is deployed, so the
+    # value is baked into the crontab as a literal — no shell escaping to get
+    # wrong. Keep the secret alphanumeric: `$`, `"` and `\` would break the
+    # printf quoting below.
     command: >
-      sh -c "apk add --no-cache curl && printf '0 2 * * * curl -X POST -H \"Authorization: Bearer mysecretcronjobkey\" -H \"Content-Type: application/json\" -d \"{\\\"origin\\\":\\\"docker cron job\\\"}\" http://anime-tracker:3000/api/anime/cron-sync\n' > /etc/crontabs/root && crond -f -d 8"
+      sh -c "apk add --no-cache curl && printf '0 2 * * * curl -X POST -H \"Authorization: Bearer ${CRON_SECRET}\" -H \"Content-Type: application/json\" -d \"{\\\"origin\\\":\\\"docker cron job\\\"}\" http://anime-tracker:3000/api/anime/cron-sync\n' > /etc/crontabs/root && crond -f -d 8"
     restart: unless-stopped
     container_name: anime-tracker-cron

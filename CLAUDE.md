@@ -511,6 +511,19 @@ genuinely different operations. What is uniform is *enablement* and *reporting*.
   `skipped: true` = not applicable (no account); `ok: false` = it should have run
   and didn't. **The handler answers 200 even when a step failed** — a non-2xx
   would tell the NAS cron job "nothing ran", which is exactly what F1 removed.
+- ⚠️ **The 405 and 401 guards LOG before returning, and must keep doing so.**
+  They are the only exits that produce no run at all, so a silent one is
+  indistinguishable from a cron job that was never scheduled. Live case
+  (2026-08-06): a `cronSecret` saved via `/settings` silently outranked the
+  `CRON_SECRET` env var the compose cron container still sent — `resolveSetting`
+  reads **stored before env** — so every 02:00 call 401'd for 11 days with
+  nothing in `logs/connection_log.json`, the one log the Connections panel polls.
+  Symptom was AniList progress frozen while MAL/SIMKL advanced, because
+  `anilistPush` only ever runs from here. **The secret lives in two places by
+  construction** (settings.json and the container env); `docker-compose.yml`
+  substitutes `${CRON_SECRET}` into BOTH services so they cannot drift, but a
+  stored `settings.json` value still wins over it and must be kept in sync or
+  removed. Never log either value — only whether a header arrived.
 - **`anilistPush` is the one step that WRITES**, and the only provider write in
   this app outside a user-initiated edit. `writers.ts` already mirrors every edit
   made *here* to AniList; this step exists for the edits that never pass through
@@ -590,7 +603,7 @@ A lightweight, dependency-free i18n built for GitHub visibility (the app is sing
 | `LOGS_PATH` | Diagnostics directory. **No writer today** — the connection log moved into the store (`DATA_PATH/logs/`, see above); the setting stays valid and displayed. |
 | `MAL_CLIENT_ID` | MyAnimeList OAuth app client ID |
 | `MAL_REDIRECT_URI` | OAuth redirect URI |
-| `CRON_SECRET` | Auth token for cron-sync endpoint |
+| `CRON_SECRET` | Auth token for cron-sync endpoint. ⚠️ A `cronSecret` saved via `/settings` **overrides** this (`resolveSetting` reads stored before env) — see the cron-sync section |
 | `SIMKL_CLIENT_ID` | SIMKL OAuth app client ID (required query param on every SIMKL request) |
 | `SIMKL_CLIENT_SECRET` | SIMKL OAuth token exchange (confidential client) |
 | `SIMKL_APP_NAME` | Sent as `app-name` query param + `User-Agent` on SIMKL requests |

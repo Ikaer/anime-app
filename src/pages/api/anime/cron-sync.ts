@@ -409,8 +409,18 @@ async function refreshRecommendations(accessToken: string | null): Promise<CronS
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Both rejections below LOG before returning, and that is the point: they are
+  // the only paths out of this handler that produce no run, and a silent one is
+  // indistinguishable from a cron job that isn't scheduled at all. Live case:
+  // a `cronSecret` saved in settings.json overrode the env var the compose cron
+  // container still sent, so every 02:00 call 401'd for 11 days with nothing in
+  // the log the Connections panel polls. Volume is a non-issue — the caller is
+  // one nightly curl on the LAN.
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
+    appendLog('cron-sync', 'error', `Cron sync rejected: method ${req.method} not allowed (expected POST)`, {
+      method: req.method,
+    });
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
@@ -418,6 +428,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const authHeader = req.headers.authorization;
   const cronSecret = getCronSecret();
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    // Never log either secret — only which of the two failure shapes it is, which
+    // is what distinguishes "cron sends no header" from "the values disagree".
+    appendLog('cron-sync', 'error', authHeader
+      ? 'Cron sync rejected: Authorization header does not match the configured cron secret'
+      : 'Cron sync rejected: no Authorization header sent', { hadAuthHeader: !!authHeader });
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
