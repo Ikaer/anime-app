@@ -60,6 +60,14 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const [anilistCatalogSweepMessage, setAnilistCatalogSweepMessage] = useState('');
   const [anilistSweepStats, setAnilistSweepStats] = useState<{ totalEntries: number; catalogCount: number } | null>(null);
 
+  // The full scheduled run ("tout synchroniser"). `isCronRunning` mirrors the
+  // SERVER's lock rather than a local in-flight flag: the POST is
+  // fire-and-forget over a multi-minute run, so a local flag would clear on
+  // reload and show an idle button mid-run — and it would miss a run the 02:00
+  // cron started.
+  const [isCronRunning, setIsCronRunning] = useState(false);
+  const [cronSyncStatus, setCronSyncStatus] = useState<'idle' | 'started' | 'alreadyRunning' | 'error'>('idle');
+
   // AniList personal-role state (the OAuth'd viewer's own list)
   const [isAnilistImporting, setIsAnilistImporting] = useState(false);
   const [anilistImportResult, setAnilistImportResult] = useState<AniListPersonalImportResult | null>(null);
@@ -130,13 +138,36 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
+  const fetchCronSyncState = async () => {
+    try {
+      const res = await fetch('/api/anime/sync-now');
+      if (res.ok) setIsCronRunning(!!(await res.json()).running);
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
   useEffect(() => {
     fetchHistoricalStats();
     fetchAnilistMetaStats();
     fetchAnilistCatalogStats();
     fetchAnilistSweepStats();
     fetchAnilistImportConfig();
+    // Read on mount so a reload mid-run — or a page opened while the 02:00 tick
+    // is going — shows the run in progress rather than an idle button.
+    fetchCronSyncState();
   }, []);
+
+  // Poll the lock while a run is in flight. An INTERVAL, not the chained
+  // `setTimeout` the push poll uses: that one re-arms because its dependency is
+  // a fresh object every fetch, whereas `isCronRunning` staying `true` produces
+  // no re-render and would leave the chain dead after a single tick. 5s; the
+  // endpoint answers from an in-memory boolean.
+  useEffect(() => {
+    if (!isCronRunning) return;
+    const timer = setInterval(() => { void fetchCronSyncState(); }, 5000);
+    return () => clearInterval(timer);
+  }, [isCronRunning]);
 
   // Push drift is only computable — and only meaningful — once AniList is
   // connected, so this waits for the status read rather than running on mount.
@@ -449,7 +480,27 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     }
   };
 
-  const anyBusy = isSyncing || isBigSyncing || isHistoricalCrawling
+  /**
+   * Start the whole scheduled run. Fire-and-forget: the response says only
+   * whether the lock was taken, and everything after that is read from the
+   * connection log panel beside the button.
+   */
+  const handleSyncAll = async () => {
+    setCronSyncStatus('idle');
+    try {
+      const res = await fetch('/api/anime/sync-now', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to start the sync');
+      setIsCronRunning(true);
+      setCronSyncStatus(data.alreadyRunning ? 'alreadyRunning' : 'started');
+      onDataChanged?.();
+    } catch (error) {
+      console.error('Error starting the full sync:', error);
+      setCronSyncStatus('error');
+    }
+  };
+
+  const anyBusy = isCronRunning || isSyncing || isBigSyncing || isHistoricalCrawling
     || isAnilistMetaSyncing || isAnilistCatalogCrawling || isAnilistHistoricalCrawling || isAnilistCatalogSweeping
     || isAnilistImporting || isSimklSyncing;
 
@@ -461,6 +512,12 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     isStatusLoading,
     anyBusy,
     refreshStatuses,
+    // Spans every provider, so it hangs off the root rather than a provider key.
+    syncAll: {
+      running: isCronRunning,
+      status: cronSyncStatus,
+      onSync: handleSyncAll,
+    },
     mal: {
       authError,
       onConnect: handleConnect,

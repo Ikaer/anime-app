@@ -12,6 +12,7 @@ const SERVER_ONLY = [
   '@/lib/providers/registry',
   '@/lib/providers/status',
   '@/lib/providers/writers',
+  '@/lib/providers/cronSync',
   '@/lib/providers/mal/**',
   '@/lib/providers/simkl/**',
   '@/lib/providers/anilist/**',

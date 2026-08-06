@@ -260,6 +260,14 @@
   "conn.personalRoleHint": "Où sont conservés vos statuts, vos notes et votre progression.",
   "conn.accountManagedBelow": "Utilise le même compte que la liste personnelle ci-dessous.",
 
+  "syncNow.title": "Tout synchroniser",
+  "syncNow.hint": "Lance maintenant la synchro programmée de 2 h : toutes les sources, dans l’ordre.",
+  "syncNow.button": "Lancer",
+  "syncNow.buttonRunning": "En cours…",
+  "syncNow.running": "Synchro en cours — suivez le détail dans le journal.",
+  "syncNow.done": "Synchro lancée — suivez le détail dans le journal.",
+  "syncNow.error": "Impossible de lancer la synchro.",
+
   "connLog.title": "Journal de connexion et de synchro",
   "connLog.empty": "Aucune activité pour l'instant.",
 

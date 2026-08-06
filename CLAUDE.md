@@ -494,11 +494,33 @@ genres.
 
 ### Scheduled sync (cron-sync) — nine steps, none of them a gate
 
-[cron-sync.ts](src/pages/api/anime/cron-sync.ts) is the one place scheduled work
+[cronSync.ts](src/lib/providers/cronSync.ts) is the one place scheduled work
 is orchestrated, and since F1 it covers every provider, not
 just MAL. It is **not** a generic loop (docs/DECISIONS.md): MAL's
 seasonal crawl, SIMKL's two-phase delta and AniList's GraphQL batch are
 genuinely different operations. What is uniform is *enablement* and *reporting*.
+
+- **It is a lib module, not a route, because it has TWO entry points**:
+  [api/anime/cron-sync](src/pages/api/anime/cron-sync.ts) (the NAS cron job,
+  secret-authenticated) and [api/anime/sync-now](src/pages/api/anime/sync-now.ts)
+  (the "Tout synchroniser" button at the top of `/connections`, ungated and
+  fire-and-forget). Both are thin — the secret check and the response shape are
+  all that differ. The rejected alternative was having the button fetch the cron
+  route over localhost with the secret attached, `startBigSync`-style: that
+  reintroduces a secret matched in two places plus a hardcoded `localhost:3000`.
+  `startBigSync` keeps its hop because *that* route owns a run lock and an SSE
+  stream; this orchestration owned nothing that couldn't move.
+- **`runCronSync` holds the run lock itself**, not the routes — a per-route check
+  lets the button and the 02:00 tick each pass their own and double every step.
+  ⚠️ The lock covers the *orchestration*, not the whole run: `syncMal` starts
+  big-sync over HTTP and returns immediately, and the last two steps are
+  fire-and-forget by design; those three are serialized by their own locks.
+- **The button is ungated for a NARROWER reason than the other Connections
+  buttons.** meta-sync / catalog-crawl / catalog-sweep are ungated because
+  AniList's catalog role is `anonymous` (E4). That does not carry here —
+  `runCronSync` includes `anilistPush`, a provider *write*. It is ungated because
+  pressing it *is* the user-initiated authorization on a single-user LAN app.
+  Don't generalize either reason onto the other set of routes.
 
 - **Nine steps, each isolated and non-fatal**: MAL catalog (big-sync via HTTP,
   which owns the run lock, then a 5-season historical crawl), SIMKL delta,
@@ -616,7 +638,7 @@ A lightweight, dependency-free i18n built for GitHub visibility (the app is sing
 
 Everything under [src/lib/store/](src/lib/store/) uses Node.js `fs`/`path` (via `jsonStore.ts`) and must never be bundled client-side. Only **pages** (`getServerSideProps`, API routes) import it, and always as values, since they run server-side. Client **components** never need it — they get their types (`AnimeRecord`, `UserAnimeStatus`, etc.) from [@/models/anime](src/models/anime/index.ts), which has no `fs` dependency and is safe to import as values from either side.
 
-**This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{data,feed,feedback,refresh,similar}` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
+**This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers,cronSync}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{data,feed,feedback,refresh,similar}` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
 
 **Next 16 removed `next lint`, and `next build` no longer lints at all**, so the guard's enforcement is deliberately re-wired through `prebuild` (`css:types && lint`) — that script is the only reason a build still fails on a bad import. Don't "simplify" `prebuild` back to `css:types` alone. The config is flat (`eslint.config.mjs`, ESLint 9); the parser/plugin come from the `typescript-eslint` meta package rather than the two `@typescript-eslint/*` packages, which is also what `eslint-config-next` itself depends on. Two rules from `eslint-plugin-react-hooks` v7 (the React Compiler set: `set-state-in-effect`, `refs`) are downgraded to **warnings** there — they flag ~26 long-standing fetch-in-effect patterns that are perf advisories, not bugs, and silencing them as errors is what keeps the real errors visible.
 

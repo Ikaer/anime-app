@@ -2,6 +2,7 @@ import Head from 'next/head';
 import { ConnectionLogPanel } from '@/components/anime';
 import {
   ProviderCard,
+  SyncNowPanel,
   ProviderAccountControl,
   MalCatalogActions,
   AnilistCatalogActions,
@@ -35,7 +36,7 @@ import { useT } from '@/lib/i18n';
  */
 export default function ConnectionsPage() {
   const t = useT();
-  const { statuses, isStatusLoading, anyBusy, mal, simkl, anilist } = useConnections();
+  const { statuses, isStatusLoading, anyBusy, syncAll, mal, simkl, anilist } = useConnections();
 
   const hasWritableExternal = Object.values(statuses).some(
     s => s && isExternalPersonalProvider(s.id) && isWritableProvider(s.id) && s.connected
@@ -139,6 +140,15 @@ export default function ConnectionsPage() {
       </Head>
       <div className="connections-page">
         <div className="connections-col">
+          {/* Above both groups: the only control here that belongs to no single
+              provider. Everything below stays individually pressable. */}
+          <SyncNowPanel
+            running={syncAll.running}
+            status={syncAll.status}
+            busy={anyBusy && !syncAll.running}
+            onSync={syncAll.onSync}
+          />
+
           <section className="connections-group">
             <h2>{t('conn.catalogRole')}</h2>
             <p className="group-hint">{t('conn.catalogRoleHint')}</p>

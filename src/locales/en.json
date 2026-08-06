@@ -260,6 +260,14 @@
   "conn.personalRoleHint": "Where your statuses, scores and progress are kept.",
   "conn.accountManagedBelow": "Uses the same account as the personal list below.",
 
+  "syncNow.title": "Sync everything",
+  "syncNow.hint": "Run the scheduled 02:00 sync now — every source, in order.",
+  "syncNow.button": "Run now",
+  "syncNow.buttonRunning": "Running…",
+  "syncNow.running": "Sync in progress — follow it in the log.",
+  "syncNow.done": "Sync started — follow it in the log.",
+  "syncNow.error": "Could not start the sync.",
+
   "connLog.title": "Connection & Sync Log",
   "connLog.empty": "No activity yet.",
 
