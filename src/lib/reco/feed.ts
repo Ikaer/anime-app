@@ -25,12 +25,14 @@ import {
   TUNING,
   FIELD_EXTRACTORS,
   computeIdfSet,
+  popularityScale,
   buildFieldProfile,
   buildFieldProfileSet,
   buildDiscriminativeProfiles,
   fieldMatch,
   isPrematureSequel,
   seedWeight,
+  seedGapBonus,
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
@@ -175,6 +177,19 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const relations = buildRelationIndex(all);
   const hidden = new Set(getHiddenAnimeIds());
   const suggestionIds = new Set(data.suggestions.map(s => s.id));
+  /**
+   * MAL's suggestions arrive ORDERED (ranks 1..100 on the live store) and that
+   * order was being thrown away: the source scored a flat 1 for all 100, so
+   * MAL's top pick and its hundredth were indistinguishable. The rank was
+   * already sitting in the cache unused. Discounted NDCG-style — `1/log2(1+rank)`
+   * is bounded in [0,1] by construction (rank >= 1), gives rank 1 the full 1.0
+   * and still leaves rank 100 a meaningful 0.15 rather than a cliff.
+   */
+  const suggestionRank = new Map(data.suggestions.map(s => [s.id, s.rank]));
+  const suggestionValue = (candId: string): number => {
+    const rank = suggestionRank.get(candId);
+    return rank && rank > 0 ? 1 / Math.log2(1 + rank) : 0;
+  };
   const feedback = getFeedback();
   const upIds = feedbackIds(feedback, 'up');
   const downIds = feedbackIds(feedback, 'down');
@@ -193,8 +208,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
     // Live threshold filter, with a fallback for 👍 seeds (no personal score).
     let weight: number;
-    if (typeof seedScore === 'number' && seedScore >= threshold) {
-      weight = seedWeight(seedScore, threshold);
+    if (seed && typeof seedScore === 'number' && seedScore >= threshold) {
+      weight = seedWeight(seedScore, threshold) * seedGapBonus(seed, seedScore);
     } else if (seed && upIds.has(seed.id)) {
       weight = TUNING.FEEDBACK_SEED_WEIGHT; // 👍 "bonne pioche" acting as a seed
     } else {
@@ -228,8 +243,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
     let weight: number;
-    if (typeof seedScore === 'number' && seedScore >= threshold) {
-      weight = seedWeight(seedScore, threshold);
+    if (seed && typeof seedScore === 'number' && seedScore >= threshold) {
+      weight = seedWeight(seedScore, threshold) * seedGapBonus(seed, seedScore);
     } else if (seed && upIds.has(seed.id)) {
       weight = TUNING.FEEDBACK_SEED_WEIGHT;
     } else {
@@ -247,7 +262,10 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // IDF-scaled taste profiles for the metadata sources (positive = liked seeds,
   // negative = dropped / low-scored). IDF is computed once over the full corpus.
   const seeds = getSeeds(threshold);
-  const seedW = (a: AnimeRecord) => seedWeight(getEffectiveScore(a) ?? threshold, threshold);
+  const seedW = (a: AnimeRecord) => {
+    const score = getEffectiveScore(a) ?? threshold;
+    return seedWeight(score, threshold) * seedGapBonus(a, score);
+  };
   const idf = computeIdfSet(all);
   // Genre and studio come from the DISCRIMINATIVE pair (netted against the
   // dislikes) rather than the plain tally: a genre you complete and drop at the
@@ -272,6 +290,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   let maxRaw = 0;
   let maxAnilistRaw = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
+  let minUsers: number = Infinity;
   for (const [candId, a] of acc) {
     const anime = byId.get(candId);
     if (!anime) continue; // not hydrated yet — skip
@@ -289,10 +308,12 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (anilistAffinity > maxAnilistRaw) maxAnilistRaw = anilistAffinity;
     const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
     if (users > maxUsers) maxUsers = users;
+    if (users < minUsers) minUsers = users;
   }
   const crowdDenom = Math.log(1 + maxRaw) || 1;
   const anilistCrowdDenom = Math.log(1 + maxAnilistRaw) || 1;
-  const popDenom = Math.log10(maxUsers) || 1;
+  // Min-max, NOT a bare ratio — see `popularityScale`.
+  const popValue = popularityScale(minUsers, maxUsers);
 
   // Pass 2: score each candidate as `Σ weight · normalizedSourceValue`, and
   // retain the per-source breakdown for the on-demand "Pourquoi ?" explain.
@@ -316,7 +337,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const values: SourceWeights = {
       crowd: maxRaw > 0 ? Math.log(1 + a.affinity) / crowdDenom : 0,
       anilistCrowd: maxAnilistRaw > 0 ? Math.log(1 + anilistAffinity) / anilistCrowdDenom : 0,
-      suggestions: suggestionIds.has(candId) ? 1 : 0,
+      suggestions: suggestionValue(candId),
       feedback: TUNING.GENRE_WEIGHT * fbGenreM.score + TUNING.STUDIO_WEIGHT * fbStudioM.score,
       genre: genreM.score,
       studio: studioM.score,
@@ -327,7 +348,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
         + TUNING.REJECTION_MIX.studio * negStudioM.score
         + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
-      popularity: Math.log10(users) / popDenom,
+      popularity: popValue(users),
     };
 
     const sortedSeeds = Array.from(a.perSeed.entries()).sort((x, y) => y[1] - x[1]);

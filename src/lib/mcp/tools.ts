@@ -411,9 +411,19 @@ function compactEntry(e: McpStatEntry): McpStatEntry {
 export interface McpRecommendation extends McpAnimeCard {
   /** The additive weighted-sum affinity score the ranking is by. */
   affinityScore: number;
-  /** Seeds (titles the owner liked) whose crowd recos point here. */
+  /**
+   * Seeds whose crowd recos point here — **positive by construction**, since a
+   * seed IS a title the owner completed and scored highly. This field is not
+   * the whole explanation and must not be read as one: the penalties live in
+   * `why`, as negative `contribution` values.
+   */
   becauseOf: Array<{ id: string; title: string }>;
-  /** Top contributing sources, strongest first — the "why", already localized. */
+  /**
+   * Top contributing sources, strongest first, already localized. A
+   * `contribution` may be NEGATIVE — `rejection` (resemblance to what the owner
+   * dropped or scored <= 5) and `popularity` push a candidate down. Trimmed per
+   * sign, so the penalties are always represented — see `WHY_POSITIVE_LIMIT`.
+   */
   why: Array<{ source: string; contribution: number; detail?: string }>;
 }
 
@@ -442,19 +452,44 @@ export interface RecommendResult {
 }
 
 const DEFAULT_RECO_LIMIT = 15;
-/** Contributions per card. The full breakdown is one line per source and mostly zeros. */
-const WHY_LIMIT = 4;
+/**
+ * How many contributions to surface per card, **per sign**. The full breakdown
+ * is one line per source and mostly zeros, so it has to be trimmed — but it must
+ * not be trimmed by magnitude alone.
+ *
+ * ⚠️ **The split is the whole point; do not collapse it back into one
+ * `slice(0, N)` by absolute contribution.** The negative sources are
+ * structurally an order of magnitude smaller than `crowd` (which is
+ * max-normalized to 1.0 at the top of the pool), so a single ranked cut drops
+ * them from every card. Live-measured on the top 15: `rejection` contributed on
+ * 15 of 15 cards and was surfaced on 0, and `rating` likewise — the feed looked
+ * like it had no negative half at all. An external audit of this tool's output
+ * concluded exactly that and proposed rebuilding a rejection signal that has
+ * existed since the discriminative profiles shipped
+ * (docs/audits/recommend-algo-notes.md). A consumer that cannot see a penalty
+ * cannot reason about it.
+ */
+const WHY_POSITIVE_LIMIT = 4;
+const WHY_NEGATIVE_LIMIT = 2;
 
 function projectWhy(breakdown: RecoContribution[]): McpRecommendation['why'] {
-  return breakdown
-    .filter(c => c.contribution !== 0)
-    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
-    .slice(0, WHY_LIMIT)
+  // Rounded BEFORE the zero filter: a contribution of -0.0004 is not a penalty
+  // worth reporting, and listing it as a literal `0` reads as a bug rather than
+  // as "negligible". (`-0 !== 0` is false, so a rounded negative zero drops out
+  // here too.)
+  const scored = breakdown
     .map(c => ({
       source: c.source,
       contribution: Math.round(c.contribution * 1000) / 1000,
       ...(c.detail ? { detail: c.detail } : {}),
-    }));
+    }))
+    .filter(c => c.contribution !== 0);
+  const byMagnitude = (a: { contribution: number }, b: { contribution: number }) =>
+    Math.abs(b.contribution) - Math.abs(a.contribution);
+  return [
+    ...scored.filter(c => c.contribution > 0).sort(byMagnitude).slice(0, WHY_POSITIVE_LIMIT),
+    ...scored.filter(c => c.contribution < 0).sort(byMagnitude).slice(0, WHY_NEGATIVE_LIMIT),
+  ].sort(byMagnitude);
 }
 
 /**
@@ -527,6 +562,11 @@ export interface McpSimilarItem {
   /** True when the owner has already watched it — NOT excluded, just marked. */
   seen: boolean;
   score: number;
+  /**
+   * Same shape and same per-sign trimming as `recommend`'s — a `contribution`
+   * may be negative (`rejection`, `popularity`), and those entries are model
+   * output rather than noise.
+   */
   why: Array<{ source: string; contribution: number; detail?: string }>;
 }
 

@@ -52,6 +52,11 @@ export const TUNING = {
    * penalty rather than skewing it.
    */
   REJECTION_MIX: { genre: 0.35, studio: 0.25, staffT1: 0.4 },
+  /**
+   * How far a seed's weight may be moved by how much the owner OUT-scored the
+   * community on it. See `seedGapBonus`; `0` disables the adjustment.
+   */
+  SEED_GAP_BONUS: 0.5,
   /** How many top seeds to surface per candidate for the match hint. */
   TOP_SEEDS_PER_CANDIDATE: 2,
   /** Synthetic edge weight for a 👍 "bonne pioche" acting as a crowd seed
@@ -91,6 +96,17 @@ export const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[
  * that nothing reads. The positive `anilistStaff` source keeps the full top-50
  * credit list, unchanged.
  *
+ * ⚠️ **Narrowing the POSITIVE source to T1 as well was tried and measured
+ * WORSE — do not redo it blind.** The dilution argument that justifies T1 on
+ * the rejection side looks like it should transfer, but it does not: narrowing
+ * the extractor shrinks `fieldMatch`'s numerator (fewer credits can match) as
+ * much as its denominator (fewer credits to divide by), so the values barely
+ * move — live-measured median 0.044 -> 0.047. What did move was the ranking,
+ * and the wrong way. Backtested against held-out favourites
+ * (`scripts/backtest-reco.js`) at three cutoffs, MRR fell every time
+ * (0.054->0.047, 0.046->0.040, 0.050->0.047) while mean rank improved every
+ * time. It trades the top of the feed — the only part read — for the middle.
+ *
  * Why T1 rather than all 50 on the negative side: `fieldMatch` divides by the
  * candidate's value COUNT, so a series composer's signal drowns among ~13-50
  * key animators and sound staff (the ~0.05-vs-0.40 dilution measured in
@@ -100,6 +116,39 @@ export const FIELD_EXTRACTORS: Record<MetaField, (a: AnimeRecord) => FieldValue[
  */
 export const staffT1Extractor = (a: AnimeRecord): FieldValue[] =>
   (a.sources.anilist?.staff || []).filter(s => staffRoleTier(s.role) === 1).map(s => s.id);
+
+/**
+ * Normalizer for the `popularity` source: log10 member count, min-max scaled
+ * across the candidate pool.
+ *
+ * **The min matters, and its absence was a real bug.** This used to be a bare
+ * `log10(users) / log10(maxUsers)` — a RATIO, not a normalization. Because a
+ * candidate pool is made of titles the crowd already recommends, its members
+ * all sit within about one order of magnitude of each other, so dividing by the
+ * max compressed every value into the top of the range instead of spanning
+ * [0,1] like every other source. Live-measured on the 974-candidate pool: the
+ * values ran [0.488, 1.000] with an interquartile range of 0.107, which at the
+ * -0.15 default weight is a 0.016 spread — a constant offset applied to
+ * everything rather than a penalty that discriminates. Subtracting the pool
+ * floor restores the [0,1] contract the additive model assumes.
+ *
+ * Deliberately min-max on the log rather than a percentile rank: a percentile
+ * would be perfectly uniform but would stop meaning "how popular" and start
+ * meaning "how popular RELATIVE TO the rest of this pool", which changes what
+ * the slider does depending on how the pool was fetched. The log keeps the
+ * magnitudes honest — a 2M-member blockbuster really is far from a 300k one.
+ *
+ * Returns `() => 0` for a degenerate pool (one distinct popularity, or none):
+ * with no spread there is nothing to penalize, and a flat 0 is the neutral
+ * answer rather than an arbitrary constant.
+ */
+export function popularityScale(minUsers: number, maxUsers: number): (users: number) => number {
+  const floor = (n: number) => Math.log10(Math.max(n, TUNING.POPULARITY_FLOOR));
+  const lo = floor(minUsers);
+  const span = floor(maxUsers) - lo;
+  if (span <= 0) return () => 0;
+  return (users: number) => (floor(users) - lo) / span;
+}
 
 /**
  * Inverse document frequency per value of a discrete field, over the whole
@@ -179,6 +228,17 @@ export function buildFieldProfileSet(
     nsfw: buildFieldProfile(animes, weightFn, FIELD_EXTRACTORS.nsfw, idf.nsfw),
     rating: buildFieldProfile(animes, weightFn, FIELD_EXTRACTORS.rating, idf.rating),
     anilistTags: buildFieldProfile(animes, weightFn, FIELD_EXTRACTORS.anilistTags, idf.anilistTags),
+    // T1 credits, NOT the full top-50 — the same dilution argument the rejection
+    // side was already built on, applied to the positive side. `fieldMatch`
+    // divides by the CANDIDATE's value count, so scoring a shared director
+    // against ~40 credits (of which most are key animators and sound staff)
+    // buries it: live-measured, this source's values ran a median 0.044 against
+    // genre's 0.232, and its 1.0 default weight existed only to compensate for
+    // that. Narrowing the extractor puts a staff match on genre's scale instead
+    // of inflating the knob. IDF stays `idf.anilistStaff` (full credits) on
+    // purpose: it measures how rare the PERSON is across the corpus, which is
+    // the same question whatever role this particular credit was — see
+    // `negStaffT1`, which nets on exactly this pairing.
     anilistStaff: buildFieldProfile(animes, weightFn, FIELD_EXTRACTORS.anilistStaff, idf.anilistStaff),
   };
 }
@@ -259,6 +319,23 @@ export interface DiscriminativeProfiles {
 }
 
 /**
+ * The dislike set: dropped, or scored <= `NEGATIVE_SCORE_THRESHOLD`, ∪ the 👎
+ * "pas pour moi" thumbs.
+ *
+ * Named rather than inlined so the definition has one home — the rejection
+ * profiles below are its only caller today.
+ */
+function getDislikedAnime(all: AnimeRecord[], downIds: Set<string>): AnimeRecord[] {
+  const base = all.filter(a => {
+    const st = getEffectiveStatus(a);
+    const sc = getEffectiveScore(a) ?? 0;
+    return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
+  });
+  const seen = new Set(base.map(a => a.id));
+  return [...base, ...all.filter(a => downIds.has(a.id) && !seen.has(a.id))];
+}
+
+/**
  * Taste profiles built as a DISCRIMINATIVE pair: what separates the titles you
  * liked from the ones you dropped, rather than two independent tallies.
  *
@@ -288,13 +365,7 @@ export function buildDiscriminativeProfiles(
   idf: IdfSet,
   liked?: { animes: AnimeRecord[]; weight: (a: AnimeRecord) => number }
 ): DiscriminativeProfiles {
-  const dislikedBase = all.filter(a => {
-    const st = getEffectiveStatus(a);
-    const sc = getEffectiveScore(a) ?? 0;
-    return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
-  });
-  const dislikedSeen = new Set(dislikedBase.map(a => a.id));
-  const disliked = [...dislikedBase, ...all.filter(a => downIds.has(a.id) && !dislikedSeen.has(a.id))];
+  const disliked = getDislikedAnime(all, downIds);
 
   const likedAnimes = liked?.animes ?? all.filter(a => {
     if (getEffectiveStatus(a) !== 'completed') return false;
@@ -345,6 +416,34 @@ const PREQUEL_OK_STATUSES = new Set(['completed', 'watching']);
 export function seedWeight(score: number, threshold: number): number {
   // threshold=8: 8->1, 9->2, 10->3
   return score - (threshold - 1);
+}
+
+/**
+ * Multiplier on a seed's weight for how far the owner's score sits ABOVE the
+ * community mean — the sharpest signal a seed carries.
+ *
+ * A 10 on a title the whole world scores 8.4 says little: "fans of this" is
+ * nearly everyone. A 10 on a title the crowd puts at 7.4 is a statement about
+ * this owner specifically, and its crowd edges point somewhere more personal.
+ * Weighting seeds by score alone cannot tell those apart.
+ *
+ * ⚠️ **Bounded and multiplicative, deliberately NOT `score − mean` outright.**
+ * The raw difference is negative for a large share of the seed set — seeds are
+ * score->=8 completions, which skew toward titles the community also rates 8+,
+ * and this owner's mean gap is −0.57. A bare difference would therefore hand
+ * half the seeds a weight of zero or less, silently dropping them from the
+ * crowd accumulation (and, at negative values, making them SUBTRACT their own
+ * backers). Clamping to ±1 before scaling keeps every seed in the model and
+ * bounds the adjustment to [1−k, 1+k], so this re-ranks the seed set rather
+ * than pruning it.
+ *
+ * Titles with no community mean return 1 — no information, no adjustment.
+ */
+export function seedGapBonus(anime: AnimeRecord, score: number): number {
+  const mean = anime.catalog.mean;
+  if (!mean) return 1;
+  const gap = Math.max(-1, Math.min(1, score - mean));
+  return 1 + TUNING.SEED_GAP_BONUS * gap;
 }
 
 /**

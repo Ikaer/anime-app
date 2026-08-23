@@ -40,6 +40,7 @@ import {
   TUNING,
   computeIdfSet,
   buildFieldProfileSet,
+  popularityScale,
   buildDiscriminativeProfiles,
   fieldMatch,
   isPrematureSequel,
@@ -150,6 +151,7 @@ export function computeAnchored(
   let maxCrowd = 0;
   let maxAnilist = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
+  let minUsers: number = Infinity;
   for (const candId of new Set([...crowd.keys(), ...anilistCrowd.keys()])) {
     if (excluded.has(candId)) continue;
     const anime = byId.get(candId);
@@ -164,13 +166,16 @@ export function computeAnchored(
     eligible.push({ anime, candId });
     maxCrowd = Math.max(maxCrowd, crowd.get(candId)?.total || 0);
     maxAnilist = Math.max(maxAnilist, anilistCrowd.get(candId)?.total || 0);
-    maxUsers = Math.max(maxUsers, anime.catalog.numListUsers || 0);
+    const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
+    maxUsers = Math.max(maxUsers, users);
+    minUsers = Math.min(minUsers, users);
   }
   if (eligible.length === 0) return [];
 
   const crowdDenom = Math.log(1 + maxCrowd) || 1;
   const anilistDenom = Math.log(1 + maxAnilist) || 1;
-  const popDenom = Math.log10(maxUsers) || 1;
+  // Min-max, NOT a bare ratio — see `popularityScale`.
+  const popValue = popularityScale(minUsers, maxUsers);
 
   // IDF over the full corpus (as in the feed), but the positive profiles are
   // built from the anchors alone: "shares a RARE genre/tag/studio/creator with
@@ -237,7 +242,7 @@ export function computeAnchored(
       rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
         + TUNING.REJECTION_MIX.studio * negStudioM.score
         + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
-      popularity: Math.log10(users) / popDenom,
+      popularity: popValue(users),
     };
 
     // With one anchor the count is the interesting number ("38 fans of this

@@ -163,7 +163,16 @@ export function buildServer(): McpServer {
         'the seeds it came from and why it scored. Use this for "what should I watch next". ' +
         'It re-ranks a cached candidate set and never refreshes it, so check `lastRefresh` and ' +
         'any `note` before trusting an empty or thin answer. For titles similar to ONE specific ' +
-        'anime, use similar_to instead.',
+        'anime, use similar_to instead. ' +
+        'READING THE SCORE — `affinityScore` is an additive weighted sum over sources that push ' +
+        'both ways, and `why` lists them with a signed `contribution`. Negative entries are ' +
+        'real model output, not noise: `rejection` scores how much a candidate resembles what ' +
+        'the owner DROPPED or scored <= 5 (a taste profile over genres, studios and lead staff, ' +
+        'netted against their likes), and `popularity` pushes well-known titles down. ' +
+        '`becauseOf` lists only the liked seeds whose crowd recommendations point at the title, ' +
+        'so it is positive by construction — do not read it as the full explanation, and do not ' +
+        'conclude from it that the dropped or low-scored titles are unused signal. `why` is ' +
+        'trimmed per sign, so a penalty is never crowded out by a larger positive.',
       inputSchema: {
         limit: z.number().int().min(1).max(50).optional().describe('How many to return (default 15, max 50).'),
         nicheMode: z.boolean().optional()
@@ -219,10 +228,17 @@ export function buildServer(): McpServer {
         "The owner's tier board as data, and how their scores compare to the community. " +
         'Default axis "gap" buckets titles by (owner score − provider\'s rounded mean), so ' +
         'sortDir "desc" surfaces where they rate FAR ABOVE the crowd and "asc" where they rate ' +
-        'below; sortBy "abs_gap" gives the biggest disagreements either way. `distribution` is ' +
-        'always the whole board even when `items` is one page, and `gapSummary` says whether ' +
-        'they are a generous or harsh rater overall. Scope is watching/completed/on_hold/dropped ' +
-        '— plan_to_watch is excluded, since an unwatched title has no score.',
+        'below; sortBy "abs_gap" gives the biggest disagreements either way. `gapSummary` says ' +
+        'whether they are a generous or harsh rater overall. Scope is watching/completed/on_hold/' +
+        'dropped — plan_to_watch is excluded, since an unwatched title has no score. ' +
+        'IMPORTANT — the filters do not all reach the same fields. statuses/genres/mediaTypes/' +
+        'minYear/maxYear select the board itself, so `distribution`, `gapSummary`, `total` and ' +
+        '`items` all describe that same narrowed set. minGap/maxGap instead narrow ONLY `total` ' +
+        'and `items`: `distribution` and `gapSummary` still describe the whole board, because ' +
+        'the shape answers "what does their board look like" while the gap bounds answer "show ' +
+        'me the disagreements". Paging never affects `distribution` either. So when a gap bound ' +
+        'is set, do not read `gapSummary.comparable` as the size of the filtered result — that ' +
+        'is `total`.',
       inputSchema: {
         axis: z.enum(['gap', 'me', 'mal', 'anilist']).optional()
           .describe('What the rows mean: "gap" (default) the difference, "me" the owner\'s score, "mal"/"anilist" that provider\'s mean.'),
@@ -231,9 +247,9 @@ export function buildServer(): McpServer {
         statuses: z.array(z.enum(['watching', 'completed', 'on_hold', 'dropped'])).optional()
           .describe('Restrict the board. Omit for all four.'),
         minGap: z.number().int().optional()
-          .describe('Only titles at least this far ABOVE the provider. Use e.g. 3 for "much higher than MAL".'),
+          .describe('Only titles at least this far ABOVE the provider. Use e.g. 3 for "much higher than MAL". Narrows `items`/`total` only, NOT `distribution`/`gapSummary`.'),
         maxGap: z.number().int().optional()
-          .describe('Only titles at most this gap. Use e.g. -3 for "much lower than MAL".'),
+          .describe('Only titles at most this gap. Use e.g. -3 for "much lower than MAL". Narrows `items`/`total` only, NOT `distribution`/`gapSummary`.'),
         genres: z.array(z.string()).optional().describe('ALL must be present. Exact names from list_genres.'),
         mediaTypes: z.array(z.string()).optional().describe('e.g. "tv", "movie", "ova".'),
         minYear: z.number().int().optional().describe('Earliest release year, inclusive.'),
