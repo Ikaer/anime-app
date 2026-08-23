@@ -156,6 +156,33 @@ a:hover {
   flex-direction: column;
 }
 
+/* Grouped dropdown: a rule between groups, and a small heading above each
+   labelled one. The separator is a top border on the group rather than an
+   <hr>, so the first group and the unlabelled trailing one need no special
+   case — `:first-child` simply has no rule above it. */
+.nav-dropdown-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-dropdown-group + .nav-dropdown-group {
+  border-top: 1px solid var(--border-color);
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+}
+
+.nav-dropdown-group-label {
+  padding: 0.35rem 1rem 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8b929c);
+  /* A heading, not a target — it must never look clickable. */
+  pointer-events: none;
+  user-select: none;
+}
+
 .nav-dropdown-item {
   color: var(--text-secondary);
   padding: 0.6rem 1rem;

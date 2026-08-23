@@ -20,6 +20,10 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
   consumer: model field + `catalogFromAnilist` + the `/stats` read + coverage/dedup
   against the cast slice + a re-sweep. Weigh it against the reason cast is
   off-join at all — `catalog/anilist.json` is parsed on every cold row build.
+- **A real per-episode watch log.** `/activity` shipped, but SIMKL gives exactly
+  ONE `watched_at` per title, so the feed can say when you last touched a show
+  and never which day a given episode was. Capturing SIMKL's activity endpoint on
+  every sync would be the way; it is a store-shape change, not a page change.
 - **Swipe system.**
 - **Seiyuu as a reco source.** Needs catalog-wide cast, which the sweep
   deliberately skips (it covers the statused list, ~500-700 titles, not the ~25k

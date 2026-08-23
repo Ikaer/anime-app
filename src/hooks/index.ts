@@ -15,6 +15,8 @@ export type { QuickRateUrlState, UseQuickRateUrlStateReturn } from './useQuickRa
 
 export { useCatchUpUrlState, CATCH_UP_DEFAULTS, toCatchUpQuery } from './useCatchUpUrlState';
 export type { CatchUpUrlState, UseCatchUpUrlStateReturn } from './useCatchUpUrlState';
+export { useActivityUrlState, ACTIVITY_DEFAULTS, toActivityQuery } from './useActivityUrlState';
+export type { ActivityUrlState, UseActivityUrlStateReturn } from './useActivityUrlState';
 
 export { useCreditsUrlState, CREDITS_DEFAULTS, decodeCreditsState } from './useCreditsUrlState';
 export type { CreditsUrlState, UseCreditsUrlStateReturn } from './useCreditsUrlState';
