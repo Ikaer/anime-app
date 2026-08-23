@@ -14,6 +14,7 @@ import { searchCatalog, MIN_QUERY_LENGTH } from '@/lib/domain/globalSearch';
 import { computeStats, STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 import { computeFeed } from '@/lib/reco/feed';
 import { getRecommendationsData } from '@/lib/reco/data';
+import { loadSimilarTo, type SimilarSources } from '@/lib/reco/similarFetch';
 import type { Lang } from '@/lib/i18n';
 import { buildRelationIndex, resolveRelations, type RelationIndex } from '@/lib/domain/relations';
 import {
@@ -487,4 +488,100 @@ export function recommend(params: RecommendParams): RecommendResult {
   }
 
   return { items, total: filtered.length, lastRefresh: data.lastRefresh, ...(note ? { note } : {}) };
+}
+
+// ---------------------------------------------------------------------------
+// similar_to
+// ---------------------------------------------------------------------------
+
+export interface McpSimilarItem {
+  id: string;
+  title: string;
+  year?: number;
+  mediaType?: string;
+  mean?: number;
+  /** The owner's effective status, when they already listed it. */
+  status?: string;
+  /** True when the owner has already watched it — NOT excluded, just marked. */
+  seen: boolean;
+  score: number;
+  why: Array<{ source: string; contribution: number; detail?: string }>;
+}
+
+export type SimilarToResult =
+  | {
+      ok: true;
+      items: McpSimilarItem[];
+      /** Per-source outcome — a dead pipe is declared, not hidden behind a thin list. */
+      sources: SimilarSources;
+      note?: string;
+    }
+  | { ok: false; error: string };
+
+const DEFAULT_SIMILAR_LIMIT = 15;
+
+/**
+ * Titles resembling ONE anime, from its crowd recommendations.
+ *
+ * The one tool here that REACHES THE NETWORK: it asks MAL and AniList for that
+ * title's recommendation edges on every call (in parallel, each non-fatal), then
+ * re-ranks them against the owner's taste. It is still a read — nothing is
+ * persisted — but it spends AniList's ~30 req/min budget, so it is not free the
+ * way the store-backed tools are.
+ *
+ * Seen titles are NOT excluded, unlike the feed: the pool is ~25 edges before
+ * filtering, so dropping them would gut the answer for a heavy watcher. They
+ * come back flagged `seen` instead.
+ */
+export async function similarTo(
+  id: string,
+  limit: number | undefined,
+  lang: Lang | undefined
+): Promise<SimilarToResult> {
+  if (!isCanonicalId(id)) {
+    return { ok: false, error: `"${id}" is not a canonical id. Ids look like "a_1234" and come from search_anime.` };
+  }
+
+  const result = await loadSimilarTo(id, limit ?? DEFAULT_SIMILAR_LIMIT, lang ?? 'fr');
+
+  if (!result.ok) {
+    switch (result.failure.kind) {
+      case 'invalid_id':
+        return { ok: false, error: `"${id}" is not a canonical id.` };
+      case 'no_provider_id':
+        return { ok: false, error: `No MAL or AniList id is known for "${id}", so neither crowd source can be asked.` };
+      case 'all_sources_failed':
+        return {
+          ok: false,
+          error: `Both crowd sources failed — MAL: ${result.failure.sources.mal.error ?? 'unknown'}; ` +
+            `AniList: ${result.failure.sources.anilist.error ?? 'unknown'}.`,
+        };
+    }
+  }
+
+  const items = result.items.map(item => ({
+    id: item.id,
+    title: item.title,
+    year: item.year,
+    mediaType: item.mediaType,
+    mean: item.mean,
+    status: item.status,
+    seen: item.seen,
+    score: Math.round(item.score * 1000) / 1000,
+    why: projectWhy(item.breakdown),
+  }));
+
+  // One pipe down halves the pool, which reads as a thin answer rather than a
+  // degraded one unless it is said out loud.
+  const dead = [
+    !result.sources.mal.ok ? `MAL (${result.sources.mal.error})` : null,
+    !result.sources.anilist.ok ? `AniList (${result.sources.anilist.error})` : null,
+  ].filter(Boolean);
+  const note = dead.length
+    ? `Only part of the pool was available — ${dead.join(', ')}. Results are thinner than usual.`
+    : items.length === 0
+      ? 'Both sources answered, but neither knows any recommendation for this title.'
+      : undefined;
+
+  return { ok: true, items, sources: result.sources, ...(note ? { note } : {}) };
 }

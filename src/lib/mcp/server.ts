@@ -10,7 +10,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, MCP_SORT_KEYS } from '@/lib/mcp/tools';
+import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, MCP_SORT_KEYS } from '@/lib/mcp/tools';
 import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 
 /** Default / ceiling on list results — the constraint is the model's context. */
@@ -177,6 +177,30 @@ export function buildServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (params) => json(recommend(params))
+  );
+
+  server.registerTool(
+    'similar_to',
+    {
+      title: 'Find anime similar to one title',
+      description:
+        'Titles resembling ONE specific anime, from its crowd recommendations on MAL and ' +
+        "AniList, re-ranked against the owner's taste. Use this for \"something like X\"; use " +
+        'recommend for "what should I watch next" in general. Titles the owner has already ' +
+        'seen are included and flagged `seen` rather than dropped. This call queries MAL and ' +
+        'AniList live, so it is slower than the other tools and worth calling once per title.',
+      inputSchema: {
+        id: z.string().describe('Canonical id of the anime to find lookalikes for, e.g. "a_1234".'),
+        limit: z.number().int().min(1).max(50).optional().describe('How many to return (default 15, max 50).'),
+        lang: z.enum(['fr', 'en']).optional().describe('Language of the `why` explanations. Default "fr".'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ id, limit, lang }) => {
+      const result = await similarTo(id, limit, lang);
+      if (!result.ok) return { ...json({ error: result.error }), isError: true };
+      return json({ items: result.items, sources: result.sources, ...(result.note ? { note: result.note } : {}) });
+    }
   );
 
   server.registerTool(
