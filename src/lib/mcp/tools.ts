@@ -309,8 +309,21 @@ export interface McpDimensionStats {
   covered: number;
 }
 
+export interface MyStatsParams {
+  dimensions?: StatsDimension[];
+  statuses?: string[];
+  /**
+   * Bounds on the OWNER'S OWN score (1-10), inclusive. Either one present drops
+   * unrated titles — see `ComputeStatsOptions`. Named for whose score it is,
+   * because `minMean`/`maxMean` elsewhere are the community's.
+   */
+  minMyScore?: number;
+  maxMyScore?: number;
+  limit?: number;
+}
+
 export interface MyStatsResult {
-  /** Titles in scope after the status filter — the percentage denominator. */
+  /** Titles in scope after the status AND score filters — the percentage denominator. */
   total: number;
   /** Titles carrying a status at all, before the status filter. */
   totalStatused: number;
@@ -334,19 +347,23 @@ const DEFAULT_STATS_LIMIT = 15;
  * never-watched titles would describe MAL's catalog rather than the owner's
  * taste. Counts are DISTINCT anime, so multi-valued dimensions sum past 100% on
  * purpose (a title has many genres).
+ *
+ * The score bounds are what separate "what do I watch a lot of" from "what do I
+ * actually rate highly" — over a whole list, volume tracks what a genre PRODUCES
+ * as much as what the owner loves, so the unbounded ranking answers only the
+ * first question.
  */
-export function myStats(
-  dimensions: StatsDimension[] | undefined,
-  statuses: string[] | undefined,
-  limit: number | undefined
-): MyStatsResult {
+export function myStats(params: MyStatsParams = {}): MyStatsResult {
+  const { dimensions, statuses, minMyScore, maxMyScore, limit } = params;
   const rows = limit ?? DEFAULT_STATS_LIMIT;
   const wanted = dimensions && dimensions.length > 0 ? dimensions : STATS_DIMENSIONS;
 
   // The cast slice is read separately — it is deliberately NOT in
   // `getAnimeForDisplay()`'s join, and `seiyuu`/`producers` are the two
   // dimensions that depend on it.
-  const stats = computeStats(getAnimeForDisplay(), getAllAnilistCast(), { statuses: statuses ?? [] });
+  const stats = computeStats(getAnimeForDisplay(), getAllAnilistCast(), {
+    statuses: statuses ?? [], minMyScore, maxMyScore,
+  });
 
   const projected = wanted.map(dimension => {
     const d = stats.dimensions[dimension];

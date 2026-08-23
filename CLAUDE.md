@@ -470,6 +470,17 @@ genres.
   crawled catalog — a repartition over never-watched titles would describe MAL's
   catalog rather than the user's taste. Unlike the tier board, `plan_to_watch` IS
   offered (asking what your backlog is made of is legitimate; you just can't rate it).
+- **A score range narrows it further** (`smin`/`smax` URL keys → `minMyScore` /
+  `maxMyScore` on `ComputeStatsOptions` and on the `my_stats` MCP tool), because
+  the flat ranking measures **volume**, which tracks how much of a genre exists
+  as much as it tracks taste. Live-measured on the statused list: Action leads at
+  55.9% overall but Drama overtakes it inside the 9-10 band (54.7% vs 51.8%), and
+  Comedy leads the ≤5 band — the divergence is the whole point of the control.
+  Bounds are on the **owner's own** score, hence not named `minScore`/`maxScore`
+  like `NarrowingFilters`' community-mean bounds. **Either bound present drops
+  UNRATED titles**: "what are my 9s made of" is a question about scored titles.
+  The two `<select>`s clamp each other rather than letting an inverted range
+  blank the page.
 - **Aggregation counts DISTINCT anime, never credits** — a seiyuu voicing three
   characters in one show counts once. Multi-valued dimensions sum past 100% on
   purpose (a title has many genres); the percentage reads "X% of your list

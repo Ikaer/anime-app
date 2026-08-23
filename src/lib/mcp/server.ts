@@ -133,17 +133,25 @@ export function buildServer(): McpServer {
         'AniList tag or genre — each ranked by how many of their titles it appears on. Use this ' +
         'for "what do I watch a lot of", "favourite studio", "which voice actor keeps showing up". ' +
         'Counts are distinct anime, and multi-valued dimensions sum past 100% (a title has many ' +
-        'genres). Scope is the statused list only, never the whole catalog.',
+        'genres). Scope is the statused list only, never the whole catalog. Narrow with ' +
+        'minMyScore/maxMyScore to ask what the owner LOVES rather than what they merely watch a ' +
+        'lot of: over the whole list, a ranking tracks how much of a genre exists as much as how ' +
+        'much they like it, and the two answers often disagree.',
       inputSchema: {
         dimensions: z.array(z.enum(STATS_DIMENSIONS as [StatsDimension, ...StatsDimension[]])).optional()
           .describe('Which repartitions to return. Omit for all six.'),
         statuses: z.array(z.enum(STATUSES)).optional()
           .describe('Restrict to these watch statuses. Omit for every statused title. "not_defined" yields nothing here.'),
+        minMyScore: z.number().min(1).max(10).optional()
+          .describe("Lower bound on the OWNER'S OWN score (1-10), inclusive. Not the community mean. " +
+            'Setting either bound also excludes titles they never scored.'),
+        maxMyScore: z.number().min(1).max(10).optional()
+          .describe("Upper bound on the owner's own score, inclusive."),
         limit: z.number().int().min(1).max(50).optional().describe('Rows per dimension (default 15, max 50).'),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ dimensions, statuses, limit }) => json(myStats(dimensions, statuses, limit))
+    async (params) => json(myStats(params))
   );
 
   server.registerTool(

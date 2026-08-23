@@ -8,7 +8,10 @@
  *
  * Scope is the statused list (the tier board's scope, via `getEffectiveStatus`),
  * NOT the ~25k crawled catalog — a repartition over titles the user never
- * watched would describe MAL's catalog, not the user's taste.
+ * watched would describe MAL's catalog, not the user's taste. It narrows
+ * further by the owner's OWN score, which is the difference between "what do I
+ * watch a lot of" and "what do I actually love" — volume and taste diverge, and
+ * the flat list answers only the first.
  *
  * Four dimensions come free off the joined record; two do not:
  * - `producers` exists ONLY on the lazily-filled cast slice (MAL's API has no
@@ -19,7 +22,7 @@
  */
 
 import type { AniListCastEntry, AnimeRecord } from '@/models/anime';
-import { getEffectiveStatus, catalogNameKey } from '@/lib/domain/animeUtils';
+import { getEffectiveScore, getEffectiveStatus, catalogNameKey } from '@/lib/domain/animeUtils';
 
 /** The six repartition dimensions. */
 export type StatsDimension =
@@ -144,6 +147,17 @@ function finalize(
 export interface ComputeStatsOptions {
   /** Effective statuses to keep. Empty = every statused title. */
   statuses?: string[];
+  /**
+   * Bounds on the OWNER'S OWN score (1-10), not the community mean — this page
+   * has no notion of the latter, which is why they aren't called
+   * `minScore`/`maxScore` like `NarrowingFilters`' community-mean bounds.
+   *
+   * Either bound present drops UNRATED titles: "what do my 9s and 10s consist
+   * of" is a question about scored titles, and letting the unscored through
+   * would answer it with the rest of the list.
+   */
+  minMyScore?: number;
+  maxMyScore?: number;
 }
 
 /**
@@ -161,9 +175,20 @@ export function computeStats(
   const wanted = new Set(options.statuses ?? []);
 
   const statused = catalog.filter(a => !!getEffectiveStatus(a));
-  const scoped = wanted.size > 0
+  let scoped = wanted.size > 0
     ? statused.filter(a => wanted.has(getEffectiveStatus(a) as string))
     : statused;
+
+  const { minMyScore, maxMyScore } = options;
+  if (minMyScore != null || maxMyScore != null) {
+    scoped = scoped.filter(a => {
+      const score = getEffectiveScore(a);
+      if (score == null || score <= 0) return false;
+      if (minMyScore != null && score < minMyScore) return false;
+      if (maxMyScore != null && score > maxMyScore) return false;
+      return true;
+    });
+  }
 
   const buckets: Record<StatsDimension, Map<string, Bucket>> = {
     studios: new Map(), seiyuu: new Map(), staff: new Map(),

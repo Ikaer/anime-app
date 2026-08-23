@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { Button } from '@/components/shared';
-import { useStatsUrlState } from '@/hooks';
+import { useStatsUrlState, type StatsUrlState } from '@/hooks';
 import { useT, TranslationKey } from '@/lib/i18n';
 import { STATS_DIMENSIONS, type StatEntry, type StatsDimension } from '@/lib/domain/stats';
 import type { StatsApiResponse } from '@/pages/api/anime/stats';
@@ -23,6 +23,9 @@ import type { StatsApiResponse } from '@/pages/api/anime/stats';
 // `plan_to_watch` IS offered: you can legitimately ask what your backlog is
 // made of, even though you can't rate it.
 const STATUSES = ['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch'] as const;
+
+/** Selectable bounds on the owner's own score. `''` is the unbounded end. */
+const SCORE_VALUES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1] as const;
 
 /** The two dimensions that depend on the lazily-filled cast slice. */
 const CAST_BACKED: StatsDimension[] = ['seiyuu', 'producers'];
@@ -51,6 +54,7 @@ export default function StatsPage() {
   const [sweepStarted, setSweepStarted] = useState(false);
 
   const statusKey = state.statuses.join(',');
+  const { minMyScore, maxMyScore } = state;
 
   const loadStats = useCallback(async () => {
     setIsLoading(true);
@@ -58,6 +62,8 @@ export default function StatsPage() {
     try {
       const params = new URLSearchParams();
       if (statusKey) params.set('status', statusKey);
+      if (minMyScore != null) params.set('minMyScore', String(minMyScore));
+      if (maxMyScore != null) params.set('maxMyScore', String(maxMyScore));
       const res = await fetch(`/api/anime/stats?${params.toString()}`);
       if (!res.ok) throw new Error(String(res.status));
       setData(await res.json());
@@ -66,7 +72,7 @@ export default function StatsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [statusKey, t]);
+  }, [statusKey, minMyScore, maxMyScore, t]);
 
   const loadCoverage = useCallback(async () => {
     try {
@@ -113,6 +119,27 @@ export default function StatsPage() {
     }
   }, [loadCoverage]);
 
+  const isScored = state.minMyScore != null || state.maxMyScore != null;
+
+  /**
+   * Both bounds are inclusive and independent; picking a min above the current
+   * max would ask for an empty set, so the other end follows rather than
+   * blanking the page.
+   */
+  const setBound = (which: 'minMyScore' | 'maxMyScore', raw: string) => {
+    const value = raw === '' ? null : Number(raw);
+    const next: Partial<StatsUrlState> = { [which]: value };
+    if (value != null) {
+      if (which === 'minMyScore' && state.maxMyScore != null && value > state.maxMyScore) {
+        next.maxMyScore = value;
+      }
+      if (which === 'maxMyScore' && state.minMyScore != null && value < state.minMyScore) {
+        next.minMyScore = value;
+      }
+    }
+    update(next);
+  };
+
   const toggleStatus = (status: string) => {
     const next = state.statuses.includes(status)
       ? state.statuses.filter(s => s !== status)
@@ -138,7 +165,10 @@ export default function StatsPage() {
           <div>
             <h1>{t('stats.heading')}</h1>
             {data && (
-              <p className="stats-sub">{t('stats.subtitle', { count: String(data.total) })}</p>
+              <p className="stats-sub">
+                {t('stats.subtitle', { count: String(data.total) })}
+                {isScored && ` · ${t('stats.scoredOnly')}`}
+              </p>
             )}
           </div>
           <div className="stats-statuses">
@@ -162,6 +192,38 @@ export default function StatsPage() {
             ))}
           </div>
         </header>
+
+        <div className="stats-scores">
+          <span className="stats-label">{t('stats.myScore')}</span>
+          <select
+            className="score-select"
+            value={state.minMyScore ?? ''}
+            onChange={e => setBound('minMyScore', e.target.value)}
+            aria-label={t('stats.myScoreMin')}
+          >
+            <option value="">{t('stats.scoreAny')}</option>
+            {SCORE_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          <span className="stats-label">{t('stats.scoreTo')}</span>
+          <select
+            className="score-select"
+            value={state.maxMyScore ?? ''}
+            onChange={e => setBound('maxMyScore', e.target.value)}
+            aria-label={t('stats.myScoreMax')}
+          >
+            <option value="">{t('stats.scoreAny')}</option>
+            {SCORE_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+          {isScored && (
+            <button
+              type="button"
+              className="chip"
+              onClick={() => update({ minMyScore: null, maxMyScore: null })}
+            >
+              {t('stats.scoreClear')}
+            </button>
+          )}
+        </div>
 
         <nav className="stats-tabs">
           {STATS_DIMENSIONS.map(dimension => (
@@ -241,6 +303,15 @@ export default function StatsPage() {
         }
         .chip:hover { color: var(--text-primary); }
         .chip.on { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+        .stats-scores {
+          display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+          margin-bottom: 1rem;
+        }
+        .score-select {
+          background: var(--bg-tertiary); color: var(--text-primary);
+          border: 1px solid var(--border-color); border-radius: 6px;
+          padding: 0.25rem 0.5rem; font-size: 0.85rem; cursor: pointer;
+        }
         .stats-tabs {
           display: flex; flex-wrap: wrap; gap: 0.35rem;
           border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;
