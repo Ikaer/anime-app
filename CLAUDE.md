@@ -414,7 +414,7 @@ gate.
 The detail page's second reco block ([MoreLikeThis.tsx](src/components/anime/MoreLikeThis.tsx)), backed by `GET /api/anime/recommendations/similar/[id]` and `computeSimilarTo` in [similar.ts](src/lib/reco/similar.ts). It flips the feed's question from "what fits my taste" to "what resembles THIS title", by running the **same weighted-source machinery** (`computeIdf` / `buildFieldProfile` / `fieldMatch` / `isPrematureSequel` / the additive `Σ weight · value` + `RecoContribution[]` breakdown) with **one anchor instead of the user's whole seed set**. Consequences, all deliberate:
 
 - **The positive taste profiles are built from the target anime alone**, so a source scores "shares a *rare* genre/tag/studio/creator with this title". `suggestions` and `feedback` are user-global and have no per-title meaning, so `ANCHORED_WEIGHTS` forces them to `0`; `rejection` and `popularity` stay on (they hold for any candidate). ⚠️ `anchored.ts` calls `buildDiscriminativeProfiles` **without** a `liked` set, so the netting reference is the user's global likes: netting the dislikes against a one-title anchor profile would assert "this anchor's genres aren't rejections", which is not a claim about the user. Its positive profiles stay un-netted for the same reason — here they mean "shares a rare value with what you picked", not "fits your taste".
-- **Candidate set = the target's crowd edges only** (MAL `fetchRecoEdges` ∪ AniList `fetchAnilistRecommendations`, fetched in parallel, each non-fatal with a per-source outcome in the response). Metadata only *re-ranks* within that set, never injects — which is exactly what keeps this block distinct from the sibling **"Dans le même studio / staff"** block ([similarByCredits.ts](src/lib/reco/byCredits.ts)), a pure catalog-wide credit similarity computed in `getServerSideProps`.
+- **Candidate set = the target's crowd edges only** (MAL `fetchRecoEdges` ∪ AniList `fetchAnilistRecommendations`, fetched in parallel, each non-fatal with a per-source outcome in the response). That fetch-and-resolve orchestration lives in [similarFetch.ts](src/lib/reco/similarFetch.ts), not in the route — lifted out when the MCP `similar_to` tool needed the same thing, so the two callers cannot drift on which sources are asked or how edges are resolved. It is the **ingest boundary** (E9): each provider is asked with its OWN id and every edge is converted to a canonical id there, resolve-only. Metadata only *re-ranks* within that set, never injects — which is exactly what keeps this block distinct from the sibling **"Dans le même studio / staff"** block ([similarByCredits.ts](src/lib/reco/byCredits.ts)), a pure catalog-wide credit similarity computed in `getServerSideProps`.
 - **Seen titles are NOT excluded** (unlike `computeFeed`). The pool is ≤ ~25 edges before filtering, so hard-dropping seen titles guts the block for a heavy watcher; they're returned with their effective `status` and marked "👁 Déjà vu". Still excluded: the target + its `related_anime`, hidden, 👎, premature sequels.
 - **Stateless and hydration-free.** It never reads or writes `RecommendationsData`, and a crowd edge pointing at a title absent from the local catalog is simply skipped (no metadata to rank on) rather than triggering a MAL detail fetch.
 - **Click-to-load**, because the detail page otherwise makes zero external calls and this block costs a MAL + an AniList round-trip.
@@ -575,6 +575,49 @@ genres.
   that page scans production credits, which never contain voice actors (see the
   Cast section above).
 
+### "/graph" — an ego explorer, not a catalog map
+
+[/graph](src/pages/graph.tsx) over [api/anime/graph](src/pages/api/anime/graph.ts), pure logic in
+[animeGraph.ts](src/lib/domain/animeGraph.ts) + [graphLayout.ts](src/lib/domain/graphLayout.ts).
+One focal node, its direct neighbours, and **re-centring as the only expansion**.
+
+- **The whole-catalog graph does not exist and must not be materialized.** Measured: "two anime
+  share a voice actor" is **82,196 edges over just 674 cast-swept titles**; tags are 419 nodes
+  each touching hundreds; staff is 298,362 credits. No layout renders that — it is a grey disc.
+  An ego turns that latent density into the asset (a seiyuu ego is ~10 anime, an anime ego ~40
+  people). Tags are a *filter* on that ego, which is what they are actually good for.
+- **Nodes are anime, NOT franchises** — asked and measured, because collapsing looks tempting on
+  a prolific seiyuu (Nobuhiko Okamoto: 64 titles → 36 franchises). It loses coherence (median
+  voice-cast Jaccard **0.30** between two members of the same franchise over 532 pairs;
+  `FRANCHISE_RELATIONS` chains Gundam SEED, 00, Iron-Blooded Orphans and Witch from Mercury into
+  ONE 128-member component whose casts are disjoint), erases the **147 characters recast across
+  their own franchise** — exactly what a connection chart should reveal — and does not even solve
+  the problem it was reached for, since 36 nodes is no more drawable in one radial ego than 64.
+  Franchise survives as a *clustering hint* (`franchiseKey` on an anime node), grouping siblings
+  into one expandable arc segment while keeping every node's identity, so a recast still renders
+  as two edges to two characters.
+- **Three focal types** (`anime` | `seiyuu` | `staff`), deliberately. `studio` and `character` are
+  reachable as neighbours and link out, but neither makes a useful centre — a studio ego is a
+  filtered catalog list (which `/credits/studio/[name]` already is), and a character's
+  neighbourhood is one anime plus one seiyuu.
+- **Layout is deterministic sectors, not a force simulation** — the target is a 4K TV at 300% zoom
+  (~1280 CSS px) where the binding constraint is **label collision, not node count**. A simulation
+  reflows on every interaction, so the same graph never looks the same twice and a screenshot
+  can't be compared to the last one; it would also be the app's first layout dependency, in a repo
+  that hand-rolled `/tier`'s drag-and-drop to avoid exactly that. Each group owns an angular wedge,
+  so label space is *allocated* rather than negotiated, and a dense group grows outward into extra
+  rings instead of crowding its neighbours. `MAX_NODES_PER_GROUP = 24` per arc; groups report
+  `total` so the overflow is **stated, never silently dropped**.
+- **Computed server-side**, for the `/stats` and `/quick-rate` reason only more so: the reverse
+  indexes span the whole catalog (49,897 staff people, 2,255 seiyuu) and never cross the wire —
+  one neighbourhood of a few hundred lean nodes does. The cast slice is read separately, since it
+  is deliberately not in `getAnimeForDisplay()`'s join. **Nothing here calls a provider**; the
+  graph is entirely a read of the local store, which is what makes it browsable at page speed.
+- **`GraphCoverage` is the honesty block.** Seiyuu edges come from the lazily-filled cast slice, so
+  `focalCastMissing` distinguishes "this title has a thin neighbourhood" from "the sweep has not
+  reached it" — the same declare-the-degraded-mode posture as `RecoRefreshSources` (B4) and
+  `/activity`'s `available: false`.
+
 ### "/connections" — split by ROLE, one card shape per provider
 
 [src/pages/connections.tsx](src/pages/connections.tsx) is two groups — **Catalogue** and **Mes listes** — each mapping `providersWithRole(role)` over a single [ProviderCard](src/components/anime/connections/ProviderCard.tsx) (E1–E4 — docs/DECISIONS.md). It replaced four hardcoded provider-named sections plus a 24-prop `DataSyncSection` catch-all.
@@ -584,6 +627,42 @@ genres.
 - **The header badges are one component** ([ConnectionBadges](src/components/anime/ConnectionBadges.tsx)) over that one fetch, replacing three near-identical stateful wrappers. `local` gets a badge **only while enabled** — an off local provider is not a connection.
 - **`local` has a card**: active/inactive, entry count, precedence rank, why `auto` switched it off, and a link to `/settings`. On a keyless install it is the only active personal provider, and it previously appeared nowhere in the UI.
 - **Actions are NOT abstracted.** Each provider's sync stays its own block in [CatalogRoleActions](src/components/anime/connections/CatalogRoleActions.tsx) / [PersonalRoleActions](src/components/anime/connections/PersonalRoleActions.tsx), passed to the card as children — MAL's seasonal crawl, SIMKL's delta and AniList's GraphQL batch are different operations (docs/DECISIONS.md). Only the card around them is uniform. Note MAL's list sync is a *personal*-role action while big-sync/historical-crawl are *catalog* ones; the sync-error state is split the same way.
+
+### MCP — the store as a read-only tool surface
+
+`POST /api/anime/mcp` ([mcp.ts](src/pages/api/anime/mcp.ts)) exposes the local record to an MCP
+client (`claude mcp add --transport http anime-tracker http://<host>:12350/api/anime/mcp`). Eight
+tools, in [mcp/server.ts](src/lib/mcp/server.ts) (schemas) over [mcp/tools.ts](src/lib/mcp/tools.ts)
+(handlers): `search_anime`, `get_anime`, `list_anime`, `list_genres`, `my_stats`, `recommend`,
+`similar_to`, `tier_list`.
+
+- **Read-only by construction, and that is enforced.** A *second* `files` block in
+  [eslint.config.mjs](eslint.config.mjs) fails the build when anything under `src/lib/mcp/**` or
+  `api/anime/mcp.ts` imports a write path — the same posture as the client-safety guard below, not
+  a convention. Adding a write tool means deliberately unmaking that, not just adding a file.
+- **The tools are thin adapters over the existing domain functions**, never a second
+  implementation: `searchCatalog`, `computeStats`, `computeFeed`, `loadSimilarTo`,
+  `applyNarrowingFilters`, `sortAnimeRecords`, `tierGap.ts`. A tool needing new behaviour gets it
+  in `domain/` or `reco/`, where the pages can reach it too.
+- **The binding constraint is TOKENS, not bytes** — a tool result is text in a model's context
+  window. [mcp/project.ts](src/lib/mcp/project.ts) is the projection layer, and it never emits
+  `sources`, `provenance` or `pictures`: that is the bulk of a record and none of it means anything
+  to a model. Same server-side-projection posture as `/api/anime/quick-rate` and
+  `/api/anime/catch-up`, only stricter. ⚠️ The `jsonStore` shared-reference contract applies —
+  every projector BUILDS a new object and must never trim a record in place.
+- **A fresh server per request** (`sessionIdGenerator: undefined`, `enableJsonResponse: true`)
+  costs nothing: the expensive state is the module-level parse cache and row cache, which survive.
+  ⚠️ Next's `bodyParser` stays **ON** — the parsed body is `handleRequest`'s third argument, so the
+  streaming-route reflex of disabling it (as `mal/big-sync.ts` does) makes every call hang.
+  Unauthenticated like every other route here, riding the same LAN boundary.
+- **`similar_to` is the one tool that reaches the network** (MAL + AniList crowd edges, via
+  [similarFetch.ts](src/lib/reco/similarFetch.ts)); every other tool is a pure store read. The
+  memoize-on-row-array-identity trick is reused for its relation index and id map.
+- ⚠️ **A tool description is part of the contract, not decoration.** Both wrong claims in the
+  external audit (docs/audits/recommend-algo-notes.md) came from what this surface *showed*, not
+  from the reader — which is why `projectWhy` now trims per sign, `recommend` states that negative
+  contributions are model output, and `tier_list` spells out its filter asymmetry. Treat a
+  misleading description as a bug of the same weight as a scoring bug.
 
 ### Scheduled sync (cron-sync) — nine steps, none of them a gate
 
@@ -844,7 +923,7 @@ Everything under [src/lib/store/](src/lib/store/) uses Node.js `fs`/`path` (via 
 
 **This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers,cronSync}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{data,feed,feedback,refresh,similar}` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
 
-**Next 16 removed `next lint`, and `next build` no longer lints at all**, so the guard's enforcement is deliberately re-wired through `prebuild` (`css:types && lint`) — that script is the only reason a build still fails on a bad import. Don't "simplify" `prebuild` back to `css:types` alone. The config is flat (`eslint.config.mjs`, ESLint 9); the parser/plugin come from the `typescript-eslint` meta package rather than the two `@typescript-eslint/*` packages, which is also what `eslint-config-next` itself depends on. Two rules from `eslint-plugin-react-hooks` v7 (the React Compiler set: `set-state-in-effect`, `refs`) are downgraded to **warnings** there — they flag ~26 long-standing fetch-in-effect patterns that are perf advisories, not bugs, and silencing them as errors is what keeps the real errors visible.
+**Next 16 removed `next lint`, and `next build` no longer lints at all**, so the guard's enforcement is deliberately re-wired through `prebuild` (`css:types && lint`) — that script is the only reason a build still fails on a bad import. Don't "simplify" `prebuild` back to `css:types` alone. The config is flat (`eslint.config.mjs`, ESLint 9); the parser/plugin come from the `typescript-eslint` meta package rather than the two `@typescript-eslint/*` packages, which is also what `eslint-config-next` itself depends on. Two rules from `eslint-plugin-react-hooks` v7 (the React Compiler set: `set-state-in-effect`, `refs`) are downgraded to **warnings** there — they flag ~26 long-standing fetch-in-effect patterns that are perf advisories, not bugs, and silencing them as errors is what keeps the real errors visible. There is a **second `files` block** in the same config, unrelated to client safety: it keeps `src/lib/mcp/**` and `api/anime/mcp.ts` from importing any write path, so the MCP surface stays read-only by build failure rather than by discipline.
 
 **Two pinned holdbacks** (re-check when upstream moves): `eslint` stays on **9.x** because `eslint-config-next@16` bundles an `eslint-plugin-react` that crashes on ESLint 10 (`contextOrFilename.getFilename is not a function`), and `typescript` stays on **5.9.x** because `typescript-eslint@8` declares `typescript >=4.8.4 <6.1.0`, so TS 7 fails to install. Everything else is on latest.
 
