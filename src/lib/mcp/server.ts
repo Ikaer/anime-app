@@ -10,7 +10,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, MCP_SORT_KEYS } from '@/lib/mcp/tools';
+import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, tierList, MCP_SORT_KEYS } from '@/lib/mcp/tools';
 import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 
 /** Default / ceiling on list results — the constraint is the model's context. */
@@ -209,6 +209,46 @@ export function buildServer(): McpServer {
       if (!result.ok) return { ...json({ error: result.error }), isError: true };
       return json({ items: result.items, sources: result.sources, ...(result.note ? { note: result.note } : {}) });
     }
+  );
+
+  server.registerTool(
+    'tier_list',
+    {
+      title: 'Tier board and the gap vs the community',
+      description:
+        "The owner's tier board as data, and how their scores compare to the community. " +
+        'Default axis "gap" buckets titles by (owner score − provider\'s rounded mean), so ' +
+        'sortDir "desc" surfaces where they rate FAR ABOVE the crowd and "asc" where they rate ' +
+        'below; sortBy "abs_gap" gives the biggest disagreements either way. `distribution` is ' +
+        'always the whole board even when `items` is one page, and `gapSummary` says whether ' +
+        'they are a generous or harsh rater overall. Scope is watching/completed/on_hold/dropped ' +
+        '— plan_to_watch is excluded, since an unwatched title has no score.',
+      inputSchema: {
+        axis: z.enum(['gap', 'me', 'mal', 'anilist']).optional()
+          .describe('What the rows mean: "gap" (default) the difference, "me" the owner\'s score, "mal"/"anilist" that provider\'s mean.'),
+        vs: z.enum(['mal', 'anilist']).optional()
+          .describe('Which community mean the gap compares against. Default "mal".'),
+        statuses: z.array(z.enum(['watching', 'completed', 'on_hold', 'dropped'])).optional()
+          .describe('Restrict the board. Omit for all four.'),
+        minGap: z.number().int().optional()
+          .describe('Only titles at least this far ABOVE the provider. Use e.g. 3 for "much higher than MAL".'),
+        maxGap: z.number().int().optional()
+          .describe('Only titles at most this gap. Use e.g. -3 for "much lower than MAL".'),
+        genres: z.array(z.string()).optional().describe('ALL must be present. Exact names from list_genres.'),
+        mediaTypes: z.array(z.string()).optional().describe('e.g. "tv", "movie", "ova".'),
+        minYear: z.number().int().optional().describe('Earliest release year, inclusive.'),
+        maxYear: z.number().int().optional().describe('Latest release year, inclusive.'),
+        search: z.string().optional().describe('Substring match on the title.'),
+        sortBy: z.enum(['gap', 'abs_gap', 'my_score', 'mean', 'title']).optional()
+          .describe('Default "gap" (signed). "abs_gap" ranks by disagreement size regardless of direction.'),
+        sortDir: z.enum(['asc', 'desc']).optional().describe('Default "desc".'),
+        limit: z.number().int().min(1).max(MAX_LIST_LIMIT).optional()
+          .describe(`Page size for \`items\` (default 25, max ${MAX_LIST_LIMIT}). \`distribution\` ignores this.`),
+        offset: z.number().int().min(0).optional().describe('Page offset for `items`.'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (params) => json(tierList(params))
   );
 
   server.registerTool(

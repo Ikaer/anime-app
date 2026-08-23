@@ -33,8 +33,13 @@ const CODE_TO_SEASON: Record<string, SeasonName> = {
  * `me` is the original board (rows = my score, the only writable mode); `mal` /
  * `anilist` re-bucket the same cards on that provider's community mean rounded
  * to MAL's 1-10 scale; `gap` makes the rows the difference itself.
+ *
+ * Declared in `domain/tierGap.ts` alongside the arithmetic it selects, and
+ * re-exported here because this hook is where the URL key lives — the server-side
+ * `tier_list` tool needs the same union without importing a hook.
  */
-export type TierAxis = 'me' | 'mal' | 'anilist' | 'gap';
+import type { TierAxis } from '@/lib/domain/tierGap';
+export type { TierAxis };
 
 /** Which community mean the per-card gap chip (and the `gap` axis) compares to. */
 export type TierVersus = 'none' | 'mal' | 'anilist';

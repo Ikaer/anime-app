@@ -6,22 +6,20 @@ import SeasonFilter from '@/components/anime/SeasonFilter';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize } from '@/models/anime';
-import { applyNarrowingFilters, extractCatalogBySource, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import {
+  GAP_MAX, GAP_ROWS, TIER_SCORES, TIER_STATUSES,
+  clampGapRow, gapOf as computeGap, meanRow, providerMeans,
+} from '@/lib/domain/tierGap';
 import { useTierUrlState } from '@/hooks';
 import type { TierAxis, TierVersus } from '@/hooks/useTierUrlState';
 import { useT, TranslationKey } from '@/lib/i18n';
 
-// Scores 10→1 carry MAL's word labels (localized via `tierWord.<n>`). Titles
-// that have no value on the active axis go to the tray below the board.
-const TIER_SCORES = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
-
-// ---- The `gap` axis: rows are (my score − the provider's rounded mean). ----
-// Clamped to ±5 because beyond that the rows are empty on any real list; the
-// two end rows are labelled "or more" / "or less" rather than pretending the
-// clamp is the value. Labels are `tierGap.<p5…p1|zero|m1…m5>` — a dynamic key
-// family, so keep it exhaustive by hand (see CLAUDE.md's i18n note).
-const GAP_MAX = 5;
-const GAP_ROWS = [5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5];
+// The rows, the gap arithmetic and the board's status scope live in
+// `domain/tierGap.ts`, shared with the MCP `tier_list` tool so the two cannot
+// disagree about which mean is compared. Scores 10→1 carry MAL's word labels
+// (localized via `tierWord.<n>`); gap labels are `tierGap.<p5…p1|zero|m1…m5>`, a
+// dynamic key family, so keep it exhaustive by hand (see CLAUDE.md's i18n note).
 
 const AXES: readonly TierAxis[] = ['me', 'mal', 'anilist', 'gap'];
 const VERSUS: readonly TierVersus[] = ['none', 'mal', 'anilist'];
@@ -40,8 +38,6 @@ function gapColor(d: number): string {
   return d > 0 ? `hsl(213, 60%, ${light}%)` : `hsl(32, 62%, ${light}%)`;
 }
 
-// The four statuses the board's fetch already scopes to (plan_to_watch excluded).
-const TIER_STATUSES = ['watching', 'completed', 'on_hold', 'dropped'] as const;
 
 // green (10) → red (1)
 function scoreColor(n: number): string {
@@ -163,17 +159,11 @@ export default function TierPage() {
     [overrides, baseScore],
   );
 
-  // ---- Community means, per provider, RAW rather than merged. ----------------
-  // `catalog.mean` is the precedence winner (one number); comparing my score to
-  // a provider needs that provider's own value, which is what
-  // `extractCatalogBySource` rebuilds. Both are already on MAL's 1-10 scale
-  // (AniList's averageScore is divided by 10 at hydration).
+  // Community means, per provider, RAW rather than merged — see `providerMeans`
+  // for why `catalog.mean` is the wrong number to compare against.
   const meansById = useMemo(() => {
-    const m = new Map<string, { mal: number | null; anilist: number | null }>();
-    for (const a of animes) {
-      const bySource = extractCatalogBySource(a.sources);
-      m.set(a.id, { mal: bySource.mal?.mean ?? null, anilist: bySource.anilist?.mean ?? null });
-    }
+    const m = new Map<string, ReturnType<typeof providerMeans>>();
+    for (const a of animes) m.set(a.id, providerMeans(a));
     return m;
   }, [animes]);
 
@@ -184,13 +174,10 @@ export default function TierPage() {
   const showChip = state.vs !== 'none' && state.by !== 'gap';
 
   /** My score minus the comparison provider's rounded mean; null if either is missing. */
-  const gapOf = useCallback((id: string): number | null => {
-    const mine = effScoreOf(id);
-    if (mine <= 0) return null;
-    const mean = meansById.get(id)?.[vsProvider];
-    if (mean == null) return null;
-    return mine - Math.round(mean);
-  }, [effScoreOf, meansById, vsProvider]);
+  const gapOf = useCallback(
+    (id: string): number | null => computeGap(effScoreOf(id), meansById.get(id)?.[vsProvider] ?? null),
+    [effScoreOf, meansById, vsProvider],
+  );
 
   /** Which row a card lands in on the active axis; null sends it to the tray. */
   const rowOf = useCallback((id: string): number | null => {
@@ -200,11 +187,10 @@ export default function TierPage() {
     }
     if (state.by === 'gap') {
       const d = gapOf(id);
-      return d === null ? null : Math.max(-GAP_MAX, Math.min(GAP_MAX, d));
+      return d === null ? null : clampGapRow(d);
     }
     const mean = meansById.get(id)?.[state.by === 'anilist' ? 'anilist' : 'mal'];
-    if (mean == null) return null;
-    return Math.max(1, Math.min(10, Math.round(mean)));
+    return mean == null ? null : meanRow(mean);
   }, [state.by, effScoreOf, gapOf, meansById]);
 
   // Only my own scores are writable — a community mean and a difference are both

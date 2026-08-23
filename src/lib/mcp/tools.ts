@@ -21,9 +21,14 @@ import {
   applyNarrowingFilters,
   getEffectiveScore,
   getEffectiveStatus,
+  getPrimaryTitle,
   sortAnimeRecords,
 } from '@/lib/domain/animeUtils';
 import { getGenreVocabulary, type GenreVocabulary } from '@/lib/domain/genreVocabulary';
+import {
+  GAP_ROWS, TIER_SCORES, TIER_STATUSES,
+  clampGapRow, gapOf, meanRow, providerMeans, type GapProvider, type TierAxis,
+} from '@/lib/domain/tierGap';
 import { projectCard, projectDetail, type McpAnimeCard, type McpAnimeDetail } from '@/lib/mcp/project';
 import type { AnimeRecord, RecoContribution, SortColumn } from '@/models/anime';
 
@@ -601,4 +606,225 @@ export async function similarTo(
       : undefined;
 
   return { ok: true, items, sources: result.sources, ...(note ? { note } : {}) };
+}
+
+// ---------------------------------------------------------------------------
+// tier_list
+// ---------------------------------------------------------------------------
+
+export interface McpTierEntry {
+  id: string;
+  title: string;
+  year?: number;
+  mediaType?: string;
+  status?: string;
+  /** The owner's own score, 1-10. Absent means unrated. */
+  myScore?: number;
+  /** MAL's own community mean — NOT the precedence-merged `mean`. */
+  malMean?: number;
+  /** AniList's own community mean, already on MAL's 1-10 scale. */
+  anilistMean?: number;
+  /** myScore − round(comparison provider's mean). Positive = rates it above the crowd. */
+  gap?: number;
+  /** Which board row it lands in on the requested axis. */
+  row: number;
+}
+
+export interface McpTierRow {
+  /** Row value: 10..1 on a score axis, +5..−5 on the gap axis. */
+  row: number;
+  count: number;
+}
+
+export interface TierGapSummary {
+  comparable: number;
+  /** Mean of (my score − provider's rounded mean). Positive = generous vs the crowd. */
+  averageGap: number;
+  above: number;
+  equal: number;
+  below: number;
+}
+
+export interface TierListResult {
+  axis: TierAxis;
+  /** Which provider the gaps compare against. */
+  vs: GapProvider;
+  /** Titles matching the filters, after gap narrowing — what `items` pages through. */
+  total: number;
+  /** Every row with its count, board order. The tier list's SHAPE, always complete. */
+  distribution: McpTierRow[];
+  /** Titles with no value on this axis: unrated, or the provider has no mean. */
+  unplaced: number;
+  /** How the owner compares to the provider overall. Null when nothing is comparable. */
+  gapSummary: TierGapSummary | null;
+  /** The titles themselves, paged. `distribution` already covers the whole board. */
+  items: McpTierEntry[];
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface TierListParams {
+  axis?: TierAxis;
+  vs?: GapProvider;
+  statuses?: string[];
+  /** Keep only titles at least this far above the provider (negatives for below). */
+  minGap?: number;
+  maxGap?: number;
+  genres?: string[];
+  mediaTypes?: string[];
+  minYear?: number;
+  maxYear?: number;
+  search?: string;
+  /** `gap` (default) is signed: desc surfaces where the owner is most generous. */
+  sortBy?: 'gap' | 'abs_gap' | 'my_score' | 'mean' | 'title';
+  sortDir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+const DEFAULT_TIER_LIMIT = 25;
+
+/**
+ * The tier board as data — the owner's scores bucketed into rows, and how each
+ * title's score compares to the community mean.
+ *
+ * Scope matches the board exactly: the four statuses that mean "seen, or being
+ * seen". `plan_to_watch` is excluded because you cannot rate what you have not
+ * watched, so it would be a row of blanks.
+ *
+ * ⚠️ **The comparison reads each provider's OWN mean, never `catalog.mean`** —
+ * see `providerMeans`. Comparing against the merged value would compare a title
+ * to itself whenever that provider won the precedence for the field.
+ *
+ * `distribution` is always the WHOLE board, even when `items` is one page: the
+ * shape is the cheap part and the thing a tier list actually IS, so it must not
+ * become a function of paging.
+ */
+export function tierList(params: TierListParams): TierListResult {
+  const axis: TierAxis = params.axis ?? 'gap';
+  const vs: GapProvider = params.vs ?? 'mal';
+  const limit = params.limit ?? DEFAULT_TIER_LIMIT;
+  const offset = params.offset ?? 0;
+  const statuses = params.statuses && params.statuses.length > 0
+    ? new Set<string>(params.statuses)
+    : new Set<string>(TIER_STATUSES);
+
+  let rows = getAnimeForDisplay().filter(a => {
+    const s = getEffectiveStatus(a);
+    return s != null && statuses.has(s);
+  });
+
+  rows = applyNarrowingFilters(rows, {
+    mediaTypes: params.mediaTypes,
+    search: params.search,
+    minYear: params.minYear ?? null,
+    maxYear: params.maxYear ?? null,
+    genres: params.genres,
+    minScore: null,
+    maxScore: null,
+  });
+
+  // Build every entry once; the axis decides which value places it in a row.
+  const built = rows.map(a => {
+    const means = providerMeans(a);
+    const myScore = getEffectiveScore(a);
+    const gap = gapOf(myScore, means[vs]);
+
+    let row: number | null;
+    if (axis === 'me') {
+      row = myScore != null && myScore > 0 ? myScore : null;
+    } else if (axis === 'gap') {
+      row = gap === null ? null : clampGapRow(gap);
+    } else {
+      const mean = means[axis];
+      row = mean == null ? null : meanRow(mean);
+    }
+
+    const entry: McpTierEntry = {
+      id: a.id,
+      title: getPrimaryTitle(a),
+      year: a.catalog.startSeason?.year,
+      mediaType: a.catalog.mediaType,
+      status: getEffectiveStatus(a),
+      myScore: myScore && myScore > 0 ? myScore : undefined,
+      malMean: means.mal ?? undefined,
+      anilistMean: means.anilist ?? undefined,
+      gap: gap ?? undefined,
+      row: row ?? 0,
+    };
+    for (const k of ['year', 'mediaType', 'status', 'myScore', 'malMean', 'anilistMean', 'gap'] as const) {
+      if (entry[k] === undefined) delete entry[k];
+    }
+    return { entry, placed: row !== null };
+  });
+
+  const placed = built.filter(b => b.placed);
+  const unplaced = built.length - placed.length;
+
+  // The board's shape, over everything placed — never a function of paging.
+  const boardRows = axis === 'gap' ? GAP_ROWS : TIER_SCORES;
+  const counts = new Map<number, number>(boardRows.map(r => [r, 0]));
+  for (const b of placed) counts.set(b.entry.row, (counts.get(b.entry.row) ?? 0) + 1);
+  const distribution = boardRows.map(row => ({ row, count: counts.get(row) ?? 0 }));
+
+  // Gap stats span every comparable title in scope, independent of the axis —
+  // "how do I compare to MAL" is worth answering even while reading a score axis.
+  const gaps = built.map(b => b.entry.gap).filter((g): g is number => g !== undefined);
+  const gapSummary: TierGapSummary | null = gaps.length
+    ? {
+        comparable: gaps.length,
+        averageGap: Math.round((gaps.reduce((s, g) => s + g, 0) / gaps.length) * 100) / 100,
+        above: gaps.filter(g => g > 0).length,
+        equal: gaps.filter(g => g === 0).length,
+        below: gaps.filter(g => g < 0).length,
+      }
+    : null;
+
+  // Gap filters narrow the ITEMS, not the distribution: the shape answers "what
+  // does my board look like", these answer "show me the disagreements".
+  let items = placed.map(b => b.entry);
+  const { minGap, maxGap } = params;
+  if (minGap != null) items = items.filter(e => e.gap != null && e.gap >= minGap);
+  if (maxGap != null) items = items.filter(e => e.gap != null && e.gap <= maxGap);
+
+  const dir = (params.sortDir ?? 'desc') === 'asc' ? 1 : -1;
+  const sortBy = params.sortBy ?? 'gap';
+  const keyOf = (e: McpTierEntry): number | string | null => {
+    switch (sortBy) {
+      case 'gap': return e.gap ?? null;
+      case 'abs_gap': return e.gap == null ? null : Math.abs(e.gap);
+      case 'my_score': return e.myScore ?? null;
+      case 'mean': return (vs === 'anilist' ? e.anilistMean : e.malMean) ?? null;
+      case 'title': return e.title.toLowerCase();
+    }
+  };
+  items = [...items].sort((a, b) => {
+    const av = keyOf(a);
+    const bv = keyOf(b);
+    // No value sorts last whatever the direction — same rule as sortAnimeRecords.
+    if (av === null || bv === null) {
+      if (av === bv) return 0;
+      return av === null ? 1 : -1;
+    }
+    if (av < bv) return -dir;
+    if (av > bv) return dir;
+    return 0;
+  });
+
+  const total = items.length;
+  const page = items.slice(offset, offset + limit);
+
+  return {
+    axis,
+    vs,
+    total,
+    distribution,
+    unplaced,
+    gapSummary,
+    items: page,
+    offset,
+    limit,
+    hasMore: total > offset + page.length,
+  };
 }
