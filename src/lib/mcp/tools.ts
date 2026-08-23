@@ -1,11 +1,25 @@
 /**
  * The MCP tool handlers — thin adapters over the existing domain functions.
  *
- * **Read-only by construction.** Nothing under `src/lib/mcp/` may import a write
- * path; that is enforced in `eslint.config.mjs` rather than left to discipline,
- * the same way the client-side store guard is. A tool that mutates the store or
- * pushes to a provider does not belong here — the surface exists so a model can
- * ASK about the local record, not edit it.
+ * **Read-only about the RECORD, with one deliberate carve-out: boxes.** Nothing
+ * under `src/lib/mcp/` may import a write path; that is enforced in
+ * `eslint.config.mjs` rather than left to discipline, the same way the
+ * client-side store guard is. A tool that rates, syncs, hides or pushes to a
+ * provider still does not belong here — the surface exists so a model can ASK
+ * about the local record, not edit it.
+ *
+ * `user/boxes.json` is the exception, opened deliberately (see the "/boxes"
+ * section of CLAUDE.md). The reason it is a good one and rating is not: a box is
+ * a JUDGEMENT the owner is trying to articulate, and articulating "what these
+ * eight shows have in common" is the thing a model is actually good at, while
+ * the metadata ranker measurably cannot do it for a form or tone axis. A score
+ * is the opposite — it is the owner's own verdict, the ground truth every ranking
+ * here is measured against, and a model has no standing to write one.
+ *
+ * ⚠️ The carve-out is NARROW and the lint rule keeps it that way: `deleteBox` is
+ * still blocked by name. Filling a box wrong costs a few chip clicks to undo;
+ * dropping one throws away labeling that exists nowhere else and that no provider
+ * can re-supply.
  *
  * Server-only (reads the store).
  */
@@ -30,6 +44,10 @@ import {
   clampGapRow, gapOf, meanRow, providerMeans, type GapProvider, type TierAxis,
 } from '@/lib/domain/tierGap';
 import { projectCard, projectDetail, type McpAnimeCard, type McpAnimeDetail } from '@/lib/mcp/project';
+import {
+  getBoxes, getBox, createBox, updateBox, setBoxMembers, rankBoxCandidates,
+} from '@/lib/reco/boxes';
+import { DEFAULT_BOX_EMOJI } from '@/models/anime';
 import type { AnimeRecord, RecoContribution, SortColumn } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -870,4 +888,136 @@ export function tierList(params: TierListParams, titleLang: TitleLanguage): Tier
     limit,
     hasMore: total > offset + page.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Boxes — the one writable surface here
+// ---------------------------------------------------------------------------
+
+export interface McpBox {
+  id: string;
+  name: string;
+  emoji: string;
+  count: number;
+  /** Member titles, best-scored first — what the box actually looks like. */
+  members: { id: string; title: string; score?: number }[];
+}
+
+/** Every box, with its members resolved to titles. */
+export function listBoxes(titleLang: TitleLanguage): { boxes: McpBox[] } {
+  const all = getAnimeForDisplay();
+  const byId = new Map(all.map(a => [a.id, a]));
+  return {
+    boxes: getBoxes().map(box => ({
+      id: box.id,
+      name: box.name,
+      emoji: box.emoji || DEFAULT_BOX_EMOJI,
+      count: box.members.length,
+      members: box.members
+        .map(id => byId.get(id))
+        .filter((a): a is AnimeRecord => !!a)
+        .sort((a, b) => (getEffectiveScore(b) || 0) - (getEffectiveScore(a) || 0))
+        .map(a => {
+          const score = getEffectiveScore(a);
+          return { id: a.id, title: getPrimaryTitle(a, titleLang), ...(score ? { score } : {}) };
+        }),
+    })),
+  };
+}
+
+/**
+ * What the metadata ranker would propose for a box, with the values that earned
+ * each one — the same `rankBoxCandidates` the /boxes UI runs.
+ *
+ * Exposed so a model reasons WITH the ranker rather than instead of it: on a
+ * content axis the ranking is strong and the model's job is to filter it, while
+ * on a form or tone axis (measured: eight deliberately-weird titles shared one
+ * tag and one T1 credit) the ranking drifts and the model should say so and work
+ * from `list_anime` instead. Handing over the matched values is what makes that
+ * distinction visible rather than something to guess at.
+ */
+export function boxCandidates(
+  boxId: string,
+  limit: number,
+  titleLang: TitleLanguage
+): { found: false; error: string } | {
+  found: true;
+  boxId: string;
+  seeds: number;
+  candidates: { id: string; title: string; score: number; franchise: string[]; matched: { field: string; values: string[] }[] }[];
+} {
+  const box = getBox(boxId);
+  if (!box) return { found: false, error: `No box with id "${boxId}". Call list_boxes.` };
+
+  const all = getAnimeForDisplay();
+  const held = new Set(box.members);
+  return {
+    found: true,
+    boxId,
+    seeds: box.members.length,
+    candidates: rankBoxCandidates(box, all, { limit }).map(g => {
+      const anchor = g.members.find(a => a.id === g.id) ?? g.members[0];
+      return {
+        id: g.id,
+        title: getPrimaryTitle(anchor, titleLang),
+        score: Number(g.score.toFixed(4)),
+        // What accepting adds, so a model proposing the group knows its blast radius.
+        franchise: g.members.filter(a => !held.has(a.id)).map(a => a.id),
+        matched: g.matched.map(m => ({ field: m.field, values: m.values.map(String) })),
+      };
+    }),
+  };
+}
+
+/** Create a box. Returns it, so the caller can fill it in the same turn. */
+export function createBoxTool(name: string, emoji: string | undefined, titleLang: TitleLanguage):
+  { box: McpBox } {
+  const created = createBox(name, emoji);
+  const box = listBoxes(titleLang).boxes.find(b => b.id === created.id)!;
+  return { box };
+}
+
+/**
+ * Edit a box: rename, re-emoji, and add/remove members.
+ *
+ * Incremental (`add`/`remove`) rather than a full member list, for the reason the
+ * HTTP route is: a replacement is a read-modify-write, and a model working from a
+ * `list_boxes` snapshot taken several turns ago would silently drop everything
+ * filed since. Unknown ids are reported in `rejected` rather than dropped
+ * quietly — a hallucinated id must not look like a successful write.
+ */
+export function editBox(
+  boxId: string,
+  patch: { name?: string; emoji?: string; add?: string[]; remove?: string[] },
+  titleLang: TitleLanguage
+): { found: false; error: string } | { found: true; box: McpBox; added: string[]; removed: string[]; rejected: string[] } {
+  const box = getBox(boxId);
+  if (!box) return { found: false, error: `No box with id "${boxId}". Call list_boxes.` };
+
+  if (patch.name !== undefined || patch.emoji !== undefined) {
+    updateBox(boxId, {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.emoji !== undefined ? { emoji: patch.emoji } : {}),
+    });
+  }
+
+  const known = new Set(getAnimeForDisplay().map(a => a.id));
+  const rejected: string[] = [];
+  const valid = (ids: string[] | undefined): string[] =>
+    (ids ?? []).filter(id => {
+      const ok = isCanonicalId(id) && known.has(id);
+      if (!ok) rejected.push(id);
+      return ok;
+    });
+
+  const add = valid(patch.add);
+  const remove = valid(patch.remove);
+  if (add.length > 0 || remove.length > 0) {
+    const dropped = new Set(remove);
+    const current = getBox(boxId)!.members;
+    setBoxMembers(boxId, [...current.filter(m => !dropped.has(m)), ...add]);
+  }
+
+  const updated = listBoxes(titleLang).boxes.find(b => b.id === boxId)!;
+  return { found: true, box: updated, added: add, removed: remove, rejected };
 }

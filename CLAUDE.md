@@ -704,15 +704,27 @@ One focal node, its direct neighbours, and **re-centring as the only expansion**
 ### MCP — the store as a read-only tool surface
 
 `POST /api/anime/mcp` ([mcp.ts](src/pages/api/anime/mcp.ts)) exposes the local record to an MCP
-client (`claude mcp add --transport http anime-tracker http://<host>:12350/api/anime/mcp`). Eight
+client (`claude mcp add --transport http anime-tracker http://<host>:12350/api/anime/mcp`). Twelve
 tools, in [mcp/server.ts](src/lib/mcp/server.ts) (schemas) over [mcp/tools.ts](src/lib/mcp/tools.ts)
 (handlers): `search_anime`, `get_anime`, `list_anime`, `list_genres`, `my_stats`, `recommend`,
-`similar_to`, `tier_list`.
+`similar_to`, `tier_list`, plus the four box tools — `list_boxes`, `box_candidates`, `create_box`,
+`edit_box`.
 
-- **Read-only by construction, and that is enforced.** A *second* `files` block in
-  [eslint.config.mjs](eslint.config.mjs) fails the build when anything under `src/lib/mcp/**` or
-  `api/anime/mcp.ts` imports a write path — the same posture as the client-safety guard below, not
-  a convention. Adding a write tool means deliberately unmaking that, not just adding a file.
+- **Read-only about the RECORD, enforced — with exactly one carve-out: boxes.** A *second* `files`
+  block in [eslint.config.mjs](eslint.config.mjs) fails the build when anything under
+  `src/lib/mcp/**` or `api/anime/mcp.ts` imports a write path — the same posture as the
+  client-safety guard below, not a convention. **Ratings, statuses, hides and syncs stay
+  unreachable**, and that is the point rather than caution: the owner's score is the ground truth
+  every ranking here is measured against (`scripts/backtest-reco.js` grades the engine on exactly
+  those labels), so a model writing one would be marking its own homework.
+- **Boxes are the exception, opened deliberately.** `@/lib/reco/boxes` is importable because a box
+  is a *judgement the owner is trying to articulate*, and "what do these eight shows have in
+  common" is the thing a model is genuinely good at — measurably better than `rankBoxCandidates`,
+  which cannot see a form or tone axis at all. ⚠️ **`deleteBox` is still blocked by name**, via an
+  `importNames` entry rather than the blanket pattern: filling a box wrong costs a few chip clicks
+  to undo, but dropping one throws away labeling that exists in exactly one place and that no
+  provider can re-supply. Keep any future carve-out this shape — a named exception with a stated
+  reason, never widening the pattern list.
 - **The tools are thin adapters over the existing domain functions**, never a second
   implementation: `searchCatalog`, `computeStats`, `computeFeed`, `loadSimilarTo`,
   `applyNarrowingFilters`, `sortAnimeRecords`, `tierGap.ts`. A tool needing new behaviour gets it
@@ -735,7 +747,11 @@ tools, in [mcp/server.ts](src/lib/mcp/server.ts) (schemas) over [mcp/tools.ts](s
   external audit (docs/audits/recommend-algo-notes.md) came from what this surface *showed*, not
   from the reader — which is why `projectWhy` now trims per sign, `recommend` states that negative
   contributions are model output, and `tier_list` spells out its filter asymmetry. Treat a
-  misleading description as a bug of the same weight as a scoring bug.
+  misleading description as a bug of the same weight as a scoring bug. The box tools are
+  written to that standard: `box_candidates` states in its own description that its ranking
+  drifts on a tone axis and names the measurement, because a confident-looking ordering is
+  exactly what a model would otherwise trust; `edit_box` says to CHECK `rejected`, since an
+  unresolvable id comes back there rather than failing the call.
 
 ### Scheduled sync (cron-sync) — nine steps, none of them a gate
 

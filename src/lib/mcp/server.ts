@@ -1,16 +1,28 @@
 /**
- * Builds the MCP server and registers the read-only tool set.
+ * Builds the MCP server and registers the tool set.
  *
  * A fresh server is built **per request** by `api/anime/mcp.ts` (stateless
  * transport), which costs nothing: the expensive state is the store's
  * mtime-keyed parse cache and row cache, which are module-level and survive.
  *
- * Every tool is annotated `readOnlyHint: true` because every tool IS read-only —
- * see the guard note in `tools.ts`. Server-only (its handlers read the store).
+ * Every tool carries `readOnlyHint: true` EXCEPT `create_box` / `edit_box`, the
+ * deliberate carve-out documented in the header of `tools.ts` — the annotation
+ * is what tells a client which is which, so it has to stay honest per tool.
+ *
+ * ⚠️ A tool description is part of the contract, not decoration: both wrong
+ * claims in docs/audits/recommend-algo-notes.md came from what this surface
+ * SHOWED, not from the reader. The box descriptions therefore state outright
+ * where the ranker is unreliable, rather than leaving a model to infer it from a
+ * confident-looking ordering.
+ *
+ * Server-only (its handlers read and, for boxes, write the store).
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, tierList, MCP_SORT_KEYS } from '@/lib/mcp/tools';
+import {
+  getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, tierList,
+  listBoxes, boxCandidates, createBoxTool, editBox, MCP_SORT_KEYS,
+} from '@/lib/mcp/tools';
 import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 import { getTitleLanguage } from '@/lib/config/settings';
 
@@ -40,12 +52,18 @@ export function buildServer(): McpServer {
     { name: 'anime-tracker', version: '1.0.0' },
     {
       instructions:
-        'Read-only access to a personal anime tracker: a local catalog (~25k titles ' +
+        'A personal anime tracker: a local catalog (~25k titles ' +
         'merged from MyAnimeList, AniList and SIMKL) plus the owner\'s own watch ' +
         'statuses and scores. Titles are keyed by a canonical id like "a_1234" — ' +
         'always get one from search_anime before calling another tool. `status` and ' +
         '`score` fields are the OWNER\'s personal state (score is 1-10); `mean` is the ' +
-        'community average. This server never writes: it cannot rate, update or sync anything.',
+        'community average. It cannot rate, update, hide or sync anything — the owner\'s ' +
+        'scores and statuses are read-only here, deliberately: they are the ground truth ' +
+        'every ranking in this app is measured against. The ONE writable thing is BOXES ' +
+        '(list_boxes / box_candidates / create_box / edit_box): hand-drawn taste axes over ' +
+        'titles the owner has watched, like "made me cry" or "watch it for the animation". ' +
+        'Helping name and fill those is what this server is open for; boxes cannot be ' +
+        'deleted through it.',
     }
   );
 
@@ -285,6 +303,96 @@ export function buildServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => json(listGenres())
+  );
+
+  // --- Boxes: the writable carve-out (see the header of `mcp/tools.ts`) -----
+
+  server.registerTool(
+    'list_boxes',
+    {
+      title: 'List taste boxes',
+      description:
+        'The owner\'s « boîtes » — hand-drawn taste axes over titles they have WATCHED, each ' +
+        'a name plus a set of members (e.g. "anime qui m\'ont chialer", "concept bizarre"). A ' +
+        'box records what no catalog field encodes — tone, register, why a show landed — ' +
+        'which is exactly why the owner writes them by hand. Members come back best-scored ' +
+        'first. Start here to learn what a box currently MEANS before proposing anything for it.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async () => json(listBoxes(titleLang))
+  );
+
+  server.registerTool(
+    'box_candidates',
+    {
+      title: 'Ranked candidates for a box',
+      description:
+        'What the app\'s own metadata ranker proposes for a box, from the owner\'s watched ' +
+        'list, with the tag/genre/studio/staff values that earned each one. Read those values ' +
+        'before trusting the order: on a CONTENT axis the ranking is strong and your job is to ' +
+        'filter it, but on a form or tone axis it drifts badly — measured, eight deliberately ' +
+        'weird titles shared only the tag `Philosophy` and one staff credit, and the ranking ' +
+        'wandered off to Death Note and Monster. When the matched values look thin or ' +
+        'off-topic, say so and reason from list_anime instead of ranking down this list. ' +
+        '`franchise` is what accepting a group would add, so you can state the blast radius.',
+      inputSchema: {
+        boxId: z.string().describe('Box id from list_boxes.'),
+        limit: z.number().int().min(1).max(100).optional().describe('Max candidates (default 30).'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ boxId, limit }) => {
+      const result = boxCandidates(boxId, limit ?? 30, titleLang);
+      if (!result.found) return { ...json({ error: result.error }), isError: true };
+      return json(result);
+    }
+  );
+
+  server.registerTool(
+    'create_box',
+    {
+      title: 'Create a taste box',
+      description:
+        'Create a new empty box, then fill it with edit_box. The name is the owner\'s own ' +
+        'vocabulary rather than a tidy category — keep their phrasing when they give you one. ' +
+        'Returns the box including its generated id.',
+      inputSchema: {
+        name: z.string().min(1).describe('Box name, in the owner\'s own words.'),
+        emoji: z.string().max(4).optional().describe('Optional icon; defaults to 📦.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ name, emoji }) => json(createBoxTool(name, emoji, titleLang))
+  );
+
+  server.registerTool(
+    'edit_box',
+    {
+      title: 'Edit a taste box',
+      description:
+        'Add or remove members, rename, or change the icon. Members are canonical ids — get ' +
+        'them from box_candidates, list_anime or search_anime. Ids that do not resolve come ' +
+        'back in `rejected` instead of failing the call, so CHECK that field rather than ' +
+        'assuming every id landed. Adding is incremental, never a replacement, so a stale ' +
+        'list_boxes snapshot cannot wipe anything. Only add a title the owner has actually ' +
+        'watched and that you can justify against what the box means: a box is their ' +
+        'judgement, and a wrong member quietly skews the recommendations built from it. ' +
+        'There is no delete — boxes are removed in the app.',
+      inputSchema: {
+        boxId: z.string().describe('Box id from list_boxes.'),
+        add: z.array(z.string()).optional().describe('Canonical ids to file into the box.'),
+        remove: z.array(z.string()).optional().describe('Canonical ids to take out.'),
+        name: z.string().min(1).optional().describe('New name.'),
+        emoji: z.string().max(4).optional().describe('New icon.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ boxId, add, remove, name, emoji }) => {
+      const result = editBox(boxId, { add, remove, name, emoji }, titleLang);
+      if (!result.found) return { ...json({ error: result.error }), isError: true };
+      return json(result);
+    }
   );
 
   return server;

@@ -66,7 +66,6 @@ const WRITE_MODULES = [
   '@/lib/providers/*/personalSync',
   '@/lib/reco/refresh',
   '@/lib/reco/feedback',
-  '@/lib/reco/boxes',
 ].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
 
 const READ_ONLY_MESSAGE =
@@ -74,7 +73,16 @@ const READ_ONLY_MESSAGE =
   'not edit it. Reads are fine (getAnimeForDisplay, getAnimeByCanonicalId, the get*/list* ' +
   'slice readers); anything that mutates the store or pushes to a provider does not belong ' +
   'under src/lib/mcp/. If a write tool is ever wanted, that is a deliberate decision to make ' +
-  'here first, not something to slip past this rule.';
+  'here first, not something to slip past this rule — as it was for boxes, the one carve-out: ' +
+  '`@/lib/reco/boxes` is importable so a model can help name and fill a taste axis, which is ' +
+  'the thing it is actually good at and the thing the metadata ranker measurably cannot do for ' +
+  'a tone axis. Ratings and statuses stay read-only: they are the ground truth every ranking ' +
+  'in this app is measured against.';
+
+const BOX_WRITE_MESSAGE =
+  'Boxes are writable from the MCP surface, but not deletable. Creating, renaming and adding or ' +
+  'removing members are all recoverable in a few clicks; deleting a box throws away labeling ' +
+  'that exists in exactly one place and that no provider can re-supply. Remove a box in the app.';
 
 export default defineConfig([
   ...nextVitals,
@@ -132,6 +140,16 @@ export default defineConfig([
               importNames: ['saveRecommendationsData'],
               allowTypeImports: true,
               message: READ_ONLY_MESSAGE,
+            },
+            {
+              // The ONE writable surface: `user/boxes.json`. `deleteBox` stays
+              // blocked by name — filling a box wrong costs a few chip clicks to
+              // undo, but dropping one throws away labeling that exists nowhere
+              // else and that no provider can re-supply.
+              name: '@/lib/reco/boxes',
+              importNames: ['deleteBox'],
+              allowTypeImports: true,
+              message: BOX_WRITE_MESSAGE,
             },
           ],
           patterns: [
