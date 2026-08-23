@@ -5,6 +5,9 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
 
 ## Features
 
+- **Youtube** - I watch some anime on youtube (specially mini, ova, etc) and I would like to have a way to add them to my list. I know that
+  there is a way to add them manually, but it is not very practical. I would like
+  to have a way to add them automatically, like the other providers.
 - **Settable preferences** — main title language, etc. `defaultTitleLanguage` is
   the real one: its rendering seam `getPrimaryTitle` is English-hardcoded across
   ~15 server + client call sites, so it is a cross-cutting change. Note it is a

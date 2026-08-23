@@ -18,9 +18,9 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, MALListStatus, MALPersonalEntry } from '@/models/anime';
+import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, MALListStatus, MALPersonalEntry, SourceIds } from '@/models/anime';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import { getRegistry, resolveByMalId, resolveCanonicalIds, toNum } from '@/lib/store/registry';
+import { buildCrosswalkIndexes, getRegistry, resolveByMalId, resolveCanonicalIds, toNum } from '@/lib/store/registry';
 import { invalidateRecordCache } from '@/lib/store/recordCache';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
 
@@ -203,11 +203,53 @@ export function getAllSimklEntries(): Record<string, SimklPersonalEntry> {
   return readJsonFile<Record<string, SimklPersonalEntry>>(ANIME_SIMKL_FILE, {});
 }
 
+/**
+ * Where one SIMKL library item lands, given that **SIMKL's foreign keys are not
+ * trustworthy and its own id is**.
+ *
+ * `resolveCanonicalIds` looks up mal → anilist → simkl, first hit wins, which is
+ * right for MAL- and AniList-sourced payloads. It is wrong for SIMKL's, because
+ * SIMKL routinely files a chibi/short companion series' MAL id on the MAIN
+ * show's record: live-measured on this store, `Youjo Senki II` (simkl 1670325)
+ * reports `ids.mal` = 64577 (*Youjo Shenki 2*, the chibi) while its own
+ * `ids.anilist` = 135865 (the main show) — the payload contradicts itself, so
+ * one of the two foreign keys is provably wrong and SIMKL will not say which.
+ * Taking `ids.mal` first filed the main show's watch state onto the chibi.
+ *
+ * So: **when SIMKL's own id is already anchored to a canonical record and its
+ * `ids.mal` names a different one, the anchor wins and every contested foreign
+ * id is discarded** — the returned crosswalk carries `simkl` (+ SIMKL's own
+ * slug) and nothing else. Dropping `mal` is not optional: leaving it in would
+ * make `resolveCanonicalIds`' merge loop OVERWRITE the anchor record's real MAL
+ * id with the chibi's.
+ *
+ * Two things this deliberately does NOT do:
+ *  - it never fires for an item SIMKL has not filed before (no anchor ⇒ nothing
+ *    to contradict ⇒ plain mal-first resolution, as before);
+ *  - it never fires when the anchor and `ids.mal` agree — which is the case for
+ *    the four titles here where it is SIMKL's `ids.anilist` that is the odd one
+ *    out (`K-On!!: Keikaku!`, …). Neither foreign key is reliably right, so the
+ *    rule keys on SIMKL's own id rather than on picking a better foreign one.
+ */
+function simklCrosswalkFor(
+  entry: SimklPersonalEntry,
+  bySimkl: Map<number, string>,
+  byMal: Map<number, string>
+): SourceIds {
+  const anchored = bySimkl.get(entry.simkl_id);
+  const viaMal = byMal.get(entry.mal_id);
+  if (anchored && viaMal && anchored !== viaMal) {
+    return { simkl: entry.simkl_id, ...(entry.ids?.slug ? { slug: entry.ids.slug } : {}) };
+  }
+  return { ...(entry.ids || {}), mal: entry.mal_id, simkl: entry.simkl_id };
+}
+
 export function upsertSimklEntries(entries: SimklPersonalEntry[]): void {
   if (entries.length === 0) return;
   const existing = getAllSimklEntries();
+  const { byMal, bySimkl } = buildCrosswalkIndexes();
   const ids = resolveCanonicalIds(
-    entries.map(e => ({ ...(e.ids || {}), mal: e.mal_id, simkl: e.simkl_id }))
+    entries.map(e => simklCrosswalkFor(e, bySimkl, byMal))
   ).ids;
   entries.forEach((entry, i) => {
     existing[ids[i]] = entry;

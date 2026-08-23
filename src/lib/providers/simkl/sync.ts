@@ -4,7 +4,7 @@
  * through the store. See docs/simkl/apirules.md for the protocol.
  */
 import { getSimklAuthData, isSimklTokenValid, getSimklCheckpoint, saveSimklCheckpoint, simklFetch, SimklCheckpoint } from '@/lib/providers/simkl/client';
-import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries } from '@/lib/store';
+import { upsertSimklEntries, removeSimklEntries, getAllSimklEntries, buildCrosswalkIndexes } from '@/lib/store';
 import { mapSimklStatus } from '@/lib/providers/discrepancy';
 import { SimklPersonalEntry, SourceIds } from '@/models/anime';
 
@@ -85,6 +85,36 @@ async function fetchActivities(token: string): Promise<RawActivities> {
   return (await res.json()) as RawActivities;
 }
 
+/**
+ * Drop entries filed under a canonical id that their own SIMKL id is no longer
+ * anchored to — **one SIMKL library item owns exactly one canonical record**.
+ *
+ * This exists because SIMKL's `ids.mal` drifts. Live-measured on this store:
+ * simkl 2743422 (`Re:Zero … 4th Season`) reported `ids.mal` = 63830 (the chibi
+ * *Break Time* short) for a while, then went back to 61316. Each mapping wrote
+ * an entry under a different canonical id and the old one stayed forever, so one
+ * library item surfaced as two watched anime — and pushed the second one to
+ * AniList on the next cron tick.
+ *
+ * Local and free (registry + slice, no request), so it runs on EVERY delta
+ * rather than behind `removed_from_list` like the remote diff below: the drift
+ * it repairs has nothing to do with a deletion, and gating it there is what let
+ * the duplicates accumulate unnoticed.
+ *
+ * Anchored *nowhere* is left alone — that is a registry gap, not a duplicate,
+ * and removing on it would wipe entries whose crosswalk was simply never written.
+ */
+function dropOrphanedEntries(): number {
+  const { bySimkl } = buildCrosswalkIndexes();
+  const local = getAllSimklEntries(); // canonical-keyed
+  const toRemove = Object.keys(local).filter(key => {
+    const anchor = bySimkl.get(local[key].simkl_id);
+    return anchor !== undefined && anchor !== key;
+  });
+  if (toRemove.length) removeSimklEntries(toRemove);
+  return toRemove.length;
+}
+
 /** Reconcile deletions: diff local simkl ids against a simkl_ids_only pull. */
 async function reconcileDeletions(token: string): Promise<number> {
   const res = await simklFetch('/sync/all-items/anime?extended=simkl_ids_only', token);
@@ -121,8 +151,9 @@ export async function performSimklSync(): Promise<SimklSyncResult> {
       const raw = await fetchAllItems(token.access_token);
       const { entries, orphansSkipped } = normalizeAll(raw);
       upsertSimklEntries(entries);
+      const orphaned = dropOrphanedEntries();
       saveSimklCheckpoint({ lastActivityAll: remoteAll, lastRemovedFromList: remoteRemoved, lastRatedAt: remoteRated });
-      return { ok: true, phase: 'initial', added: entries.length, removed: 0, orphansSkipped };
+      return { ok: true, phase: 'initial', added: entries.length, removed: orphaned, orphansSkipped };
     }
 
     const allMoved = !!remoteAll && remoteAll !== checkpoint.lastActivityAll;
@@ -145,10 +176,12 @@ export async function performSimklSync(): Promise<SimklSyncResult> {
     const { entries, orphansSkipped } = normalizeAll(raw);
     upsertSimklEntries(entries);
 
+    // Free and local, so unconditional — see dropOrphanedEntries.
+    let removed = dropOrphanedEntries();
+
     // Deletion reconciliation only when the removed_from_list timestamp moved
-    let removed = 0;
     if (remoteRemoved && remoteRemoved !== checkpoint.lastRemovedFromList) {
-      removed = await reconcileDeletions(token.access_token);
+      removed += await reconcileDeletions(token.access_token);
     }
 
     const next: SimklCheckpoint = { lastActivityAll: remoteAll, lastRemovedFromList: remoteRemoved, lastRatedAt: remoteRated };

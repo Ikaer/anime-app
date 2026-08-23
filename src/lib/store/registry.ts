@@ -78,10 +78,21 @@ function buildAnilistIndex(registry: Record<string, SourceIds>): Map<number, str
  * Returned as maps rather than a `resolve(id)` function because callers convert
  * whole edge sets: `resolveByMalId` rebuilds the index per call, which is fine
  * for a route param and quadratic for six thousand edges.
+ *
+ * `bySimkl` rides along for `upsertSimklEntries`, which needs to compare SIMKL's
+ * OWN id against its (unreliable) `ids.mal` before deciding where an item lands.
  */
-export function buildCrosswalkIndexes(): { byMal: Map<number, string>; byAnilist: Map<number, string> } {
+export function buildCrosswalkIndexes(): {
+  byMal: Map<number, string>;
+  byAnilist: Map<number, string>;
+  bySimkl: Map<number, string>;
+} {
   const registry = getRegistry();
-  return { byMal: buildMalIndex(registry), byAnilist: buildAnilistIndex(registry) };
+  return {
+    byMal: buildMalIndex(registry),
+    byAnilist: buildAnilistIndex(registry),
+    bySimkl: buildSimklIndex(registry),
+  };
 }
 
 /** Same as `buildMalIndex`, keyed by the `simkl` crosswalk field instead. */
