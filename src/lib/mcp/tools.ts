@@ -12,6 +12,9 @@
 import { getAllAnilistCast, getAnimeByCanonicalId, getAnimeForDisplay, isCanonicalId } from '@/lib/store';
 import { searchCatalog, MIN_QUERY_LENGTH } from '@/lib/domain/globalSearch';
 import { computeStats, STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
+import { computeFeed } from '@/lib/reco/feed';
+import { getRecommendationsData } from '@/lib/reco/data';
+import type { Lang } from '@/lib/i18n';
 import { buildRelationIndex, resolveRelations, type RelationIndex } from '@/lib/domain/relations';
 import {
   applyNarrowingFilters,
@@ -21,7 +24,7 @@ import {
 } from '@/lib/domain/animeUtils';
 import { getGenreVocabulary, type GenreVocabulary } from '@/lib/domain/genreVocabulary';
 import { projectCard, projectDetail, type McpAnimeCard, type McpAnimeDetail } from '@/lib/mcp/project';
-import type { AnimeRecord, SortColumn } from '@/models/anime';
+import type { AnimeRecord, RecoContribution, SortColumn } from '@/models/anime';
 
 /** Default page size for list_anime; the tool schema caps the ceiling. */
 const DEFAULT_LIST_LIMIT = 20;
@@ -375,4 +378,113 @@ function compactEntry(e: McpStatEntry): McpStatEntry {
   if (e.id === undefined) delete e.id;
   if (e.detail === undefined) delete e.detail;
   return e;
+}
+
+// ---------------------------------------------------------------------------
+// recommend
+// ---------------------------------------------------------------------------
+
+/** One recommended title: the card, plus why the engine put it there. */
+export interface McpRecommendation extends McpAnimeCard {
+  /** The additive weighted-sum affinity score the ranking is by. */
+  affinityScore: number;
+  /** Seeds (titles the owner liked) whose crowd recos point here. */
+  becauseOf: Array<{ id: string; title: string }>;
+  /** Top contributing sources, strongest first — the "why", already localized. */
+  why: Array<{ source: string; contribution: number; detail?: string }>;
+}
+
+export interface RecommendParams {
+  limit?: number;
+  nicheMode?: boolean;
+  threshold?: number;
+  diversity?: number;
+  mediaTypes?: string[];
+  genres?: string[];
+  minMean?: number;
+  maxMean?: number;
+  minYear?: number;
+  maxYear?: number;
+  search?: string;
+  lang?: Lang;
+}
+
+export interface RecommendResult {
+  items: McpRecommendation[];
+  total: number;
+  /** ISO timestamp of the last cache refresh, or null if it has never run. */
+  lastRefresh: string | null;
+  /** Set when the answer is empty or degraded, so a thin feed is never silent. */
+  note?: string;
+}
+
+const DEFAULT_RECO_LIMIT = 15;
+/** Contributions per card. The full breakdown is one line per source and mostly zeros. */
+const WHY_LIMIT = 4;
+
+function projectWhy(breakdown: RecoContribution[]): McpRecommendation['why'] {
+  return breakdown
+    .filter(c => c.contribution !== 0)
+    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
+    .slice(0, WHY_LIMIT)
+    .map(c => ({
+      source: c.source,
+      contribution: Math.round(c.contribution * 1000) / 1000,
+      ...(c.detail ? { detail: c.detail } : {}),
+    }));
+}
+
+/**
+ * The "Pour toi" feed — unseen titles ranked by affinity to the owner's taste.
+ *
+ * Reads the cached candidate set and re-ranks it live; it **never refreshes**.
+ * The refresh is the expensive half (it calls MAL and AniList and writes
+ * `cache/recommendations.json`), which is a write and therefore not something
+ * this surface may do — so an empty cache is REPORTED rather than repaired.
+ *
+ * The narrowing filters go through the same `applyNarrowingFilters` the feed
+ * route uses. Status and sort deliberately do not apply: the feed is unseen
+ * titles by construction, and its order IS the affinity ranking.
+ */
+export function recommend(params: RecommendParams): RecommendResult {
+  const limit = params.limit ?? DEFAULT_RECO_LIMIT;
+  const data = getRecommendationsData();
+
+  const ranked = computeFeed({
+    nicheMode: params.nicheMode ?? false,
+    threshold: params.threshold ?? null,
+    diversity: params.diversity ?? null,
+    lang: params.lang ?? 'fr',
+  });
+
+  const filtered = applyNarrowingFilters(ranked, {
+    mediaTypes: params.mediaTypes,
+    search: params.search,
+    minScore: params.minMean ?? null,
+    maxScore: params.maxMean ?? null,
+    minYear: params.minYear ?? null,
+    maxYear: params.maxYear ?? null,
+    genres: params.genres,
+  });
+
+  const items = filtered.slice(0, limit).map(item => ({
+    ...projectCard(item),
+    affinityScore: Math.round(item.recoMeta.affinityScore * 1000) / 1000,
+    becauseOf: item.recoMeta.topSeeds.slice(0, 3).map(s => ({ id: s.id, title: s.title })),
+    why: projectWhy(item.recoMeta.breakdown),
+  }));
+
+  let note: string | undefined;
+  if (!data.lastRefresh) {
+    note = 'The recommendations cache has never been refreshed, so the feed is empty. ' +
+      'This tool cannot refresh it (that would write); the owner refreshes from the app\'s ' +
+      'Connections page or the nightly cron sync.';
+  } else if (ranked.length === 0) {
+    note = `The cache was last refreshed ${data.lastRefresh} but ranks no candidates — ` +
+      'likely too few completed+scored titles to seed from.';
+  } else if (filtered.length === 0) {
+    note = `${ranked.length} candidates ranked, but none matched the filters.`;
+  }
+
+  return { items, total: filtered.length, lastRefresh: data.lastRefresh, ...(note ? { note } : {}) };
 }

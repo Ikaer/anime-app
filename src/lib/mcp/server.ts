@@ -10,7 +10,7 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getAnime, listAnime, listGenres, myStats, searchAnime, MCP_SORT_KEYS } from '@/lib/mcp/tools';
+import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, MCP_SORT_KEYS } from '@/lib/mcp/tools';
 import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 
 /** Default / ceiling on list results — the constraint is the model's context. */
@@ -144,6 +144,39 @@ export function buildServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ dimensions, statuses, limit }) => json(myStats(dimensions, statuses, limit))
+  );
+
+  server.registerTool(
+    'recommend',
+    {
+      title: 'Recommend what to watch next',
+      description:
+        'The "Pour toi" feed: UNSEEN titles ranked by affinity to the owner\'s taste, each with ' +
+        'the seeds it came from and why it scored. Use this for "what should I watch next". ' +
+        'It re-ranks a cached candidate set and never refreshes it, so check `lastRefresh` and ' +
+        'any `note` before trusting an empty or thin answer. For titles similar to ONE specific ' +
+        'anime, use similar_to instead.',
+      inputSchema: {
+        limit: z.number().int().min(1).max(50).optional().describe('How many to return (default 15, max 50).'),
+        nicheMode: z.boolean().optional()
+          .describe('Favour lesser-known titles over popular ones. Default false.'),
+        threshold: z.number().min(1).max(10).optional()
+          .describe('Minimum owner score for a completed title to seed the feed. Defaults to the stored setting.'),
+        diversity: z.number().min(0).optional()
+          .describe('0 (default) keeps the pure affinity order; higher spreads genres/studios apart.'),
+        mediaTypes: z.array(z.string()).optional().describe('e.g. "tv", "movie", "ova".'),
+        genres: z.array(z.string()).optional().describe('ALL must be present. Exact names from list_genres.'),
+        minMean: z.number().min(0).max(10).optional().describe('Lower bound on the COMMUNITY mean.'),
+        maxMean: z.number().min(0).max(10).optional().describe('Upper bound on the community mean.'),
+        minYear: z.number().int().optional().describe('Earliest release year, inclusive.'),
+        maxYear: z.number().int().optional().describe('Latest release year, inclusive.'),
+        search: z.string().optional().describe('Substring match on the title.'),
+        lang: z.enum(['fr', 'en']).optional()
+          .describe('Language of the `why` explanations. Default "fr".'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (params) => json(recommend(params))
   );
 
   server.registerTool(

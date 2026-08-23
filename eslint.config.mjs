@@ -125,6 +125,12 @@ export default defineConfig([
               allowTypeImports: true,
               message: READ_ONLY_MESSAGE,
             },
+            {
+              name: '@/lib/reco/data',
+              importNames: ['saveRecommendationsData'],
+              allowTypeImports: true,
+              message: READ_ONLY_MESSAGE,
+            },
           ],
           patterns: [
             {
