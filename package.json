@@ -17,9 +17,11 @@
     "data:copy-salon": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/copy-data-salon.ps1"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "next": "^16.2.11",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

@@ -30,6 +30,50 @@ const SERVER_ONLY_MESSAGE =
   'the client-safe helpers are @/lib/domain/**, @/lib/url/**, @/lib/i18n, ' +
   '@/lib/reco/{weights,scoring,byCredits} and @/lib/providers/{capabilities,personalState,discrepancy}.';
 
+// Store exports that WRITE. The MCP surface is read-only by contract, and these
+// are the names that would break it — including `resolveCanonicalId(s)`, which
+// mints a registry entry when it can't resolve one.
+const STORE_WRITES = [
+  'saveAnime',
+  'upsertAnime',
+  'addHiddenAnimeId',
+  'removeHiddenAnimeId',
+  'upsertMalPersonal',
+  'removeMalPersonal',
+  'upsertSimklEntries',
+  'removeSimklEntries',
+  'upsertAnilistMeta',
+  'upsertAnilistCatalogFields',
+  'upsertAnilistCast',
+  'replaceAnilistPersonalEntries',
+  'upsertAnilistPersonalEntries',
+  'removeAnilistPersonalEntries',
+  'upsertLocalEntries',
+  'removeLocalEntries',
+  'updatePersonalStatusBatch',
+  'resolveCanonicalId',
+  'resolveCanonicalIds',
+];
+
+// Modules whose whole point is to mutate something — the store, a provider, or a
+// remote list. None of them belongs in a read-only surface.
+const WRITE_MODULES = [
+  '@/lib/providers/writers',
+  '@/lib/providers/cronSync',
+  '@/lib/providers/*/write',
+  '@/lib/providers/*/sync',
+  '@/lib/providers/*/personalSync',
+  '@/lib/reco/refresh',
+  '@/lib/reco/feedback',
+].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
+
+const READ_ONLY_MESSAGE =
+  'The MCP surface is read-only: it exists so a model can ASK about the local record, ' +
+  'not edit it. Reads are fine (getAnimeForDisplay, getAnimeByCanonicalId, the get*/list* ' +
+  'slice readers); anything that mutates the store or pushes to a provider does not belong ' +
+  'under src/lib/mcp/. If a write tool is ever wanted, that is a deliberate decision to make ' +
+  'here first, not something to slip past this rule.';
+
 export default defineConfig([
   ...nextVitals,
   {
@@ -53,6 +97,40 @@ export default defineConfig([
               group: SERVER_ONLY,
               allowTypeImports: true,
               message: SERVER_ONLY_MESSAGE,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The read-only guard on the MCP surface. Same posture as the server-only
+    // guard above: enforced by the linter (which `prebuild` runs, so `npm run
+    // build` fails on it) rather than left to discipline.
+    files: ['src/lib/mcp/**/*.ts', 'src/pages/api/anime/mcp.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+    },
+    plugins: {
+      '@typescript-eslint': tseslint.plugin,
+    },
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/lib/store',
+              importNames: STORE_WRITES,
+              allowTypeImports: true,
+              message: READ_ONLY_MESSAGE,
+            },
+          ],
+          patterns: [
+            {
+              group: WRITE_MODULES,
+              allowTypeImports: true,
+              message: READ_ONLY_MESSAGE,
             },
           ],
         },
