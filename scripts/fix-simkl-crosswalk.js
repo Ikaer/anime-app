@@ -186,6 +186,12 @@ for (const field of ['mal', 'anilist', 'simkl']) {
     }
     console.log(`${field} ${value}`);
     console.log(`  keep  ${winner}  ${titleOf(winner)}`);
+    // Matched by VALUE, not by key: SIMKL files the same Trakt slug under
+    // `traktslug` on one record and `trakttvslug` on the other, so a key-by-key
+    // comparison leaves the parent's slug sitting on the short.
+    const winnerBlockValues = new Set(
+      SIMKL_BLOCK_FIELDS.map(key => registry[winner][key]).filter(v => v !== undefined)
+    );
     for (const loser of holders.filter(id => id !== winner)) {
       losers.add(loser);
       const removed = [];
@@ -193,9 +199,9 @@ for (const field of ['mal', 'anilist', 'simkl']) {
       for (const key of [field, ...SIMKL_BLOCK_FIELDS]) {
         if (key === 'mal' || key === 'anilist') continue; // settled per-field, never blanket-stripped
         if (registry[loser][key] === undefined) continue;
-        // Only strip a block field that actually duplicates the winner's — a
-        // value the loser holds alone is its own and stays.
-        if (key !== field && registry[winner][key] !== registry[loser][key]) continue;
+        // Only strip a block field whose value the winner also holds — a value
+        // the loser holds alone is its own and stays.
+        if (key !== field && !winnerBlockValues.has(registry[loser][key])) continue;
         removed.push(`${key}=${registry[loser][key]}`);
         delete registry[loser][key];
       }
