@@ -9,8 +9,9 @@
  *
  * Server-only (reads the store).
  */
-import { getAnimeByCanonicalId, getAnimeForDisplay, isCanonicalId } from '@/lib/store';
+import { getAllAnilistCast, getAnimeByCanonicalId, getAnimeForDisplay, isCanonicalId } from '@/lib/store';
 import { searchCatalog, MIN_QUERY_LENGTH } from '@/lib/domain/globalSearch';
+import { computeStats, STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 import { buildRelationIndex, resolveRelations, type RelationIndex } from '@/lib/domain/relations';
 import {
   applyNarrowingFilters,
@@ -276,4 +277,102 @@ export function listAnime(params: ListAnimeParams): ListAnimeResult {
  */
 export function listGenres(): GenreVocabulary {
   return getGenreVocabulary(getAnimeForDisplay());
+}
+
+// ---------------------------------------------------------------------------
+// my_stats
+// ---------------------------------------------------------------------------
+
+/** A stats row, minus the fields only a web page can use. */
+export interface McpStatEntry {
+  name: string;
+  /** DISTINCT anime carrying this entity — never a credit count. */
+  count: number;
+  /** Share of the filtered title total, 0-100. */
+  pct: number;
+  /** AniList staff id, for `staff` and `seiyuu` rows. */
+  id?: number;
+  /** Most frequent role (staff) or sample characters (seiyuu). */
+  detail?: string;
+}
+
+export interface McpDimensionStats {
+  dimension: StatsDimension;
+  entries: McpStatEntry[];
+  /** Distinct entities before the top-N cut — "top 15 of 412". */
+  distinct: number;
+  /** Titles in scope carrying ANY data here. Below `total` means partial coverage. */
+  covered: number;
+}
+
+export interface MyStatsResult {
+  /** Titles in scope after the status filter — the percentage denominator. */
+  total: number;
+  /** Titles carrying a status at all, before the status filter. */
+  totalStatused: number;
+  dimensions: McpDimensionStats[];
+  /**
+   * Set when a requested dimension is thin: `seiyuu` and `producers` come from
+   * the lazily-filled cast slice, so a low `covered` means the sweep has not
+   * reached those titles — not that the taste isn't there.
+   */
+  note?: string;
+}
+
+/** Default rows per dimension. The page shows 50; a model rarely needs that many. */
+const DEFAULT_STATS_LIMIT = 15;
+
+/**
+ * What the owner's list is MADE OF — top studios, seiyuu, staff, producers, tags
+ * and genres by share of titles.
+ *
+ * Scope is the STATUSED list, never the ~25k catalog: a repartition over
+ * never-watched titles would describe MAL's catalog rather than the owner's
+ * taste. Counts are DISTINCT anime, so multi-valued dimensions sum past 100% on
+ * purpose (a title has many genres).
+ */
+export function myStats(
+  dimensions: StatsDimension[] | undefined,
+  statuses: string[] | undefined,
+  limit: number | undefined
+): MyStatsResult {
+  const rows = limit ?? DEFAULT_STATS_LIMIT;
+  const wanted = dimensions && dimensions.length > 0 ? dimensions : STATS_DIMENSIONS;
+
+  // The cast slice is read separately — it is deliberately NOT in
+  // `getAnimeForDisplay()`'s join, and `seiyuu`/`producers` are the two
+  // dimensions that depend on it.
+  const stats = computeStats(getAnimeForDisplay(), getAllAnilistCast(), { statuses: statuses ?? [] });
+
+  const projected = wanted.map(dimension => {
+    const d = stats.dimensions[dimension];
+    return {
+      dimension,
+      entries: d.entries.slice(0, rows).map(e => compactEntry({
+        name: e.name,
+        count: e.count,
+        pct: e.pct,
+        id: e.id,
+        detail: e.detail,
+      })),
+      distinct: d.distinct,
+      covered: d.covered,
+    };
+  });
+
+  // Declare thin coverage rather than letting a half-swept slice read as taste.
+  const thin = projected.filter(d => stats.total > 0 && d.covered < stats.total * 0.5);
+  const note = thin.length
+    ? `Partial coverage on ${thin.map(d => `${d.dimension} (${d.covered}/${stats.total})`).join(', ')}` +
+      ' — these come from the lazily-filled AniList cast slice, so the ranking covers only swept titles.'
+    : undefined;
+
+  return { total: stats.total, totalStatused: stats.totalStatused, dimensions: projected, ...(note ? { note } : {}) };
+}
+
+/** Drop `undefined` keys so the JSON a model reads carries no empty fields. */
+function compactEntry(e: McpStatEntry): McpStatEntry {
+  if (e.id === undefined) delete e.id;
+  if (e.detail === undefined) delete e.detail;
+  return e;
 }

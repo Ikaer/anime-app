@@ -10,7 +10,8 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { getAnime, listAnime, listGenres, searchAnime, MCP_SORT_KEYS } from '@/lib/mcp/tools';
+import { getAnime, listAnime, listGenres, myStats, searchAnime, MCP_SORT_KEYS } from '@/lib/mcp/tools';
+import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 
 /** Default / ceiling on list results — the constraint is the model's context. */
 const DEFAULT_SEARCH_LIMIT = 10;
@@ -121,6 +122,28 @@ export function buildServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (params) => json(listAnime(params))
+  );
+
+  server.registerTool(
+    'my_stats',
+    {
+      title: "What the owner's list is made of",
+      description:
+        "Repartition of the owner's WATCHED list by studio, seiyuu, technical staff, producer, " +
+        'AniList tag or genre — each ranked by how many of their titles it appears on. Use this ' +
+        'for "what do I watch a lot of", "favourite studio", "which voice actor keeps showing up". ' +
+        'Counts are distinct anime, and multi-valued dimensions sum past 100% (a title has many ' +
+        'genres). Scope is the statused list only, never the whole catalog.',
+      inputSchema: {
+        dimensions: z.array(z.enum(STATS_DIMENSIONS as [StatsDimension, ...StatsDimension[]])).optional()
+          .describe('Which repartitions to return. Omit for all six.'),
+        statuses: z.array(z.enum(STATUSES)).optional()
+          .describe('Restrict to these watch statuses. Omit for every statused title. "not_defined" yields nothing here.'),
+        limit: z.number().int().min(1).max(50).optional().describe('Rows per dimension (default 15, max 50).'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ dimensions, statuses, limit }) => json(myStats(dimensions, statuses, limit))
   );
 
   server.registerTool(
