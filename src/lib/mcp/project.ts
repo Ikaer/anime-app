@@ -26,6 +26,7 @@ import {
 import { groupByAxis } from '@/lib/domain/genreAxis';
 import { groupStaffByTier } from '@/lib/domain/staffRole';
 import type { ResolvedRelation } from '@/lib/domain/relations';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /** The card shape every LIST tool returns — ~10 fields, no prose. */
 export interface McpAnimeCard {
@@ -91,11 +92,11 @@ function compact<T extends object>(o: T): T {
   return o;
 }
 
-export function projectCard(a: AnimeRecord): McpAnimeCard {
+export function projectCard(a: AnimeRecord, titleLang: TitleLanguage): McpAnimeCard {
   return compact({
     id: a.id,
-    title: getPrimaryTitle(a),
-    secondaryTitle: getSecondaryTitle(a),
+    title: getPrimaryTitle(a, titleLang),
+    secondaryTitle: getSecondaryTitle(a, titleLang),
     year: year(a),
     mediaType: a.catalog.mediaType,
     numEpisodes: a.catalog.numEpisodes || undefined,
@@ -113,6 +114,7 @@ const TAG_LIMIT = 15;
 
 export function projectDetail(
   a: AnimeRecord,
+  titleLang: TitleLanguage,
   relations: ResolvedRelation[] = []
 ): McpAnimeDetail {
   const genres = (a.catalog.genres || []).map(g => g.name);
@@ -138,7 +140,7 @@ export function projectDetail(
     : undefined;
 
   return compact({
-    ...projectCard(a),
+    ...projectCard(a, titleLang),
     synopsis: a.catalog.synopsis,
     airingStatus: a.catalog.airingStatus,
     season,
@@ -164,7 +166,7 @@ export function projectDetail(
     relations: relations.length
       ? relations.map(r => ({
           id: r.record.id,
-          title: getPrimaryTitle(r.record),
+          title: getPrimaryTitle(r.record, titleLang),
           relationType: r.relationType,
         }))
       : undefined,

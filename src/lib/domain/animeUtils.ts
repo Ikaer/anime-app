@@ -5,28 +5,70 @@ import type {
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 import { buildProviderStates, toAnimePersonal } from '@/lib/providers/personalState';
+import { SHIPPED_TITLE_LANGUAGE, type TitleLanguage } from '@/lib/url/viewDefaults';
 
 // ============================================================================
-// Display titles (English-first)
+// Display titles
 // ============================================================================
 
 type TitleFields = Pick<AnimeRecord, 'catalog'>;
-type CatalogTitleFields = { title: string; alternativeTitles?: { en: string } };
+type CatalogTitleFields = { title: string; alternativeTitles?: { en?: string; ja?: string } };
 
-/** Primary display title: the English title when present, else the original (romaji) title. */
-export function getPrimaryTitle(a: TitleFields): string {
-  return getCatalogPrimaryTitle(a.catalog);
+/**
+ * The three titles a record can carry, in the preference's own order. `title`
+ * is the romaji original (MAL's and AniList's default), and it is the ONLY one
+ * guaranteed present — `alternativeTitles` is absent on an AniList-only title
+ * the crawler filled without a MAL slice, and MAL itself stores `en: ''` far
+ * more often than it stores a real English title.
+ *
+ * Order matters twice over: the first non-empty entry is the primary title, and
+ * the next distinct one is the secondary. So a `native` reader with no Japanese
+ * title on file falls back to romaji and shows English underneath, rather than
+ * showing nothing or showing the same string twice.
+ */
+function titleCandidates(c: CatalogTitleFields, pref: TitleLanguage): (string | undefined)[] {
+  const english = c.alternativeTitles?.en;
+  const native = c.alternativeTitles?.ja;
+  const romaji = c.title;
+  switch (pref) {
+    case 'romaji': return [romaji, english, native];
+    case 'native': return [native, romaji, english];
+    case 'english':
+    default: return [english, romaji, native];
+  }
 }
 
-/** Secondary title: the original (romaji) title, returned only when it differs from the primary. */
-export function getSecondaryTitle(a: TitleFields): string | undefined {
-  const primary = getPrimaryTitle(a);
-  return a.catalog.title && a.catalog.title !== primary ? a.catalog.title : undefined;
+/**
+ * Primary display title under the user's `titleLanguage` preference, falling
+ * back through the other two when the preferred one is missing or blank.
+ *
+ * ⚠️ **`pref` defaults to `SHIPPED_TITLE_LANGUAGE`, and that default is
+ * load-bearing rather than a convenience.** There are ~47 call sites across
+ * server projections, client components and the MCP tools; the default is what
+ * makes an un-threaded one keep today's exact English-first behaviour instead
+ * of breaking. Read it as "not yet threaded", never as "deliberately English".
+ */
+export function getPrimaryTitle(a: TitleFields, pref: TitleLanguage = SHIPPED_TITLE_LANGUAGE): string {
+  return getCatalogPrimaryTitle(a.catalog, pref);
+}
+
+/**
+ * Secondary title: the best title that is NOT the one being shown as primary,
+ * or `undefined` when the record carries only one distinct title.
+ *
+ * This generalizes the old "the romaji title when it differs" rule, which was
+ * correct only while primary was always English. Under `romaji` the romaji
+ * title IS the primary, so the useful second line is the English one — hence
+ * "the next distinct candidate" rather than a named field.
+ */
+export function getSecondaryTitle(a: TitleFields, pref: TitleLanguage = SHIPPED_TITLE_LANGUAGE): string | undefined {
+  const primary = getPrimaryTitle(a, pref);
+  return titleCandidates(a.catalog, pref).find(t => t && t !== primary) || undefined;
 }
 
 /** `getPrimaryTitle` for `AnimeRecord.catalog` (camelCase field names). */
-export function getCatalogPrimaryTitle(c: CatalogTitleFields): string {
-  return c.alternativeTitles?.en || c.title;
+export function getCatalogPrimaryTitle(c: CatalogTitleFields, pref: TitleLanguage = SHIPPED_TITLE_LANGUAGE): string {
+  return titleCandidates(c, pref).find(t => t) || c.title;
 }
 
 // ============================================================================
@@ -74,9 +116,15 @@ export function applyNarrowingFilters<T extends AnimeRecord>(
 
   if (f.search && f.search.trim()) {
     const term = f.search.toLowerCase();
+    // Matches EVERY name a title carries, deliberately independent of the
+    // `titleLanguage` display preference: you must be able to find a show by a
+    // name it has, not only by the one currently rendered. `ja` matters most
+    // here — a `native` reader sees Japanese titles, and without it could not
+    // search for what is on screen.
     out = out.filter(a =>
       (a.catalog.title || '').toLowerCase().includes(term) ||
-      (a.catalog.alternativeTitles?.en || '').toLowerCase().includes(term)
+      (a.catalog.alternativeTitles?.en || '').toLowerCase().includes(term) ||
+      (a.catalog.alternativeTitles?.ja || '').toLowerCase().includes(term)
     );
   }
 
@@ -129,6 +177,11 @@ export function sortAnimeRecords<T extends AnimeRecord>(
   items: T[],
   column: SortColumn,
   direction: SortDirection,
+  // Only `column: 'title'` reads it, but it is required rather than defaulted:
+  // an alphabetical sort computed on English titles while the grid renders
+  // romaji ones looks like a broken sort, and a silent default is exactly how
+  // that would ship.
+  titleLang: TitleLanguage,
 ): T[] {
   const dir = direction === 'asc' ? 1 : -1;
 
@@ -137,7 +190,7 @@ export function sortAnimeRecords<T extends AnimeRecord>(
 
   const valueOf = (a: T): string | number | null => {
     switch (column) {
-      case 'title': return getPrimaryTitle(a).toLowerCase();
+      case 'title': return getPrimaryTitle(a, titleLang).toLowerCase();
       case 'mean': return a.catalog.mean || 0;
       case 'start_date': return a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : 0;
       case 'status': return a.catalog.airingStatus || '';

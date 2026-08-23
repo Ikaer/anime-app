@@ -45,7 +45,8 @@ import type {
   AniListCharacterEntry,
   AnimeRecord,
 } from '@/models/anime';
-import { getEffectiveScore, getEffectiveStatus } from '@/lib/domain/animeUtils';
+import { getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 import { staffRoleTier, type StaffRoleTier } from '@/lib/domain/staffRole';
 import { buildRelationIndex, resolveRelations, type RelationIndex } from '@/lib/domain/relations';
 import { FRANCHISE_RELATIONS } from '@/lib/domain/franchise';
@@ -231,6 +232,13 @@ export interface GraphIndex {
   franchiseLabel: Map<string, string>;
   castTitles: number;
   staffTitles: number;
+  /**
+   * The title preference every label in this index was built under. Held on the
+   * index rather than threaded to each `animeNode` call, and folded into
+   * `getGraphIndex`'s cache key — otherwise changing the preference would keep
+   * serving labels built under the old one for as long as the record array lived.
+   */
+  titleLang: TitleLanguage;
 }
 
 function rememberPerson(
@@ -251,7 +259,8 @@ function rememberPerson(
 
 /** Franchise components, plus a display label per component and the relation index. */
 function buildFranchiseMaps(
-  records: AnimeRecord[]
+  records: AnimeRecord[],
+  titleLang: TitleLanguage
 ): Pick<GraphIndex, 'franchise' | 'franchiseLabel' | 'relations'> {
   const relIndex = buildRelationIndex(records);
   const adjacency = new Map<string, Set<string>>();
@@ -297,18 +306,19 @@ function buildFranchiseMaps(
       if (!best) { best = member; continue; }
       const a = animeYear(member) ?? Number.POSITIVE_INFINITY;
       const b = animeYear(best) ?? Number.POSITIVE_INFINITY;
-      if (a < b || (a === b && member.catalog.title.length < best.catalog.title.length)) best = member;
+      if (a < b || (a === b && getPrimaryTitle(member, titleLang).length < getPrimaryTitle(best, titleLang).length)) best = member;
     }
-    if (best) franchiseLabel.set(record.id, best.catalog.title);
+    if (best) franchiseLabel.set(record.id, getPrimaryTitle(best, titleLang));
   }
   return { franchise, franchiseLabel, relations: relIndex };
 }
 
 export function buildGraphIndex(
   records: AnimeRecord[],
-  castById: Record<string, AniListCastEntry>
+  castById: Record<string, AniListCastEntry>,
+  titleLang: TitleLanguage
 ): GraphIndex {
-  const { franchise, franchiseLabel, relations } = buildFranchiseMaps(records);
+  const { franchise, franchiseLabel, relations } = buildFranchiseMaps(records, titleLang);
   const index: GraphIndex = {
     seiyuu: new Map(),
     staff: new Map(),
@@ -317,6 +327,7 @@ export function buildGraphIndex(
     relations,
     franchise,
     franchiseLabel,
+    titleLang,
     castTitles: 0,
     staffTitles: 0,
   };
@@ -365,16 +376,20 @@ export function buildGraphIndex(
  * even though the rows did not change (the cast slice is deliberately not part
  * of the seven-slice join, and `upsertAnilistCast` does not touch the row cache).
  */
-const indexCache = new WeakMap<AnimeRecord[], { cast: object; index: GraphIndex }>();
+const indexCache = new WeakMap<AnimeRecord[], { cast: object; titleLang: TitleLanguage; index: GraphIndex }>();
 
 export function getGraphIndex(
   records: AnimeRecord[],
-  castById: Record<string, AniListCastEntry>
+  castById: Record<string, AniListCastEntry>,
+  titleLang: TitleLanguage
 ): GraphIndex {
   const cached = indexCache.get(records);
-  if (cached && cached.cast === castById) return cached.index;
-  const index = buildGraphIndex(records, castById);
-  indexCache.set(records, { cast: castById, index });
+  // `titleLang` is part of the key because it decides every anime and franchise
+  // label in the index — without it, changing the preference would keep serving
+  // the old labels until the record array itself was rebuilt.
+  if (cached && cached.cast === castById && cached.titleLang === titleLang) return cached.index;
+  const index = buildGraphIndex(records, castById, titleLang);
+  indexCache.set(records, { cast: castById, titleLang, index });
   return index;
 }
 
@@ -398,7 +413,7 @@ function animeNode(
   return {
     kind: 'anime',
     key: record.id,
-    label: record.catalog.title,
+    label: getPrimaryTitle(record, index.titleLang),
     image: record.catalog.mainPicture?.medium || record.catalog.mainPicture?.large,
     year: animeYear(record),
     mediaType: record.catalog.mediaType,
@@ -721,9 +736,10 @@ export function computeEgo(
   focalKey: string,
   records: AnimeRecord[],
   castById: Record<string, AniListCastEntry>,
+  titleLang: TitleLanguage,
   filters: GraphFilters = {}
 ): GraphEgo | null {
-  const index = getGraphIndex(records, castById);
+  const index = getGraphIndex(records, castById, titleLang);
 
   let built: Omit<GraphEgo, 'focalType' | 'coverage'> | null = null;
   let focalCastMissing = false;

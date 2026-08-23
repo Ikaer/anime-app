@@ -2,6 +2,7 @@ import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByIdForDisplay } from '@/lib/store';
+import { getTitleLanguage } from '@/lib/config/settings';
 import { getPrimaryTitle } from '@/lib/domain/animeUtils';
 import type { RatingTarget } from '@/lib/domain/ratingGrids';
 import { useT } from '@/lib/i18n';
@@ -45,7 +46,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
   const target: RatingTarget = {
     id, // the MAL id already parsed from the query param — `anime.id` is now the canonical id
-    title: getPrimaryTitle(anime),
+    title: getPrimaryTitle(anime, getTitleLanguage()),
     genres: (anime.catalog.genres || []).map(g => ({ id: g.id, name: g.name })),
     poster: anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || null,
   };

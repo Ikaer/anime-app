@@ -20,12 +20,13 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GetServerSideProps } from 'next';
 import { getAllAnilistCast, getAnimeForDisplay } from '@/lib/store';
-import { getEffectiveScore, getEffectiveStatus } from '@/lib/domain/animeUtils';
+import { getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { GRAPH_FOCAL_TYPES, type GraphEgo, type GraphFocalType } from '@/lib/domain/animeGraph';
 import { STAFF_ROLE_TIERS, type StaffRoleTier } from '@/lib/domain/staffRole';
 import { AnimeListHeader } from '@/components/anime';
 import EgoGraph from '@/components/anime/graph/EgoGraph';
 import useGraphUrlState, { GRAPH_COLOUR_MODES, type GraphColourMode } from '@/hooks/useGraphUrlState';
+import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import type { AnimeRecord } from '@/models/anime';
 
@@ -433,6 +434,7 @@ function FocalPicker({
   onPick: (id: string) => void;
 }) {
   const t = useT();
+  const titleLang = useTitleLanguage();
   const [term, setTerm] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -451,7 +453,7 @@ function FocalPicker({
         .then((body: { animes?: AnimeRecord[] }) => {
           setHits((body.animes || []).map(a => ({
             id: a.id,
-            title: a.catalog.title,
+            title: getPrimaryTitle(a, titleLang),
             year: a.catalog.startSeason?.year,
             poster: a.catalog.mainPicture?.medium,
           })));

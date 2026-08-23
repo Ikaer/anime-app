@@ -15,6 +15,7 @@
  */
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAllAnilistCast, getAnimeForDisplay } from '@/lib/store';
+import { getTitleLanguage } from '@/lib/config/settings';
 import {
   computeEgo,
   GRAPH_FOCAL_TYPES,
@@ -61,7 +62,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       tag: typeof req.query.tag === 'string' && req.query.tag.trim() ? req.query.tag.trim() : undefined,
     };
 
-    const ego = computeEgo(focalType, focalKey, getAnimeForDisplay(), getAllAnilistCast(), filters);
+    const ego = computeEgo(focalType, focalKey, getAnimeForDisplay(), getAllAnilistCast(), getTitleLanguage(), filters);
     // A focal node with no credits is indistinguishable from a typo, so this is a
     // 404 rather than an empty graph — see `computeEgo`.
     if (!ego) return res.status(404).json({ error: `No ${focalType} found for ${focalKey}` });

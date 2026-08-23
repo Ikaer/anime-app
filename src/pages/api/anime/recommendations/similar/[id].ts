@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { SIMILAR_LIMIT } from '@/lib/reco/similar';
 import { loadSimilarTo } from '@/lib/reco/similarFetch';
+import { getTitleLanguage } from '@/lib/config/settings';
 
 /**
  * "Plus comme ça" — crowd recommendations anchored on ONE anime, ranked with the
@@ -24,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const lang = req.query.lang === 'en' ? 'en' : 'fr';
 
   try {
-    const result = await loadSimilarTo(canonicalId, limit, lang);
+    const result = await loadSimilarTo(canonicalId, getTitleLanguage(), limit, lang);
     if (result.ok) {
       return res.json({ items: result.items, sources: result.sources });
     }

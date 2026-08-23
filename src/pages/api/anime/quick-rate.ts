@@ -18,7 +18,9 @@ import {
   getPrimaryTitle,
 } from '@/lib/domain/animeUtils';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
+import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord } from '@/models/anime';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /** Everything a quick-rate card needs, and nothing else. */
 export interface QuickRateMember {
@@ -58,9 +60,9 @@ export interface QuickRateResponse {
  */
 const PAGE_SIZE = 20;
 
-const toMember = (a: AnimeRecord): QuickRateMember => ({
+const toMember = (a: AnimeRecord, titleLang: TitleLanguage): QuickRateMember => ({
   id: a.id,
-  title: getPrimaryTitle(a),
+  title: getPrimaryTitle(a, titleLang),
   picture: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
   numEpisodes: a.catalog.numEpisodes,
   mean: a.catalog.mean,
@@ -71,11 +73,11 @@ const toMember = (a: AnimeRecord): QuickRateMember => ({
 });
 
 /** Airing order within a franchise: earliest first, undated last. */
-const byAirDate = (a: AnimeRecord, b: AnimeRecord): number => {
+const byAirDate = (titleLang: TitleLanguage) => (a: AnimeRecord, b: AnimeRecord): number => {
   const ta = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
   const tb = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
   if (ta !== tb) return ta - tb;
-  return getPrimaryTitle(a).localeCompare(getPrimaryTitle(b));
+  return getPrimaryTitle(a, titleLang).localeCompare(getPrimaryTitle(b, titleLang));
 };
 
 const csv = (v: unknown): string[] =>
@@ -95,6 +97,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   try {
     const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, status, page } = req.query;
+    const titleLang = getTitleLanguage();
     // Indexed on the row-cache array itself (see getFranchiseIndex), so hidden
     // titles are dropped at seed/member level rather than by copying the array.
     const catalog = getAnimeForDisplay();
@@ -164,11 +167,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const response: QuickRateResponse = {
       groups: slice.map<QuickRateGroup>(members => {
-        const ordered = [...members].sort(byAirDate);
+        const ordered = [...members].sort(byAirDate(titleLang));
         return {
           id: ordered[0].id,
-          title: getPrimaryTitle(ordered[0]),
-          members: ordered.map(toMember),
+          title: getPrimaryTitle(ordered[0], titleLang),
+          members: ordered.map(a => toMember(a, titleLang)),
         };
       }),
       total: groups.length,

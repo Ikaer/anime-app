@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import type { AnimeRecord } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { useT } from '@/lib/i18n';
 import styles from './AnimeRatePicker.module.css';
 
 export default function AnimeRatePicker() {
   const t = useT();
+  const titleLang = useTitleLanguage();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AnimeRecord[]>([]);
@@ -72,7 +74,7 @@ export default function AnimeRatePicker() {
                   ? <img className={styles.resultPoster} src={poster} alt="" />
                   : <div className={styles.resultPosterEmpty} />}
                 <div className={styles.resultBody}>
-                  <span className={styles.resultTitle}>{getPrimaryTitle(anime)}</span>
+                  <span className={styles.resultTitle}>{getPrimaryTitle(anime, titleLang)}</span>
                   {anime.catalog.genres && anime.catalog.genres.length > 0 && (
                     <span className={styles.resultGenres}>{anime.catalog.genres.map(g => g.name).join(', ')}</span>
                   )}

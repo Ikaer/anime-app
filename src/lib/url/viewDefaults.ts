@@ -60,6 +60,33 @@ export interface ViewFilterDefaults {
   maxScore?: number | null;
 }
 
+/**
+ * Which of the three titles a provider supplies is shown as the primary one.
+ *
+ * The vocabulary is AniList's own (`userPreferredTitleLanguage`), because that
+ * is the wording the owner already meets on the site the titles largely come
+ * from. Each value names a field that genuinely exists on the record rather
+ * than a locale to negotiate: `english` = `alternativeTitles.en`, `romaji` =
+ * `catalog.title` (MAL's and AniList's default), `native` =
+ * `alternativeTitles.ja`.
+ *
+ * ⚠️ **This is NOT the FR/EN UI language** (`lib/i18n.tsx`, localStorage-backed,
+ * `anime-app.lang`). The two are constantly conflated and behave differently on
+ * purpose: the UI language is a per-browser toggle, while this one is a stored
+ * server-side preference that also decides what `/api/anime/catch-up`, the reco
+ * feed and the MCP tools put in a `title` field. Reading an English UI with
+ * Japanese titles is a legitimate combination.
+ */
+export type TitleLanguage = 'english' | 'romaji' | 'native';
+
+export const TITLE_LANGUAGES: TitleLanguage[] = ['english', 'romaji', 'native'];
+
+/**
+ * English-first, which is what every call site hardcoded before this was
+ * configurable — so an un-threaded reader keeps today's behaviour exactly.
+ */
+export const SHIPPED_TITLE_LANGUAGE: TitleLanguage = 'english';
+
 export interface ViewDefaults {
   /** A `VIEW_PRESETS` key; an unknown one falls back to the shipped preset. */
   preset: string;
@@ -67,6 +94,13 @@ export interface ViewDefaults {
   /** Forced cards per row; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
   sidebarExpanded: Record<string, boolean>;
+  /**
+   * Which title to show as primary. A display key like `cardsPerRow` — "how it
+   * looks", never URL state — but unlike the rest of this file it is also read
+   * SERVER-side, because several endpoints project a `title` string into their
+   * payload and the client never sees the record to re-derive it from.
+   */
+  titleLanguage: TitleLanguage;
 }
 
 export const SHIPPED_VIEW_DEFAULTS: ViewDefaults = {
@@ -74,6 +108,7 @@ export const SHIPPED_VIEW_DEFAULTS: ViewDefaults = {
   filters: {},
   cardsPerRow: null,
   sidebarExpanded: DEFAULT_SIDEBAR_EXPANDED,
+  titleLanguage: SHIPPED_TITLE_LANGUAGE,
 };
 
 /** The filter keys the settings UI offers, so the form and the sanitizer agree. */
@@ -82,6 +117,12 @@ export const CONFIGURABLE_FILTER_DEFAULTS: (keyof ViewFilterDefaults)[] = [
   'minScore',
   'maxScore',
 ];
+
+function sanitizeTitleLanguage(raw: unknown): TitleLanguage {
+  return TITLE_LANGUAGES.includes(raw as TitleLanguage)
+    ? (raw as TitleLanguage)
+    : SHIPPED_TITLE_LANGUAGE;
+}
 
 function sanitizeCardsPerRow(raw: unknown): number | null {
   const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? parseInt(raw, 10) : NaN;
@@ -135,6 +176,7 @@ export function resolveViewDefaults(raw: unknown): ViewDefaults {
     filters: sanitizeFilters(src.filters),
     cardsPerRow: sanitizeCardsPerRow(src.cardsPerRow),
     sidebarExpanded,
+    titleLanguage: sanitizeTitleLanguage(src.titleLanguage),
   };
 }
 
@@ -150,6 +192,7 @@ export function sparseViewDefaults(defaults: ViewDefaults): Record<string, unkno
 
   if (defaults.preset !== SHIPPED_PRESET) out.preset = defaults.preset;
   if (defaults.cardsPerRow !== null) out.cardsPerRow = defaults.cardsPerRow;
+  if (defaults.titleLanguage !== SHIPPED_TITLE_LANGUAGE) out.titleLanguage = defaults.titleLanguage;
 
   const filters = sanitizeFilters(defaults.filters);
   if (Object.keys(filters).length > 0) out.filters = filters;

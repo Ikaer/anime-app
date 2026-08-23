@@ -485,7 +485,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async ({ query }) =
   // settings reader reaches the client bundle. The resolved per-field map is the
   // same one `getAnimeForDisplay` threads into the merge — read it here too, or
   // this page describes an ordering the record wasn't built with.
-  const { getCatalogPrecedenceByField } = await import('@/lib/config/settings');
+  const { getCatalogPrecedenceByField, getTitleLanguage } = await import('@/lib/config/settings');
   const byField = getCatalogPrecedenceByField();
   const pinnedFields = Object.keys(byField);
 
@@ -499,7 +499,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async ({ query }) =
 
   return {
     props: {
-      anime: { id: record.id, title: getPrimaryTitle(record) },
+      anime: { id: record.id, title: getPrimaryTitle(record, getTitleLanguage()) },
       // JSON round-trip: `undefined` is not serializable across the SSR boundary,
       // and the explain rows are dense with optional fields.
       rows: JSON.parse(JSON.stringify(explainCatalogPrecedence(record, undefined, byField))),

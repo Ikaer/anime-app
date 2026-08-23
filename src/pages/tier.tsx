@@ -7,6 +7,7 @@ import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.c
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize } from '@/models/anime';
 import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import {
   GAP_MAX, GAP_ROWS, TIER_SCORES, TIER_STATUSES,
   clampGapRow, gapOf as computeGap, meanRow, providerMeans,
@@ -53,6 +54,7 @@ interface QueueItem { id: string; score: number; prevScore: number; }
 
 export default function TierPage() {
   const t = useT();
+  const titleLang = useTitleLanguage();
   const { state, update, isReady } = useTierUrlState();
 
   const [animes, setAnimes] = useState<AnimeRecord[]>([]);
@@ -267,12 +269,12 @@ export default function TierPage() {
           return gc - ga;
         }
       }
-      return getPrimaryTitle(a).localeCompare(getPrimaryTitle(c));
+      return getPrimaryTitle(a, titleLang).localeCompare(getPrimaryTitle(c, titleLang));
     };
     for (const list of byRow.values()) list.sort(cmp);
-    tray.sort((a, c) => getPrimaryTitle(a).localeCompare(getPrimaryTitle(c)));
+    tray.sort((a, c) => getPrimaryTitle(a, titleLang).localeCompare(getPrimaryTitle(c, titleLang)));
     return { byRow, tray };
-  }, [filtered, rows, rowOf, showChip, gapOf]);
+  }, [filtered, rows, rowOf, showChip, gapOf, titleLang]);
 
   // ---- Serial write queue (respects SIMKL's 1 req/s + 20s per-user lock). ----
   const queueRef = useRef<QueueItem[]>([]);
@@ -381,12 +383,12 @@ export default function TierPage() {
         onDragEnd={readOnly ? undefined : onDragEnd}
         onMouseEnter={(e) => onCardEnter(e, a)}
         onMouseLeave={onCardLeave}
-        title={getPrimaryTitle(a)}
+        title={getPrimaryTitle(a, titleLang)}
         style={{ width: thumbW, height: thumbH }}
       >
         {thumb
           ? <img src={thumb} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%' }} />
-          : <div className="noimg">{getPrimaryTitle(a).slice(0, 2)}</div>}
+          : <div className="noimg">{getPrimaryTitle(a, titleLang).slice(0, 2)}</div>}
         {gap !== null && (
           <span
             className={`gap-chip ${gap > 0 ? 'gap-up' : gap < 0 ? 'gap-down' : 'gap-eq'}`}
@@ -595,7 +597,7 @@ export default function TierPage() {
       {preview && (
         <div className="hover-preview" style={{ left: preview.x, top: preview.y }}>
           <img src={preview.anime.catalog.mainPicture?.large || preview.anime.catalog.mainPicture?.medium || ''} alt="" />
-          <div className="hover-title">{getPrimaryTitle(preview.anime)}</div>
+          <div className="hover-title">{getPrimaryTitle(preview.anime, titleLang)}</div>
           <div className="hover-mean">
             {[
               meansById.get(preview.anime.id)?.mal != null ? `MAL ${meansById.get(preview.anime.id)!.mal!.toFixed(2)}` : null,

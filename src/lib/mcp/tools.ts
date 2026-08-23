@@ -31,6 +31,7 @@ import {
 } from '@/lib/domain/tierGap';
 import { projectCard, projectDetail, type McpAnimeCard, type McpAnimeDetail } from '@/lib/mcp/project';
 import type { AnimeRecord, RecoContribution, SortColumn } from '@/models/anime';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /** Default page size for list_anime; the tool schema caps the ceiling. */
 const DEFAULT_LIST_LIMIT = 20;
@@ -74,20 +75,20 @@ export interface SearchResult {
  * as `AnimeSearchHit`s: the hit carries no personal state, and "have I already
  * seen this" is the first thing worth knowing about a result.
  */
-export function searchAnime(query: string, limit: number): SearchResult {
+export function searchAnime(query: string, limit: number, titleLang: TitleLanguage): SearchResult {
   const trimmed = query.trim();
   if (trimmed.length < MIN_QUERY_LENGTH) {
     return { animes: [], studios: [], staff: [] };
   }
 
   const rows = getAnimeForDisplay();
-  const results = searchCatalog(trimmed, rows);
+  const results = searchCatalog(trimmed, rows, titleLang);
   const byId = byIdFor(rows);
 
   const animes: McpAnimeCard[] = [];
   for (const hit of results.animes.slice(0, limit)) {
     const record = byId.get(hit.id);
-    if (record) animes.push(projectCard(record));
+    if (record) animes.push(projectCard(record, titleLang));
   }
 
   return {
@@ -112,7 +113,7 @@ export type GetAnimeResult =
  * other tool hands one back. A MAL id arriving here is a caller confusion worth
  * naming rather than silently resolving.
  */
-export function getAnime(id: string): GetAnimeResult {
+export function getAnime(id: string, titleLang: TitleLanguage): GetAnimeResult {
   if (!isCanonicalId(id)) {
     return {
       found: false,
@@ -125,7 +126,7 @@ export function getAnime(id: string): GetAnimeResult {
 
   // The relation index needs the whole catalog; the record itself is cheap.
   const relations = resolveRelations(record, relationIndexFor(getAnimeForDisplay()));
-  return { found: true, anime: projectDetail(record, relations) };
+  return { found: true, anime: projectDetail(record, titleLang, relations) };
 }
 
 // ---------------------------------------------------------------------------
@@ -190,9 +191,9 @@ export interface ListAnimeResult {
 }
 
 /** `my_score` / `my_progress` here; every other key delegates to the shared sorter. */
-function sortRecords(rows: AnimeRecord[], key: McpSortKey, dir: 'asc' | 'desc'): AnimeRecord[] {
+function sortRecords(rows: AnimeRecord[], key: McpSortKey, dir: 'asc' | 'desc', titleLang: TitleLanguage): AnimeRecord[] {
   if (key !== 'my_score' && key !== 'my_progress') {
-    return sortAnimeRecords(rows, key as SortColumn, dir);
+    return sortAnimeRecords(rows, key as SortColumn, dir, titleLang);
   }
   const sign = dir === 'asc' ? 1 : -1;
   const valueOf = (a: AnimeRecord) =>
@@ -223,7 +224,7 @@ function sortRecords(rows: AnimeRecord[], key: McpSortKey, dir: 'asc' | 'desc'):
  * `mean`, not the owner's score; collapsing the two here would quietly answer a
  * different question than the one asked.
  */
-export function listAnime(params: ListAnimeParams): ListAnimeResult {
+export function listAnime(params: ListAnimeParams, titleLang: TitleLanguage): ListAnimeResult {
   const limit = params.limit ?? DEFAULT_LIST_LIMIT;
   const offset = params.offset ?? 0;
 
@@ -263,11 +264,11 @@ export function listAnime(params: ListAnimeParams): ListAnimeResult {
   }
 
   const total = rows.length;
-  const sorted = sortRecords(rows, params.sortBy ?? 'my_score', params.sortDir ?? 'desc');
+  const sorted = sortRecords(rows, params.sortBy ?? 'my_score', params.sortDir ?? 'desc', titleLang);
   const page = sorted.slice(offset, offset + limit);
 
   return {
-    items: page.map(projectCard),
+    items: page.map(a => projectCard(a, titleLang)),
     total,
     offset,
     limit,
@@ -504,7 +505,7 @@ function projectWhy(breakdown: RecoContribution[]): McpRecommendation['why'] {
  * route uses. Status and sort deliberately do not apply: the feed is unseen
  * titles by construction, and its order IS the affinity ranking.
  */
-export function recommend(params: RecommendParams): RecommendResult {
+export function recommend(params: RecommendParams, titleLang: TitleLanguage): RecommendResult {
   const limit = params.limit ?? DEFAULT_RECO_LIMIT;
   const data = getRecommendationsData();
 
@@ -513,6 +514,7 @@ export function recommend(params: RecommendParams): RecommendResult {
     threshold: params.threshold ?? null,
     diversity: params.diversity ?? null,
     lang: params.lang ?? 'fr',
+    titleLang,
   });
 
   const filtered = applyNarrowingFilters(ranked, {
@@ -526,7 +528,7 @@ export function recommend(params: RecommendParams): RecommendResult {
   });
 
   const items = filtered.slice(0, limit).map(item => ({
-    ...projectCard(item),
+    ...projectCard(item, titleLang),
     affinityScore: Math.round(item.recoMeta.affinityScore * 1000) / 1000,
     becauseOf: item.recoMeta.topSeeds.slice(0, 3).map(s => ({ id: s.id, title: s.title })),
     why: projectWhy(item.recoMeta.breakdown),
@@ -598,13 +600,14 @@ const DEFAULT_SIMILAR_LIMIT = 15;
 export async function similarTo(
   id: string,
   limit: number | undefined,
-  lang: Lang | undefined
+  lang: Lang | undefined,
+  titleLang: TitleLanguage
 ): Promise<SimilarToResult> {
   if (!isCanonicalId(id)) {
     return { ok: false, error: `"${id}" is not a canonical id. Ids look like "a_1234" and come from search_anime.` };
   }
 
-  const result = await loadSimilarTo(id, limit ?? DEFAULT_SIMILAR_LIMIT, lang ?? 'fr');
+  const result = await loadSimilarTo(id, titleLang, limit ?? DEFAULT_SIMILAR_LIMIT, lang ?? 'fr');
 
   if (!result.ok) {
     switch (result.failure.kind) {
@@ -741,7 +744,7 @@ const DEFAULT_TIER_LIMIT = 25;
  * shape is the cheap part and the thing a tier list actually IS, so it must not
  * become a function of paging.
  */
-export function tierList(params: TierListParams): TierListResult {
+export function tierList(params: TierListParams, titleLang: TitleLanguage): TierListResult {
   const axis: TierAxis = params.axis ?? 'gap';
   const vs: GapProvider = params.vs ?? 'mal';
   const limit = params.limit ?? DEFAULT_TIER_LIMIT;
@@ -783,7 +786,7 @@ export function tierList(params: TierListParams): TierListResult {
 
     const entry: McpTierEntry = {
       id: a.id,
-      title: getPrimaryTitle(a),
+      title: getPrimaryTitle(a, titleLang),
       year: a.catalog.startSeason?.year,
       mediaType: a.catalog.mediaType,
       status: getEffectiveStatus(a),

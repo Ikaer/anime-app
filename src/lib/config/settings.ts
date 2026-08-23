@@ -14,6 +14,7 @@ import {
   SHIPPED_VIEW_DEFAULTS,
   resolveViewDefaults,
   sparseViewDefaults,
+  type TitleLanguage,
   type ViewDefaults,
 } from '@/lib/url/viewDefaults';
 
@@ -292,4 +293,24 @@ export function getCatalogPrecedenceByField(): CatalogPrecedenceOverrides {
 export function getViewDefaults(): ViewDefaults {
   const stored = readSettings().viewDefaults;
   return stored ? resolveViewDefaults(stored) : SHIPPED_VIEW_DEFAULTS;
+}
+
+/**
+ * The title language in force, for the SERVER half of the preference — the
+ * endpoints and `getServerSideProps` that project a `title` string into a
+ * payload, where the client never sees the record and so cannot re-derive it.
+ *
+ * ⚠️ **Server-only, and the client-safe modules must keep taking it as a
+ * parameter instead of calling this.** `lib/domain/**` and `lib/reco/byCredits`
+ * are in the eslint client-safety set, so an import of this module from one of
+ * them fails `npm run lint` — and `npm run build` with it. That constraint is
+ * why `getPrimaryTitle` takes a `pref` argument at all rather than reading the
+ * setting itself.
+ *
+ * Not to be confused with the FR/EN UI language threaded as `lang` through
+ * `computeFeed`/`computeSimilarTo` — different knob, different storage, and
+ * they are deliberately independent.
+ */
+export function getTitleLanguage(): TitleLanguage {
+  return getViewDefaults().titleLanguage;
 }

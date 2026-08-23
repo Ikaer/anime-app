@@ -128,7 +128,12 @@ async function fetchAnimeDetail(animeId: number, accessToken: string): Promise<M
  */
 export async function performRecommendationsRefresh(
   accessToken: string | null,
-  options: FeedOptions,
+  // Only `nicheMode`/`threshold` are read below — this is the FETCH half, not
+  // the ranking half, so it has no use for `FeedOptions`' ranking-only fields
+  // (`titleLang` included). `Pick` rather than the whole interface so a caller
+  // building this options bag never has to fabricate a title-language pref it
+  // has no reason to hold.
+  options: Pick<FeedOptions, 'nicheMode' | 'threshold'>,
   progress?: (p: RecoRefreshProgress) => void
 ): Promise<RecoRefreshResult> {
   if (isRefreshRunning) {

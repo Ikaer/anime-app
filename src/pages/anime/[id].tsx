@@ -6,9 +6,10 @@ import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalI
 import type { AnimeRecord, AnimeCatalog, AniListCharacterEntry, AniListStaffEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle, catalogFieldOrigins, type CatalogFieldOrigin } from '@/lib/domain/animeUtils';
 import { groupStaffByTier, getStaffAffinity, pickStaffAffinity, type StaffRoleTier } from '@/lib/domain/staffRole';
-import { getCatalogPrecedenceByField } from '@/lib/config/settings';
+import { getCatalogPrecedenceByField, getTitleLanguage } from '@/lib/config/settings';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/reco/byCredits';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
@@ -28,6 +29,15 @@ interface RelatedItem {
 
 interface Props {
   anime: AnimeRecord;
+  /**
+   * The title-language preference, resolved server-side and passed down rather
+   * than read from `useTitleLanguage()` like the client-fetched pages do. This
+   * page renders its title in `getServerSideProps`, so the hook's pre-fetch
+   * `SHIPPED_TITLE_LANGUAGE` would show an English title for one paint and then
+   * swap it — a visible flicker on the one surface where the title is the
+   * headline. Same reason the credits page takes it as a prop.
+   */
+  titleLang: TitleLanguage;
   similar: SimilarByCredits[];
   /** Relations from BOTH providers, resolved to canonical ids — see
    *  `domain/relations.ts`. MAL's `catalog.relatedAnime` alone covers 48 titles
@@ -125,15 +135,18 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, staffAffinity }: Props) {
+export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, staffAffinity, titleLang }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
   const en = anime.catalog.alternativeTitles?.en;
   const ja = anime.catalog.alternativeTitles?.ja;
   const synonyms = anime.catalog.alternativeTitles?.synonyms || [];
-  const primaryTitle = getPrimaryTitle(anime);
-  const secondaryTitle = getSecondaryTitle(anime);
+  const primaryTitle = getPrimaryTitle(anime, titleLang);
+  const secondaryTitle = getSecondaryTitle(anime, titleLang);
+  const titleField = (shown: string) => (shown === anime.catalog.title ? 'title' : 'alternativeTitles');
+  const titleOrigin = (shown: string) =>
+    (shown === anime.catalog.title ? origins.title : origins.alternativeTitles);
 
   const mal = anime.sources.malPersonal;
   const simkl = anime.sources.simkl;
@@ -173,6 +186,9 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
   const effScore = getEffectiveScore(anime);
   const effProgress = getEffectiveProgress(anime);
 
+  // Not `primaryTitle`: this feeds the Google/JustWatch links, and those index
+  // Latin-script titles — see the same note in AnimeCardView. Deliberately
+  // independent of `titleLanguage`.
   const searchTitle = en || anime.catalog.title;
   const anilistId = anime.sources.anilist?.anilist_id ?? crosswalk.anilist;
 
@@ -241,12 +257,19 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
             ? <img className="poster" src={poster} alt={primaryTitle} />
             : <div className="poster noimg">{t('common.noImage')}</div>}
           <div className="head-info">
-            {/* The displayed title is `alternativeTitles.en` when there is one and
-                `catalog.title` otherwise — two different catalog fields, so the
-                chip has to name whichever one actually supplied this string. */}
-            <h1>{primaryTitle}<ProvenanceChip field={en ? 'alternativeTitles' : 'title'} origin={en ? origins.alternativeTitles : origins.title} /></h1>
-            {secondaryTitle && <div className="alt">{secondaryTitle}<ProvenanceChip field="title" origin={origins.title} /></div>}
-            {ja && <div className="alt ja">{ja}</div>}
+            {/* Which CATALOG FIELD supplied each line depends on the user's
+                `titleLanguage`, so the chips are derived from the rendered string
+                rather than assumed. Before the preference existed the primary was
+                always `alternativeTitles.en` and the secondary always
+                `catalog.title`; hardcoding that now mislabels every romaji or
+                native reader. `titleField` compares against `catalog.title`
+                because that is the only one of the three that is its own field —
+                both `en` and `ja` live under `alternativeTitles`. */}
+            <h1>{primaryTitle}<ProvenanceChip field={titleField(primaryTitle)} origin={titleOrigin(primaryTitle)} /></h1>
+            {secondaryTitle && <div className="alt">{secondaryTitle}<ProvenanceChip field={titleField(secondaryTitle)} origin={titleOrigin(secondaryTitle)} /></div>}
+            {/* The Japanese title gets its own line only when it is not already
+                one of the two above — under `native` it IS the primary. */}
+            {ja && ja !== primaryTitle && ja !== secondaryTitle && <div className="alt ja">{ja}</div>}
             {synonyms.length > 0 && <div className="synonyms">{t('detail.alsoKnown', { names: synonyms.join(' · ') })}</div>}
             <div className="badges">
               <span className={`airing ${anime.catalog.airingStatus || ''}`}>{airingLabel(anime.catalog.airingStatus, t)}</span>
@@ -865,12 +888,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   // Similar-by-credits reads catalog fields (studios/staff) only, so the
   // personal-state cache caveat doesn't apply — the shared cached catalog is fine.
   const catalog = getAnimeForDisplay();
-  const similar = computeSimilarByCredits(anime, catalog, 3);
+  const titleLang = getTitleLanguage();
+  const similar = computeSimilarByCredits(anime, catalog, titleLang, 3);
   // Relations resolve against that same array — the page already had it in hand,
   // so both providers' edges cost nothing extra here.
   const related = resolveRelations(anime, buildRelationIndex(catalog)).map(r => ({
     id: r.record.id,
-    title: getPrimaryTitle(r.record),
+    title: getPrimaryTitle(r.record, titleLang),
     picture: r.record.catalog.mainPicture?.medium,
     relation: r.formatted,
   }));
@@ -883,6 +907,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   return {
     props: {
       anime: JSON.parse(JSON.stringify(anime)),
+      titleLang,
       similar: JSON.parse(JSON.stringify(similar)),
       related: JSON.parse(JSON.stringify(related)),
       cast: cast ? JSON.parse(JSON.stringify(cast)) : null,

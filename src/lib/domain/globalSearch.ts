@@ -9,6 +9,7 @@
 
 import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface AnimeSearchHit {
   /** Canonical id — the detail-page route key. */
@@ -58,7 +59,10 @@ function matchRank(haystack: string, needle: string): number {
 /** Best (lowest) match rank across a title's candidate strings. */
 function bestTitleRank(a: AnimeRecord, needle: string): number {
   const alt = a.catalog.alternativeTitles;
-  const candidates = [a.catalog.title, alt?.en, ...(alt?.synonyms || [])];
+  // `ja` included so a `native` reader can search for the title they are
+  // actually shown — matching is deliberately preference-independent, unlike
+  // the `titleLang` that decides which name is DISPLAYED on the hit.
+  const candidates = [a.catalog.title, alt?.en, alt?.ja, ...(alt?.synonyms || [])];
   let best = Infinity;
   for (const c of candidates) {
     if (!c) continue;
@@ -73,7 +77,7 @@ function bestTitleRank(a: AnimeRecord, needle: string): number {
  * Search the catalog for anime / studios / staff matching `query`. Returns
  * empty for queries shorter than {@link MIN_QUERY_LENGTH}.
  */
-export function searchCatalog(query: string, catalog: AnimeRecord[]): GlobalSearchResults {
+export function searchCatalog(query: string, catalog: AnimeRecord[], titleLang: TitleLanguage): GlobalSearchResults {
   const needle = query.trim().toLowerCase();
   if (needle.length < MIN_QUERY_LENGTH) return EMPTY;
 
@@ -86,7 +90,7 @@ export function searchCatalog(query: string, catalog: AnimeRecord[]): GlobalSear
   for (const a of catalog) {
     const titleRank = bestTitleRank(a, needle);
     if (titleRank !== Infinity) {
-      const primary = getCatalogPrimaryTitle(a.catalog);
+      const primary = getCatalogPrimaryTitle(a.catalog, titleLang);
       const original = a.catalog.title;
       animeScored.push({
         hit: {

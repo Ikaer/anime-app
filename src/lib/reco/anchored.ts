@@ -51,6 +51,7 @@ import { getEffectiveStatus, getPrimaryTitle, catalogNameKey } from '@/lib/domai
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /**
  * One crowd edge, already resolved onto canonical ids by the caller (E9) — both
@@ -92,6 +93,8 @@ export interface AnchoredOptions {
   excludeSeen?: boolean;
   /** Language for the server-built "Pourquoi ?" detail strings. */
   lang?: Lang;
+  /** Which of a title's three names `anchorTitle`/card titles are built from. */
+  titleLang: TitleLanguage;
 }
 
 /**
@@ -103,11 +106,12 @@ export function computeAnchored(
   anchorIds: string[],
   malEdges: AnchoredEdge[],
   anilistEdges: AnchoredEdge[],
-  options: AnchoredOptions = {}
+  options: AnchoredOptions
 ): AnchoredItem[] {
   const lang = options.lang ?? DEFAULT_LANG;
   const t = makeT(lang);
   const weights = options.weights ?? ANCHORED_WEIGHTS;
+  const titleLang = options.titleLang;
 
   const all = getAnimeForDisplay();
   const byId = new Map<string, AnimeRecord>(all.map(a => [a.id, a]));
@@ -200,7 +204,7 @@ export function computeAnchored(
   // one-anchor version this generalizes.
   const anchorStudioNames = new Map(anchors.flatMap(a => (a.catalog.studios || []).map(s => [catalogNameKey(s.name), s.name] as const)));
   const anchorStaffById = new Map(anchors.flatMap(a => (a.sources.anilist?.staff || []).map(s => [s.id, s] as const)));
-  const anchorTitle = (id: string) => { const a = byId.get(id); return a ? getPrimaryTitle(a) : id; };
+  const anchorTitle = (id: string) => { const a = byId.get(id); return a ? getPrimaryTitle(a, titleLang) : id; };
   const multi = anchors.length > 1;
 
   /** Anchor names behind one crowd source, strongest first. */

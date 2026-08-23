@@ -4,6 +4,7 @@ import { getFeedbackAnime } from '@/lib/reco/feedback';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { applyNarrowingFilters } from '@/lib/domain/animeUtils';
 import { parseSourceWeights } from '@/lib/reco/weights';
+import { getTitleLanguage } from '@/lib/config/settings';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -51,6 +52,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       weights,
       diversity,
       lang,
+      titleLang: getTitleLanguage(),
     });
     const animes = applyNarrowingFilters(ranked, narrowing);
 

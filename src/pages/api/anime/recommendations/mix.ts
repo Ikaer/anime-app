@@ -14,6 +14,7 @@ import { fetchRecoEdges } from '@/lib/reco/refresh';
 import { fetchAnilistRecommendations } from '@/lib/providers/anilist/sync';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { parseSourceWeights, resolveWeights, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
+import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord, RecoMeta } from '@/models/anime';
 
 /**
@@ -136,13 +137,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Invalid anime id' });
   }
 
+  const titleLang = getTitleLanguage();
   const byId = new Map(getAnimeForDisplay().map(a => [a.id, a]));
   // Unknown ids are dropped rather than 400'd: a bookmarked mix must survive an
   // anchor disappearing from the store, and the response says which were kept.
   const anchorIds = Array.from(new Set(requested)).filter(id => byId.has(id)).slice(0, MAX_MIX_ANCHORS);
   const anchors = anchorIds.map(id => {
     const a = byId.get(id)!;
-    return { id, title: getPrimaryTitle(a), poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large };
+    return { id, title: getPrimaryTitle(a, titleLang), poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large };
   });
 
   if (anchorIds.length === 0) {
@@ -189,6 +191,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       weights,
       excludeSeen: !includeSeen,
       lang,
+      titleLang,
     });
 
     // Projected into the feed's card shape, so `/mix` renders through the same

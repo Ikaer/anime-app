@@ -31,6 +31,7 @@ import { fetchRecoEdges, type RawEdge } from '@/lib/reco/refresh';
 import type { RecoEdge } from '@/lib/reco/data';
 import { fetchAnilistRecommendations, type AniListRecEdge } from '@/lib/providers/anilist/sync';
 import { DEFAULT_LANG, type Lang } from '@/lib/i18n';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface SimilarSourceOutcome {
   ok: boolean;
@@ -86,6 +87,7 @@ async function loadAnilistEdges(
  */
 export async function loadSimilarTo(
   canonicalId: string,
+  titleLang: TitleLanguage,
   limit: number = SIMILAR_LIMIT,
   lang: Lang = DEFAULT_LANG
 ): Promise<SimilarResult> {
@@ -125,5 +127,5 @@ export async function loadSimilarTo(
     }))
     .filter((e): e is AniListEdgeInput => e.id !== undefined);
 
-  return { ok: true, items: computeSimilarTo(canonicalId, malEdges, anilistEdges, limit, lang), sources };
+  return { ok: true, items: computeSimilarTo(canonicalId, malEdges, anilistEdges, titleLang, limit, lang), sources };
 }

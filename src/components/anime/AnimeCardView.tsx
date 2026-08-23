@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, RecoMeta, RecoVerdict } from '@/models/anime';
 import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
+import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
@@ -44,6 +45,7 @@ export default function AnimeCardView({
     allExplainsOpen
 }: AnimeCardViewProps) {
     const t = useT();
+    const titleLang = useTitleLanguage();
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const [explainOpen, setExplainOpen] = useState<Set<string>>(new Set());
 
@@ -83,6 +85,12 @@ export default function AnimeCardView({
         );
     }
 
+    // ⚠️ The two search links deliberately do NOT follow `titleLanguage`. They
+    // build a query for Google and JustWatch, which is a different question from
+    // "what do I call this show": both index Latin-script titles, so a `native`
+    // reader searching in Japanese would get worse results on JustWatch and a
+    // different corpus on Google. English-then-romaji is the right query whatever
+    // the display preference — this is not an un-threaded call site.
     const handleManualSearch = (anime: AnimeRecord) => {
         const searchTitle = anime.catalog.alternativeTitles?.en || anime.catalog.title;
         const googleUrl = generateGoogleORQuery(searchTitle);
@@ -179,13 +187,15 @@ export default function AnimeCardView({
     return (
         <div className={styles.cardGrid} style={gridStyle}>
             {animes.map((anime) => {
+                const primaryTitle = getPrimaryTitle(anime, titleLang);
+                const secondaryTitle = getSecondaryTitle(anime, titleLang);
                 return (
                 <div key={anime.id} className={styles.card}>
                     <div className={styles.imageContainer}>
                         {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
                             <Image
                                 src={anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium}
-                                alt={getPrimaryTitle(anime)}
+                                alt={primaryTitle}
                                 className={styles.animeImage}
                                 fill
                                 sizes="(max-width: 1200px) 50vw, 280px"
@@ -275,10 +285,10 @@ export default function AnimeCardView({
                     </div>
                     <div className={styles.cardContent}>
                         <div className={styles.titleRow}>
-                            <span className={styles.title} title={getPrimaryTitle(anime)}>{getPrimaryTitle(anime)}</span>
+                            <span className={styles.title} title={primaryTitle}>{primaryTitle}</span>
                             <button
                                 className={`${styles.copyBtn} ${copiedKey === `${anime.id}-title` ? styles.copyBtnCopied : ''}`}
-                                onClick={() => copyToClipboard(getPrimaryTitle(anime), `${anime.id}-title`)}
+                                onClick={() => copyToClipboard(primaryTitle, `${anime.id}-title`)}
                                 title={t('card.copyTitle')}
                             >
                                 {copiedKey === `${anime.id}-title` ? (
@@ -293,12 +303,12 @@ export default function AnimeCardView({
                                 )}
                             </button>
                         </div>
-                        {getSecondaryTitle(anime) && (
+                        {secondaryTitle && (
                             <div className={styles.titleRow}>
-                                <span className={styles.altTitle}>{getSecondaryTitle(anime)}</span>
+                                <span className={styles.altTitle}>{secondaryTitle}</span>
                                 <button
                                     className={`${styles.copyBtn} ${copiedKey === `${anime.id}-alt` ? styles.copyBtnCopied : ''}`}
-                                    onClick={() => copyToClipboard(getSecondaryTitle(anime)!, `${anime.id}-alt`)}
+                                    onClick={() => copyToClipboard(secondaryTitle, `${anime.id}-alt`)}
                                     title={t('card.copyAltTitle')}
                                 >
                                     {copiedKey === `${anime.id}-alt` ? (

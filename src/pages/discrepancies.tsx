@@ -6,6 +6,7 @@ import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
 import type { AnimeRecord, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
 import { getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { computeDiscrepancy } from '@/lib/providers/discrepancy';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
@@ -178,6 +179,7 @@ function ApplySimklButton({
 
 export default function DiscrepanciesPage() {
   const t = useT();
+  const titleLang = useTitleLanguage();
   const router = useRouter();
   const [animes, setAnimes] = useState<AnimeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -322,7 +324,7 @@ export default function DiscrepanciesPage() {
                             </Link>
                           </td>
                           <td className={styles.titleCell} rowSpan={subRows.length}>
-                            <Link href={`/anime/${anime.id}`}>{getPrimaryTitle(anime)}</Link>
+                            <Link href={`/anime/${anime.id}`}>{getPrimaryTitle(anime, titleLang)}</Link>
                             {absent.length > 0 && (
                               <>
                                 {' '}

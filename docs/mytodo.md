@@ -8,12 +8,12 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
 - **Youtube** - I watch some anime on youtube (specially mini, ova, etc) and I would like to have a way to add them to my list. I know that
   there is a way to add them manually, but it is not very practical. I would like
   to have a way to add them automatically, like the other providers.
-- **Settable preferences** — main title language, etc. `defaultTitleLanguage` is
-  the real one: its rendering seam `getPrimaryTitle` is English-hardcoded across
-  ~15 server + client call sites, so it is a cross-cutting change. Note it is a
-  **server-side** knob (titles render in `getServerSideProps`), unlike the FR/EN
-  **UI** language which is client `localStorage` — two different knobs, easily
-  conflated.
+- **Settable preferences.** The main title language **shipped** — it landed as a
+  `ViewDefaults` display key (`titleLanguage`), not a top-level settings field,
+  so it rides the existing sparse storage + `useViewDefaults` transport; see the
+  "Title language" section of CLAUDE.md. Whatever comes next here (episode-count
+  display, date format…) should follow that same seam rather than growing
+  `AppSettings`.
 - **Producers as a catalog field.** They exist only on `AniListCastEntry.studios`
   with `isMain: false`, and that slice is deliberately off the hot-path join, so
   coverage is whatever the cast sweep has reached. Do it as one task with its
@@ -21,9 +21,12 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
   against the cast slice + a re-sweep. Weigh it against the reason cast is
   off-join at all — `catalog/anilist.json` is parsed on every cold row build.
 - **Swipe system.**
-- **Seiyuu as a reco source, or a "more from this seiyuu" browse page.** Both need
-  catalog-wide cast, which the sweep deliberately skips (it covers the statused
-  list, ~500-700 titles, not the ~25k catalog).
+- **Seiyuu as a reco source.** Needs catalog-wide cast, which the sweep
+  deliberately skips (it covers the statused list, ~500-700 titles, not the ~25k
+  catalog) — at the shared AniList throttle that is a ~14h sweep, so the sweep is
+  the project, not a footnote. (The "more from this seiyuu" browse half of this
+  item **shipped**: `/credits/seiyuu/[id]`, via `listAnimeBySeiyuu`, declaring its
+  partial coverage as `castCovered`.)
 - **Discrepancy page utilities.** SIMKL auto-syncs from MAL but the others don't,
   so the page gets noisier as providers land: provider checkboxes to filter rows
   out (URL state, like the rest of the app), and one-way "fully sync provider A ⇒

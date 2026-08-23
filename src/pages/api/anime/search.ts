@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
 import { searchCatalog, MIN_QUERY_LENGTH, type GlobalSearchResults } from '@/lib/domain/globalSearch';
+import { getTitleLanguage } from '@/lib/config/settings';
 
 /**
  * Header global search. Catalog-only (title/studio/staff), so the shared cached
@@ -21,7 +22,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.json(empty);
     }
 
-    const results = searchCatalog(query, getAnimeForDisplay());
+    const results = searchCatalog(query, getAnimeForDisplay(), getTitleLanguage());
     res.json(results);
   } catch (error) {
     console.error('Global search error:', error);

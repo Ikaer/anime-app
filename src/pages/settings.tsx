@@ -5,7 +5,7 @@ import { useT, type TranslationKey } from '@/lib/i18n';
 import { catalogOrderingWithWinner, catalogWinnerOf } from '@/lib/domain/animeUtils';
 import type { CatalogSource } from '@/models/anime';
 import { MEDIA_TYPES, VIEW_PRESETS } from '@/lib/url/animeParams';
-import type { ViewDefaults } from '@/lib/url/viewDefaults';
+import { TITLE_LANGUAGES, type TitleLanguage, type ViewDefaults } from '@/lib/url/viewDefaults';
 import useViewDefaults from '@/hooks/useViewDefaults';
 
 /**
@@ -449,6 +449,29 @@ export default function SettingsPage() {
                       {t('settings.viewDefaults.unset')}
                     </button>
                   )}
+                </div>
+              </div>
+
+              {/* The title language — a display preference like cards-per-row, but
+                  the only one here that is ALSO read server-side (several
+                  endpoints project a `title` string the client never re-derives).
+                  Not to be confused with the FR/EN UI toggle in the header:
+                  different knob, different storage, deliberately independent. */}
+              <div className="field">
+                <label htmlFor="viewTitleLanguage">{t('settings.field.titleLanguage')}</label>
+                <div className="input-row">
+                  <select
+                    id="viewTitleLanguage"
+                    value={viewDraft.titleLanguage}
+                    onChange={e => patchView({ titleLanguage: e.target.value as TitleLanguage })}
+                  >
+                    {TITLE_LANGUAGES.map(tl => (
+                      <option key={tl} value={tl}>{t(`titleLanguage.${tl}` as TranslationKey)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="hints">
+                  <span className="resolved">{t('settings.viewDefaults.titleLanguageHint')}</span>
                 </div>
               </div>
 

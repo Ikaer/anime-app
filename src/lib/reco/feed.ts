@@ -41,6 +41,7 @@ import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, catalogNameKey 
 import { buildRelationIndex } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface RecommendationItem extends AnimeRecord {
   recoMeta: RecoMeta;
@@ -59,6 +60,8 @@ export interface FeedOptions {
   diversity?: number | null;
   /** Language for the server-built "Pourquoi ?" detail strings. Defaults to `fr`. */
   lang?: Lang;
+  /** Which of a title's three names seed/candidate titles are built from. */
+  titleLang: TitleLanguage;
 }
 
 // ============================================================================
@@ -352,7 +355,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     };
 
     const sortedSeeds = Array.from(a.perSeed.entries()).sort((x, y) => y[1] - x[1]);
-    const seedTitle = (sid: string) => { const s = byId.get(sid); return s ? getPrimaryTitle(s) : sid; };
+    const seedTitle = (sid: string) => { const s = byId.get(sid); return s ? getPrimaryTitle(s, options.titleLang) : sid; };
     const topSeeds = sortedSeeds
       .slice(0, TUNING.TOP_SEEDS_PER_CANDIDATE)
       .map(([sid, backers]) => ({ id: sid, title: seedTitle(sid), backers }));

@@ -34,6 +34,7 @@ import { getAllAnilistCast, getAnimeForDisplay } from '@/lib/store';
 import { applyNarrowingFilters, getEffectiveStatus, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { listAnimeByStudio, listAnimeByStaff, listAnimeBySeiyuu, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
 import { decodeCreditsState, useCreditsUrlState } from '@/hooks';
+import { getTitleLanguage } from '@/lib/config/settings';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import type { SortColumn, SortDirection, UserAnimeStatus } from '@/models/anime';
 
@@ -435,6 +436,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   // Catalog fields (studios/staff/cast) only, so the personal-state cache caveat
   // doesn't apply — the shared cached catalog is fine (see similarByCredits.ts).
   const catalog = getAnimeForDisplay();
+  const titleLang = getTitleLanguage();
   // The cast slice is read ONLY on the seiyuu branch: it is the bulkiest AniList
   // payload there is, and parsing it to render a studio filmography would tax
   // the other two types for data they never look at.
@@ -482,7 +484,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       name: result.name,
       nameNative: result.nameNative ?? null,
       image: result.image ?? null,
-      items: JSON.parse(JSON.stringify(sortAnimeRecords(records, state.sortBy, state.sortDir).map(toCredited))),
+      items: JSON.parse(JSON.stringify(sortAnimeRecords(records, state.sortBy, state.sortDir, titleLang).map(a => toCredited(a, titleLang)))),
       total: result.records.length,
       availableGenres: Array.from(genreNames).sort((a, b) => a.localeCompare(b)),
       castCovered: result.castCovered ?? null,

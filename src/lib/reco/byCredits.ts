@@ -18,6 +18,7 @@
 import type { AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface SharedStaffCredit {
   name: string;
@@ -115,6 +116,7 @@ function catalogIdf(catalog: AnimeRecord[]): IdfMaps {
 export function computeSimilarByCredits(
   target: AnimeRecord,
   catalog: AnimeRecord[],
+  titleLang: TitleLanguage,
   limit = 3,
 ): SimilarByCredits[] {
   const targetStudios = target.catalog.studios || [];
@@ -165,7 +167,7 @@ export function computeSimilarByCredits(
 
     scored.push({
       id: cand.id,
-      title: getCatalogPrimaryTitle(cand.catalog),
+      title: getCatalogPrimaryTitle(cand.catalog, titleLang),
       poster: cand.catalog.mainPicture?.medium || cand.catalog.mainPicture?.large,
       score,
       sharedStudios,

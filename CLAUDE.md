@@ -662,6 +662,87 @@ A lightweight, dependency-free i18n built for GitHub visibility (the app is sing
 - **Server usage:** `translate(lang, key, params?)` / `makeT(lang)` are framework-free (no React context) for the reco **"Pourquoi ?"** detail strings built in [feed.ts](src/lib/reco/feed.ts) / [similar.ts](src/lib/reco/similar.ts) (`computeFeed` / `computeSimilarTo` take a `lang`, keyed `recoDetail.*`). The client passes `?lang=` to `/api/anime/recommendations` and `…/similar/[id]`; both default to `fr`.
 - **Deliberately left French-only:** the `/rate` rubric ([ratingGrids.ts](src/lib/domain/ratingGrids.ts), subjective prose) — only the calculator's chrome is translated. `formatUserStatus` is still used for the catalog `source` field (language-neutral prettify), not for watch statuses.
 
+### Title language — a display preference that is ALSO read server-side
+
+Which of a title's three names shows as the primary one: `english`
+(`alternativeTitles.en`), `romaji` (`catalog.title` — MAL's and AniList's own
+default) or `native` (`alternativeTitles.ja`). The vocabulary is AniList's
+`userPreferredTitleLanguage`, because that is the wording the owner already
+meets on the site most of these titles come from.
+
+- **It is a `ViewDefaults` key, not a new settings field.** `titleLanguage` sits
+  in [src/lib/url/viewDefaults.ts](src/lib/url/viewDefaults.ts) beside
+  `cardsPerRow`/`sidebarExpanded` — "how it looks", never URL state — so it
+  inherits that module's whole apparatus for free: sparse storage under
+  `settings.json.viewDefaults`, `resolveViewDefaults`/`sparseViewDefaults`
+  sanitizing and no-op-dropping it, `GET/POST /api/anime/view-defaults` as the
+  transport, and `useViewDefaults`'s **one module-level store, one fetch per
+  page** on the client. Adding it as a top-level `AppSettings` field would have
+  meant a second endpoint and a second client cache for the same kind of value.
+- ⚠️ **Not the FR/EN UI language, and the two must never be merged.** The UI
+  language is `lib/i18n.tsx`, `localStorage`-backed, per-browser, threaded as
+  `lang`. This one is stored server-side and also decides what several endpoints
+  put in a `title` **field**. English UI + Japanese titles is a legitimate
+  combination. `computeFeed`/`computeSimilarTo`/`computeAnchored` now take BOTH,
+  as `lang` and `titleLang` — do not collapse them.
+- **The preference reaches the render two ways, and which one is correct depends
+  on where the page gets its data.** Client-fetched pages (`/`, `/tier`,
+  `/discrepancies`, `/recommendations`, `/mix`) read `useTitleLanguage()` — they
+  already render an empty grid until their own fetch lands, so the preference
+  arrives with the rows and there is nothing to flicker. SSR pages
+  (`/anime/[id]`, `/credits/[type]/[id]`) take it as a **prop** resolved by
+  `getTitleLanguage()` in `getServerSideProps`, because the hook's pre-fetch
+  value is `SHIPPED_TITLE_LANGUAGE` and using it there would paint an English
+  headline title and then swap it.
+- **`getTitleLanguage()` (in `config/settings.ts`) is server-only, which is why
+  the helpers take a parameter at all.** `getPrimaryTitle`/`getSecondaryTitle`/
+  `getCatalogPrimaryTitle` live in `lib/domain/animeUtils.ts`, and that folder —
+  along with `lib/reco/byCredits.ts` — is in the enforced client-safety eslint
+  block, so it cannot read the setting itself. Server callers pass it down; the
+  outermost boundary (API route, `getServerSideProps`, MCP handler) is where
+  `getTitleLanguage()` is actually called.
+- ⚠️ **The `pref` parameter defaults to `SHIPPED_TITLE_LANGUAGE`, and that
+  default means "not yet threaded", never "deliberately English".** It exists so
+  that ~47 call sites could be converted without a flag day. A new call site
+  that omits it is a bug that will not announce itself — pass the preference.
+- **Three places read a title WITHOUT going through a type error, so they were
+  found by grep, not by the compiler** — check them if a title ever looks wrong.
+  `sortAnimeRecords`' `case 'title'` (an alphabetical sort computed on English
+  titles while the grid renders romaji reads as a broken sort, hence its
+  `titleLang` is required, not defaulted); `animeGraph.ts`'s node and franchise
+  labels, which used raw `catalog.title` and so showed romaji while the rest of
+  the app showed English — the preference now rides ON the `GraphIndex` and is
+  part of `getGraphIndex`'s WeakMap key, or a changed preference would serve
+  stale labels for the life of the record array. The third is an exemption:
+- ⚠️ **The Google/JustWatch links deliberately do NOT follow the preference.**
+  `searchTitle` in `AnimeCardView` and on the detail page stays English-then-
+  romaji, because building a *search query* is a different question from naming
+  a show — both services index Latin-script titles. It looks like an
+  un-threaded call site and is not one; both spots carry a comment saying so.
+- **The detail page's title provenance chips derive their field from the string
+  shown**, not from `en ? 'alternativeTitles' : 'title'` as before. That test
+  assumed English-first and mislabels every romaji/native reader. Note `en` and
+  `ja` are BOTH `alternativeTitles`, so only `catalog.title` distinguishes
+  itself — and the standalone Japanese line is suppressed when `ja` is already
+  the primary or secondary, or `native` renders it twice.
+- **Search is deliberately preference-INDEPENDENT and matches every name a
+  title carries.** `applyNarrowingFilters`, `globalSearch`'s `bestTitleRank` and
+  `/catch-up`'s franchise filter all test romaji + `en` + `ja` (+ synonyms in the
+  global one) whatever `titleLanguage` says: you must be able to find a show by a
+  name it has, not only by the one currently rendered. `ja` was missing from all
+  three before this shipped, which was invisible while everything displayed
+  English and would have meant a `native` reader could not search for what was on
+  their own screen.
+- **Fallback is an ordered list, not a single field.** `titleCandidates` returns
+  all three in the preference's order; the primary is the first non-empty one
+  and the secondary is the next *distinct* one. Only `catalog.title` is
+  guaranteed present (`alternativeTitles` is absent on AniList-only titles, and
+  MAL stores `en: ''` far more often than a real English title), so a `native`
+  reader on a title with no Japanese name gets romaji with English underneath
+  rather than a blank. This also generalized `getSecondaryTitle`, whose old
+  "the romaji title when it differs" rule was only correct while the primary was
+  always English.
+
 ### Environment variables
 
 | Variable | Purpose |

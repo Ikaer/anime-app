@@ -24,7 +24,9 @@ import {
   getPrimaryTitle,
 } from '@/lib/domain/animeUtils';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
+import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord } from '@/models/anime';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /** Everything a catch-up row needs, and nothing else. */
 export interface CatchUpEntry {
@@ -89,9 +91,9 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const toEntry = (a: AnimeRecord): CatchUpEntry => ({
+const toEntry = (a: AnimeRecord, titleLang: TitleLanguage): CatchUpEntry => ({
   id: a.id,
-  title: getPrimaryTitle(a),
+  title: getPrimaryTitle(a, titleLang),
   picture: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
   numEpisodes: a.catalog.numEpisodes,
   mean: a.catalog.mean,
@@ -103,11 +105,11 @@ const toEntry = (a: AnimeRecord): CatchUpEntry => ({
 });
 
 /** Airing order within a franchise: earliest first, undated last. */
-const byAirDate = (a: AnimeRecord, b: AnimeRecord): number => {
+const byAirDate = (titleLang: TitleLanguage) => (a: AnimeRecord, b: AnimeRecord): number => {
   const ta = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
   const tb = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
   if (ta !== tb) return ta - tb;
-  return getPrimaryTitle(a).localeCompare(getPrimaryTitle(b));
+  return getPrimaryTitle(a, titleLang).localeCompare(getPrimaryTitle(b, titleLang));
 };
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -120,6 +122,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, unaired, direct, page } =
       req.query;
     const includeUnaired = unaired === '1';
+    const titleLang = getTitleLanguage();
 
     // `direct` narrows the GRAPH, not the rows: the component is rebuilt over
     // sequel/prequel edges alone, so an OVA that only hangs off the series stops
@@ -159,10 +162,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       const visible = members.filter(m => !m.hidden);
 
       if (term) {
+        // Every name, not just the displayed one — same rule as
+        // `applyNarrowingFilters`; see the note there.
         const hit = visible.some(
           m =>
             (m.catalog.title || '').toLowerCase().includes(term) ||
-            (m.catalog.alternativeTitles?.en || '').toLowerCase().includes(term)
+            (m.catalog.alternativeTitles?.en || '').toLowerCase().includes(term) ||
+            (m.catalog.alternativeTitles?.ja || '').toLowerCase().includes(term)
         );
         if (!hit) continue;
       }
@@ -189,7 +195,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
       const completed = [...seen]
         .filter(m => getEffectiveStatus(m) === 'completed')
-        .sort(byAirDate);
+        .sort(byAirDate(titleLang));
       const scores = completed.map(m => getEffectiveScore(m)).filter((s): s is number => !!s);
       const sortScore = scores.length > 0 ? Math.max(...scores) : 0;
 
@@ -203,10 +209,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       built.push({
         group: {
           id: namer.id,
-          title: getPrimaryTitle(namer),
+          title: getPrimaryTitle(namer, titleLang),
           score: scores.length > 0 ? Math.max(...scores) : undefined,
-          seen: [...seen].sort(byAirDate).map(toEntry),
-          missing: [...holes].sort(byAirDate).map(toEntry),
+          seen: [...seen].sort(byAirDate(titleLang)).map(a => toEntry(a, titleLang)),
+          missing: [...holes].sort(byAirDate(titleLang)).map(a => toEntry(a, titleLang)),
           unairedHidden,
         },
         sortScore,

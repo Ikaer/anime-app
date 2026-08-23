@@ -18,6 +18,7 @@ import type { RecoContribution } from '@/models/anime';
 import type { RecoEdge } from '@/lib/reco/data';
 import { getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { DEFAULT_LANG, type Lang } from '@/lib/i18n';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /** Default number of similar titles returned. */
 export const SIMILAR_LIMIT = 12;
@@ -65,6 +66,7 @@ export function computeSimilarTo(
   targetId: string,
   malEdges: RecoEdge[],
   anilistEdges: AniListEdgeInput[],
+  titleLang: TitleLanguage,
   limit: number = SIMILAR_LIMIT,
   lang: Lang = DEFAULT_LANG
 ): SimilarItem[] {
@@ -73,11 +75,11 @@ export function computeSimilarTo(
   const mal: AnchoredEdge[] = malEdges.map(e => ({ anchorId: targetId, id: e.id, num: e.num }));
   const anilist: AnchoredEdge[] = anilistEdges.map(e => ({ anchorId: targetId, id: e.id, num: e.rating }));
 
-  return computeAnchored([targetId], mal, anilist, { lang })
+  return computeAnchored([targetId], mal, anilist, { lang, titleLang })
     .slice(0, limit)
     .map(({ anime, score, breakdown, status, seen }) => ({
       id: anime.id,
-      title: getPrimaryTitle(anime),
+      title: getPrimaryTitle(anime, titleLang),
       poster: anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large,
       mean: anime.catalog.mean,
       mediaType: anime.catalog.mediaType,

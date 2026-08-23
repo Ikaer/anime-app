@@ -24,6 +24,7 @@
 
 import type { AniListCastEntry, AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle, getEffectiveScore, getEffectiveStatus } from '@/lib/domain/animeUtils';
+import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface CreditedAnime {
   /** Canonical id — the detail-page route key. */
@@ -87,10 +88,10 @@ export interface CreditsResult {
 // goes through the effective-state helpers (never `sources.malPersonal`), so a
 // SIMKL-, AniList- or local-only entry shows up. `id` is the outward canonical
 // id — the detail-page route key.
-export function toCredited(a: CreditedRecord): CreditedAnime {
+export function toCredited(a: CreditedRecord, titleLang: TitleLanguage): CreditedAnime {
   return {
     id: a.id,
-    title: getCatalogPrimaryTitle(a.catalog),
+    title: getCatalogPrimaryTitle(a.catalog, titleLang),
     poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
     mean: a.catalog.mean ?? null,
     mediaType: a.catalog.mediaType,

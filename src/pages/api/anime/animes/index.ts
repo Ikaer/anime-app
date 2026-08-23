@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
+import { getTitleLanguage } from '@/lib/config/settings';
 import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
@@ -137,7 +138,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const sortColumn = sortBy as SortColumn;
     const sortDirection = sortDir as SortDirection;
 
-    animeList = sortAnimeRecords(animeList, sortColumn, sortDirection);
+    animeList = sortAnimeRecords(animeList, sortColumn, sortDirection, getTitleLanguage());
 
     // Pagination already defaulted to 200; no view-specific overrides
 

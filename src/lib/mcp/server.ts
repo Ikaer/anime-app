@@ -12,6 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, tierList, MCP_SORT_KEYS } from '@/lib/mcp/tools';
 import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
+import { getTitleLanguage } from '@/lib/config/settings';
 
 /** Default / ceiling on list results — the constraint is the model's context. */
 const DEFAULT_SEARCH_LIMIT = 10;
@@ -30,6 +31,11 @@ function json(value: unknown) {
 }
 
 export function buildServer(): McpServer {
+  // Read once per request (a fresh server is built per request — see the file
+  // doc comment) and closed over by every handler below, rather than each
+  // handler reading the setting itself.
+  const titleLang = getTitleLanguage();
+
   const server = new McpServer(
     { name: 'anime-tracker', version: '1.0.0' },
     {
@@ -58,7 +64,7 @@ export function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ query, limit }) => json(searchAnime(query, limit ?? DEFAULT_SEARCH_LIMIT))
+    async ({ query, limit }) => json(searchAnime(query, limit ?? DEFAULT_SEARCH_LIMIT, titleLang))
   );
 
   server.registerTool(
@@ -76,7 +82,7 @@ export function buildServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ id }) => {
-      const result = getAnime(id);
+      const result = getAnime(id, titleLang);
       if (!result.found) return { ...json({ error: result.error }), isError: true };
       return json(result.anime);
     }
@@ -121,7 +127,7 @@ export function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async (params) => json(listAnime(params))
+    async (params) => json(listAnime(params, titleLang))
   );
 
   server.registerTool(
@@ -193,7 +199,7 @@ export function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async (params) => json(recommend(params))
+    async (params) => json(recommend(params, titleLang))
   );
 
   server.registerTool(
@@ -214,7 +220,7 @@ export function buildServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({ id, limit, lang }) => {
-      const result = await similarTo(id, limit, lang);
+      const result = await similarTo(id, limit, lang, titleLang);
       if (!result.ok) return { ...json({ error: result.error }), isError: true };
       return json({ items: result.items, sources: result.sources, ...(result.note ? { note: result.note } : {}) });
     }
@@ -264,7 +270,7 @@ export function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async (params) => json(tierList(params))
+    async (params) => json(tierList(params, titleLang))
   );
 
   server.registerTool(

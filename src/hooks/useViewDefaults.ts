@@ -3,6 +3,7 @@ import {
   SHIPPED_VIEW_DEFAULTS,
   ViewDefaults,
   resolveViewDefaults,
+  type TitleLanguage,
 } from '@/lib/url/viewDefaults';
 
 /**
@@ -116,6 +117,20 @@ export function useViewDefaults(): UseViewDefaultsReturn {
   const save = useCallback((updates: Partial<ViewDefaults>) => saveViewDefaults(updates), []);
 
   return { defaults, loaded: isLoaded, save };
+}
+
+/**
+ * Just the title-language preference — the one view default that most of its
+ * readers want on its own, from components that care nothing for presets or
+ * sidebar state (`AnimeCardView`, the tier board, the discrepancies table).
+ *
+ * It rides the same single fetch as the rest, so this costs nothing extra; it
+ * exists so a card does not have to destructure a settings object to render a
+ * title. Before the fetch lands it returns `SHIPPED_TITLE_LANGUAGE`, which is
+ * what keeps SSR and the first client render in agreement.
+ */
+export function useTitleLanguage(): TitleLanguage {
+  return useViewDefaults().defaults.titleLanguage;
 }
 
 export default useViewDefaults;
