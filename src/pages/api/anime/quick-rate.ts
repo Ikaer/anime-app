@@ -18,22 +18,16 @@ import {
   getPrimaryTitle,
 } from '@/lib/domain/animeUtils';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
+import { toLeanRow, byAirDate, type LeanAnimeRow } from '@/lib/domain/leanRow';
 import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
-/** Everything a quick-rate card needs, and nothing else. */
-export interface QuickRateMember {
-  id: string;
-  title: string;
-  picture?: string;
-  numEpisodes?: number;
-  mean?: number;
-  year?: number;
-  mediaType?: string;
-  status?: string;
-  score?: number;
-}
+/**
+ * Everything a quick-rate card needs, and nothing else — the shared lean row.
+ * Kept as a named alias because the page imports this type by this name.
+ */
+export type QuickRateMember = LeanAnimeRow;
 
 export interface QuickRateGroup {
   /** The group's key + display name: its earliest (or best-known) member. */
@@ -59,26 +53,6 @@ export interface QuickRateResponse {
  * than capping (a cap just hid the rest with no way to reach them).
  */
 const PAGE_SIZE = 20;
-
-const toMember = (a: AnimeRecord, titleLang: TitleLanguage): QuickRateMember => ({
-  id: a.id,
-  title: getPrimaryTitle(a, titleLang),
-  picture: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
-  numEpisodes: a.catalog.numEpisodes,
-  mean: a.catalog.mean,
-  year: a.catalog.startSeason?.year,
-  mediaType: a.catalog.mediaType,
-  status: getEffectiveStatus(a),
-  score: getEffectiveScore(a),
-});
-
-/** Airing order within a franchise: earliest first, undated last. */
-const byAirDate = (titleLang: TitleLanguage) => (a: AnimeRecord, b: AnimeRecord): number => {
-  const ta = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
-  const tb = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
-  if (ta !== tb) return ta - tb;
-  return getPrimaryTitle(a, titleLang).localeCompare(getPrimaryTitle(b, titleLang));
-};
 
 const csv = (v: unknown): string[] =>
   typeof v === 'string' && v.trim() !== '' ? v.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -171,7 +145,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         return {
           id: ordered[0].id,
           title: getPrimaryTitle(ordered[0], titleLang),
-          members: ordered.map(a => toMember(a, titleLang)),
+          members: ordered.map(a => toLeanRow(a, titleLang)),
         };
       }),
       total: groups.length,

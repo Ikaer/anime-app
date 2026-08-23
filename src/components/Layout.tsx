@@ -54,6 +54,7 @@ const OTHER_NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.explore',
     items: [
       { href: '/mix', key: 'nav.mix' },
+      { href: '/boxes', key: 'nav.boxes' },
       { href: '/catch-up', key: 'nav.catchUp' },
       { href: '/quick-rate', key: 'nav.quickRate' },
     ],

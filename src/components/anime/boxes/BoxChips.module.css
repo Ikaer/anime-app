@@ -1,0 +1,61 @@
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+/* Filed. Reads as "in", not as "hovered" — the two states sit side by side in a
+   row and have to be tellable apart at a glance from across a room (the target
+   is a TV at 300% zoom). */
+.on {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.on:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+
+.busy {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.emoji {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+.empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}

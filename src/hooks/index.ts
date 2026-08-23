@@ -15,6 +15,10 @@ export type { QuickRateUrlState, UseQuickRateUrlStateReturn } from './useQuickRa
 
 export { useCatchUpUrlState, CATCH_UP_DEFAULTS, toCatchUpQuery } from './useCatchUpUrlState';
 export type { CatchUpUrlState, UseCatchUpUrlStateReturn } from './useCatchUpUrlState';
+export { useBoxesUrlState, BOXES_DEFAULTS, toWatchedGroupsQuery } from './useBoxesUrlState';
+export type { BoxesUrlState, UseBoxesUrlStateReturn } from './useBoxesUrlState';
+export { useBoxUrlState, BOX_DEFAULTS } from './useBoxUrlState';
+export type { BoxUrlState, BoxView, UseBoxUrlStateReturn } from './useBoxUrlState';
 export { useActivityUrlState, ACTIVITY_DEFAULTS, toActivityQuery } from './useActivityUrlState';
 export type { ActivityUrlState, UseActivityUrlStateReturn } from './useActivityUrlState';
 

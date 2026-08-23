@@ -17,6 +17,7 @@ const SERVER_ONLY = [
   '@/lib/providers/simkl/**',
   '@/lib/providers/anilist/**',
   '@/lib/reco/anchored',
+  '@/lib/reco/boxes',
   '@/lib/reco/data',
   '@/lib/reco/feed',
   '@/lib/reco/feedback',
@@ -65,6 +66,7 @@ const WRITE_MODULES = [
   '@/lib/providers/*/personalSync',
   '@/lib/reco/refresh',
   '@/lib/reco/feedback',
+  '@/lib/reco/boxes',
 ].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
 
 const READ_ONLY_MESSAGE =

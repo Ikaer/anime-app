@@ -10,6 +10,7 @@ import {
   toNum,
 } from '@/lib/store';
 import { computeAnchored, type AnchoredEdge } from '@/lib/reco/anchored';
+import { getBox } from '@/lib/reco/boxes';
 import { fetchRecoEdges } from '@/lib/reco/refresh';
 import { fetchAnilistRecommendations } from '@/lib/providers/anilist/sync';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
@@ -48,6 +49,20 @@ import type { AnimeRecord, RecoMeta } from '@/models/anime';
 
 /** Hard cap on anchors — a guard on the MAL fetch cost, not a UX preference. */
 export const MAX_MIX_ANCHORS = 12;
+
+/**
+ * The same guard for a `box=` request, an order of magnitude looser.
+ *
+ * `MAX_MIX_ANCHORS` is small because `ids=` is arbitrary URL input and MAL costs
+ * one request per anchor. A box is neither arbitrary nor transient: it is a
+ * curated file the owner filled by hand, 20-40 titles by design, and the
+ * per-anchor edge cache means the fetch is paid ONCE for the process's life.
+ * AniList costs one request for all of them either way (`id_in`).
+ *
+ * Over the cap, the highest-scored members win — a box's best-loved entries are
+ * the ones whose crowd neighbourhoods best describe what the box is.
+ */
+export const MAX_BOX_ANCHORS = 40;
 
 export interface MixSourceOutcome {
   ok: boolean;
@@ -129,19 +144,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
-  const requested = (typeof req.query.ids === 'string' ? req.query.ids : '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
+  // Two ways in: `ids=` is /mix's hand-picked set, `box=` is a saved one. The
+  // ranking is identical — a box IS an anchor set, which is the whole reason its
+  // members are stored as a flat id array — so only the cap and the ordering
+  // rule differ.
+  const boxParam = typeof req.query.box === 'string' ? req.query.box.trim() : '';
+  const box = boxParam ? getBox(boxParam) : undefined;
+  if (boxParam && !box) return res.status(404).json({ error: 'Box not found' });
+
+  const requested = box
+    ? box.members
+    : (typeof req.query.ids === 'string' ? req.query.ids : '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
   if (requested.some(id => !isCanonicalId(id))) {
     return res.status(400).json({ error: 'Invalid anime id' });
   }
 
   const titleLang = getTitleLanguage();
-  const byId = new Map(getAnimeForDisplay().map(a => [a.id, a]));
+  const records = getAnimeForDisplay();
+  const byId = new Map(records.map(a => [a.id, a]));
   // Unknown ids are dropped rather than 400'd: a bookmarked mix must survive an
   // anchor disappearing from the store, and the response says which were kept.
-  const anchorIds = Array.from(new Set(requested)).filter(id => byId.has(id)).slice(0, MAX_MIX_ANCHORS);
+  let anchorIds = Array.from(new Set(requested)).filter(id => byId.has(id));
+  if (box) {
+    anchorIds = anchorIds
+      .sort((a, b) => (byId.get(b)!.personal.score || 0) - (byId.get(a)!.personal.score || 0))
+      .slice(0, MAX_BOX_ANCHORS);
+  } else {
+    anchorIds = anchorIds.slice(0, MAX_MIX_ANCHORS);
+  }
   const anchors = anchorIds.map(id => {
     const a = byId.get(id)!;
     return { id, title: getPrimaryTitle(a, titleLang), poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large };

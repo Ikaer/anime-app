@@ -674,6 +674,50 @@ export type SourceWeights = Record<RecoSource, number>;
 /** A user's explicit thumb on a recommendation: 👍 keep / 👎 not for me. */
 export type RecoVerdict = 'up' | 'down';
 
+/**
+ * One hand-drawn taste axis — « une boîte » — over the owner's own watched list.
+ *
+ * The point of the thing: the reco engine's positive signal is derived entirely
+ * from SCORES, so nothing records *why* a title was liked. AniList's tags cover
+ * content axes well (a measured "exotic adventure" set shares `Steampunk`,
+ * `Lost Civilization`, `Aviation`) but cannot express form or tone — a measured
+ * "weird concept" set of eight auteur titles shared exactly one T1 credit and no
+ * tag beyond `Philosophy`. A box records that axis by hand instead of inferring
+ * it, and its payoff is that `members` IS an anchor set: `computeAnchored`
+ * consumes it unmodified, which is what makes a box a query rather than a label.
+ *
+ * ⚠️ `members` holds CANONICAL IDS, never a franchise key, even though the UI
+ * writes a whole direct-relation component at a time. Franchise components are
+ * derived from relation data that changes on every AniList sync, so a stored key
+ * would silently re-scope; ids also give the per-title override a recap movie or
+ * a comedy spin-off needs.
+ */
+export interface Box {
+  /** Slug, minted from the name; the URL key on `/boxes/[id]`. */
+  id: string;
+  name: string;
+  emoji?: string;
+  /** Canonical ids. Order is insertion order and carries no meaning. */
+  members: string[];
+  /** ISO 8601. */
+  createdAt: string;
+}
+
+/**
+ * Emoji a box gets when none was picked.
+ *
+ * ⚠️ Lives HERE, not in `lib/reco/boxes.ts`, because `/boxes` is a client-rendered
+ * page and its create form needs this value: importing it from the store module
+ * would pull `fs` into the browser bundle. `src/pages/**` is exempt from the
+ * client-safety lint rule (it is the sanctioned seam for `getServerSideProps`),
+ * so that mistake would not have been caught — models is the client-safe home.
+ *
+ * A box without an emoji is not a cosmetic gap: the chip rows on `/boxes` ARE the
+ * labeling control, and an iconless chip renders shorter than its neighbours, so
+ * a row of them stops lining up.
+ */
+export const DEFAULT_BOX_EMOJI = '📦';
+
 /** One line of the on-demand "Pourquoi ?" breakdown for a recommendation. */
 export interface RecoContribution {
   source: RecoSource;
