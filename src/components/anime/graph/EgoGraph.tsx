@@ -70,9 +70,11 @@ const MAX_ZOOM = 4;
  *   cost two clip paths total.
  * - **A studio node is not clickable to re-centre.** It links to
  *   `/credits/studio/[name]`, which is that view already.
- * - **A seiyuu node re-centres and never links to `/credits/staff/[id]`** —
- *   that page scans production credits, which by construction never contain
- *   voice actors, so the link would resolve to an empty page.
+ * - **A seiyuu node re-centres rather than linking out.** `/credits/seiyuu/[id]`
+ *   now exists and would resolve, but re-centring IS this view's answer to
+ *   "what else has this person done" — leaving the graph would be a downgrade.
+ *   `/credits/staff/[id]` remains wrong for a seiyuu whatever happens: it scans
+ *   production credits, which by construction never contain voice actors.
  */
 const EgoGraph: React.FC<EgoGraphProps> = ({ ego, colour, collapseFranchise, onRecentre }) => {
   const t = useT();

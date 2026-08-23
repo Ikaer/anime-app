@@ -351,13 +351,15 @@ interface EntryLink {
 }
 
 /**
- * Where an entry's name points, per dimension. Two of the four linkable
- * dimensions deliberately leave the app:
+ * Where an entry's name points, per dimension. Three of the four linkable
+ * dimensions stay in the app; one cannot:
  *
- * - **seiyuu** → AniList. `/credits/staff/[id]` scans `sources.anilist.staff`,
- *   which is the top-15 *production* credits; voice actors are never in it, so
- *   an internal link would resolve to an empty page. (Same call `CastSection`
- *   already makes for the detail page's seiyuu.)
+ * - **seiyuu** → `/credits/seiyuu/[id]`, its own credit type. It is NOT
+ *   `/credits/staff/[id]`: that one scans `sources.anilist.staff`, the top-50
+ *   *production* credits, which by construction never contain voice actors — so
+ *   pointing there would resolve to an empty page even though the id is valid in
+ *   both. The seiyuu page reads the cast slice instead, and declares its own
+ *   partial coverage.
  * - **producers** → AniList. These carry ANILIST studio ids, while
  *   `listAnimeByStudio` scans `catalog.studios`, which are MAL-namespace ids.
  *   The two id spaces overlap numerically, so an internal link wouldn't merely
@@ -370,7 +372,7 @@ function linkFor(dimension: StatsDimension, entry: StatEntry): EntryLink | null 
   switch (dimension) {
     case 'studios': return { href: `/credits/studio/${entry.id}`, external: false };
     case 'staff': return { href: `/credits/staff/${entry.id}`, external: false };
-    case 'seiyuu': return { href: `https://anilist.co/staff/${entry.id}`, external: true };
+    case 'seiyuu': return { href: `/credits/seiyuu/${entry.id}`, external: false };
     case 'producers': return { href: `https://anilist.co/studio/${entry.id}`, external: true };
     default: return null;
   }

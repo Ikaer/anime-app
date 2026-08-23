@@ -1,5 +1,14 @@
 /**
- * /credits/studio/[id] and /credits/staff/[id] — one credit's filmography.
+ * /credits/studio/[id], /credits/staff/[id] and /credits/seiyuu/[id] — one
+ * credit's filmography.
+ *
+ * **`seiyuu` is a third TYPE, not more rows on `staff`**, even though both key
+ * on the same AniList staff id space. The two credit sets are disjoint by
+ * construction: `sources.anilist.staff` is the top-50 *production* credits,
+ * which never contain voice actors. They also come from different places —
+ * staff rides on the record, seiyuu live in the cast slice, which is
+ * deliberately off the row join — so only this type reads a second file and
+ * only this type has partial coverage to declare (see `castCovered`).
  *
  * The narrowing filters and the sort run in `getServerSideProps`, not in the
  * browser: finding the credit is a catalog scan either way, so the server is
@@ -21,14 +30,14 @@ import { AnimePageLayout, AnimeListHeader } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { CollapsibleSection } from '@/components/shared';
-import { getAnimeForDisplay } from '@/lib/store';
+import { getAllAnilistCast, getAnimeForDisplay } from '@/lib/store';
 import { applyNarrowingFilters, getEffectiveStatus, sortAnimeRecords } from '@/lib/domain/animeUtils';
-import { listAnimeByStudio, listAnimeByStaff, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
+import { listAnimeByStudio, listAnimeByStaff, listAnimeBySeiyuu, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
 import { decodeCreditsState, useCreditsUrlState } from '@/hooks';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import type { SortColumn, SortDirection, UserAnimeStatus } from '@/models/anime';
 
-type CreditType = 'studio' | 'staff';
+type CreditType = 'studio' | 'staff' | 'seiyuu';
 
 /** Same list (and order) as the main list's status filter — `not_defined` included:
  *  a filmography is mostly titles you have no status on, so "sans statut" is a
@@ -49,18 +58,38 @@ interface Props {
   type: CreditType;
   id: number;
   name: string;
+  /** Seiyuu only — AniList's Japanese-script name, when it has one. */
+  nameNative: string | null;
+  /** Seiyuu only — AniList-hosted portrait, hot-linked like the cast section's. */
+  image: string | null;
   items: CreditedAnime[];
   /** Credits before narrowing — so the count can say "42 of 310". */
   total: number;
   /** Genre vocabulary of the WHOLE filmography, so it doesn't shrink as you filter. */
   availableGenres: string[];
+  /**
+   * Seiyuu only: how many catalog titles had a cast entry at all. The cast slice
+   * is filled lazily + by the /stats sweep, never catalog-wide, so this
+   * filmography is drawn from a pool — saying which one is the difference
+   * between an honest partial answer and a silently wrong one.
+   */
+  castCovered: number | null;
+  /** Catalog size, the denominator `castCovered` is read against. */
+  catalogTotal: number;
 }
 
-export default function CreditsPage({ type, id, name, items, total, availableGenres }: Props) {
+export default function CreditsPage({
+  type, id, name, nameNative, image, items, total, availableGenres, castCovered, catalogTotal,
+}: Props) {
   const t = useT();
   const router = useRouter();
   const { state, update } = useCreditsUrlState(`/credits/${type}/${id}`);
-  const heading = type === 'studio' ? t('credits.studioHeading', { name }) : t('credits.staffHeading', { name });
+  const heading = type === 'studio'
+    ? t('credits.studioHeading', { name })
+    : type === 'seiyuu'
+      ? t('credits.seiyuuHeading', { name })
+      : t('credits.staffHeading', { name });
+
 
   // Filtering is a server round-trip here, so say so — otherwise a filter click
   // looks like it did nothing until the new props land. Gated on the
@@ -89,6 +118,16 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
   const isFiltered = !!state.search || state.mediaTypes.length > 0 || state.genres.length > 0
     || state.statuses.length > 0 || state.minScore !== null || state.maxScore !== null
     || state.minYear !== null || state.maxYear !== null;
+
+  /**
+   * Whether the character portraits ride on the posters. Component state, not a
+   * URL key: it says how the grid LOOKS, and the same reasoning that removed the
+   * `img` key applies — a display toggle nobody shares does not earn a param.
+   * It survives filter changes because those re-render this page rather than
+   * remounting it; a hard reload legitimately starts from the default.
+   */
+  const [showFaces, setShowFaces] = useState(true);
+  const anyFace = items.some(a => a.characters?.some(c => c.image));
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ filters: true });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
@@ -166,8 +205,39 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
 
           {/* The same bar `/`, `/recommendations` and `/tier` render. No
               `display` slot: the grid is auto-fill, not cards-per-row. */}
+          {/* The portrait rides in the header's `title` slot rather than above
+              it, so a seiyuu page keeps the exact bar every other list page
+              renders. It is written INLINE rather than built into a variable
+              above: styled-jsx only scopes JSX inside the tree that holds the
+              `<style jsx>` block, so a hoisted node would render unstyled — and
+              an unsized portrait is a full-height poster. */}
           <AnimeListHeader
-            title={heading}
+            title={type === 'seiyuu' && (image || nameNative) ? (
+              <span className="who">
+                {image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img className="portrait" src={image} alt="" />
+                  : null}
+                <span className="who-text">
+                  <span>{heading}</span>
+                  {nameNative && <span className="native">{nameNative}</span>}
+                  {/* Lives here, in the seiyuu's own box, because it controls
+                      something only a seiyuu page has. Hidden outright when no
+                      character on the page carries a portrait — a toggle with
+                      nothing to toggle is worse than no toggle. */}
+                  {anyFace && (
+                    <button
+                      type="button"
+                      className="faces-toggle"
+                      aria-pressed={showFaces}
+                      onClick={() => setShowFaces(v => !v)}
+                    >
+                      {t(showFaces ? 'credits.hideFaces' : 'credits.showFaces')}
+                    </button>
+                  )}
+                </span>
+              </span>
+            ) : heading}
             count={isFiltered
               ? t('credits.countFiltered', { count: items.length, total })
               : t(total === 1 ? 'credits.countOne' : 'credits.countOther', { count: total })}
@@ -179,6 +249,16 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
             }}
           />
 
+          {/* Coverage is a property of the DATA, not of the filters, so it sits
+              outside the loading/empty branches — an over-narrow filter must not
+              hide the reason a filmography looks short. */}
+          {castCovered !== null && castCovered < catalogTotal && (
+            <p className="coverage">
+              {t('credits.seiyuuCoverage', { covered: castCovered, total: catalogTotal })}{' '}
+              <Link href="/stats">{t('credits.seiyuuCoverageAction')}</Link>
+            </p>
+          )}
+
           {isLoading ? (
             <div className="empty">{t('common.loading')}</div>
           ) : items.length === 0 ? (
@@ -187,9 +267,37 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
             <div className="grid">
               {items.map(a => (
                 <Link key={a.id} href={`/anime/${a.id}`} className="card" title={a.title}>
-                  {a.poster
-                    ? <img src={a.poster} alt="" />
-                    : <div className="noimg">?</div>}
+                  <span className="poster">
+                    {a.poster
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={a.poster} alt="" />
+                      : <span className="noimg">?</span>}
+                    {/* The character(s) this seiyuu voiced, over the art they
+                        belong to. On the poster rather than beside the title
+                        because a face is what identifies a role — the name chip
+                        below still carries the text, so hiding these loses
+                        nothing but the pictures. */}
+                    {showFaces && a.characters && a.characters.some(c => c.image) && (
+                      // The circle SIZES ITSELF to the count: one credit — the
+                      // usual case — earns the full quarter of the poster, and
+                      // each extra face gives some of it back rather than every
+                      // card paying the worst case's size. Capped at 4, past
+                      // which they wrap instead of shrinking further.
+                      <span className={`faces faces-${Math.min(a.characters.filter(c => c.image).length, 4)}`}>
+                        {a.characters.filter(c => c.image).map(c => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={c.id}
+                            className={c.role === 'MAIN' ? 'face face-main' : 'face'}
+                            src={c.image}
+                            alt={c.name}
+                            title={c.name}
+                            loading="lazy"
+                          />
+                        ))}
+                      </span>
+                    )}
+                  </span>
                   <div className="body">
                     <span className="title">{a.title}</span>
                     <div className="meta">
@@ -208,6 +316,18 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
                       </span>
                     )}
                     {a.role && <span className="role">{a.role}</span>}
+                    {/* Every character, not just the first: voicing two roles in
+                        one title is common enough that showing one silently
+                        drops a real credit. */}
+                    {a.characters && a.characters.length > 0 && (
+                      <span className="chars">
+                        {a.characters.map(c => (
+                          <span key={c.id} className={c.role === 'MAIN' ? 'char char-main' : 'char'}>
+                            {c.name}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </div>
                 </Link>
               ))}
@@ -221,15 +341,56 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
         .back { color: var(--accent-primary); text-decoration: none; font-weight: 600; align-self: flex-start; }
         .back:hover { text-decoration: underline; }
         .empty { text-align: center; padding: 3rem; color: var(--text-secondary); }
+        .coverage { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+        .coverage :global(a) { color: var(--accent-primary); }
+
+        .who { display: inline-flex; align-items: center; gap: 0.6rem; }
+        .faces-toggle { margin-top: 4px; align-self: flex-start; cursor: pointer; font: inherit;
+          font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+          color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .faces-toggle:hover { color: var(--text-primary); border-color: var(--border-hover); }
+        .who .portrait { width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
+          border: 1px solid var(--border-color); }
+        .who-text { display: inline-flex; flex-direction: column; line-height: 1.2; }
+        .who-text .native { color: var(--text-muted); font-size: 0.8rem; font-weight: 400; }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
         .grid :global(.card) { display: flex; flex-direction: column; gap: 0.4rem; text-decoration: none;
           color: var(--text-primary); background: var(--bg-tertiary); border: 1px solid var(--border-color);
           border-radius: 10px; padding: 0.6rem; }
         .grid :global(.card):hover { border-color: var(--border-hover); }
-        .grid :global(.card) img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; }
+        /* .poster > img, NOT .card img: the card also holds the character
+           circles, and a descendant selector here won them on specificity and
+           stretched each one into a 2:3 poster of its own. */
+        .poster { position: relative; display: block; width: 100%; }
+        .poster > img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; display: block; }
         .noimg { width: 100%; aspect-ratio: 2 / 3; border-radius: 6px; background: var(--bg-secondary);
           display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+
+        /* Bottom-anchored, and wrap-reverse so a second row grows UPWARD: a
+           poster's subject is far more often at the top than the bottom, and a
+           row growing downward would hang off the art entirely. pointer-events:
+           none keeps the whole card one click target — the circles are a label,
+           not a control. */
+        .faces { position: absolute; left: 6px; right: 6px; bottom: 6px;
+          display: flex; flex-wrap: wrap-reverse; gap: 4px; pointer-events: none; }
+        .face { aspect-ratio: 1; border-radius: 50%; object-fit: cover;
+          object-position: top center; background: var(--bg-secondary);
+          border: 2px solid rgba(0, 0, 0, 0.55); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55); }
+        .face-main { border-color: var(--accent-primary); }
+
+        /* One face is the common case, and it is sized to be READ rather than to
+           a tidy fraction: 70% of the poster, picked on the 4K-at-300%-zoom TV
+           where a quarter-width circle was still too small to tell a character
+           by. It stays clear of the title band because the poster is 2:3 — 70%
+           of the width is only 47% of the height. Past one the row is shared,
+           and each subtraction is what the gaps eat, so a row lands on exactly
+           100% instead of overflowing and wrapping one short. Four is the floor:
+           a fifth face wraps rather than shrinking into an unreadable dot. */
+        .faces-1 .face { width: 70%; }
+        .faces-2 .face { width: calc(50% - 2px); }
+        .faces-3 .face { width: calc(33.333% - 2.7px); }
+        .faces-4 .face { width: calc(25% - 3px); }
         .body { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; align-items: flex-start; }
         .title { font-size: 0.88rem; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box;
           -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -237,6 +398,18 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
         .meta { display: flex; flex-wrap: wrap; gap: 0.5rem; color: var(--text-muted); font-size: 0.75rem; }
         .meta .mean { color: var(--accent-primary); }
         .role { color: var(--text-secondary); font-size: 0.75rem; }
+        .chars { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+        /* Text only: the portrait lives on the poster, so putting it here too
+           would say the same thing twice in a quarter of the space. */
+        .char { color: var(--text-secondary); font-size: 0.72rem; padding: 1px 6px; border-radius: 999px;
+          background: var(--bg-secondary); border: 1px solid var(--border-color); }
+        /* char-main, not main: styled-jsx scopes a rule to this file, but it does
+           NOT stop globals.css from ALSO matching the bare class name — and
+           .main there is the page shell's min-height: calc(100vh - 80px), which
+           rendered every MAIN-role chip as a full-height lozenge. Keep modifier
+           names on these pages prefixed. (No backticks in here: this whole block
+           is a template literal, and one would close it.) */
+        .char.char-main { color: var(--accent-primary); border-color: var(--accent-primary); }
 
         /* Same colour vocabulary as the card view's personal-status label. */
         .status { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 999px;
@@ -256,13 +429,20 @@ export default function CreditsPage({ type, id, name, items, total, availableGen
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const type = String(ctx.params?.type);
   const id = parseInt(String(ctx.params?.id), 10);
-  if ((type !== 'studio' && type !== 'staff') || !Number.isInteger(id)) {
+  if ((type !== 'studio' && type !== 'staff' && type !== 'seiyuu') || !Number.isInteger(id)) {
     return { notFound: true };
   }
-  // Catalog fields (studios/staff) only, so the personal-state cache caveat
+  // Catalog fields (studios/staff/cast) only, so the personal-state cache caveat
   // doesn't apply — the shared cached catalog is fine (see similarByCredits.ts).
   const catalog = getAnimeForDisplay();
-  const result = type === 'studio' ? listAnimeByStudio(id, catalog) : listAnimeByStaff(id, catalog);
+  // The cast slice is read ONLY on the seiyuu branch: it is the bulkiest AniList
+  // payload there is, and parsing it to render a studio filmography would tax
+  // the other two types for data they never look at.
+  const result = type === 'studio'
+    ? listAnimeByStudio(id, catalog)
+    : type === 'seiyuu'
+      ? listAnimeBySeiyuu(id, catalog, getAllAnilistCast())
+      : listAnimeByStaff(id, catalog);
   // 404 is about whether the CREDIT exists, never about what the filters left —
   // an over-narrow filter has to render an empty grid, not a missing page.
   if (!result) {
@@ -300,9 +480,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       type,
       id,
       name: result.name,
+      nameNative: result.nameNative ?? null,
+      image: result.image ?? null,
       items: JSON.parse(JSON.stringify(sortAnimeRecords(records, state.sortBy, state.sortDir).map(toCredited))),
       total: result.records.length,
       availableGenres: Array.from(genreNames).sort((a, b) => a.localeCompare(b)),
+      castCovered: result.castCovered ?? null,
+      catalogTotal: catalog.length,
     },
   };
 };

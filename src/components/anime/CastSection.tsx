@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { AniListCharacterEntry } from '@/models/anime';
 import { useT } from '@/lib/i18n';
 import styles from './CastSection.module.css';
@@ -42,6 +43,12 @@ function initials(name: string): string {
  *
  * Layout mirrors the convention AniList/MAL both use: the character faces in
  * from the left, its voice actor faces in from the right.
+ *
+ * **The two sides link to different places, on purpose.** A seiyuu goes to the
+ * in-app `/credits/seiyuu/[id]` filmography — same AniList staff id, read out of
+ * the cast slice. A character still leaves for AniList: the app stores
+ * characters only as rows inside a title's cast entry, with no page to send
+ * them to.
  */
 export default function CastSection({ animeId, initialCast }: CastSectionProps) {
   const t = useT();
@@ -128,12 +135,10 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
             {c.voiceActors.length > 0 ? (
               <span className={styles.vaStack}>
                 {c.voiceActors.map(va => (
-                  <a
+                  <Link
                     key={va.id}
                     className={`${styles.side} ${styles.sideRight}`}
-                    href={`https://anilist.co/staff/${va.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={`/credits/seiyuu/${va.id}`}
                   >
                     <span className={`${styles.who} ${styles.whoRight}`}>
                       <span className={styles.name}>{va.name}</span>
@@ -143,7 +148,7 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
                       // eslint-disable-next-line @next/next/no-img-element
                       ? <img className={styles.avatar} src={va.image} alt={va.name} loading="lazy" />
                       : <span className={styles.avatarFallback}>{initials(va.name)}</span>}
-                  </a>
+                  </Link>
                 ))}
               </span>
             ) : (
