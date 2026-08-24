@@ -30,11 +30,39 @@ services:
     image: alpine:latest
     depends_on:
       - anime-tracker
-    # `${CRON_SECRET}` is expanded by compose when the stack is deployed, so the
-    # value is baked into the crontab as a literal — no shell escaping to get
-    # wrong. Keep the secret alphanumeric: `$`, `"` and `\` would break the
-    # printf quoting below.
-    command: >
-      sh -c "apk add --no-cache curl && printf '0 2 * * * curl -X POST -H \"Authorization: Bearer ${CRON_SECRET}\" -H \"Content-Type: application/json\" -d \"{\\\"origin\\\":\\\"docker cron job\\\"}\" http://anime-tracker:3000/api/anime/cron-sync\n' > /etc/crontabs/root && crond -f -d 8"
+    environment:
+      # Same substitution as the app above, so the two still cannot drift. The
+      # difference is what happens next: the value reaches the JOB through a
+      # file, never through the crontab.
+      - CRON_SECRET=${CRON_SECRET}
+    # ⚠️ The secret must never be interpolated into a `printf` FORMAT string,
+    # and must never land in /etc/crontabs/root. Baking it in is what silently
+    # killed the 02:00 tick (2026-08-24): a metacharacter in the value truncated
+    # printf's output mid-quote, so the crontab held
+    # `... -H "Authorization: Bearer X2` and crond dutifully ran `sh -c` on an
+    # unterminated string every night — nothing ever reached the app, so not
+    # even the 401 path logged. Passing the value as a `%s` ARGUMENT makes `%`,
+    # `\`, `$` and quotes literal by construction, which retires the "keep the
+    # secret alphanumeric" rule this used to depend on. `$$` is compose's escape
+    # for a literal `$`.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache curl
+        printf '%s' "$$CRON_SECRET" > /run/cron_secret
+        chmod 600 /run/cron_secret
+        cat > /usr/local/bin/anime-cron-sync <<'SCRIPT'
+        #!/bin/sh
+        exec curl -sS -X POST \
+          -H "Authorization: Bearer $$(cat /run/cron_secret)" \
+          -H "Content-Type: application/json" \
+          -d '{"origin":"docker cron job"}' \
+          http://anime-tracker:3000/api/anime/cron-sync
+        SCRIPT
+        chmod +x /usr/local/bin/anime-cron-sync
+        echo '0 2 * * * /usr/local/bin/anime-cron-sync' > /etc/crontabs/root
+        exec crond -f -d 8
     restart: unless-stopped
     container_name: anime-tracker-cron

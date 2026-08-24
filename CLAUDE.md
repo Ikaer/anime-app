@@ -807,6 +807,18 @@ genuinely different operations. What is uniform is *enablement* and *reporting*.
   substitutes `${CRON_SECRET}` into BOTH services so they cannot drift, but a
   stored `settings.json` value still wins over it and must be kept in sync or
   removed. Never log either value — only whether a header arrived.
+- ⚠️ **The secret never goes into a `printf` format string, and never into the
+  crontab.** The cron container writes it to `/run/cron_secret` with
+  `printf '%s' "$CRON_SECRET"` — value as an **argument** — and the job reads it
+  back with `$(cat …)`. Live case (2026-08-24): the old compose baked
+  `${CRON_SECRET}` into printf's *format*, a metacharacter in the value
+  truncated the output mid-quote, and `/etc/crontabs/root` ended up holding
+  `… -H "Authorization: Bearer X2`. crond then ran `sh -c` on that every night —
+  `/bin/sh: syntax error: unterminated quoted string`, nothing reaching the app,
+  so **not even the 401 path above logged**: `connection_log.json` simply stops.
+  That silence is the signature of a request that never arrived, as opposed to
+  one that was rejected. Don't reintroduce a "keep the secret alphanumeric" rule
+  in place of the `%s` argument — the rule is what failed.
 - **`anilistPush` is the one step that WRITES**, and the only provider write in
   this app outside a user-initiated edit. `writers.ts` already mirrors every edit
   made *here* to AniList; this step exists for the edits that never pass through
