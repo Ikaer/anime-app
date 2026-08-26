@@ -1,27 +1,31 @@
-name: Setup Development Environment for GitHub Copilot
+# ⚠️ The filename AND the job id below are reserved by GitHub: the Copilot
+# coding agent looks for `.github/workflows/copilot-setup-steps.yml` holding a
+# job called `copilot-setup-steps`, and runs it to prepare its environment.
+# Renaming either silently unhooks the agent — which is why the build moved out
+# to ci.yml rather than this file being renamed.
+#
+# Setup only. It deliberately does NOT build: ci.yml owns that, and duplicating
+# it here would mean two runs of the same check per push.
+name: Copilot setup steps
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
 
 jobs:
   copilot-setup-steps:
-    name: Setup Anime Tracker Development Environment
+    name: Setup anime-tracker environment
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-        
-    - name: Install dependencies
-      run: npm ci
-      
-    - name: Build project
-      run: npm run build
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Kept in step with ci.yml and package.json `engines`.
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci

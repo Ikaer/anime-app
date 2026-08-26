@@ -1,0 +1,39 @@
+# The build gate for pushes to main.
+#
+# `npm run build` is the whole check: its `prebuild` step runs css:types, the
+# linter (which is where the client-safety and MCP read-only guards live) and
+# the test suite, then `next build` type-checks everything. There is nothing to
+# add here — a check that belongs in CI belongs in `prebuild`, so that running
+# it locally and running it here cannot disagree.
+#
+# No `pull_request` trigger: this repo commits straight to main.
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # >= 22.15 — scripts/lib/ts-loader.js needs module.registerHooks(),
+          # and `prebuild` runs the test suite through it. See package.json
+          # `engines`; node 20 dies with `registerHooks is not a function`.
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (prebuild runs css:types, lint and the test suite)
+        run: npm run build
