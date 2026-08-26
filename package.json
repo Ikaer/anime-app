@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "pretest": "node scripts/check-suite-discovered.js",
     "test": "node --require ./scripts/lib/ts-loader.js --test \"tests/**/*.test.ts\"",
     "screenshots": "node scripts/capture-screenshots.js",
     "registry:migrate": "node scripts/migrate-registry.js",
