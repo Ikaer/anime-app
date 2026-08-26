@@ -491,7 +491,8 @@ const DEFAULT_RECO_LIMIT = 15;
 const WHY_POSITIVE_LIMIT = 4;
 const WHY_NEGATIVE_LIMIT = 2;
 
-function projectWhy(breakdown: RecoContribution[]): McpRecommendation['why'] {
+/** Exported so the per-sign trim above can be asserted; not part of the tool surface. */
+export function projectWhy(breakdown: RecoContribution[]): McpRecommendation['why'] {
   // Rounded BEFORE the zero filter: a contribution of -0.0004 is not a penalty
   // worth reporting, and listing it as a literal `0` reads as a bug rather than
   // as "negligible". (`-0 !== 0` is false, so a rounded negative zero drops out
