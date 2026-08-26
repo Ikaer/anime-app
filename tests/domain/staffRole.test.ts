@@ -15,21 +15,29 @@ import { staffRoleTier, parseStaffRole, groupStaffByTier, STAFF_ROLE_TIERS } fro
 import type { AniListStaffEntry } from '@/models/anime';
 
 /**
- * ⚠️ Normalization, the failure docs/staffRoleTiers.md warns about: the live
- * store holds `"Director "` (430 credits) and `"Music "` (307) as strings
- * distinct from their untrimmed twins, and matching without normalizing drops
- * them out of T1 into the fall-through — misfiled, not broken, so nothing shows.
+ * ⚠️ The tier path normalizes whitespace in TWO places, and they are **not**
+ * redundant — they cover disjoint inputs. Re-measured 2026-08-26 against the
+ * live store (301,628 credits), removing each in turn:
  *
- * ⚠️ **Measured while writing this: the tier path is trimmed TWICE and either
- * trim alone suffices.** `parseStaffRole` trims `base`, then `key()` trims
- * again on the way into the whitelist lookup; `parseStaffRole` has no consumer
- * outside this module, so the two are genuinely redundant today. Removing
- * EITHER leaves this test green — it only fires when both go. So read it as a
- * guard on the normalization as a whole, not on the line the source comment
- * happens to sit above, and do not take one trim's removal passing CI as
- * evidence that trim was dead.
+ * | removed | credits changing tier | why |
+ * |---|---|---|
+ * | both | 1,549 (182 strings) | bare `"Director "` → T1 falls through to T3 |
+ * | `parseStaffRole`'s `raw.trim()` | 141 (108) | `)`-then-space defeats the `$`-anchored peel |
+ * | `key()`'s trim | 37 (16) | `;`-split yields `" English"` from `(OP; English)` |
  *
- * The doc's third example, `"Producer "` (766 credits), cannot be asserted at
+ * THIS test is the doubled case — the bare untrimmed strings — so it passes
+ * with either trim present and only fires when both go. That is exactly what
+ * makes each trim easy to misread as dead code, so the two tests below isolate
+ * them: each fails on its own trim's removal, and each names the shape it
+ * guards. Do not take one trim's removal passing CI as evidence it was dead.
+ *
+ * For the record of what was actually unpinned before those two were added:
+ * dropping `key()`'s trim left the whole suite GREEN, while dropping
+ * `parseStaffRole`'s already failed the peel test at the foot of this file (via
+ * `'  Director  '`) — so only one of the two was genuinely unguarded, and the
+ * guard that existed sat under a different test's name.
+ *
+ * The doc's third example, `"Producer "` (770 credits), cannot be asserted at
  * all: the producer family is pinned to T3 and the fall-through is ALSO T3, so
  * the bug is invisible on that string. It is the two below that would move.
  */
@@ -37,6 +45,37 @@ test('trailing and surrounding whitespace never changes a tier', () => {
   assert.equal(staffRoleTier('Director '), 1);
   assert.equal(staffRoleTier('Music '), 1);
   assert.equal(staffRoleTier('  Chief Director  '), 1);
+});
+
+/**
+ * ⚠️ Isolates `parseStaffRole`'s `raw.trim()`. The peel regex is `$`-anchored,
+ * so whitespace AFTER the closing paren makes it fail outright — the qualifier
+ * stays inside `base`, misses every whitelist, and rule 2 never fires. 266 live
+ * credits carry this shape.
+ *
+ * `Episode Director` is the discriminating base on purpose: it is fall-through
+ * T3 and then demoted, so this fails if EITHER the peel or rule 2 breaks.
+ * `Key Animation (ep 3) ` is the more common shape live but is already T4 and
+ * caps there, which makes it blind to the demotion half.
+ */
+test('a qualifier is peeled even when whitespace follows the closing paren', () => {
+  assert.equal(staffRoleTier('Episode Director (ep 2) '), 4, 'T3 fall-through, demoted by (ep 2)');
+  assert.equal(staffRoleTier('Key Animation (ep 3) '), 4);
+  assert.deepEqual(parseStaffRole('Director (ep 5) '), { base: 'Director', qualifiers: ['ep 5'] });
+});
+
+/**
+ * ⚠️ Isolates `key()`'s trim. `staffRoleTier` splits a qualifier on `;`, which
+ * manufactures a fresh untrimmed part whenever the dub language is not first —
+ * `" English"` here. That is why normalizing once at the function's entry could
+ * NOT replace this trim: the split happens after any such normalization.
+ *
+ * The `(English; ADV)` case in rule 1's test puts the language first, where it
+ * needs no trimming, which is precisely why it never caught this.
+ */
+test('rule 1 sees a dub language that is not the first `;` part', () => {
+  assert.equal(staffRoleTier('Theme Song Performance (OP; English)'), 4);
+  assert.equal(staffRoleTier('Theme Song Lyrics (OP; Italian)'), 4);
 });
 
 test('matching is case-insensitive', () => {

@@ -117,6 +117,27 @@ const DUB_LANGUAGES = new Set([
 /** `(ep 3)`, `(eps 1, 2)`, `(eps 1-3)`, `(OP1, eps 4, 14)` — a per-episode credit. */
 const EPISODE_QUALIFIER = /\beps?\b|\bepisodes?\b/i;
 
+/**
+ * ⚠️ **This trim is load-bearing on its own, and not for the reason the tier
+ * path's other trim is.** It is the only normalization applied to strings this
+ * module *manufactures*: `staffRoleTier` splits a qualifier on `;`, so
+ * `Theme Song Performance (OP; English)` yields the part `" English"`, whose
+ * leading space defeats the `DUB_LANGUAGES` lookup. Measured on the live store,
+ * dropping this trim alone moves **37 credits / 16 distinct strings** out of T4
+ * — dub theme-song credits stop reading as localization and surface in the
+ * fall-through. The existing `(English; ADV)` shape hides this, because there
+ * the language is the first part and needs no trimming.
+ *
+ * ⚠️ Consequently **normalizing once at the entry to `staffRoleTier` cannot
+ * replace this**: the `;` split happens *after* any input-level trim and
+ * produces fresh untrimmed substrings. Do not "simplify" the pair that way.
+ *
+ * The bare untrimmed roles the docs cite (`"Producer "`, `"Director "`,
+ * `"Music "` — 1,549 credits over 182 strings) are covered here **and** by
+ * `parseStaffRole`, so removing either trim alone leaves those working. That
+ * redundancy is what makes the two individually-load-bearing cases easy to
+ * misread as dead code; each is pinned by its own test.
+ */
 function key(name: string): string {
   return name.trim().toLowerCase();
 }
@@ -140,11 +161,26 @@ export interface ParsedStaffRole {
 /**
  * Split a raw role into its base and trailing qualifiers.
  *
- * ⚠️ **The trim is load-bearing, not hygiene.** The live store holds `"Producer "`
- * (766 credits), `"Director "` (430) and `"Music "` (307) as strings distinct from
- * their untrimmed twins. Matching without normalizing drops ~1,500 credits out of
- * T1/T2 into the fall-through — silently misfiled rather than visibly broken,
- * exactly the failure mode `genreAxis`'s `GENRE_ALIASES` note warns about.
+ * ⚠️ **`raw.trim()` is load-bearing, and specifically because the peel regex is
+ * `$`-anchored.** Whitespace *after* the closing paren makes the match fail
+ * outright, so nothing is peeled at all: `"Episode Director (ep 2) "` keeps its
+ * qualifier inside `base`, misses every whitelist, and rule 2 never fires. The
+ * live store holds **266 such credits over 203 distinct strings**, and dropping
+ * this trim alone moves **141 credits / 108 strings** — rank-and-file work
+ * (`Key Animation (ep 3) `, `In-Between Animation (ep 1) `) escaping the
+ * collapsed T4 section into the fall-through.
+ *
+ * ⚠️ It is **not** what saves the bare `"Producer "` / `"Director "` / `"Music "`
+ * strings the docs cite — `key()` trims those again on the way into the lookup,
+ * so they survive either trim alone. Do not read one trim's removal passing the
+ * suite as evidence it was dead; see `key()` above for the other half, and
+ * `tests/domain/staffRole.test.ts` for the case that isolates each.
+ *
+ * Either way the failure is silent: the credit still renders, in the wrong
+ * group, on a page nobody diffs — the `GENRE_ALIASES` failure mode.
+ *
+ * Exported (rather than module-private) only so the peel contract can be pinned
+ * directly by the suite; `staffRoleTier` is its sole caller in `src/`.
  */
 export function parseStaffRole(raw: string): ParsedStaffRole {
   let base = raw.trim();

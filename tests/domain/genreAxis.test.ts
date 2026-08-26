@@ -68,9 +68,11 @@ test('unknown names fall through to theme rather than throwing', () => {
 });
 
 /**
- * `key()` trims and lowercases. This is the same class of bug as
- * `parseStaffRole`'s missing trim, which silently dropped ~1,500 credits out of
- * their tier — a whitelist match against an unnormalized string fails quietly.
+ * `key()` trims and lowercases. This is the same class of bug as an
+ * unnormalized `staffRoleTier` lookup, which drops 1,549 credits out of their
+ * tier — a whitelist match against an unnormalized string fails quietly. Note
+ * that failure needs BOTH of staffRole's trims removed; each also guards a case
+ * of its own (see tests/domain/staffRole.test.ts).
  */
 test('lookup is insensitive to case and surrounding whitespace', () => {
   assert.equal(genreAxis('  Sci-Fi  '), 'genre');

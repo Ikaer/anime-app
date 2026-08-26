@@ -128,11 +128,26 @@ Applied to the parsed qualifiers, and they matter more than the whitelists:
 
 ### ⚠️ Trailing whitespace is load-bearing, not hygiene
 
-The live store holds `"Producer "` (766), `"Director "` (430), `"Music "` (307) as
-**separate raw strings**. The lookup must `trim()` before matching or ~1,500
+The live store holds `"Producer "` (770), `"Director "` (436), `"Music "` (313) as
+**separate raw strings**. The lookup must `trim()` before matching or 1,549
 credits drop out of T1/T2 into the fall-through and quietly lose their emphasis.
 Same failure class as `genreAxis`'s documented `GENRE_ALIASES` hazard — skip the
 normalization step and a value is silently misfiled rather than visibly broken.
+
+⚠️ **That normalization is TWO trims, and they are not interchangeable.** The
+figure above is what breaks when both go; each also guards a case of its own,
+re-measured 2026-08-26 over 301,628 credits:
+
+| trim | removing it alone moves | the case only it covers |
+|---|---|---|
+| `parseStaffRole`'s `raw.trim()` | 141 credits / 108 strings | The peel regex is `$`-anchored, so whitespace AFTER the closing paren makes it fail outright — `"Episode Director (ep 2) "` keeps its qualifier in `base`, matches no whitelist, and rule 2 never fires. 266 live credits carry the shape. |
+| `key()`'s `.trim()` | 37 credits / 16 strings | `staffRoleTier` splits a qualifier on `;`, manufacturing an untrimmed part when the dub language is not first — `" English"` in `(OP; English)`. Rule 1 then misses it. |
+
+Consequently **normalizing once at `staffRoleTier`'s entry cannot replace the
+pair**: the `;` split runs after any input-level trim and produces fresh
+untrimmed substrings. The bare `"Producer "`-shaped strings are covered by both,
+which is what makes either trim look dead when removed on its own — so both
+cases are pinned individually in `tests/domain/staffRole.test.ts`.
 
 ## ⚠️ T1 can be empty — the render must tolerate it
 

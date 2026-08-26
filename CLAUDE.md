@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `mcp/tools`' `projectWhy` (the per-sign trim), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `mcp/tools`' `projectWhy` (the per-sign trim), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -348,10 +348,19 @@ by editing an array. Live split: 298,362 credits → 16 / 23 / 32 / 30 %.
   that keeps an anthology's per-segment directors visible in T2); `OP`/`ED` are
   **ignored** (15,486 instances — on `Theme Song Performance (ED)` the qualifier
   says *which song*).
-- ⚠️ **`parseStaffRole` must trim, and that is load-bearing.** The store holds
-  `"Producer "` (766), `"Director "` (430) and `"Music "` (307) as distinct
-  strings; matching unnormalized drops ~1,500 credits out of T1/T2 into the
-  fall-through — silently misfiled, the `GENRE_ALIASES` failure mode.
+- ⚠️ **The tier lookup trims in TWO places and neither is redundant.** The store
+  holds `"Producer "` (770), `"Director "` (436) and `"Music "` (313) as distinct
+  strings; matching unnormalized drops 1,549 credits out of T1/T2 into the
+  fall-through — silently misfiled, the `GENRE_ALIASES` failure mode. That case
+  is covered by **both** trims, which is exactly why each looks like dead code
+  when removed alone. Each also guards a case only it reaches:
+  `parseStaffRole`'s `raw.trim()` feeds a `$`-anchored peel regex, so whitespace
+  *after* the closing paren stops the qualifier being peeled at all (141 credits);
+  `key()`'s trim normalizes the parts `staffRoleTier` manufactures by splitting a
+  qualifier on `;`, where the dub language may not be first — `(OP; English)`
+  (37 credits). ⚠️ So a single trim at the function's entry cannot replace the
+  pair: the split happens after it. All three cases are pinned individually in
+  [tests/domain/staffRole.test.ts](tests/domain/staffRole.test.ts).
 - **The producer/planning family is pinned to T3 as a group.** Left to the
   whitelists it scattered across three tiers; consolidating it cut JoJo Part 4's
   T2 from 18 rows to 11 of pure creative crew. `Animation Producer` stays in T2 —
