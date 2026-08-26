@@ -4,6 +4,7 @@ import type { HistoricalCrawlStats } from '@/lib/providers/mal/sync';
 import type { AnilistHistoricalCrawlStats } from '@/lib/providers/anilist/sync';
 import type { AniListPersonalImportResult } from '@/lib/providers/anilist/personalSync';
 import type { AniListPushStats } from '@/lib/providers/anilist/push';
+import type { CronFreshness } from '@/lib/domain/cronFreshness';
 import { useProviderStatuses } from './useProviderStatuses';
 
 interface UseConnectionsOptions {
@@ -66,6 +67,8 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   // reload and show an idle button mid-run — and it would miss a run the 02:00
   // cron started.
   const [isCronRunning, setIsCronRunning] = useState(false);
+  /** Health of the 02:00 job; null until the first poll. See cronFreshness.ts. */
+  const [cronFreshness, setCronFreshness] = useState<CronFreshness | null>(null);
   const [cronSyncStatus, setCronSyncStatus] = useState<'idle' | 'started' | 'alreadyRunning' | 'error'>('idle');
 
   // AniList personal-role state (the OAuth'd viewer's own list)
@@ -141,7 +144,11 @@ export function useConnections(options: UseConnectionsOptions = {}) {
   const fetchCronSyncState = async () => {
     try {
       const res = await fetch('/api/anime/sync-now');
-      if (res.ok) setIsCronRunning(!!(await res.json()).running);
+      if (res.ok) {
+        const data = await res.json();
+        setIsCronRunning(!!data.running);
+        setCronFreshness(data.freshness ?? null);
+      }
     } catch {
       // non-critical, silently ignore
     }
@@ -514,6 +521,7 @@ export function useConnections(options: UseConnectionsOptions = {}) {
     refreshStatuses,
     // Spans every provider, so it hangs off the root rather than a provider key.
     syncAll: {
+      freshness: cronFreshness,
       running: isCronRunning,
       status: cronSyncStatus,
       onSync: handleSyncAll,

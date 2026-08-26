@@ -33,6 +33,7 @@ import { STAFF_ROLE_TIERS } from '@/lib/domain/staffRole';
 import { TITLE_LANGUAGES } from '@/lib/url/viewDefaults';
 import { STATS_DIMENSIONS } from '@/lib/domain/stats';
 import { GRAPH_FOCAL_TYPES } from '@/lib/domain/animeGraph';
+import { CRON_FRESHNESS_LEVELS, type CronRejectionReason } from '@/lib/domain/cronFreshness';
 import type { UserAnimeStatus, SeasonName } from '@/models/anime';
 import type { TierAxis } from '@/lib/domain/tierGap';
 // Type-only: `useTierUrlState` is a hook module, and the transpile elides an
@@ -75,6 +76,10 @@ const TIER_VERSUS = keysOf({
   none: 0, mal: 0, anilist: 0,
 } satisfies Record<TierVersus, 0>);
 
+const CRON_REJECTION_REASONS = keysOf({
+  method: 0, secretMismatch: 0, noHeader: 0,
+} satisfies Record<CronRejectionReason, 0>);
+
 /**
  * MAL's `airingStatus` is typed `string` on the record — the provider does not
  * give us a union to derive from, so this list is transcribed rather than
@@ -114,6 +119,14 @@ family('graph.focalType.*', GRAPH_FOCAL_TYPES, t => `graph.focalType.${t}`);
 family('graph.tier.*', STAFF_ROLE_TIERS, t => `graph.tier.${t}`);
 family('tier.axis.*', TIER_AXES, a => `tier.axis.${a}`);
 family('tier.vs.*', TIER_VERSUS, v => `tier.vs.${v}`);
+
+/**
+ * The cron-freshness panel. Each level is a different DIAGNOSIS, so a missing
+ * key would render a raw dotted string exactly where the page is supposed to be
+ * explaining an outage — the one moment it has to be legible.
+ */
+family('cronFreshness.level.*', CRON_FRESHNESS_LEVELS, l => `cronFreshness.level.${l}`);
+family('cronFreshness.reason.*', CRON_REJECTION_REASONS, r => `cronFreshness.reason.${r}`);
 
 /** Ten rows, 10 → 1, each carrying MAL's own word for that score. */
 family('tierWord.*', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], n => `tierWord.${n}`);

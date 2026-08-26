@@ -83,6 +83,7 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `personal/local.json` — **in-app** personal state (`LocalPersonalEntry`: status/score/progress + `updated_at`), keyed by canonical id (see "Local personal-data provider").
 - `auth/mal.json` — MAL OAuth token + user data (its peers: `auth/simkl.json`, `auth/anilist.json`, and the three transient `auth/oauth_state_*.json` CSRF files)
 - `sync/mal_seasons.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`) — the seasonal-crawl checkpoint, sitting next to `sync/simkl_checkpoint.json` (all-items watermark + `lastRatedAt`), `sync/anilist_import.json` and `sync/anilist_years.json` (AniList's back-catalog checkpoint, `{ syncedYears: number[] }` — a year is never re-crawled, so re-running the window means deleting the file).
+- `sync/cron_health.json` — the cron watermark: last scheduled arrival, last scheduled run, last MANUAL run (recorded but never counted), last rejection. Feeds the `/connections` freshness indicator; see "Scheduled sync". Rebuildable in the sense that a deleted file simply reports `unknown` until the next tick.
 - `user/reco_feedback.json` — "Pour toi" thumbs, `{ canonicalId: 'up' | 'down' }` (see the "Pour toi" section)
 - `user/boxes.json` — « Mes boîtes »: hand-drawn taste axes, a bare `Box[]` whose `members` are canonical ids (see the "/boxes" section)
 - `cache/recommendations.json` — cached recommendations feed data (the one **rebuildable** file: `cache/` says so) (crowd/AniList seeds + hydrated candidates); the code constant is `RECOMMENDATIONS_FILE`. **Canonical-id-keyed like every other file here** since E10 (docs/DECISIONS.md), and carrying a `v` (`RECO_CACHE_VERSION`): an older MAL-keyed file parses fine but would miss every lookup and render an empty feed silently, so a version mismatch **discards** it rather than migrating — it is `cache/`, the next refresh rebuilds it.
@@ -835,6 +836,31 @@ genuinely different operations. What is uniform is *enablement* and *reporting*.
   That silence is the signature of a request that never arrived, as opposed to
   one that was rejected. Don't reintroduce a "keep the secret alphanumeric" rule
   in place of the `%s` argument — the rule is what failed.
+- **The freshness indicator on `/connections` is the answer to both of those**,
+  and it exists because both outages were **absences**: the 401 logged errors
+  nobody was looking for, and the `printf` truncation logged *nothing at all*.
+  A watermark (`sync/cron_health.json`, written by
+  [providers/cronHealth.ts](src/lib/providers/cronHealth.ts)) is read by the pure
+  [domain/cronFreshness.ts](src/lib/domain/cronFreshness.ts) and rendered in
+  `SyncNowPanel`. It rides on `GET /api/anime/sync-now`, which the page already
+  polls for the run lock, so it costs no extra request.
+  ⚠️ **It is NOT derived from `logs/connection_log.json`** — that is a 500-entry
+  rolling buffer shared by every channel (`anilist/sync.ts` alone has 39
+  `appendLog` sites), so a busy day evicts a whole run and "scrolled out of the
+  buffer" would be indistinguishable from "never happened", which is the exact
+  distinction this has to make.
+  ⚠️ **A manual "Tout synchroniser" never counts.** `runCronSync` takes a
+  required `trigger`, and the manual run is recorded under its own key and
+  reported but excluded from the verdict — otherwise the first thing anyone does
+  while investigating a dead cron would turn the light green.
+  ⚠️ **Arrival is stamped by the ROUTE, before `runCronSync`**, which separates
+  the two silences (nothing arriving = crontab/container; arriving but never
+  completing = a hung run) and stops a lock collision from crying wolf: a tick
+  landing during a manual run returns immediately and completes nothing. `ok` is
+  therefore decided before `stalled`. Levels are `ok`/`rejected`/`stalled`/
+  `silent`/`unknown` — each a different FIX, with degradation carried as
+  `failedSteps` rather than a sixth level. `unknown` is deliberately not an alarm:
+  the watermark is empty until the first tick after this shipped.
 - **`anilistPush` is the one step that WRITES**, and the only provider write in
   this app outside a user-initiated edit. `writers.ts` already mirrors every edit
   made *here* to AniList; this step exists for the edits that never pass through

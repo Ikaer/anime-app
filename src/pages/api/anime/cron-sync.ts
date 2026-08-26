@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { runCronSync } from '@/lib/providers/cronSync';
 import { appendLog } from '@/lib/config/connectionLog';
 import { getCronSecret } from '@/lib/config/settings';
+import { recordCronArrival, recordCronRejection } from '@/lib/providers/cronHealth';
 
 /**
  * Cron entry point — the **authenticated** door onto `runCronSync`.
@@ -32,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     appendLog('cron-sync', 'error', `Cron sync rejected: method ${req.method} not allowed (expected POST)`, {
       method: req.method,
     });
+    recordCronRejection('method');
     return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 
@@ -44,10 +46,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     appendLog('cron-sync', 'error', authHeader
       ? 'Cron sync rejected: Authorization header does not match the configured cron secret'
       : 'Cron sync rejected: no Authorization header sent', { hadAuthHeader: !!authHeader });
+    recordCronRejection(authHeader ? 'secretMismatch' : 'noHeader');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const result = await runCronSync();
+  // Stamped BEFORE the run, and this is load-bearing. `runCronSync` returns
+  // immediately when the lock is held (a tick landing during a manual run), so
+  // without an arrival stamp that tick would leave no trace and the freshness
+  // indicator would drift toward an alarm while the cron is perfectly healthy.
+  // It is also what separates "nothing is arriving" from "arriving but never
+  // finishing" — different problems, different fixes.
+  recordCronArrival();
+
+  const result = await runCronSync('cron');
 
   // A run already in flight (the /connections button, or a previous tick that
   // overran) is a normal outcome, not a failure — the work is happening.

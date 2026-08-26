@@ -296,6 +296,20 @@
   "syncNow.done": "Synchro lancée — suivez le détail dans le journal.",
   "syncNow.error": "Impossible de lancer la synchro.",
 
+  "cronFreshness.title": "Synchro planifiée (2 h)",
+  "cronFreshness.level.ok": "Le job de 2 h tourne normalement.",
+  "cronFreshness.level.rejected": "Le cron appelle l’app mais se fait rejeter — aucun run n’a lieu.",
+  "cronFreshness.level.stalled": "Le cron atteint bien l’app, mais aucun run ne va au bout.",
+  "cronFreshness.level.silent": "Plus aucun appel du cron ne parvient à l’app. Vérifiez le conteneur cron et sa crontab.",
+  "cronFreshness.level.unknown": "Aucun passage planifié enregistré pour l’instant.",
+  "cronFreshness.reason.method": "mauvaise méthode HTTP",
+  "cronFreshness.reason.secretMismatch": "le secret envoyé ne correspond pas à celui configuré",
+  "cronFreshness.reason.noHeader": "aucun en-tête d’autorisation envoyé",
+  "cronFreshness.lastRun": "Dernier passage {when}.",
+  "cronFreshness.rejectedSince": "Rejeté {when} : {reason}.",
+  "cronFreshness.failedSteps": "Étapes en échec : {steps}.",
+  "cronFreshness.manualRun": "Dernier lancement manuel {when} — il ne compte pas pour le job planifié.",
+
   "connLog.title": "Journal de connexion et de synchro",
   "connLog.empty": "Aucune activité pour l'instant.",
 

@@ -47,6 +47,7 @@ import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { appendLog } from '@/lib/config/connectionLog';
+import { recordCronRun } from '@/lib/providers/cronHealth';
 
 /**
  * Per-step outcome, mirroring `RecoRefreshSources`: a step that did not run says
@@ -73,6 +74,9 @@ export type CronStepName =
   | 'recommendations';
 
 export type CronSteps = Record<CronStepName, CronStepOutcome>;
+
+/** Which entry point started a run — the cron door, or the /connections button. */
+export type CronTrigger = 'cron' | 'manual';
 
 export interface CronSyncResult {
   /** True when another run held the lock and this call did nothing. */
@@ -442,7 +446,13 @@ export function isCronSyncRunning(): boolean {
  * data pulls first, so the reco refresh consumes what they just landed (measured:
  * 4 seeds keyless vs 274 after the SIMKL + AniList imports on the same store).
  */
-export async function runCronSync(): Promise<CronSyncResult> {
+/**
+ * `trigger` is REQUIRED, not defaulted: the freshness indicator on
+ * `/connections` only trusts a scheduled run, so a caller must say which it
+ * is. Defaulting to `cron` would let the "Tout synchroniser" button silently
+ * report the 02:00 job as healthy — see `domain/cronFreshness.ts`.
+ */
+export async function runCronSync(trigger: CronTrigger): Promise<CronSyncResult> {
   if (isRunning) {
     appendLog('cron-sync', 'info', 'Cron sync skipped: a run is already in progress');
     return { alreadyRunning: true };
@@ -489,6 +499,15 @@ export async function runCronSync(): Promise<CronSyncResult> {
       failed.length ? `Cron sync run completed with failures: ${failed.join(', ')}` : 'Cron sync run completed',
       { steps }
     );
+
+    // Stamped next to the log entry above, but durably: the log is a 500-entry
+    // rolling buffer shared by every channel, so a busy day evicts a whole run
+    // and "scrolled out" becomes indistinguishable from "never happened".
+    recordCronRun(trigger, {
+      completedAt: Date.now(),
+      ok: failed.length === 0,
+      ...(failed.length ? { failedSteps: failed } : {}),
+    });
 
     return { alreadyRunning: false, steps, failed };
   } finally {

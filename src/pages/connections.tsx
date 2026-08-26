@@ -144,6 +144,7 @@ export default function ConnectionsPage() {
               provider. Everything below stays individually pressable. */}
           <SyncNowPanel
             running={syncAll.running}
+            freshness={syncAll.freshness}
             status={syncAll.status}
             busy={anyBusy && !syncAll.running}
             onSync={syncAll.onSync}

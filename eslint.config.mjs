@@ -13,6 +13,7 @@ const SERVER_ONLY = [
   '@/lib/providers/status',
   '@/lib/providers/writers',
   '@/lib/providers/cronSync',
+  '@/lib/providers/cronHealth',
   '@/lib/providers/mal/**',
   '@/lib/providers/simkl/**',
   '@/lib/providers/anilist/**',
@@ -61,6 +62,7 @@ const STORE_WRITES = [
 const WRITE_MODULES = [
   '@/lib/providers/writers',
   '@/lib/providers/cronSync',
+  '@/lib/providers/cronHealth',
   '@/lib/providers/*/write',
   '@/lib/providers/*/sync',
   '@/lib/providers/*/personalSync',
@@ -85,6 +87,15 @@ const BOX_WRITE_MESSAGE =
   'that exists in exactly one place and that no provider can re-supply. Remove a box in the app.';
 
 export default defineConfig([
+  {
+    // ⚠️ `.claude/worktrees/**` holds full CHECKOUTS of this repo — a subagent
+    // working in isolation gets one. Without this, `eslint .` lints every file
+    // twice (live-measured: 68 warnings became 136 the moment one existed) and,
+    // worse, another agent's half-finished edit fails THIS build. CI never sees
+    // it, since a runner checks out fresh — so the failure would be local-only
+    // and look like a phantom.
+    ignores: ['.claude/**'],
+  },
   ...nextVitals,
   {
     files: [

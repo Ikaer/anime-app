@@ -1,13 +1,20 @@
 .panel {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 0.75rem;
   padding: 0.9rem 1rem;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--bg-secondary);
+}
+
+/* The original panel layout, now one row inside the column the block sits under. */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .text {
@@ -33,4 +40,62 @@
   margin: 0;
   font-size: 0.8rem;
   color: var(--score-3);
+}
+
+/* ---------------------------------------------------------------------------
+   Cron freshness
+   --------------------------------------------------------------------------- */
+
+.freshness {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  border-left: 3px solid var(--freshness-color);
+  background: var(--bg-primary);
+}
+
+/* Colour by level, in CSS rather than in the markup: several levels share a
+   colour because they differ by what to DO, not by how bad they are. `silent`
+   and `rejected` are both red — the job is not running either way. */
+.freshness[data-level='ok'] { --freshness-color: var(--score-8); }
+.freshness[data-level='rejected'] { --freshness-color: var(--score-3); }
+.freshness[data-level='silent'] { --freshness-color: var(--score-3); }
+.freshness[data-level='stalled'] { --freshness-color: var(--score-5); }
+/* Not an alarm: the watermark is empty until the first tick after this shipped,
+   so on a fresh deploy this is the honest answer for up to a day. */
+.freshness[data-level='unknown'] { --freshness-color: var(--score-na); }
+
+.dot {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: var(--freshness-color);
+}
+
+.freshnessText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.freshnessTitle {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.freshnessVerdict {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.freshnessDetail {
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }

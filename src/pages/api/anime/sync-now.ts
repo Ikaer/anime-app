@@ -1,5 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { isCronSyncRunning, runCronSync } from '@/lib/providers/cronSync';
+import { getCronHealth } from '@/lib/providers/cronHealth';
+import { computeCronFreshness } from '@/lib/domain/cronFreshness';
 
 /**
  * Run the scheduled sync **now**, from the `/connections` button — the same nine
@@ -24,7 +26,13 @@ import { isCronSyncRunning, runCronSync } from '@/lib/providers/cronSync';
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
-    return res.status(200).json({ running: isCronSyncRunning() });
+    // Freshness rides on the endpoint the page ALREADY polls for `running`, so
+    // the indicator costs no extra fetch and the two facts — is a run in
+    // flight, and did the scheduled one land — arrive together.
+    return res.status(200).json({
+      running: isCronSyncRunning(),
+      freshness: computeCronFreshness(getCronHealth(), Date.now()),
+    });
   }
 
   if (req.method === 'POST') {
@@ -33,7 +41,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     // Not awaited. `runCronSync` never rejects (every step is wrapped), but the
     // catch keeps an unhandled rejection out of the process if that ever changes.
-    void runCronSync().catch(error => console.error('Manual cron sync failed:', error));
+    // `manual`, and the freshness verdict ignores it on purpose: a button press
+    // must not report the 02:00 job as alive.
+    void runCronSync('manual').catch(error => console.error('Manual cron sync failed:', error));
     return res.status(200).json({ started: true, alreadyRunning: false });
   }
 

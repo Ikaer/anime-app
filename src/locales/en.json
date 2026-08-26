@@ -296,6 +296,20 @@
   "syncNow.done": "Sync started — follow it in the log.",
   "syncNow.error": "Could not start the sync.",
 
+  "cronFreshness.title": "Scheduled sync (02:00)",
+  "cronFreshness.level.ok": "The 02:00 job is running normally.",
+  "cronFreshness.level.rejected": "The cron reaches the app but is turned away — no run happens.",
+  "cronFreshness.level.stalled": "The cron reaches the app, but no run gets to the end.",
+  "cronFreshness.level.silent": "No cron request is reaching the app any more. Check the cron container and its crontab.",
+  "cronFreshness.level.unknown": "No scheduled run recorded yet.",
+  "cronFreshness.reason.method": "wrong HTTP method",
+  "cronFreshness.reason.secretMismatch": "the secret sent does not match the configured one",
+  "cronFreshness.reason.noHeader": "no authorization header sent",
+  "cronFreshness.lastRun": "Last ran {when}.",
+  "cronFreshness.rejectedSince": "Turned away {when}: {reason}.",
+  "cronFreshness.failedSteps": "Failed steps: {steps}.",
+  "cronFreshness.manualRun": "Last manual run {when} — it does not count for the scheduled job.",
+
   "connLog.title": "Connection & Sync Log",
   "connLog.empty": "No activity yet.",
 
