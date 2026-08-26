@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "npx concurrently -k --kill-signal SIGKILL -n next,css -c cyan,magenta \"npm run dev:next\" \"npm run css:types:watch\"",
     "dev:next": "next dev",
-    "prebuild": "npm run css:types && npm run lint",
+    "prebuild": "npm run css:types && npm run lint && npm test",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "test": "node --require ./scripts/lib/ts-loader.js --test \"tests/**/*.test.ts\"",
     "screenshots": "node scripts/capture-screenshots.js",
     "registry:migrate": "node scripts/migrate-registry.js",
     "css:types": "npx tcm -p \"src/**/*.module.css\" . --camelCase",
