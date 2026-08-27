@@ -22,7 +22,7 @@
  *   carries a `characters` list where staff carries a single `role`.
  */
 
-import type { AniListCastEntry, AnimeRecord } from '@/models/anime';
+import type { AniListCastEntry, AniListSeiyuuCredit, AniListSeiyuuEntry, AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle, getEffectiveScore, getEffectiveStatus } from '@/lib/domain/animeUtils';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -81,6 +81,15 @@ export interface CreditsResult {
    * whose credits cover the whole catalog.
    */
   castCovered?: number;
+  /**
+   * Seiyuu, AniList-sourced path only: credits AniList reports that the local
+   * catalog does not know, so they cannot be rendered or filtered. Stated rather
+   * than silently dropped — same posture as `castCovered`.
+   */
+  unresolved?: number;
+  /** Seiyuu, AniList-sourced path only: false when the filmography was truncated
+   *  at the page cap, so these are the most recent credits rather than all. */
+  complete?: boolean;
 }
 
 // Studio/staff credits and MAL score are catalog-only fields, so the catalog
@@ -139,6 +148,60 @@ export function listAnimeByStaff(staffId: number, catalog: AnimeRecord[]): Credi
  * `cast` is keyed by canonical id, so the catalog scan and the slice lookup join
  * on `a.id` with no crosswalk involved.
  */
+/**
+ * Every anime a seiyuu is credited on, built from AniList's OWN answer
+ * (`catalog/anilist_seiyuu.json`, filled by `getOrFetchSeiyuuFilmography`)
+ * rather than from the cast slice.
+ *
+ * **This is the one that can answer "what has she done that I haven't seen".**
+ * Its sibling `listAnimeBySeiyuu` below scans `catalog/anilist_cast.json`, which
+ * is filled per title and therefore covers the owner's watched list and little
+ * else — so its filmography is, structurally, the titles already seen, and
+ * filtering it to `not_defined` returns nothing however many credits exist.
+ * Asking from the person's side removes that dependency entirely.
+ *
+ * `resolve` is the **ingest boundary** (E9): the caller owns the crosswalk and
+ * hands back a canonical id, so this module stays pure. Resolution is
+ * resolve-only — a credit naming a title the store has never heard of is
+ * counted in `unresolved` and dropped, never minted.
+ */
+export function listAnimeBySeiyuuFilmography(
+  entry: AniListSeiyuuEntry,
+  catalog: AnimeRecord[],
+  resolve: (credit: AniListSeiyuuCredit) => string | undefined,
+): CreditsResult {
+  const byId = new Map(catalog.map(a => [a.id, a]));
+  const records: CreditedRecord[] = [];
+  let unresolved = 0;
+
+  for (const credit of entry.credits) {
+    const canonicalId = resolve(credit);
+    // Two different misses, counted the same: no id in the crosswalk, and an id
+    // that resolves to a record the catalog does not hold. Either way the title
+    // cannot be rendered or filtered, so saying how many is the honest answer.
+    const record = canonicalId === undefined ? undefined : byId.get(canonicalId);
+    if (!record) { unresolved++; continue; }
+    records.push({
+      ...record,
+      creditCharacters: credit.characters.map(c => ({
+        id: c.id,
+        name: c.name,
+        role: c.role,
+        image: c.image,
+      })),
+    });
+  }
+
+  return {
+    name: entry.name,
+    nameNative: entry.nameNative,
+    image: entry.image,
+    records,
+    unresolved,
+    complete: entry.complete,
+  };
+}
+
 export function listAnimeBySeiyuu(
   staffId: number,
   catalog: AnimeRecord[],

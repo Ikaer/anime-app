@@ -79,7 +79,8 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `personal/simkl.json` — SIMKL personal entries (`SimklPersonalEntry`), keyed by canonical id
 - `catalog/anilist.json` — AniList catalog metadata (tags + staff + banner + catalog fields) keyed by canonical id (see "AniList tags + staff integration"). The code calls it `anilistMeta`.
 - `personal/anilist.json` — AniList personal-list entries (`AniListPersonalEntry`) imported from the **OAuth'd viewer's own list**, keyed by canonical id (see "AniList OAuth" below). An entry here always belongs to a connected account — there is no anonymous import path.
-- `catalog/anilist_cast.json` — characters + Japanese seiyuu (`AniListCastEntry`), keyed by canonical id. **The one AniList slice that is NOT joined in `getAnimeForDisplay()`** — read only by the detail page, filled lazily per title (see "Cast" below).
+- `catalog/anilist_cast.json` — characters + Japanese seiyuu (`AniListCastEntry`), keyed by canonical id. **NOT joined in `getAnimeForDisplay()`** — read only by the detail page, filled lazily per title (see "Cast" below).
+- `catalog/anilist_seiyuu.json` — one seiyuu's ANIME credits as AniList reports them (`AniListSeiyuuEntry`), **keyed by AniList staff id — the one slice here not keyed by canonical id**, because a filmography belongs to a person rather than a title. Also off the row join, also filled lazily, one person at a time (see "Seiyuu filmography" below).
 - `personal/local.json` — **in-app** personal state (`LocalPersonalEntry`: status/score/progress + `updated_at`), keyed by canonical id (see "Local personal-data provider").
 - `auth/mal.json` — MAL OAuth token + user data (its peers: `auth/simkl.json`, `auth/anilist.json`, and the three transient `auth/oauth_state_*.json` CSRF files)
 - `sync/mal_seasons.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`) — the seasonal-crawl checkpoint, sitting next to `sync/simkl_checkpoint.json` (all-items watermark + `lastRatedAt`), `sync/anilist_import.json` and `sync/anilist_years.json` (AniList's back-catalog checkpoint, `{ syncedYears: number[] }` — a year is never re-crawled, so re-running the window means deleting the file).
@@ -324,10 +325,59 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
 - **Japanese VAs only** (`voiceActors(language: JAPANESE)`) — these are seiyuu, not
   dub actors. **All** of a character's VAs render, not just the first: dual casting
   (a child self + an adult inner monologue) and mid-series recasts are common.
-- **Seiyuu link OUT to AniList, not to `/credits/staff/[id]`.** That page's
-  `listAnimeByStaff` scans `sources.anilist.staff`, which is the top-50
-  *production* credits — voice actors are never in it, so an internal link would
-  resolve to nothing.
+- **Seiyuu link to `/credits/seiyuu/[id]`, never to `/credits/staff/[id]`.** The
+  two share an id space and nothing else: `listAnimeByStaff` scans
+  `sources.anilist.staff`, the top-50 *production* credits, which by
+  construction never contain voice actors — so a staff link would resolve to
+  nothing. `seiyuu` is a third credit TYPE for exactly that reason, and it reads
+  its own slice (see "Seiyuu filmography" below), not this one.
+
+### Seiyuu filmography — the cast slice, inverted
+
+`/credits/seiyuu/[id]` answers "what has this voice actor been in", which the
+cast slice **cannot** answer and never could. [seiyuu.ts](src/lib/providers/anilist/seiyuu.ts)
+fetches it from AniList by staff id into `catalog/anilist_seiyuu.json`.
+
+- ⚠️ **Deriving a filmography from `catalog/anilist_cast.json` returns the titles
+  you have already WATCHED.** That slice is keyed by title and filled per title —
+  lazily on a detail-page view, plus the /stats sweep over the statused list — so
+  the pool it draws from is your own list. Measured when this shipped: 715 cast
+  entries out of 26,666 catalog titles, **689 of them statused**. So the page's
+  `sans statut` filter was structurally guaranteed to return nothing, on every
+  seiyuu, however many credits existed. Shion Wakayama: the scan found 29 credits,
+  all 29 watched; AniList has 63, of which 30 are unwatched. Takahiro Sakurai: 66
+  vs **622, 516 unwatched**. Do NOT "fix" this back into a cast-slice scan — the
+  scan survives only as the stand-in rendered while the fetch is in flight.
+- **`Staff.characterMedia`, one edge per CHARACTER**, so a recast or a twin
+  arrives as several edges naming the same title and they are merged by media id.
+  `perPage: 50` is silently capped at **25** (the same hard cap `sync.ts`
+  documents for the `staff` connection), and ⚠️ `pageInfo.total`/`lastPage` report
+  the same 500/20 placeholder on every page but the last — page on `hasNextPage`
+  alone. There is no `type` argument on this connection (AniList answers
+  `Unknown argument "type"`), so MANGA edges are filtered client-side; they are
+  rare (500 edges → 487 anime on the sample).
+- **Persisted, not process-cached**, unlike `/mix`'s per-anchor edge cache. Live
+  timings: Shion Wakayama 3 pages / 4.5s, Youko Hikasa 528 credits / 44s,
+  Takahiro Sakurai 622 credits / 53s at the shared ~2.1s throttle.
+  `MAX_FILMOGRAPHY_PAGES = 30` (750 credits) clears the real tail; past it
+  `complete: false` is declared rather than the truncation being silent.
+- **Therefore NOT awaited in `getServerSideProps`.** A 50-second server render
+  reads as a hang, so the page renders the cast-slice stand-in, fetches once on
+  mount (the `CastSection` idiom), then `router.replace`s its own route so the
+  normal server path resolves and filters the new slice. The endpoint returns no
+  rows for that reason. Every later view is a plain local read.
+- **Resolution is the ingest boundary** (E9): AniList media id first, `idMal`
+  second, resolve-only. Both keys earn their place — Sakurai has 3 credits the
+  local catalog lacks, and the `idMal` fallback is what resolves titles the
+  registry holds no AniList id for. Unresolvable credits are **counted and
+  stated**, never silently dropped.
+- ⚠️ **A pending seiyuu must not 404.** Nothing local knows the person precisely
+  when the cast slice has never covered them — which is exactly the case this
+  feature exists for — so `getServerSideProps` renders a placeholder and lets the
+  fetch run. 404 is still correct for a seiyuu already fetched and unknown.
+- A transient AniList failure is **never persisted**: an empty entry
+  short-circuits forever, same discipline as the cast slice's stored empties, so
+  only a real "AniList has no such person" answer is written.
 
 ### Staff importance tiers — a lookup, not a data field
 

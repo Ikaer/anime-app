@@ -30,9 +30,9 @@ import { AnimePageLayout, AnimeListHeader } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { CollapsibleSection } from '@/components/shared';
-import { getAllAnilistCast, getAnimeForDisplay } from '@/lib/store';
+import { buildCrosswalkIndexes, getAllAnilistCast, getAnilistSeiyuu, getAnimeForDisplay } from '@/lib/store';
 import { applyNarrowingFilters, getEffectiveStatus, sortAnimeRecords } from '@/lib/domain/animeUtils';
-import { listAnimeByStudio, listAnimeByStaff, listAnimeBySeiyuu, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
+import { listAnimeByStudio, listAnimeByStaff, listAnimeBySeiyuu, listAnimeBySeiyuuFilmography, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
 import { decodeCreditsState, useCreditsUrlState } from '@/hooks';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { useT, type TranslationKey } from '@/lib/i18n';
@@ -77,19 +77,41 @@ interface Props {
   castCovered: number | null;
   /** Catalog size, the denominator `castCovered` is read against. */
   catalogTotal: number;
+  /**
+   * Seiyuu only — where the filmography came from.
+   *
+   * `anilist` is the real answer: AniList's own credits for this person, stored
+   * in `catalog/anilist_seiyuu.json`. `cast` is the legacy scan of
+   * `catalog/anilist_cast.json`, which only ever covers titles someone has
+   * already opened (in practice: the watched list), and is kept solely as the
+   * render for the moment before the filmography lands — or if AniList refuses.
+   */
+  filmographySource: 'anilist' | 'cast' | null;
+  /** Seiyuu only — no stored filmography yet, so fetch one and re-render. */
+  pending: boolean;
+  /** Seiyuu, `anilist` source only — credits the local catalog doesn't know. */
+  unresolved: number | null;
+  /** Seiyuu, `anilist` source only — false when truncated at the page cap. */
+  complete: boolean;
 }
 
 export default function CreditsPage({
   type, id, name, nameNative, image, items, total, availableGenres, castCovered, catalogTotal,
+  filmographySource, pending, unresolved, complete,
 }: Props) {
   const t = useT();
   const router = useRouter();
   const { state, update } = useCreditsUrlState(`/credits/${type}/${id}`);
-  const heading = type === 'studio'
-    ? t('credits.studioHeading', { name })
-    : type === 'seiyuu'
-      ? t('credits.seiyuuHeading', { name })
-      : t('credits.staffHeading', { name });
+  // An empty name only happens on a pending seiyuu nothing local knows yet —
+  // the person's identity arrives with the filmography, so name them generically
+  // rather than rendering "Roles voiced by " with a hole in it.
+  const heading = !name
+    ? t('credits.filmographyLoadingHeading')
+    : type === 'studio'
+      ? t('credits.studioHeading', { name })
+      : type === 'seiyuu'
+        ? t('credits.seiyuuHeading', { name })
+        : t('credits.staffHeading', { name });
 
 
   // Filtering is a server round-trip here, so say so — otherwise a filter click
@@ -112,6 +134,44 @@ export default function CreditsPage({
       router.events.off('routeChangeError', done);
     };
   }, [router.events, type, id]);
+
+  /**
+   * Fill the filmography from AniList the first time this seiyuu is opened, then
+   * re-render the route so the normal server path resolves, filters and sorts it.
+   *
+   * Auto-fetch on mount rather than click-to-load, same call as `CastSection`:
+   * it happens at most ONCE per person for the life of the store, and without it
+   * the page cannot answer its own central question. Unlike `CastSection` this
+   * can take up to a minute (AniList pages 25 credits at a time against a ~2.1s
+   * throttle), so it announces itself instead of just spinning.
+   *
+   * Deliberately NOT awaited in `getServerSideProps`: blocking the server render
+   * for 60s would make the page look broken, and the fallback scan gives the
+   * reader something real to look at meanwhile.
+   */
+  const [filling, setFilling] = useState(false);
+  const [fillError, setFillError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pending || type !== 'seiyuu') return;
+    let cancelled = false;
+    setFilling(true);
+    setFillError(null);
+    fetch(`/api/anime/credits/seiyuu/${id}`)
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!r.ok || !body.ok) throw new Error(body.error || `HTTP ${r.status}`);
+        // The response carries no rows on purpose — re-running the route is what
+        // resolves the new slice against the catalog and re-applies the filters.
+        router.replace(router.asPath);
+      })
+      .catch(e => { if (!cancelled) setFillError(e instanceof Error ? e.message : 'Unknown error'); })
+      .finally(() => { if (!cancelled) setFilling(false); });
+    return () => { cancelled = true; };
+    // `router.asPath` is read inside, not depended on: re-running this on every
+    // filter click would re-fetch a filmography that is already stored.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, type, id]);
 
   // "N of M" whenever a filter is SET, not whenever it happened to narrow —
   // a filter that keeps everything is still active, and reading a bare total
@@ -196,7 +256,7 @@ export default function CreditsPage({
   return (
     <>
       <Head>
-        <title>{t('credits.pageTitle', { name })}</title>
+        <title>{name ? t('credits.pageTitle', { name }) : t('credits.filmographyLoadingHeading')}</title>
         <link rel="icon" href="/anime-favicon.svg" />
       </Head>
 
@@ -253,11 +313,40 @@ export default function CreditsPage({
           {/* Coverage is a property of the DATA, not of the filters, so it sits
               outside the loading/empty branches — an over-narrow filter must not
               hide the reason a filmography looks short. */}
-          {castCovered !== null && castCovered < catalogTotal && (
-            <p className="coverage">
-              {t('credits.seiyuuCoverage', { covered: castCovered, total: catalogTotal })}{' '}
-              <Link href="/stats">{t('credits.seiyuuCoverageAction')}</Link>
+
+          {/* Fetching AniList's own credits. Says what it is doing and that it
+              is once-only, because it can run for a minute on a prolific
+              seiyuu — a bare spinner there reads as a hang. */}
+          {filling && <p className="coverage">{t('credits.filmographyFilling')}</p>}
+
+          {/* A failed fill leaves the cast-slice scan on screen, which looks
+              like a complete filmography and is not. Say so. */}
+          {fillError && (
+            <p className="coverage coverage-warn">
+              {t('credits.filmographyError', { error: fillError })}
             </p>
+          )}
+
+          {/* The cast-slice fallback: only ever the titles already opened, so on
+              a seiyuu page it is close to "what you have watched". Stating that
+              is the difference between an honest partial answer and a silently
+              wrong one — the same reason the old castCovered note existed. */}
+          {filmographySource === 'cast' && !filling && castCovered !== null && castCovered < catalogTotal && (
+            <p className="coverage">
+              {t('credits.seiyuuCoverage', { covered: castCovered, total: catalogTotal })}
+            </p>
+          )}
+
+          {/* Truncated at the page cap — the most recent credits, not all. */}
+          {filmographySource === 'anilist' && !complete && (
+            <p className="coverage">{t('credits.filmographyTruncated')}</p>
+          )}
+
+          {/* Credits AniList has that the local catalog does not, so they cannot
+              be shown or filtered. Counted out rather than dropped in silence,
+              same posture as /catch-up's unaired entries. */}
+          {filmographySource === 'anilist' && unresolved !== null && unresolved > 0 && (
+            <p className="coverage">{t('credits.filmographyUnresolved', { count: unresolved })}</p>
           )}
 
           {isLoading ? (
@@ -344,6 +433,9 @@ export default function CreditsPage({
         .empty { text-align: center; padding: 3rem; color: var(--text-secondary); }
         .coverage { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
         .coverage :global(a) { color: var(--accent-primary); }
+        /* Prefixed modifier, like .char-main above: styled-jsx scopes this rule
+           but does NOT stop globals.css matching a bare class name too. */
+        .coverage.coverage-warn { color: #fca5a5; }
 
         .who { display: inline-flex; align-items: center; gap: 0.6rem; }
         .faces-toggle { margin-top: 4px; align-self: flex-start; cursor: pointer; font: inherit;
@@ -437,18 +529,60 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   // doesn't apply — the shared cached catalog is fine (see similarByCredits.ts).
   const catalog = getAnimeForDisplay();
   const titleLang = getTitleLanguage();
-  // The cast slice is read ONLY on the seiyuu branch: it is the bulkiest AniList
-  // payload there is, and parsing it to render a studio filmography would tax
-  // the other two types for data they never look at.
-  const result = type === 'studio'
-    ? listAnimeByStudio(id, catalog)
-    : type === 'seiyuu'
-      ? listAnimeBySeiyuu(id, catalog, getAllAnilistCast())
-      : listAnimeByStaff(id, catalog);
+  /**
+   * A seiyuu filmography comes from AniList's own answer about the PERSON
+   * (`catalog/anilist_seiyuu.json`), not from a scan of the per-title cast
+   * slice. The scan is still here, but only as the stand-in until the
+   * filmography lands — it can only ever surface titles whose cast has been
+   * fetched, which is the watched list plus whatever detail pages have been
+   * opened, so on its own it answers "what have I already seen her in".
+   *
+   * The cast slice is read ONLY when that fallback is actually taken: it is the
+   * bulkiest AniList payload there is, and parsing it to render a studio
+   * filmography would tax the other two types for data they never look at.
+   */
+  let filmographySource: 'anilist' | 'cast' | null = null;
+  let pending = false;
+  let result: ReturnType<typeof listAnimeByStudio> = null;
+
+  if (type === 'studio') {
+    result = listAnimeByStudio(id, catalog);
+  } else if (type === 'staff') {
+    result = listAnimeByStaff(id, catalog);
+  } else {
+    const stored = getAnilistSeiyuu(id);
+    // An entry with no name is AniList saying it has no such person — fall back
+    // rather than render a nameless page. A stored entry with a name but zero
+    // credits is a real answer and renders as an empty filmography.
+    if (stored && stored.name) {
+      // The ingest boundary (E9): provider ids become canonical ids here, and
+      // resolve-only — an unknown credit is counted, never minted.
+      const { byAnilist, byMal } = buildCrosswalkIndexes();
+      result = listAnimeBySeiyuuFilmography(stored, catalog, credit =>
+        byAnilist.get(credit.anilist_id)
+        ?? (credit.mal_id !== undefined ? byMal.get(credit.mal_id) : undefined));
+      filmographySource = 'anilist';
+    } else {
+      result = listAnimeBySeiyuu(id, catalog, getAllAnilistCast());
+      filmographySource = result ? 'cast' : null;
+      // Only ask for a fetch when none is stored. A stored-but-nameless entry
+      // has already been asked and answered; re-fetching it on every view is the
+      // exact loop the cast slice's persisted empties exist to prevent.
+      pending = !stored;
+    }
+  }
   // 404 is about whether the CREDIT exists, never about what the filters left —
   // an over-narrow filter has to render an empty grid, not a missing page.
+  //
+  // A PENDING seiyuu is the third case and must not 404: nothing local knows the
+  // person yet precisely because the cast slice has never covered them, which is
+  // the situation the AniList fetch exists to resolve. 404ing here would make
+  // the page unreachable for exactly the seiyuu whose work you have not watched.
   if (!result) {
-    return { notFound: true };
+    if (!pending) {
+      return { notFound: true };
+    }
+    result = { name: '', records: [] };
   }
 
   const params = new URLSearchParams();
@@ -489,6 +623,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       availableGenres: Array.from(genreNames).sort((a, b) => a.localeCompare(b)),
       castCovered: result.castCovered ?? null,
       catalogTotal: catalog.length,
+      filmographySource,
+      pending,
+      unresolved: result.unresolved ?? null,
+      complete: result.complete ?? true,
     },
   };
 };

@@ -18,7 +18,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListPersonalEntry, LocalPersonalEntry, MALListStatus, MALPersonalEntry, SourceIds } from '@/models/anime';
+import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListSeiyuuEntry, AniListPersonalEntry, LocalPersonalEntry, MALListStatus, MALPersonalEntry, SourceIds } from '@/models/anime';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { buildCrosswalkIndexes, getRegistry, resolveByMalId, resolveCanonicalIds, toNum } from '@/lib/store/registry';
 import { invalidateRecordCache } from '@/lib/store/recordCache';
@@ -33,6 +33,7 @@ const ANIME_HIDDEN_FILE = dataFile('user/hidden.json');
 const ANIME_SIMKL_FILE = dataFile('personal/simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('catalog/anilist.json');
 const ANIME_ANILIST_CAST_FILE = dataFile('catalog/anilist_cast.json');
+const ANIME_ANILIST_SEIYUU_FILE = dataFile('catalog/anilist_seiyuu.json');
 const ANIME_ANILIST_PERSONAL_FILE = dataFile('personal/anilist.json');
 const ANIME_LOCAL_PERSONAL_FILE = dataFile('personal/local.json');
 
@@ -367,6 +368,42 @@ export function upsertAnilistCast(canonicalId: string, entry: AniListCastEntry):
   const existing = getAllAnilistCast();
   existing[canonicalId] = entry;
   writeJsonFile(ANIME_ANILIST_CAST_FILE, existing);
+  // No `invalidateRecordCache()` on purpose — see the block comment above.
+}
+
+// ============================================================================
+// AniList seiyuu filmography slice, keyed by **AniList staff id** — the one
+// slice here that is not keyed by canonical id, because a filmography belongs
+// to a person rather than to a title.
+//
+// It exists because the cast slice cannot answer the question. Cast is keyed by
+// title and filled only for titles someone has already looked at (the /stats
+// sweep covers the statused list), so deriving a filmography from it returns
+// almost exactly the titles the owner has SEEN — which makes "what has this
+// seiyuu done that I have NOT watched" structurally unanswerable. This slice
+// holds the same person's credits as AniList reports them from her own side.
+//
+// Off the row join and cache-neutral for the same reason as cast: no assembled
+// row reads it, so these functions do NOT clear the record cache.
+// ============================================================================
+
+export function getAllAnilistSeiyuu(): Record<string, AniListSeiyuuEntry> {
+  return readJsonFile<Record<string, AniListSeiyuuEntry>>(ANIME_ANILIST_SEIYUU_FILE, {});
+}
+
+/**
+ * One seiyuu's filmography, or `undefined` when it was never fetched. Same
+ * distinction the cast slice depends on: `undefined` = never asked, whereas an
+ * entry with `credits: []` = asked, AniList has none.
+ */
+export function getAnilistSeiyuu(staffId: number): AniListSeiyuuEntry | undefined {
+  return getAllAnilistSeiyuu()[String(staffId)];
+}
+
+export function upsertAnilistSeiyuu(staffId: number, entry: AniListSeiyuuEntry): void {
+  const existing = getAllAnilistSeiyuu();
+  existing[String(staffId)] = entry;
+  writeJsonFile(ANIME_ANILIST_SEIYUU_FILE, existing);
   // No `invalidateRecordCache()` on purpose — see the block comment above.
 }
 

@@ -59,7 +59,7 @@ query ($anilistId: Int) {
 }`;
 
 interface RawName { full?: string | null; native?: string | null }
-interface RawImage { large?: string | null; medium?: string | null }
+export interface RawImage { large?: string | null; medium?: string | null }
 interface RawPerson {
   id?: number;
   name?: RawName | null;
@@ -87,7 +87,7 @@ interface RawCastMedia {
  * `default.jpg` basename lets the UI fall back to initials instead of showing
  * a wall of identical placeholders.
  */
-function cleanImage(image?: RawImage | null): string | undefined {
+export function cleanImage(image?: RawImage | null): string | undefined {
   const url = image?.large || image?.medium || '';
   if (!url || /\/default\.[a-z]+$/i.test(url)) return undefined;
   return url;

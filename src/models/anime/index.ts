@@ -340,6 +340,64 @@ export interface AniListCastEntry {
   fetched_at: string;
 }
 
+/**
+ * One seiyuu's ANIME credits as AniList reports them, stored in its OWN slice
+ * (`catalog/anilist_seiyuu.json`) keyed by **AniList staff id**.
+ *
+ * **The inverse index of `AniListCastEntry`, and it has to be fetched, not
+ * derived.** `catalog/anilist_cast.json` answers "who is in this title"; a
+ * filmography asks "what is this person in", and scanning the cast slice for it
+ * can only ever return titles that slice already covers — which is the statused
+ * list plus whatever detail pages have been opened. So the one question the
+ * page exists to answer ("what has she done that I have NOT seen") was
+ * guaranteed to come back empty. Asking AniList from the PERSON's side is the
+ * only way round it; see `getOrFetchSeiyuuFilmography`.
+ *
+ * Keyed by staff id rather than canonical id — deliberately, and the one slice
+ * in the store that is. A filmography is a property of the person, not of any
+ * one title, so there is no canonical id to hang it off. Like the cast slice it
+ * is off the row join and writing it never invalidates the record cache.
+ */
+export interface AniListSeiyuuEntry {
+  /** AniList staff id — same id space as `AniListVoiceActorEntry.id`. */
+  staff_id: number;
+  name: string;
+  /** Japanese-script name, when AniList has one. */
+  nameNative?: string;
+  /** AniList-hosted portrait URL, hot-linked like the cast section's. */
+  image?: string;
+  /** ANIME credits only, newest first. Empty = AniList was asked and has none;
+   *  a MISSING entry is the "never fetched" signal, same discipline as the cast
+   *  slice's empty `characters`. */
+  credits: AniListSeiyuuCredit[];
+  /** False when paging stopped at `MAX_FILMOGRAPHY_PAGES` — the credits are then
+   *  the most recent N, not the whole filmography, and the page must say so. */
+  complete: boolean;
+  fetched_at: string;
+}
+
+/** One title a seiyuu is credited on. Provider ids only — resolving them to a
+ *  canonical id is the reader's job (resolve-only, at the ingest boundary). */
+export interface AniListSeiyuuCredit {
+  /** AniList media id — the crosswalk key this resolves through. */
+  anilist_id: number;
+  /** AniList's own declared crosswalk, when it has one. Fallback key only. */
+  mal_id?: number;
+  /** Every character this seiyuu voices in this title: AniList returns one edge
+   *  per character, so a recast or a twin merges into several entries here. */
+  characters: AniListSeiyuuCharacter[];
+}
+
+/** A character voiced, carrying the role it was credited in on that title. */
+export interface AniListSeiyuuCharacter {
+  id: number;
+  name: string;
+  nameNative?: string;
+  image?: string;
+  /** AniList's `MAIN` | `SUPPORTING` | `BACKGROUND`. Stored verbatim. */
+  role: string;
+}
+
 /** One studio credit on a title. `isMain: false` is what the app calls a producer. */
 export interface AniListCastStudioEntry {
   id: number;
