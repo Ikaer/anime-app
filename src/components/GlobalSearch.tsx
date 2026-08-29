@@ -140,6 +140,7 @@ export default function GlobalSearch() {
                   key={`a${a.id}`}
                   hit={a}
                   activeRow={active === animeBase + i}
+                  approxLabel={t('search.approx')}
                   onHover={() => setActive(animeBase + i)}
                   onClick={() => go(`/anime/${a.id}`)}
                 />
@@ -187,8 +188,8 @@ export default function GlobalSearch() {
   );
 }
 
-function AnimeRow({ hit, activeRow, onHover, onClick }: {
-  hit: AnimeSearchHit; activeRow: boolean; onHover: () => void; onClick: () => void;
+function AnimeRow({ hit, activeRow, approxLabel, onHover, onClick }: {
+  hit: AnimeSearchHit; activeRow: boolean; approxLabel: string; onHover: () => void; onClick: () => void;
 }) {
   return (
     <button
@@ -207,6 +208,7 @@ function AnimeRow({ hit, activeRow, onHover, onClick }: {
         {hit.secondary && <span className={styles.rowSub}>{hit.secondary}</span>}
       </span>
       <span className={styles.rowMeta}>
+        {hit.fuzzy && <span className={styles.approx} title={approxLabel}>~</span>}
         {hit.year && <span>{hit.year}</span>}
         {hit.mediaType && <span>{hit.mediaType.toUpperCase()}</span>}
         {hit.mean != null && <span className={styles.mean}>★ {hit.mean.toFixed(2)}</span>}

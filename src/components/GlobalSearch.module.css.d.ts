@@ -1,4 +1,5 @@
 declare const styles: {
+  readonly "approx": string;
   readonly "creditRow": string;
   readonly "dropdown": string;
   readonly "empty": string;

@@ -490,6 +490,7 @@
   "search.animeCount": "{count} anime",
   "search.noResults": "Aucun résultat",
   "search.searching": "Recherche…",
+  "search.approx": "Correspondance approximative",
 
   "refresh.title": "Rafraîchir depuis MAL / AniList / SIMKL",
   "refresh.refreshing": "⏳ Rafraîchissement…",

@@ -148,3 +148,15 @@
   font-size: 0.85rem;
   text-align: center;
 }
+
+/*
+ * Marks a row the FUZZY pass produced — the query does not literally occur in
+ * the title. Without it a typo silently returns a different set of shows than
+ * the one typed, which reads as the box being wrong rather than forgiving.
+ */
+.approx {
+  color: var(--text-secondary);
+  flex: none;
+  font-size: 0.8rem;
+  font-weight: 400;
+}
