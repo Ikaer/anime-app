@@ -11,6 +11,7 @@ import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/sear
 import { computeSimilarByCredits, type SimilarByCredits } from '@/lib/reco/byCredits';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
+import { getFranchiseIndex } from '@/lib/domain/franchise';
 import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection, ProvenanceChip } from '@/components/anime';
@@ -72,6 +73,12 @@ interface Props {
    * discovery signal rather than decoration.
    */
   staffAffinity: Record<number, number>;
+  /**
+   * How many titles the franchise containing this one holds (`FRANCHISE_RELATIONS`
+   * scope). Only its size is needed — the link to `/franchise/[id]` is offered
+   * when it is >1, and that page does the grouping again for itself.
+   */
+  franchiseSize: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +142,7 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, staffAffinity, titleLang }: Props) {
+export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, staffAffinity, titleLang, franchiseSize }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -407,9 +414,22 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
           )}
 
           {/* ---------- Related anime ---------- */}
-          {related.length > 0 && (
+          {(related.length > 0 || franchiseSize > 1) && (
             <section className="section">
               <h2>{t('detail.relatedAnime')}</h2>
+              {/* The ordered read of the same edges. It sits at the head of this
+                  section rather than in its own because it answers the question
+                  the pile of cards below provokes — "fine, but in what order?" —
+                  and because franchise membership IS resolved relations, so a
+                  franchise wider than this title cannot exist without them. */}
+              {franchiseSize > 1 && (
+                <Link href={`/franchise/${anime.id}`} className="franchise-link">
+                  <span className="franchise-link-label">🎬 {t('franchise.link')}</span>
+                  <span className="franchise-link-count">
+                    {t('franchise.linkSub', { count: franchiseSize })}
+                  </span>
+                </Link>
+              )}
               <div className="related">
                 {related.map(r => (
                   <Link key={r.id} href={`/anime/${r.id}`} className="related-card" title={r.title}>
@@ -770,6 +790,16 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         .reco-badge.studio { color: var(--accent-primary); }
         .reco-badge .reco-role { color: var(--text-muted); }
 
+        /* :global() for the same reason .related-card needs it — the class rides
+           on a next/link component, not a DOM element, so styled-jsx never
+           rewrites it. */
+        :global(.franchise-link) { display: flex; align-items: center; justify-content: space-between;
+          gap: 0.5rem; margin-bottom: 0.7rem; padding: 0.45rem 0.6rem; border-radius: 8px;
+          text-decoration: none; background: var(--bg-secondary);
+          border: 1px solid var(--border-color); }
+        :global(.franchise-link):hover { border-color: var(--accent-primary); }
+        :global(.franchise-link-label) { font-size: 0.82rem; color: var(--text-primary); }
+        :global(.franchise-link-count) { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
         .related { display: flex; flex-wrap: wrap; gap: 0.75rem; }
         .related :global(.related-card) { width: 110px; display: flex; flex-direction: column; gap: 4px; text-decoration: none;
           color: var(--text-primary); }
@@ -930,6 +960,12 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       staffAffinity: getEffectiveStatus(anime)
         ? {}
         : pickStaffAffinity(anime.sources.anilist?.staff || [], getStaffAffinity(catalog)),
+      // Only the COUNT — enough to decide whether to offer the watch-order link,
+      // and the index is memoized on `catalog`'s identity, so this is a map
+      // lookup on all but the first detail view after a slice changes. A title
+      // with no in-catalog franchise edges is in no component and is its own
+      // franchise of one, which reads as 1 and offers nothing.
+      franchiseSize: (getFranchiseIndex(catalog).get(anime.id) ?? [anime]).length,
     },
   };
 };

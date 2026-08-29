@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `mcp/tools`' `projectWhy` (the per-sign trim), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -628,6 +628,72 @@ cannot express it (a connected-component question, not a filter combination) and
 - Grouping goes through `getFranchiseIndex` in
   [domain/franchise.ts](src/lib/domain/franchise.ts) — shared with `/quick-rate`,
   memoized on the row array's identity.
+
+### "/franchise/[id]" — one franchise as a watch order
+
+[/franchise/[id]](src/pages/franchise/[id].tsx) over the pure
+[domain/franchiseOrder.ts](src/lib/domain/franchiseOrder.ts). `domain/franchise.ts`
+answers "which titles are the same franchise"; this answers the next question —
+"in what order do I watch them, and where am I in that line". Reached from the
+detail page's « Anime liés » section, which is the same edges unordered.
+
+- **The URL names a MEMBER, not a franchise, and no redirect canonicalizes it.**
+  A franchise is a derived component with no id anywhere in the store — the same
+  reason `/boxes` persists canonical ids rather than a franchise key (a stored
+  key would silently re-scope on every AniList sync). So every member is a valid
+  URL for its franchise, the detail-page link is just `/franchise/${anime.id}`,
+  and the member you arrived by is **marked** in the line rather than reordering
+  it. ⚠️ Do NOT "improve" this by starting the list at the focus title: the same
+  franchise would then render differently through each of its members. Pinned.
+- ⚠️ **The order is air date, and that is a claim, not a fallback.** No provider
+  publishes a story order, and relation edges are a graph rather than a sequence
+  — undirected here by construction, with several entries routinely sharing one
+  parent. `catalog.startDate` covers **99.1%** of multi-member-franchise members
+  (9,429 of 9,519, live-measured) and reproduces Kara no Kyoukai's canonical
+  release order exactly. Where the recommended order genuinely differs
+  (Monogatari) this is wrong, and the page **says so** rather than implying an
+  authority it hasn't got. Do NOT fix that with a hand-maintained order table:
+  2,542 multi-member franchises, and no provider to re-supply one.
+- ⚠️ **The undated sentinel in `compareByAirDate` is load-bearing.**
+  `Date.parse(undefined)` is `NaN` and every comparison against it is false, so a
+  comparator forwarding it returns 0 for every pair touching an undated entry and
+  `sort` leaves those wherever the catalog put them — quite possibly opening the
+  watch order on a special. Same guard, same reason, as `/catch-up`'s `byAirDate`.
+- **Named after its earliest AIRED member**, which is why the name is read off
+  `entries[0]` *after* the sort — `members[0]` is catalog order, and would title
+  the Gundam page after whichever of its 131 entries the crawl landed first. The
+  longest-common-prefix alternative was built and **measured worse**: empty on 22%
+  of components (490 of 2,542) and truncating mid-name on much of the rest
+  ("Cowboy", "Aa", "Hunter x", "Full Metal"). What ships reads correctly —
+  "Bakemonogatari", "Neon Genesis Evangelion", "The Garden of Sinners Chapter 1".
+- **"À voir ensuite" is the point of the page**: the first entry in air order you
+  have neither completed nor dropped, skipping anything unaired. A `watching`
+  entry stops it (resuming IS the action); `dropped` does not, or the one call to
+  action on the page would point at an abandoned title forever. `null` renders as
+  "up to date", which is a different statement from an empty list.
+- **The `dr` scope toggle is `/catch-up`'s « suites directes », and here it is
+  the defence against the giant components.** Only **10 of 2,542** multi-member
+  franchises exceed 30 entries, so the wide scope is right by default; those ten
+  are the long-runners (Gundam 131, Conan 124, Pokémon 108) where it chains
+  unrelated series together. The toggle states BOTH counts so the effect is
+  visible before the click.
+- **SSR with no API route**, like the detail page it is reached from: grouping is
+  O(catalog) so it happens server-side and only the lean `FranchiseEntry[]`
+  crosses the wire, and the one control is a URL key, so nothing refetches. Both
+  scope indexes cost 51ms/47ms once per bundle and 0ms after (memoized on the row
+  array's identity). `titleLang` is a prop for the usual SSR reason.
+- ⚠️ **Every class riding on a `next/link` needs `:global()`**, hand-scoped under
+  `.fr-page`. styled-jsx rewrites `className` on DOM elements only — a className
+  handed to a COMPONENT passes through untouched, so the scoped rule matches
+  nothing. Live symptom when this was got wrong: every row rendered as a stack
+  instead of a line, on a page that compiled clean. Same arrangement as the detail
+  page's `.related :global(.related-card)`, and a third face of the styled-jsx
+  trap already documented above.
+- **French singulars are separate keys chosen by an inline ternary** (`...One`),
+  never a constructed key: building `franchise.entryCountOne` as a string needs a
+  `TranslationKey` cast, and that cast is exactly what disables the missing-key
+  compile check. Only the counts that actually inflect have a variant. Reachable
+  in normal use — `dr=1` narrows Crayon Shin-chan to a single entry.
 
 ### "/activity" — « Fil d'activité », the watch history
 
