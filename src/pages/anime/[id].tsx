@@ -245,6 +245,16 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
                 router.replace(router.asPath, undefined, { scroll: false })
               }}
             />
+            {/* Sits with « Noter » and « Rafraîchir » rather than with the
+                external links that follow, because it goes somewhere inside the
+                app. Terse like its neighbours; the full phrase is the tooltip.
+                Hidden on a franchise of one, where the page would only restate
+                this title. */}
+            {franchiseSize > 1 && (
+              <Link href={`/franchise/${anime.id}`} className="ext-link" title={t('franchise.link')}>
+                🎬 {t('franchise.button')}
+              </Link>
+            )}
             <a href={`https://myanimelist.net/anime/${crosswalk.mal}`} target="_blank" rel="noopener noreferrer">MAL</a>
             {(simkl?.simkl_id || crosswalk.simkl) && (
               <a href={`https://simkl.com/anime/${simkl?.simkl_id ?? crosswalk.simkl}`} target="_blank" rel="noopener noreferrer">SIMKL</a>
@@ -414,22 +424,9 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
           )}
 
           {/* ---------- Related anime ---------- */}
-          {(related.length > 0 || franchiseSize > 1) && (
+          {related.length > 0 && (
             <section className="section">
               <h2>{t('detail.relatedAnime')}</h2>
-              {/* The ordered read of the same edges. It sits at the head of this
-                  section rather than in its own because it answers the question
-                  the pile of cards below provokes — "fine, but in what order?" —
-                  and because franchise membership IS resolved relations, so a
-                  franchise wider than this title cannot exist without them. */}
-              {franchiseSize > 1 && (
-                <Link href={`/franchise/${anime.id}`} className="franchise-link">
-                  <span className="franchise-link-label">🎬 {t('franchise.link')}</span>
-                  <span className="franchise-link-count">
-                    {t('franchise.linkSub', { count: franchiseSize })}
-                  </span>
-                </Link>
-              )}
               <div className="related">
                 {related.map(r => (
                   <Link key={r.id} href={`/anime/${r.id}`} className="related-card" title={r.title}>
@@ -790,16 +787,6 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         .reco-badge.studio { color: var(--accent-primary); }
         .reco-badge .reco-role { color: var(--text-muted); }
 
-        /* :global() for the same reason .related-card needs it — the class rides
-           on a next/link component, not a DOM element, so styled-jsx never
-           rewrites it. */
-        :global(.franchise-link) { display: flex; align-items: center; justify-content: space-between;
-          gap: 0.5rem; margin-bottom: 0.7rem; padding: 0.45rem 0.6rem; border-radius: 8px;
-          text-decoration: none; background: var(--bg-secondary);
-          border: 1px solid var(--border-color); }
-        :global(.franchise-link):hover { border-color: var(--accent-primary); }
-        :global(.franchise-link-label) { font-size: 0.82rem; color: var(--text-primary); }
-        :global(.franchise-link-count) { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
         .related { display: flex; flex-wrap: wrap; gap: 0.75rem; }
         .related :global(.related-card) { width: 110px; display: flex; flex-direction: column; gap: 4px; text-decoration: none;
           color: var(--text-primary); }

@@ -635,7 +635,11 @@ cannot express it (a connected-component question, not a filter combination) and
 [domain/franchiseOrder.ts](src/lib/domain/franchiseOrder.ts). `domain/franchise.ts`
 answers "which titles are the same franchise"; this answers the next question —
 "in what order do I watch them, and where am I in that line". Reached from the
-detail page's « Anime liés » section, which is the same edges unordered.
+detail page's topbar, beside « Noter » and « Rafraîchir » — it goes somewhere
+inside the app, unlike the external links that follow it, and it is deliberately
+NOT in the « Anime liés » block: that block is the same edges unordered, so the
+two read as rivals rather than as a question and its answer. Hidden on a
+franchise of one, where the page would only restate the title you are on.
 
 - **The URL names a MEMBER, not a franchise, and no redirect canonicalizes it.**
   A franchise is a derived component with no id anywhere in the store — the same

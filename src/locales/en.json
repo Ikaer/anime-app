@@ -851,7 +851,7 @@
   "franchise.youAreHere": "you are here",
   "franchise.orderHint": "Airing order: no provider publishes a story order, so release date is what this follows. On a few franchises (Monogatari) the recommended order differs.",
   "franchise.link": "View the franchise in order",
-  "franchise.linkSub": "{count} entries",
+  "franchise.button": "Franchise",
   "franchise.entryCountOne": "{count} entry",
   "franchise.episodeCountOne": "{count} episode",
   "franchise.droppedOne": "{count} dropped",
