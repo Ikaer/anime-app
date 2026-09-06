@@ -708,6 +708,15 @@ over their WATCHED list — "quand je suis fatigué", "pour l'animation", "conce
   browser bundle, which `src/pages/**` being exempt from the client-safety rule would NOT have
   caught). An iconless chip renders shorter than its neighbours, so a row stops lining up; the
   list projection falls back for older boxes and the detail page edits it in place.
+- **`description` is optional prose and nothing ranks on it** — the axis stated in the owner's
+  own words, so a box that is only a name months later still says where its line was drawn.
+  `rankBoxCandidates` never reads it. Unlike `emoji` it is **not** defaulted on the way out:
+  its absence is what makes the editor show a placeholder and the chip tooltip fall back to the
+  name. Editable in place on `/boxes/[id]` (blur saves, blank clears — a box must always have a
+  name, and must be allowed to have no description) and optional on the create form. The MCP
+  reads it on `list_boxes` and can write it, which is the point of exposing it there: it is the
+  one field that tells a model what a box MEANS rather than what it happens to contain, and
+  `edit_box`'s description says to overwrite it only on the owner's request.
 - Routes: `boxes/index` (list + create), `boxes/[id]/index` (PATCH/PUT/DELETE),
   `boxes/[id]/grow`, `boxes/[id]/members`, plus
   [watched-groups](src/pages/api/anime/watched-groups.ts) for the labeling grid. The last one

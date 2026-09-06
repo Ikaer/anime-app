@@ -41,6 +41,7 @@ export default function BoxesPage() {
 
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('');
+  const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
 
   /** `${groupId}:${boxId}` pairs with a write in flight. */
@@ -86,11 +87,16 @@ export default function BoxesPage() {
       const res = await fetch('/api/anime/boxes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, emoji: newEmoji.trim() || undefined }),
+        body: JSON.stringify({
+          name,
+          emoji: newEmoji.trim() || undefined,
+          description: newDesc.trim() || undefined,
+        }),
       });
       if (!res.ok) throw new Error('create');
       setNewName('');
       setNewEmoji('');
+      setNewDesc('');
       await loadBoxes();
     } catch {
       setError(t('boxes.createError'));
@@ -175,6 +181,20 @@ export default function BoxesPage() {
           </button>
         </div>
 
+        {/* Its own line rather than a fourth control on the row above: the name
+            is a handle you type in two words, this is the sentence that says
+            where the axis stops. Optional — a box can be described later on its
+            own page. */}
+        <input
+          className="create-desc"
+          type="text"
+          value={newDesc}
+          placeholder={t('boxes.create.descPlaceholder')}
+          aria-label={t('boxes.descriptionTitle')}
+          onChange={e => setNewDesc(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') createBox(); }}
+        />
+
         {boxes.length === 0 ? (
           <p className="hint">{t('boxes.noBoxesHint')}</p>
         ) : (
@@ -182,8 +202,14 @@ export default function BoxesPage() {
             {boxes.map(box => (
               <li key={box.id}>
                 <Link href={`/boxes/${encodeURIComponent(box.id)}`} className="box-link">
-                  <span className="box-name">{box.emoji ? `${box.emoji} ` : ''}{box.name}</span>
-                  <span className="box-count">{box.count}</span>
+                  <span className="box-head">
+                    <span className="box-name">{box.emoji ? `${box.emoji} ` : ''}{box.name}</span>
+                    <span className="box-count">{box.count}</span>
+                  </span>
+                  {/* Rendered, not just a tooltip: this list is the page's own
+                      index of what each axis means, and a title attribute is
+                      unreachable on the TV target this app is built for. */}
+                  {box.description && <span className="box-desc">{box.description}</span>}
                 </Link>
               </li>
             ))}
@@ -356,6 +382,10 @@ export default function BoxesPage() {
         .bx-side .create { display: flex; gap: 6px; margin-bottom: 0.75rem; }
         .bx-side .create-emoji { width: 46px; text-align: center; }
         .bx-side .create-name { flex: 1; min-width: 0; }
+        .bx-side .create-desc { width: 100%; box-sizing: border-box; margin-bottom: 0.75rem;
+          background: var(--bg-tertiary); color: var(--text-primary);
+          border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px;
+          font-size: 0.8rem; }
         .bx-side .create input { background: var(--bg-tertiary); color: var(--text-primary);
           border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; font-size: 0.85rem; }
         .bx-side .create button { background: var(--accent-primary); color: #fff; border: none;
@@ -363,11 +393,18 @@ export default function BoxesPage() {
         .bx-side .create button:disabled { opacity: 0.4; cursor: default; }
         .bx-side .box-list { list-style: none; margin: 0; padding: 0; display: flex;
           flex-direction: column; gap: 4px; }
-        .bx-side .box-link { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        .bx-side .box-link { display: flex; flex-direction: column; gap: 2px;
           padding: 6px 8px; border-radius: 6px; background: var(--bg-tertiary);
           color: var(--text-primary); text-decoration: none; font-size: 0.85rem; }
         .bx-side .box-link:hover { background: var(--bg-secondary); color: var(--accent-primary); }
+        .bx-side .box-head { display: flex; align-items: center; justify-content: space-between;
+          gap: 8px; }
         .bx-side .box-count { color: var(--text-muted); font-size: 0.78rem; }
+        /* Two lines: enough to state the axis, never enough for one box to push
+           the rest of the list off the screen. */
+        .bx-side .box-desc { color: var(--text-muted); font-size: 0.75rem; line-height: 1.3;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+          overflow: hidden; }
       `}</style>
     </>
   );

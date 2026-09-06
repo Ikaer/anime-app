@@ -144,7 +144,22 @@ export default function BoxDetailPage() {
   const removeMember = (id: string) => writeMembers({ remove: [id] }, id);
   const addSeed = (id: string) => writeMembers({ add: [id] }, id);
 
-  const patchBox = async (patch: { name?: string; emoji?: string }) => {
+  /**
+   * Grow the description box to its content, on mount and as it is typed.
+   *
+   * ⚠️ Not cosmetic: a fixed `rows` clips the one line the field exists to be
+   * READ and hands you a scrollbar instead — measured at the 1280px TV target,
+   * a 2-row box against 65px of content. `field-sizing: content` would do this
+   * in CSS, but the NAS TV browser's version is not something to bet the only
+   * copy of this text on.
+   */
+  const autoSize = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  const patchBox = async (patch: { name?: string; emoji?: string; description?: string }) => {
     await fetch(`/api/anime/boxes/${encodeURIComponent(boxId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -226,6 +241,25 @@ export default function BoxDetailPage() {
                 />
                 {box?.name ?? boxId}
               </h1>
+              {/* The purpose of the box, editable where it is read. A name is a
+                  handle — this is the line that says where the box's boundary
+                  was drawn, which is exactly what you come back needing. Blur
+                  saves, and emptying it clears the field. */}
+              <textarea
+                className="bd-desc"
+                rows={1}
+                ref={autoSize}
+                onInput={e => autoSize(e.currentTarget)}
+                defaultValue={box?.description ?? ''}
+                key={`d:${box?.description ?? ''}:${boxId}`}
+                placeholder={t('boxes.descriptionPlaceholder')}
+                aria-label={t('boxes.descriptionTitle')}
+                title={t('boxes.descriptionTitle')}
+                onBlur={e => {
+                  const next = e.target.value.trim();
+                  if (box && next !== (box.description ?? '')) patchBox({ description: next });
+                }}
+              />
               <span className="bd-sub">
                 {t(
                   (box?.count ?? 0) > 1 ? 'boxes.memberCount' : 'boxes.memberCountOne',
@@ -365,7 +399,12 @@ export default function BoxDetailPage() {
            const, so a rule for either in the scoped block would silently do
            nothing. Prefixed with .bd-main / .bd-side to stay page-local.
            No backticks in these comments: this is a template literal. */
-        .bd-main .bd-id { display: flex; flex-direction: column; gap: 2px; }
+        /* Takes the row's spare width rather than shrinking to the title: the
+           description lives in here, and at the 1280px TV target the header's
+           space-between left it 254px wide, clipping every description onto a
+           scrollbar. */
+        .bd-main .bd-id { display: flex; flex-direction: column; gap: 2px;
+          flex: 1 1 320px; min-width: 0; }
         .bd-main .bd-back { color: var(--text-muted); font-size: 0.8rem; text-decoration: none; }
         .bd-main .bd-back:hover { color: var(--accent-primary); }
         .bd-main .bd-title { font-size: 1.5rem; margin: 0; color: var(--text-primary);
@@ -377,6 +416,19 @@ export default function BoxDetailPage() {
         .bd-main .bd-emoji:focus { outline: none; border-color: var(--accent-primary);
           background: var(--bg-tertiary); cursor: text; }
         .bd-main .bd-sub { color: var(--text-secondary); font-size: 0.85rem; }
+        /* Quiet until touched, like the emoji field beside it: the description is
+           prose to READ most of the time, and a boxed-in form control at the top
+           of the page would read as an empty input rather than as the box's own
+           definition. */
+        .bd-main .bd-desc { width: 100%; max-width: 640px; overflow: hidden; resize: none;
+          margin: 2px 0 4px;
+          background: transparent; color: var(--text-secondary); font-size: 0.85rem;
+          font-family: inherit; line-height: 1.4; border: 1px solid transparent;
+          border-radius: 6px; padding: 4px 6px; cursor: pointer; }
+        .bd-main .bd-desc::placeholder { color: var(--text-muted); font-style: italic; }
+        .bd-main .bd-desc:hover { border-color: var(--border-hover); }
+        .bd-main .bd-desc:focus { outline: none; border-color: var(--accent-primary);
+          background: var(--bg-tertiary); color: var(--text-primary); cursor: text; }
         .bd-main .bd-tabs { display: flex; gap: 6px; }
         .bd-main .bd-tab { background: var(--bg-tertiary); color: var(--text-secondary);
           border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 14px;

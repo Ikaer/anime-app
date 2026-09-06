@@ -64,12 +64,16 @@ function mintId(name: string, taken: Set<string>): string {
   }
 }
 
-export function createBox(name: string, emoji?: string): Box {
+export function createBox(name: string, emoji?: string, description?: string): Box {
   const boxes = getBoxes();
+  const desc = description?.trim();
   const box: Box = {
     id: mintId(name, new Set(boxes.map(b => b.id))),
     name: name.trim() || 'Sans nom',
     emoji: emoji?.trim() || DEFAULT_BOX_EMOJI,
+    // Absent rather than empty: `description` is optional on the model, and an
+    // empty string would make every "has one?" check read as true.
+    ...(desc ? { description: desc } : {}),
     members: [],
     createdAt: new Date().toISOString(),
   };
@@ -78,8 +82,17 @@ export function createBox(name: string, emoji?: string): Box {
   return box;
 }
 
-/** Rename / re-emoji. The id is the URL and never changes. */
-export function updateBox(id: string, patch: { name?: string; emoji?: string | null }): Box | undefined {
+/**
+ * Rename / re-emoji / re-describe. The id is the URL and never changes.
+ *
+ * An empty or blank `description` CLEARS it, unlike `name`, which falls back to
+ * the current one: a box must always have a name (it is the chip's label), and
+ * must be allowed to have no description.
+ */
+export function updateBox(
+  id: string,
+  patch: { name?: string; emoji?: string | null; description?: string | null }
+): Box | undefined {
   const boxes = getBoxes();
   const box = boxes.find(b => b.id === id);
   if (!box) return undefined;
@@ -87,6 +100,11 @@ export function updateBox(id: string, patch: { name?: string; emoji?: string | n
   if (patch.emoji !== undefined) {
     if (patch.emoji) box.emoji = patch.emoji;
     else delete box.emoji;
+  }
+  if (patch.description !== undefined) {
+    const desc = patch.description?.trim();
+    if (desc) box.description = desc;
+    else delete box.description;
   }
   writeJsonFile(BOXES_FILE, boxes);
   return box;

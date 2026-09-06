@@ -44,7 +44,9 @@ const BoxChips: React.FC<BoxChipsProps> = ({ boxes, active, pending, onToggle, e
             aria-pressed={on}
             disabled={busy}
             onClick={() => onToggle(box.id, !on)}
-            title={box.name}
+            // The description when there is one: the chip row IS the decision,
+            // and the name alone rarely says where the axis stops.
+            title={box.description || box.name}
           >
             {box.emoji && <span className={styles.emoji}>{box.emoji}</span>}
             <span className={styles.label}>{box.name}</span>

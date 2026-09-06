@@ -794,6 +794,17 @@ export interface Box {
   id: string;
   name: string;
   emoji?: string;
+  /**
+   * Free prose: what the axis actually MEANS, in the owner's own words.
+   *
+   * A name is a handle, not a definition — « concept bizarre » says nothing about
+   * where the line was drawn, and the line is the whole content of a box. It is
+   * read at the two moments a box is USED: the chip rows on `/boxes`, where the
+   * decision is made one franchise at a time, and the MCP surface, where a model
+   * proposing members has nothing else to check its guess against. Purely
+   * descriptive — nothing ranks on it, `rankBoxCandidates` never sees it.
+   */
+  description?: string;
   /** Canonical ids. Order is insertion order and carries no meaning. */
   members: string[];
   /** ISO 8601. */

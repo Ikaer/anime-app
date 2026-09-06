@@ -4,7 +4,7 @@ import { isCanonicalId } from '@/lib/store';
 
 /**
  * One box.
- *   PATCH  { name?, emoji? }                  — rename / re-emoji (the id never moves)
+ *   PATCH  { name?, emoji?, description? }    — rename / re-emoji / re-describe (the id never moves)
  *   PUT    { members } | { add?, remove? }    — membership
  *   DELETE                                    — drop the box
  *
@@ -33,10 +33,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     switch (req.method) {
       case 'PATCH': {
-        const patch: { name?: string; emoji?: string | null } = {};
+        const patch: { name?: string; emoji?: string | null; description?: string | null } = {};
         if (typeof req.body?.name === 'string') patch.name = req.body.name;
         // `null` clears the emoji; `undefined` leaves it alone.
         if (req.body?.emoji === null || typeof req.body?.emoji === 'string') patch.emoji = req.body.emoji;
+        // Same convention, plus: an empty string clears too, because the editor
+        // is a textarea the owner empties rather than a control that sends null.
+        if (req.body?.description === null || typeof req.body?.description === 'string') {
+          patch.description = req.body.description;
+        }
         return res.status(200).json({ box: updateBox(boxId, patch) });
       }
 

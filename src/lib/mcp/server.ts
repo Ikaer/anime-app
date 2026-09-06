@@ -324,7 +324,11 @@ export function buildServer(): McpServer {
         'a name plus a set of members (e.g. "anime qui m\'ont chialer", "concept bizarre"). A ' +
         'box records what no catalog field encodes — tone, register, why a show landed — ' +
         'which is exactly why the owner writes them by hand. Members come back best-scored ' +
-        'first. Start here to learn what a box currently MEANS before proposing anything for it.',
+        'first. Start here to learn what a box currently MEANS before proposing anything for it. ' +
+        '`description`, when present, is the owner stating that meaning in their own words — ' +
+        'read it as the box\'s definition and prefer it over what the members merely suggest. ' +
+        'When it is ABSENT the members are the only definition there is, so say what you infer ' +
+        'the axis to be before proposing for it.',
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -364,14 +368,20 @@ export function buildServer(): McpServer {
       description:
         'Create a new empty box, then fill it with edit_box. The name is the owner\'s own ' +
         'vocabulary rather than a tidy category — keep their phrasing when they give you one. ' +
-        'Returns the box including its generated id.',
+        'Set `description` whenever the owner has said what the axis means: it is what they ' +
+        'will read months later to remember where the line was drawn, and what a later ' +
+        'proposal gets checked against. Returns the box including its generated id.',
       inputSchema: {
         name: z.string().min(1).describe('Box name, in the owner\'s own words.'),
         emoji: z.string().max(4).optional().describe('Optional icon; defaults to 📦.'),
+        description: z.string().optional().describe(
+          'What the axis means and where it stops, in the owner\'s own words — a sentence or two. ' +
+          'Do not invent one they have not expressed.'
+        ),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    async ({ name, emoji }) => json(createBoxTool(name, emoji, titleLang))
+    async ({ name, emoji, description }) => json(createBoxTool(name, emoji, description, titleLang))
   );
 
   server.registerTool(
@@ -379,13 +389,16 @@ export function buildServer(): McpServer {
     {
       title: 'Edit a taste box',
       description:
-        'Add or remove members, rename, or change the icon. Members are canonical ids — get ' +
-        'them from box_candidates, list_anime or search_anime. Ids that do not resolve come ' +
+        'Add or remove members, rename, re-describe, or change the icon. Members are ' +
+        'canonical ids — get them from box_candidates, list_anime or search_anime. ' +
+        'Ids that do not resolve come ' +
         'back in `rejected` instead of failing the call, so CHECK that field rather than ' +
         'assuming every id landed. Adding is incremental, never a replacement, so a stale ' +
         'list_boxes snapshot cannot wipe anything. Only add a title the owner has actually ' +
         'watched and that you can justify against what the box means: a box is their ' +
         'judgement, and a wrong member quietly skews the recommendations built from it. ' +
+        'Writing `description` REPLACES the owner\'s own words with yours, so only do it when ' +
+        'they asked for it or dictated the wording; an empty string erases it. ' +
         'There is no delete — boxes are removed in the app.',
       inputSchema: {
         boxId: z.string().describe('Box id from list_boxes.'),
@@ -393,11 +406,15 @@ export function buildServer(): McpServer {
         remove: z.array(z.string()).optional().describe('Canonical ids to take out.'),
         name: z.string().min(1).optional().describe('New name.'),
         emoji: z.string().max(4).optional().describe('New icon.'),
+        description: z.string().optional().describe(
+          'New statement of what the axis means; an empty string clears it. Overwrites what ' +
+          'the owner wrote — only on their request.'
+        ),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ boxId, add, remove, name, emoji }) => {
-      const result = editBox(boxId, { add, remove, name, emoji }, titleLang);
+    async ({ boxId, add, remove, name, emoji, description }) => {
+      const result = editBox(boxId, { add, remove, name, emoji, description }, titleLang);
       if (!result.found) return { ...json({ error: result.error }), isError: true };
       return json(result);
     }

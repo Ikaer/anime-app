@@ -968,6 +968,12 @@ export interface McpBox {
   id: string;
   name: string;
   emoji: string;
+  /**
+   * The owner's own statement of what the axis means. Absent when they never
+   * wrote one — which is information: the members are then the only definition
+   * there is, and a proposal has nothing to check itself against.
+   */
+  description?: string;
   count: number;
   /** Member titles, best-scored first — what the box actually looks like. */
   members: { id: string; title: string; score?: number }[];
@@ -982,6 +988,7 @@ export function listBoxes(titleLang: TitleLanguage): { boxes: McpBox[] } {
       id: box.id,
       name: box.name,
       emoji: box.emoji || DEFAULT_BOX_EMOJI,
+      ...(box.description ? { description: box.description } : {}),
       count: box.members.length,
       members: box.members
         .map(id => byId.get(id))
@@ -1040,15 +1047,19 @@ export function boxCandidates(
 }
 
 /** Create a box. Returns it, so the caller can fill it in the same turn. */
-export function createBoxTool(name: string, emoji: string | undefined, titleLang: TitleLanguage):
-  { box: McpBox } {
-  const created = createBox(name, emoji);
+export function createBoxTool(
+  name: string,
+  emoji: string | undefined,
+  description: string | undefined,
+  titleLang: TitleLanguage
+): { box: McpBox } {
+  const created = createBox(name, emoji, description);
   const box = listBoxes(titleLang).boxes.find(b => b.id === created.id)!;
   return { box };
 }
 
 /**
- * Edit a box: rename, re-emoji, and add/remove members.
+ * Edit a box: rename, re-emoji, re-describe, and add/remove members.
  *
  * Incremental (`add`/`remove`) rather than a full member list, for the reason the
  * HTTP route is: a replacement is a read-modify-write, and a model working from a
@@ -1058,16 +1069,18 @@ export function createBoxTool(name: string, emoji: string | undefined, titleLang
  */
 export function editBox(
   boxId: string,
-  patch: { name?: string; emoji?: string; add?: string[]; remove?: string[] },
+  patch: { name?: string; emoji?: string; description?: string; add?: string[]; remove?: string[] },
   titleLang: TitleLanguage
 ): { found: false; error: string } | { found: true; box: McpBox; added: string[]; removed: string[]; rejected: string[] } {
   const box = getBox(boxId);
   if (!box) return { found: false, error: `No box with id "${boxId}". Call list_boxes.` };
 
-  if (patch.name !== undefined || patch.emoji !== undefined) {
+  if (patch.name !== undefined || patch.emoji !== undefined || patch.description !== undefined) {
     updateBox(boxId, {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.emoji !== undefined ? { emoji: patch.emoji } : {}),
+      // An empty string clears it, the same as through the HTTP route.
+      ...(patch.description !== undefined ? { description: patch.description } : {}),
     });
   }
 

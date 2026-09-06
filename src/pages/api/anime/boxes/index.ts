@@ -23,6 +23,8 @@ export interface BoxSummary {
   name: string;
   /** Always set — falls back to `DEFAULT_BOX_EMOJI`. */
   emoji: string;
+  /** What the axis means, in the owner's words. Absent when never written. */
+  description?: string;
   createdAt: string;
   members: string[];
   count: number;
@@ -60,6 +62,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             // its neighbours. The stored value is left alone — this is display
             // normalization, and the detail page's editor is what writes one.
             emoji: box.emoji || DEFAULT_BOX_EMOJI,
+            // Unlike the emoji, NOT defaulted: a box with no description must
+            // render as one, so the field's absence is the editor's placeholder
+            // state and the chip tooltip's fall-back-to-the-name signal.
+            ...(box.description ? { description: box.description } : {}),
             createdAt: box.createdAt,
             members: box.members,
             count: box.members.length,
@@ -78,7 +84,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
         if (!name) return res.status(400).json({ error: 'name is required' });
         const emoji = typeof req.body?.emoji === 'string' ? req.body.emoji : undefined;
-        return res.status(201).json({ box: createBox(name, emoji) });
+        const description = typeof req.body?.description === 'string' ? req.body.description : undefined;
+        return res.status(201).json({ box: createBox(name, emoji, description) });
       }
 
       default:
