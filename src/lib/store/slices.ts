@@ -18,7 +18,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListSeiyuuEntry, AniListPersonalEntry, LocalPersonalEntry, MALListStatus, MALPersonalEntry, SourceIds } from '@/models/anime';
+import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCastEntry, AniListSeiyuuEntry, AniListPersonalEntry, LocalPersonalEntry, MALListStatus, MALPersonalEntry, RatingIntent, SourceIds } from '@/models/anime';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { buildCrosswalkIndexes, getRegistry, resolveByMalId, resolveCanonicalIds, toNum } from '@/lib/store/registry';
 import { invalidateRecordCache } from '@/lib/store/recordCache';
@@ -30,6 +30,7 @@ import { getSeasonInfos } from '@/lib/domain/animeUtils';
 const ANIME_MAL_FILE = dataFile('catalog/mal.json');
 const ANIME_MAL_PERSONAL_FILE = dataFile('personal/mal.json');
 const ANIME_HIDDEN_FILE = dataFile('user/hidden.json');
+const RATING_INTENT_FILE = dataFile('user/rating_intent.json');
 const ANIME_SIMKL_FILE = dataFile('personal/simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('catalog/anilist.json');
 const ANIME_ANILIST_CAST_FILE = dataFile('catalog/anilist_cast.json');
@@ -62,6 +63,35 @@ function assertMigratedMalStore(animes?: Record<string, MALAnime>): void {
     }
   }
   malStoreChecked = true;
+}
+
+// ============================================================================
+// Rating intent — why a completed title is deliberately unrated
+// ============================================================================
+//
+// A `user/` annotation like `hidden.json` and `reco_feedback.json`, NOT provider
+// state: `RatingIntent` is not a sixth `UserAnimeStatus` (see the type's own
+// note), so it never reaches a writer and never enters personal precedence.
+// Keyed by canonical id, values 'rewatch' | 'no_opinion'.
+
+/** The whole map. Callers that need one title should index this. */
+export function getRatingIntents(): Record<string, RatingIntent> {
+  return readJsonFile<Record<string, RatingIntent>>(RATING_INTENT_FILE, {});
+}
+
+/** Set the intent, or clear it with `null`. No-ops when nothing would change. */
+export function setRatingIntent(canonicalId: string, intent: RatingIntent | null): void {
+  const intents = getRatingIntents();
+  const current = intents[canonicalId];
+  if (intent === null) {
+    if (current === undefined) return;
+    delete intents[canonicalId];
+  } else {
+    if (current === intent) return;
+    intents[canonicalId] = intent;
+  }
+  writeJsonFile(RATING_INTENT_FILE, intents);
+  invalidateRecordCache();
 }
 
 // ============================================================================

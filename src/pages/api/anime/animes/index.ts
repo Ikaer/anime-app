@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
-import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
+import { applyNarrowingFilters, getStatusFilterKey, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -119,15 +119,19 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       );
     }
 
-    // Apply status filter
+    // Apply status filter. `getStatusFilterKey` — not `getEffectiveStatus` —
+    // because a rating intent REPLACES the status here: a title marked
+    // « À revoir » answers to that chip and no longer to « Terminé », which is
+    // what keeps this a partition and what empties the `to_rate` preset of
+    // titles the owner has already decided not to score.
     if (status && typeof status === 'string') {
       const statusList = status.split(',').map(s => s.trim());
       animeList = animeList.filter(anime => {
-        const userStatus = getEffectiveStatus(anime);
-        if (!userStatus) {
+        const key = getStatusFilterKey(anime);
+        if (!key) {
           return statusList.includes('not_defined');
         }
-        return statusList.includes(userStatus);
+        return statusList.includes(key);
       });
     }
 

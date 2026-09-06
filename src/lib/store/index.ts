@@ -37,6 +37,8 @@ export {
 
 export {
   getHiddenAnimeIds,
+  getRatingIntents,
+  setRatingIntent,
   addHiddenAnimeId,
   removeHiddenAnimeId,
   getAllAnime,

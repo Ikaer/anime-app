@@ -31,21 +31,21 @@ import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { CollapsibleSection } from '@/components/shared';
 import { buildCrosswalkIndexes, getAllAnilistCast, getAnilistSeiyuu, getAnimeForDisplay } from '@/lib/store';
-import { applyNarrowingFilters, getEffectiveStatus, sortAnimeRecords } from '@/lib/domain/animeUtils';
+import { applyNarrowingFilters, getStatusFilterKey, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { listAnimeByStudio, listAnimeByStaff, listAnimeBySeiyuu, listAnimeBySeiyuuFilmography, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
 import { decodeCreditsState, useCreditsUrlState } from '@/hooks';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { useT, type TranslationKey } from '@/lib/i18n';
-import type { SortColumn, SortDirection, UserAnimeStatus } from '@/models/anime';
+import type { SortColumn, SortDirection } from '@/models/anime';
+import { ALL_STATUSES } from '@/lib/url/animeParams';
 
 type CreditType = 'studio' | 'staff' | 'seiyuu';
 
-/** Same list (and order) as the main list's status filter — `not_defined` included:
- *  a filmography is mostly titles you have no status on, so "sans statut" is a
- *  meaningful narrowing here, unlike on the tier board. */
-const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
-  'watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch', 'not_defined',
-];
+/* The status vocabulary comes from `url/animeParams` — the same list, in the
+ * same order, as the main list's filter, rather than a third transcription of
+ * it. `not_defined` earns its place here in a way it does not on the tier
+ * board: a filmography is mostly titles you have no status on, so "sans statut"
+ * is a meaningful narrowing. */
 
 const STATUS_ICON: Record<string, string> = {
   watching: '📺',
@@ -53,6 +53,8 @@ const STATUS_ICON: Record<string, string> = {
   on_hold: '⏸️',
   dropped: '🗑️',
   plan_to_watch: '📅',
+  rewatch: '🔁',
+  no_opinion: '🤷',
 };
 
 interface Props {
@@ -605,7 +607,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   // same OR semantics (and the same helper) as the main list's status filter.
   if (state.statuses.length > 0) {
     const wanted = new Set(state.statuses);
-    records = records.filter(a => wanted.has(getEffectiveStatus(a) || 'not_defined'));
+    records = records.filter(a => wanted.has(getStatusFilterKey(a) || 'not_defined'));
   }
 
   const genreNames = new Set<string>();

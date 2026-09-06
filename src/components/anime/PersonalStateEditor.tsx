@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { UserAnimeStatus } from '@/models/anime';
+import { RATING_INTENTS, type RatingIntent, type UserAnimeStatus } from '@/models/anime';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './PersonalStateEditor.module.css';
 
@@ -42,6 +42,9 @@ interface Props {
   /** No writable external provider connected — so clearing a status is safe
    *  (nothing remote to diverge from). See `PersonalPatch` in personalWriters. */
   canClearStatus: boolean;
+  /** The owner's « pourquoi pas de note » annotation, if any. Not provider
+   *  state — see `RatingIntent`. */
+  ratingIntent?: RatingIntent;
   /** Re-run the page's `getServerSideProps` so the effective values re-read. */
   onWritten: () => void;
 }
@@ -49,7 +52,7 @@ interface Props {
 type Patch = { status?: UserAnimeStatus | null; score?: number; progress?: number };
 
 export default function PersonalStateEditor({
-  animeId, status, score, progress, numEpisodes, canClearStatus, onWritten,
+  animeId, status, score, progress, numEpisodes, canClearStatus, ratingIntent, onWritten,
 }: Props) {
   const t = useT();
   const [busy, setBusy] = useState(false);
@@ -86,6 +89,42 @@ export default function PersonalStateEditor({
       setBusy(false);
     }
   }
+
+  /**
+   * The intent has its own route: it is a `user/` annotation, not a dimension of
+   * `PersonalPatch`, so it never goes through `writePersonal` from here. Clicking
+   * the active one clears it — the chips are a tri-state, not a latch.
+   */
+  async function sendIntent(next: RatingIntent | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/anime/animes/${animeId}/rating-intent`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || t('personalEdit.writeFailed'));
+        return;
+      }
+      if (data.outcomes) setOutcomes(data.outcomes);
+      onWritten();
+    } catch {
+      setError(t('personalEdit.writeFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The annotation answers "why is this completed title unscored", so it is
+  // offered only where that question exists: unrated, and either already
+  // completed or not in the list at all (marking one completes it server-side).
+  // A `watching`/`dropped`/`on_hold` title is a decision in progress, not a
+  // deferred score.
+  const intentApplies =
+    (score == null || score === 0) && (status === 'completed' || !status);
 
   // Only remote pushes can fail here — the local-cache authority write already
   // landed — so a failed provider means "didn't reach the service", not "lost".
@@ -152,6 +191,26 @@ export default function PersonalStateEditor({
           )}
         </div>
       </div>
+
+      {intentApplies && (
+        <div className={styles.row}>
+          <span className={styles.label}>{t('personalEdit.intent')}</span>
+          <div className={styles.controls}>
+            {RATING_INTENTS.map(i => (
+              <button
+                key={i}
+                type="button"
+                disabled={busy}
+                className={`${styles.chip} ${ratingIntent === i ? styles.active : ''}`}
+                title={t(`ratingIntentHint.${i}` as TranslationKey)}
+                onClick={() => sendIntent(ratingIntent === i ? null : i)}
+              >
+                {t(`ratingIntent.${i}` as TranslationKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className={styles.row}>
         <span className={styles.label}>{t('personalEdit.progress')}</span>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, RecoMeta, RecoVerdict } from '@/models/anime';
-import { getEffectiveStatus, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
+import { getStatusFilterKey, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
@@ -106,7 +106,10 @@ export default function AnimeCardView({
     // Effective (hydrated) personal status, NOT MAL's raw slice — a SIMKL-only,
     // AniList-only or local-only user has no `sources.mal` and would render an
     // empty badge. Per-provider detail stays on the DiscrepancyBadge.
-    const getDisplayStatus = (anime: AnimeRecord) => getEffectiveStatus(anime) ?? '';
+    // A rating intent REPLACES the status on the badge, for the same reason it
+    // replaces it in the filter: « À revoir » is the more specific answer, and
+    // showing « Terminé » beside it would just restate what it already implies.
+    const getDisplayStatus = (anime: AnimeRecord) => getStatusFilterKey(anime) ?? '';
 
     const getScoreClass = (score?: number) => {
         if (score === undefined || score === 0) return styles.scoreNa;
@@ -134,6 +137,8 @@ export default function AnimeCardView({
             case 'on_hold': return styles.onHold;
             case 'dropped': return styles.dropped;
             case 'plan_to_watch': return styles.planToWatch;
+            case 'rewatch': return styles.rewatch;
+            case 'no_opinion': return styles.noOpinion;
             default: return '';
         }
     };
@@ -145,6 +150,8 @@ export default function AnimeCardView({
             case 'on_hold': return '⏸️';
             case 'dropped': return '🗑️';
             case 'plan_to_watch': return '📅';
+            case 'rewatch': return '🔁';
+            case 'no_opinion': return '🤷';
             default: return '';
         }
     };

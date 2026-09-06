@@ -29,6 +29,20 @@ export const GAP_ROWS = [5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5];
  */
 export const TIER_STATUSES = ['watching', 'completed', 'on_hold', 'dropped'] as const;
 
+/**
+ * What the BOARD asks the list API for — the four statuses above plus the two
+ * rating intents, which that API treats as statuses of their own (it partitions
+ * on `getStatusFilterKey`, so an intent-marked title no longer answers to
+ * `completed`). Without them the board's « À revoir » / « Sans avis » rows would
+ * always render empty.
+ *
+ * Deliberately NOT folded into `TIER_STATUSES`: that set is compared against
+ * `getEffectiveStatus` — by the board's own status checkboxes and by the MCP
+ * `tier_list` tool — and that never returns an intent, so adding them there
+ * would produce a checkbox matching nothing.
+ */
+export const TIER_BOARD_STATUSES = [...TIER_STATUSES, 'rewatch', 'no_opinion'] as const;
+
 
 /**
  * What the tier board's rows mean. `me` is the owner's own score (the only

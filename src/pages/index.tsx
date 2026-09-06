@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeSidebar, AnimeListHeader, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
-import { AnimeRecord, UserAnimeStatus } from '@/models/anime';
+import { AnimeRecord, StatusFilterValue } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
 import { useT } from '@/lib/i18n';
 
@@ -95,7 +95,7 @@ export default function AnimePage() {
   }, [isReady, loadAnimes]);
 
   // Filter handlers - update URL
-  const handleStatusFilterChange = (status: UserAnimeStatus | 'not_defined', isChecked: boolean) => {
+  const handleStatusFilterChange = (status: StatusFilterValue, isChecked: boolean) => {
     const newFilters = isChecked
       ? [...filters.statusFilters, status]
       : filters.statusFilters.filter(s => s !== status);

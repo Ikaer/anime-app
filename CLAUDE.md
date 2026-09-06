@@ -45,7 +45,7 @@ One person's anime tracker, running on their own NAS, for themselves. No other u
 
 **The costs that are real**, and the only ones worth designing around:
 
-- **Durable user data** — `personal/local.json`, `user/hidden.json`, `user/reco_feedback.json`, and any score/status that lives only here. Not refetchable; resolve-before-mint in the registry exists for exactly this. `npm run data:copy*` before anything destructive, and **ask before an operation that can lose it** (spending CPU time needs no permission).
+- **Durable user data** — `personal/local.json`, `user/hidden.json`, `user/reco_feedback.json`, `user/rating_intent.json`, `user/boxes.json`, and any score/status that lives only here. Not refetchable; resolve-before-mint in the registry exists for exactly this. `npm run data:copy*` before anything destructive, and **ask before an operation that can lose it** (spending CPU time needs no permission).
 - **Someone else's API** — AniList's ~30 req/min, SIMKL's 20s write lock + 1 req/s, MAL's limits. Wall-clock time is free; hammering a free public API is not.
 - **Hot-path latency** — work paid on *every* row build, request or page load. Several notes below are justified by cost (the cast slice off the seven-slice join, the parse/row caches, the MAL personal/catalog split). Those are this category, not migration cost — don't generalize them into a rule against restructuring, and don't read this section as licensing their removal.
 
@@ -86,6 +86,7 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `sync/mal_seasons.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`) — the seasonal-crawl checkpoint, sitting next to `sync/simkl_checkpoint.json` (all-items watermark + `lastRatedAt`), `sync/anilist_import.json` and `sync/anilist_years.json` (AniList's back-catalog checkpoint, `{ syncedYears: number[] }` — a year is never re-crawled, so re-running the window means deleting the file).
 - `sync/cron_health.json` — the cron watermark: last scheduled arrival, last scheduled run, last MANUAL run (recorded but never counted), last rejection. Feeds the `/connections` freshness indicator; see "Scheduled sync". Rebuildable in the sense that a deleted file simply reports `unknown` until the next tick.
 - `user/reco_feedback.json` — "Pour toi" thumbs, `{ canonicalId: 'up' | 'down' }` (see the "Pour toi" section)
+- `user/rating_intent.json` — why a completed title is deliberately unscored, `{ canonicalId: 'rewatch' | 'no_opinion' }` (see "Rating intent" below)
 - `user/boxes.json` — « Mes boîtes »: hand-drawn taste axes, a bare `Box[]` whose `members` are canonical ids (see the "/boxes" section)
 - `cache/recommendations.json` — cached recommendations feed data (the one **rebuildable** file: `cache/` says so) (crowd/AniList seeds + hydrated candidates); the code constant is `RECOMMENDATIONS_FILE`. **Canonical-id-keyed like every other file here** since E10 (docs/DECISIONS.md), and carrying a `v` (`RECO_CACHE_VERSION`): an older MAL-keyed file parses fine but would miss every lookup and render an empty feed silently, so a version mismatch **discards** it rather than migrating — it is `cache/`, the next refresh rebuilds it.
 - `logs/connection_log.json` — the sync-progress feed. Named like diagnostics, but it is **app data**: the Connections panel and the first-run onboarding bar *poll* it (there is no SSE for meta-sync, the cast sweep or the catalog crawl — this log IS the transport). So it lives in the store under `DATA_PATH`, **not** under `LOGS_PATH`, which consequently has no writer left and stays reserved for real debug output.
@@ -239,6 +240,70 @@ A fourth personal source — the app's own — so the whole thing is usable with
   - `personal.ts` **rejects `status: null` combined with `score`/`progress`** (400) rather than discarding them — the removal leaves nowhere for them to land.
 - **The bootstrap surface** is [PersonalStateEditor](src/components/anime/PersonalStateEditor.tsx) on the detail page — the one control that takes an *unstatused catalog title* to statused + scored. It has to exist: the tier board only fetches already-statused titles and the reco feed needs completed+scored seeds, so a fresh local-only install renders empty everywhere else. No auto-complete on rating (that's /quick-rate's idea, not this page's).
 - **Discrepancy detection is N-provider**, [src/lib/providers/discrepancy.ts](src/lib/providers/discrepancy.ts) (client-safe/pure, the old `simklCompare.ts`): `computeDiscrepancy(states)` takes a `Partial<Record<ProvenanceSource, ProviderPersonalState>>` and reports a per-provider map + which dimensions `disagree`. The map is built from the RAW slices by `buildProviderStates` in [src/lib/providers/personalState.ts](src/lib/providers/personalState.ts) — **the same per-provider extractor table hydration uses**, so all four providers (MAL, SIMKL, AniList, local) participate and a provider cannot be added to one path without the other. **A provider participates iff it appears in the resolved `personalPrecedence`** — one enablement predicate, not one per surface. Two rules worth knowing: differing progress where every present provider has watched all of **its own** total is not a disagreement (MAL 12/12 vs SIMKL 13/13); and **presence is deliberately asymmetric** — only "present somewhere, absent from the **anchor**" flags, because the anchor is the user's reference list while the others are subset feeds, and a symmetric rule would flag most of the list. The anchor is **one** provider, `presenceAnchors(precedence)` in `providers/capabilities.ts`: the first `listCoverage: 'full'` provider in the resolved precedence (MAL where connected, else AniList, else none — never both, which measured 430 of 671 titles flagged). `buildProviderStates` marks it `anchor: true` **and gives it a state even when it holds no entry** — a missing entry is the whole point of a presence split, so it cannot be represented by omission (this is what H1 accidentally broke: post-split `personal/mal.json` holds only statused titles, so presence detection silently stopped firing altogether until A2). The flag rides on the state rather than being an argument so `computeDiscrepancy` stays a pure function of what it is handed — the discrepancies page re-runs it client-side over a *filtered* subset of the same states. Surfaced by `DiscrepancyBadge`, the `discrepanciesOnly` (`disc`) URL filter, and the [discrepancies page](src/pages/discrepancies.tsx), which renders the **grouped long format** (one sub-row per provider under each anime) so a new provider costs a row, not a column.
+
+### Rating intent — « À revoir » / « Sans avis », and NOT a sixth status
+
+Two answers to "why is this completed title unscored": `rewatch` (« À revoir » —
+seen long ago, rewatch before committing a score) and `no_opinion` (« Sans avis »
+— seen, forgotten, will not rewatch). Stored in `user/rating_intent.json`,
+joined onto the row as `AnimeRecord.ratingIntent` exactly like `hidden`.
+
+- ⚠️ **Deliberately not a sixth `UserAnimeStatus`, and it must not become one.**
+  That union is MAL's five-value vocabulary: every provider's slice is normalized
+  onto it at write time and every `PersonalWriter` pushes it back out. A sixth
+  value is unrepresentable outward (MAL's API rejects it) and would force all
+  four writers to invent a mapping. Both intents ARE `completed` to every
+  provider — `personal.status` is untouched — so `/stats`, `/catch-up`'s anchor
+  rule, the reco seeds and every provider write behave exactly as before. What
+  the annotation adds is a local judgement no provider has a field for, which is
+  why it lives in `user/` beside `hidden.json` and `reco_feedback.json`, off
+  personal precedence entirely, and never reaches `writers.ts`.
+- **It REPLACES the status wherever the status is a chip**, via the one function
+  `getStatusFilterKey` in `domain/animeUtils.ts` — the status filter, the card
+  badge and the credits page all key on it. Replacement rather than addition is
+  what keeps the filter a **partition**: a title marked « À revoir » answers to
+  that chip and no longer to « Terminé », the same way an unstatused row answers
+  only to `not_defined`. Additive semantics would leave « Terminé » returning the
+  whole pile and the two new chips narrowing nothing. `ALL_STATUSES` in
+  `url/animeParams.ts` is that partition, exported so the sidebar, the credits
+  page and the URL codec cannot offer different sets (three transcriptions of it
+  had already drifted); codes are `r` and `o`.
+- **Two surfaces clean themselves for free, and that is the payoff.** The
+  `to_rate` preset ("completed shows you haven't scored yet") and the tier
+  board's « à noter » tray both select on status, so a marked title drops out of
+  each with no code — the tier board fetches four statuses and the intent is no
+  longer one of them. Recovery is the `rewatch` chip on `/`, or scoring it on the
+  detail page.
+- **It is meaningful only while the title is unrated**, and that is enforced
+  twice on purpose: `writePersonal` clears the intent on a real score write
+  (score `0` is an un-rating and leaves it alone), and `getRatingIntent` ignores
+  a stale entry on read, so a rogue writer can never surface one.
+- ⚠️ **Marking an UNSTATUSED title completes it**, through the normal writer
+  fan-out, because both intents assert "I have seen this" and
+  `getStatusFilterKey` would otherwise answer `rewatch` for a row no provider
+  believes was ever watched. Measured on the live store when this shipped:
+  completed-and-unrated was **1 title of 26,721**, so this — not the tray — is
+  the path that actually gets used. A title that already carries a status keeps
+  it: overwriting a deliberate `dropped` would be the annotation deciding
+  something it was never asked about.
+- Set from `PersonalStateEditor` on the detail page (the row appears only when
+  the question exists: unrated, and completed or unstatused), through its own
+  `PUT /api/anime/animes/[id]/rating-intent` — its own route because this is not
+  a `PersonalPatch` dimension and has no remote to fan out to, so it takes
+  `hide.ts`'s shape rather than `personal.ts`'s. Also set by dragging on the
+  tier board, which is the bulk surface — see below.
+- **Excluded from every recommendation surface.** `computeFeed` and
+  `computeAnchored` both drop an intent-marked title. In `anchored.ts` the check
+  sits with `hidden` and 👎 and is ⚠️ **deliberately NOT behind `excludeSeen`**:
+  "Plus comme ça" keeps seen titles on purpose (its pool is ~25 edges and
+  dropping them would gut the block), but an intent is not a watch status — it
+  is the owner saying *stop putting this in front of me*, which holds however
+  small the pool is. Verified by measurement rather than by reading, since the
+  feed path's exclusion is otherwise indistinguishable from the plain
+  already-seen one: marking a statused-unrated title removed it from an anchored
+  pool, 13 → 12, with every other candidate intact. Both lines are stated rather
+  than left implicit — an intent's status is `completed`, so relying on that
+  would make the guarantee an accident of `completed` being in `SEEN_STATUSES`.
 
 ### "/quick-rate" — franchise-bulk rating
 
@@ -576,6 +641,11 @@ over their WATCHED list — "quand je suis fatigué", "pour l'animation", "conce
 A drag-and-drop rating surface at [src/pages/tier.tsx](src/pages/tier.tsx) (route `/tier`; note `/rate` is the unrelated Rating Calculator). Like `/recommendations` it's its own route with its own lean URL state ([useTierUrlState](src/hooks/useTierUrlState.ts)), **not** a third layout of the main list — it has editing semantics the main `AnimeFiltersState` shouldn't carry. Its sidebar is `RecoFiltersSection` and nothing else; every display control sits in `AnimeListHeader` (see below).
 
 - **A tier IS a score.** Ten rows (10→1, colored green→red with MAL's word labels) plus an "à noter" tray (unrated). Dropping a card into a row sets that MAL/personal score; dropping into the tray clears it (score 0).
+- **Two further rows on the `me` axis are NOT scores: « À revoir » and « Sans avis »** (see "Rating intent" above). They make the board the bulk surface for the annotation — the detail page sets one title at a time, this sets a pile. Dropping into them writes the intent instead of a score, so `TierRow` is `number | RatingIntent` and the write queue carries a discriminated union: a score and an intent go to **different endpoints**, and they share one serial queue precisely because they are mutually exclusive destinations on the same board — two queues would let a score land after the intent write meant to replace it. Set off from the 10→1 ladder with a dashed border and a gap, the same visual language as the tray, which is the other "no number here" destination.
+  - **They exist only on `me`.** On `mal`/`anilist`/`gap` a row is a *reading* of a number a provider published, and "the owner declined to score this" is not one; those axes bucket an intent-marked title by its mean like any other.
+  - ⚠️ **The board has to ask for the two intents by name** (`TIER_BOARD_STATUSES`), because the list API partitions on `getStatusFilterKey` and an intent-marked title no longer answers to `completed` — without that the two rows would always render empty. Deliberately NOT folded into `TIER_STATUSES`: that set is compared against `getEffectiveStatus`, by the board's own status checkboxes and by the MCP `tier_list` tool, and that never returns an intent, so a checkbox there would match nothing.
+  - ⚠️ **Dragging OUT of an intent row clears the intent client-side, and that is not redundant.** `writePersonal` clears it on a real score, but dropping onto the **tray** is `score: 0` — an un-rating, which the server leaves alone by design. Without the explicit clear, a card dragged from « Sans avis » to « à noter » would snap straight back.
+  - **"N notés" counts real scores only.** Folding intent-marked cards in would report the very pile these two rows exist to empty.
 - **The rows have four possible meanings** (URL key `by`): `me` (my score — the original board and the **only writable axis**), `mal` / `anilist` (that provider's community mean, rounded to 1-10), and `gap` (my score *minus* the comparison provider's rounded mean, rows +5…−5, clamped with "or more"/"or less" end labels). Both switches — plus thumbnail size, an icon + `<select>` rather than a label and four buttons, since it is the bar's least-used group and a wrapping bar is the constraint — live in **`AnimeListHeader`**, the same bar `/` and `/recommendations` render, so all three pages read as one app; the tier sidebar is now filters and nothing else. That is the header's own split (*which* anime vs *how they look*), and it is also a discoverability fix: as a sidebar section under the filters they landed ~1100px down, below the scrolling genre list, where they were unfindable. A second key `vs` (`none`|`mal`|`anilist`) picks the comparison provider for the per-card gap chip; `gap` coerces `none` to `mal` rather than emptying the board, and suppresses the chip because the row already **is** the chip. Cards sort by gap descending inside a row whenever the chip is on, so contested titles cluster. `by !== 'me'` drops `draggable` and the drop handlers outright — a community mean and a difference are readings, not settings. Anything with no value on the active axis falls to the tray, which is relabelled accordingly (on `me` that's "unrated", on a provider axis "that provider has no mean").
 - **The comparison reads RAW per-provider means, not `catalog.mean`.** `catalog.mean` is the precedence winner — one number, whichever provider won — so comparing against it would compare a title to itself whenever that provider won the field. `extractCatalogBySource(record.sources)` rebuilds each provider's own value (both already on MAL's 1-10 scale; AniList's `averageScore` is divided by 10 at hydration), memoized once per fetched list. ⚠️ **Expect the `mal`/`anilist` axes to look lopsided and that is the honest result** — community means cluster hard, live-measured 520 of 632 statused titles in rows 7-8 with rows 10 and 1-4 empty. That clustering is exactly why `gap` exists and is the more useful of the two.
 - **Scope = the personal list, not the catalog.** Fetches `?status=watching,completed,on_hold,dropped&limit=all` (≈500 titles) — `plan_to_watch` is excluded (you can't rate what you haven't seen), which also means every card is already statused, so score writes never touch status. Splitting the *whole crawled catalog* (back to 1960) by score would be wrong. Cards are bucketed client-side by `getEffectiveScore`; all narrowing filters run client-side (via `applyNarrowingFilters`) so filtering never refetches.

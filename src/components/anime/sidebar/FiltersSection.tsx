@@ -1,23 +1,14 @@
 import React from 'react';
 import styles from './FiltersSection.module.css';
-import { UserAnimeStatus } from '@/models/anime';
+import { StatusFilterValue } from '@/models/anime';
 import SeasonFilter from '../SeasonFilter';
 import type { SeasonInfo } from '@/models/anime';
 import { useT, type TranslationKey } from '@/lib/i18n';
-import { MEDIA_TYPES } from '@/lib/url/animeParams';
-
-const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
-  "watching", 
-  "completed", 
-  "on_hold", 
-  "dropped", 
-  "plan_to_watch", 
-  "not_defined"
-];
+import { ALL_STATUSES, MEDIA_TYPES } from '@/lib/url/animeParams';
 
 interface FiltersSectionProps {
-  statusFilters: (UserAnimeStatus | 'not_defined')[];
-  onStatusFilterChange: (status: UserAnimeStatus | 'not_defined', isChecked: boolean) => void;
+  statusFilters: StatusFilterValue[];
+  onStatusFilterChange: (status: StatusFilterValue, isChecked: boolean) => void;
   seasons: SeasonInfo[];
   onSeasonsChange: (seasons: SeasonInfo[]) => void;
   mediaTypes: string[];

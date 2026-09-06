@@ -35,6 +35,7 @@ declare const styles: {
   readonly "imageContainer": string;
   readonly "infoRow": string;
   readonly "noImage": string;
+  readonly "noOpinion": string;
   readonly "notYetAired": string;
   readonly "onHold": string;
   readonly "overlay": string;
@@ -45,6 +46,7 @@ declare const styles: {
   readonly "pulse": string;
   readonly "pulsingDot": string;
   readonly "recoHint": string;
+  readonly "rewatch": string;
   readonly "score": string;
   readonly "score1": string;
   readonly "score10": string;

@@ -1,7 +1,7 @@
 import type {
   AnimeRecord, AnimeCatalog, AnimePersonal, CatalogSource,
   ProvenanceSource, SeasonName, SeasonInfo, MALAnime, MALPersonalEntry, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry,
-  LocalPersonalEntry, SourceIds, Discrepancy, Genre, SortColumn, SortDirection,
+  LocalPersonalEntry, RatingIntent, SourceIds, Discrepancy, Genre, SortColumn, SortDirection,
 } from '@/models/anime';
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 import { buildProviderStates, toAnimePersonal } from '@/lib/providers/personalState';
@@ -352,6 +352,32 @@ export function getEffectiveScore(anime: AnimeRecord): number | undefined {
 /** Effective watched-episode progress. See `getEffectiveStatus`. */
 export function getEffectiveProgress(anime: AnimeRecord): number | undefined {
   return anime.personal.progress;
+}
+
+/**
+ * Is this title's rating intent in force? Only while it is genuinely unrated —
+ * the annotation answers "why is this completed title unscored", so a score
+ * settles the question and the intent stops applying. `writePersonal` clears it
+ * on a real score write; this guard is the belt to that braces, and is what
+ * keeps a stale entry from ever being *displayed* as one.
+ */
+export function getRatingIntent(anime: AnimeRecord): RatingIntent | undefined {
+  if (!anime.ratingIntent) return undefined;
+  return getEffectiveScore(anime) == null ? anime.ratingIntent : undefined;
+}
+
+/**
+ * The single value the status filter and the status badge both key on — the
+ * effective status, REPLACED by the rating intent where one is in force.
+ *
+ * Replacement, not addition, is what makes the status filter a partition again:
+ * a title marked « À revoir » answers to that chip and no longer to
+ * « Terminé », exactly as an unstatused title answers only to `not_defined`.
+ * Filtering « Terminé » would otherwise still return the whole completed pile
+ * and the two new chips would narrow nothing.
+ */
+export function getStatusFilterKey(anime: AnimeRecord): string | undefined {
+  return getRatingIntent(anime) ?? getEffectiveStatus(anime);
 }
 
 export function formatUserStatus(status?: string) {
@@ -738,6 +764,7 @@ export interface RawAnimeSlices {
   anilistPersonal?: AniListPersonalEntry;
   local?: LocalPersonalEntry;
   hidden?: boolean;
+  ratingIntent?: RatingIntent;
   discrepancy?: Discrepancy | null;
   crosswalk?: SourceIds;
 }
@@ -893,7 +920,7 @@ export function toAnimeRecord(
   personalPrecedence: ProvenanceSource[] = DEFAULT_PERSONAL_PRECEDENCE,
   catalogPrecedenceByField: Partial<Record<keyof AnimeCatalog, CatalogSource[]>> = CATALOG_PRECEDENCE_BY_FIELD
 ): AnimeRecord {
-  const { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk } = slices;
+  const { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, ratingIntent, discrepancy, crosswalk } = slices;
 
   const catalogExtracted = {
     mal: catalogFromMal(mal),
@@ -941,6 +968,7 @@ export function toAnimeRecord(
     provenance: { catalog: catalogProvenance, personal: personalProvenance },
     sources: { mal, malPersonal, simkl, anilist: anilistMeta, anilistPersonal, local },
     hidden,
+    ratingIntent,
     discrepancy,
   };
 }

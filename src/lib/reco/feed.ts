@@ -37,7 +37,7 @@ import {
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
-import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
+import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
@@ -301,6 +301,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     // Hard filters (spec §5.3)
     const st = getEffectiveStatus(anime);
     if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
+    // « À revoir » / « Sans avis » — the owner has said outright they are not
+    // scoring this one. Stated separately rather than left to the SEEN check
+    // above: it holds for the same reason `hidden` does (an explicit "stop
+    // offering me this"), and relying on the intent's status being `completed`
+    // would make the guarantee an accident of that status happening to be in
+    // SEEN_STATUSES rather than something this line promises.
+    if (getRatingIntent(anime)) continue;
     if (hidden.has(anime.id)) continue;
     if (upIds.has(anime.id) || downIds.has(anime.id)) continue; // already thumbed
     if (isPrematureSequel(anime, relations)) continue; // later season of an unwatched show

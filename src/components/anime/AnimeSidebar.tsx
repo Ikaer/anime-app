@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './AnimeSidebar.module.css';
-import { UserAnimeStatus } from '@/models/anime';
+import { StatusFilterValue } from '@/models/anime';
 import type { SeasonInfo } from '@/models/anime';
 import { CollapsibleSection, DebouncedSearchInput } from '@/components/shared';
 import { useT } from '@/lib/i18n';
@@ -17,8 +17,8 @@ import {
  */
 interface AnimeSidebarProps {
   // Filters
-  statusFilters: (UserAnimeStatus | 'not_defined')[];
-  onStatusFilterChange: (status: UserAnimeStatus | 'not_defined', isChecked: boolean) => void;
+  statusFilters: StatusFilterValue[];
+  onStatusFilterChange: (status: StatusFilterValue, isChecked: boolean) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   seasons: SeasonInfo[];

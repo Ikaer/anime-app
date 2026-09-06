@@ -36,6 +36,7 @@ import {
   upsertAnilistPersonalEntries,
   removeAnilistPersonalEntries,
   getAnimeByCanonicalId,
+  setRatingIntent,
 } from '@/lib/store';
 import { updateMalListStatus, deleteMalListEntry } from '@/lib/providers/mal/write';
 import { pushSimklRating, removeSimklEntry } from '@/lib/providers/simkl/write';
@@ -358,6 +359,14 @@ export async function writePersonal(
 
   const narrowed = new Map(active.map(w => [w.id, narrowPatch(w.id, patch)]));
   const applicable = active.filter(w => Object.keys(narrowed.get(w.id)!.applied).length > 0);
+
+  // A real score answers the very question a rating intent was standing in for
+  // (« À revoir » / « Sans avis » = "completed, and here is why it is unrated"),
+  // so scoring clears it. Only a real score: dropping a card back into the tier
+  // board's tray is `score: 0`, an un-rating, which leaves the intent alone.
+  // `getRatingIntent` also ignores a stale entry on read, so this is the tidy
+  // half of a belt-and-braces pair rather than the only guard.
+  if (typeof patch.score === 'number' && patch.score > 0) setRatingIntent(canonicalId, null);
 
   // Pass 1: local-cache authority writes — ALL before any remote.
   for (const w of applicable) w.writeLocal(ctx, narrowed.get(w.id)!.applied);

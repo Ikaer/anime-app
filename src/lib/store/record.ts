@@ -1,5 +1,5 @@
 /**
- * The row join: seven slices in, `AnimeRecord[]` out.
+ * The row join: eight slices in, `AnimeRecord[]` out.
  *
  * This is the only place the slices are read *together*. Everything upstream of
  * it (`slices.ts`, `registry.ts`) deals with one file at a time; everything
@@ -11,7 +11,7 @@
  * `import type` from here, never import values.
  */
 
-import { MALAnime, AnimeRecord, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, LocalPersonalEntry, SourceIds, ProvenanceSource, MALPersonalEntry } from '@/models/anime';
+import { MALAnime, AnimeRecord, SimklPersonalEntry, AniListMetaEntry, AniListPersonalEntry, LocalPersonalEntry, RatingIntent, SourceIds, ProvenanceSource, MALPersonalEntry } from '@/models/anime';
 import { computeDiscrepancy } from '@/lib/providers/discrepancy';
 import { buildProviderStates } from '@/lib/providers/personalState';
 import { toAnimeRecord, type CatalogPrecedenceOverrides } from '@/lib/domain/animeUtils';
@@ -27,6 +27,7 @@ import {
   getAllMalPersonal,
   getAllSimklEntries,
   getHiddenAnimeIds,
+  getRatingIntents,
 } from '@/lib/store/slices';
 
 /**
@@ -77,6 +78,7 @@ function assembleDisplayRow(
   localByCanonical: Record<string, LocalPersonalEntry>,
   registry: Record<string, SourceIds>,
   hiddenIds: Set<string>,
+  ratingIntents: Record<string, RatingIntent>,
   personalPrecedence: ProvenanceSource[],
   catalogPrecedenceByField: CatalogPrecedenceOverrides
 ): AnimeRecord | undefined {
@@ -93,11 +95,12 @@ function assembleDisplayRow(
   const malId = mal?.id ?? toNum(crosswalk?.mal);
   if (malId === undefined) return undefined;
   const hidden = hiddenIds.has(canonicalId);
+  const ratingIntent = ratingIntents[canonicalId];
   const discrepancy = computeDiscrepancy(
     buildProviderStates({ mal, malPersonal, simkl, anilist: anilistPersonal, local, anilistMeta }, personalPrecedence)
   );
   return toAnimeRecord(
-    { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
+    { mal, malPersonal, simkl, anilistMeta, anilistPersonal, local, hidden, ratingIntent, discrepancy, crosswalk: crosswalk ?? { mal: malId } },
     canonicalId,
     undefined,
     personalPrecedence,
@@ -114,6 +117,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const malAnime = getAllAnime();
   const malPersonalByCanonical = getAllMalPersonal();
   const hiddenIdList = getHiddenAnimeIds();
+  const ratingIntents = getRatingIntents();
   const simklByCanonical = getAllSimklEntries();
   const anilistMetaByCanonical = getAllAnilistMeta();
   const anilistPersonalByCanonical = getAllAnilistPersonalEntries();
@@ -136,7 +140,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   // slice reference changes, and the page bundle's row cache rebuilds. The
   // precedence join is a value-compared string (see 1d.3), so a mode/token
   // change invalidates too.
-  const inputs = [malAnime, malPersonalByCanonical, hiddenIdList, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|'), catalogPrecedenceKey(catalogPrecedenceByField)];
+  const inputs = [malAnime, malPersonalByCanonical, hiddenIdList, ratingIntents, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|'), catalogPrecedenceKey(catalogPrecedenceByField)];
   const cached = getCachedRows(inputs);
   if (cached) return cached;
 
@@ -155,7 +159,7 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   const rows: AnimeRecord[] = [];
   for (const canonicalId of canonicalIds) {
     const row = assembleDisplayRow(
-      canonicalId, malAnime, malPersonalByCanonical, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, personalPrecedence, catalogPrecedenceByField
+      canonicalId, malAnime, malPersonalByCanonical, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, hiddenIds, ratingIntents, personalPrecedence, catalogPrecedenceByField
     );
     if (row) rows.push(row);
   }
@@ -187,6 +191,7 @@ export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefi
     getAllLocalEntries(),
     getRegistry(),
     new Set(getHiddenAnimeIds()),
+    getRatingIntents(),
     getResolvedPersonalPrecedence(),
     getCatalogPrecedenceByField()
   );

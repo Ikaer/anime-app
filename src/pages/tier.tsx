@@ -5,11 +5,11 @@ import { RecoFiltersSection } from '@/components/anime/sidebar';
 import SeasonFilter from '@/components/anime/SeasonFilter';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
-import { AnimeRecord, ImageSize } from '@/models/anime';
-import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { AnimeRecord, ImageSize, RATING_INTENTS, type RatingIntent } from '@/models/anime';
+import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle, getRatingIntent } from '@/lib/domain/animeUtils';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import {
-  GAP_MAX, GAP_ROWS, TIER_SCORES, TIER_STATUSES,
+  GAP_MAX, GAP_ROWS, TIER_BOARD_STATUSES, TIER_SCORES, TIER_STATUSES,
   clampGapRow, gapOf as computeGap, meanRow, providerMeans,
 } from '@/lib/domain/tierGap';
 import { useTierUrlState } from '@/hooks';
@@ -45,12 +45,36 @@ function scoreColor(n: number): string {
   return `hsl(${Math.round(((n - 1) / 9) * 120)}, 55%, 42%)`;
 }
 
+/**
+ * A row on the board. Numeric on every axis — a score, a rounded mean or a gap —
+ * plus, on the writable `me` axis only, the two rating intents, which are rows
+ * rather than scores because they are the answer "this one is not getting a
+ * number". Same colours as the card badge, so a row predicts its chip.
+ */
+type TierRow = number | RatingIntent;
+
+const isIntentRow = (r: TierRow): r is RatingIntent => typeof r === 'string';
+
+const INTENT_COLOR: Record<RatingIntent, string> = {
+  rewatch: '#0d9488',
+  no_opinion: '#64748b',
+};
+
 const THUMB_W: Record<ImageSize, number> = { 0: 46, 1: 62, 2: 84, 3: 112 };
 const THUMB_LABELS: Record<ImageSize, string> = { 0: 'S', 1: 'M', 2: 'L', 3: 'XL' };
 const POSTER_RATIO = 0.7; // width / height
 
 interface Preview { anime: AnimeRecord; x: number; y: number; }
-interface QueueItem { id: string; score: number; prevScore: number; }
+/**
+ * One pending write. A score and an intent go to DIFFERENT endpoints (`rating`
+ * fans out to every provider; `rating-intent` writes one local `user/` file),
+ * but they share this queue because they are mutually exclusive destinations on
+ * the same board — interleaving them on two queues would let a score land after
+ * the intent write that was meant to replace it.
+ */
+type QueueItem =
+  | { kind: 'score'; id: string; score: number; prevScore: number }
+  | { kind: 'intent'; id: string; intent: RatingIntent | null; prevIntent: RatingIntent | null };
 
 export default function TierPage() {
   const t = useT();
@@ -63,6 +87,9 @@ export default function TierPage() {
 
   // Optimistic score overrides layered on the fetched data (0 = unrated / tray).
   const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
+  // The same, for the rating intent. `null` is a real value here — "cleared" —
+  // so absence from the map means "no override", not "no intent".
+  const [intentOverrides, setIntentOverrides] = useState<Map<string, RatingIntent | null>>(new Map());
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [failed, setFailed] = useState<Map<string, string>>(new Map());
 
@@ -136,7 +163,10 @@ export default function TierPage() {
       setIsLoading(true);
       setError('');
       try {
-        const res = await fetch('/api/anime/animes?status=watching,completed,on_hold,dropped&limit=all');
+        // The two intents are their OWN statuses to the list API (it partitions
+        // on `getStatusFilterKey`), so they have to be asked for by name or the
+        // board's two intent rows would always render empty.
+        const res = await fetch(`/api/anime/animes?status=${TIER_BOARD_STATUSES.join(',')}&limit=all`);
         if (!res.ok) throw new Error('load failed');
         const data = await res.json();
         if (!cancelled) setAnimes(data.animes || []);
@@ -161,6 +191,20 @@ export default function TierPage() {
     [overrides, baseScore],
   );
 
+  // Base (server-known) intent. `getRatingIntent`, not `record.ratingIntent`:
+  // it ignores a stale entry on a scored title, the same guard the badge uses.
+  const baseIntent = useMemo(() => {
+    const m = new Map<string, RatingIntent | null>();
+    for (const a of animes) m.set(a.id, getRatingIntent(a) ?? null);
+    return m;
+  }, [animes]);
+
+  const effIntentOf = useCallback(
+    (id: string): RatingIntent | null =>
+      (intentOverrides.has(id) ? intentOverrides.get(id)! : (baseIntent.get(id) ?? null)),
+    [intentOverrides, baseIntent],
+  );
+
   // Community means, per provider, RAW rather than merged — see `providerMeans`
   // for why `catalog.mean` is the wrong number to compare against.
   const meansById = useMemo(() => {
@@ -182,8 +226,14 @@ export default function TierPage() {
   );
 
   /** Which row a card lands in on the active axis; null sends it to the tray. */
-  const rowOf = useCallback((id: string): number | null => {
+  const rowOf = useCallback((id: string): TierRow | null => {
     if (state.by === 'me') {
+      // The intent wins over the score, for the same reason it replaces the
+      // status everywhere else: it is the more specific answer. A scored title
+      // cannot hold one anyway — `getRatingIntent` drops it and a score write
+      // clears it server-side — so the two can never contend for long.
+      const intent = effIntentOf(id);
+      if (intent) return intent;
       const s = effScoreOf(id);
       return s > 0 ? s : null;
     }
@@ -193,12 +243,20 @@ export default function TierPage() {
     }
     const mean = meansById.get(id)?.[state.by === 'anilist' ? 'anilist' : 'mal'];
     return mean == null ? null : meanRow(mean);
-  }, [state.by, effScoreOf, gapOf, meansById]);
+  }, [state.by, effScoreOf, effIntentOf, gapOf, meansById]);
 
   // Only my own scores are writable — a community mean and a difference are both
   // readings, not settings, so those axes drop the drag affordance entirely.
   const readOnly = state.by !== 'me';
-  const rows = state.by === 'gap' ? GAP_ROWS : TIER_SCORES;
+  // The intent rows exist only on the writable axis: on `mal`/`anilist`/`gap` a
+  // row is a READING of a number the provider published, and "the owner declined
+  // to score this" is not one — those axes bucket an intent-marked title by its
+  // mean like any other.
+  const rows: TierRow[] = state.by === 'gap'
+    ? GAP_ROWS
+    : state.by === 'me'
+      ? [...TIER_SCORES, ...RATING_INTENTS]
+      : TIER_SCORES;
 
   // Client-side narrowing (search / media type / mean range / year range / genres),
   // plus the tier board's own status filter (page-specific, so not in
@@ -251,7 +309,7 @@ export default function TierPage() {
   // titles you disagree with the crowd about cluster at one end; alphabetical
   // otherwise (and as the tiebreak).
   const board = useMemo(() => {
-    const byRow = new Map<number, AnimeRecord[]>();
+    const byRow = new Map<TierRow, AnimeRecord[]>();
     for (const r of rows) byRow.set(r, []);
     const tray: AnimeRecord[] = [];
     for (const a of filtered) {
@@ -284,8 +342,48 @@ export default function TierPage() {
     if (processingRef.current) return;
     processingRef.current = true;
     while (queueRef.current.length > 0) {
-      const { id, score, prevScore } = queueRef.current.shift()!;
+      const item = queueRef.current.shift()!;
+      const { id } = item;
       setSaving(prev => new Set(prev).add(id));
+
+      // An intent write is a different endpoint and a different failure story:
+      // it touches ONE local file, so there is no per-provider outcome map to
+      // read and nothing that can partially succeed.
+      if (item.kind === 'intent') {
+        try {
+          const res = await fetch(`/api/anime/animes/${id}/rating-intent`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ intent: item.intent }),
+          });
+          const data = await res.json().catch(() => ({} as any));
+          if (!res.ok || data.ok === false) {
+            setIntentOverrides(prev => new Map(prev).set(id, item.prevIntent));
+            setFailed(prev => new Map(prev).set(id, data.error || t('tier.saveFailed')));
+          } else {
+            // Marking an unstatused title completes it through the writer
+            // fan-out, so this call CAN carry provider outcomes after all.
+            const outcomes: Record<string, { ok?: boolean }> = data.outcomes || {};
+            const bad = Object.entries(outcomes)
+              .filter(([, o]) => o && o.ok === false)
+              .map(([provider]) => provider.toUpperCase());
+            setFailed(prev => {
+              const n = new Map(prev);
+              if (bad.length) n.set(id, t('tier.notSynced', { sources: bad.join(' + ') }));
+              else n.delete(id);
+              return n;
+            });
+          }
+        } catch {
+          setIntentOverrides(prev => new Map(prev).set(id, item.prevIntent));
+          setFailed(prev => new Map(prev).set(id, t('tier.networkError')));
+        } finally {
+          setSaving(prev => { const n = new Set(prev); n.delete(id); return n; });
+        }
+        continue;
+      }
+
+      const { score, prevScore } = item;
       try {
         const res = await fetch(`/api/anime/animes/${id}/rating`, {
           method: 'POST',
@@ -326,12 +424,48 @@ export default function TierPage() {
 
   const assignScore = useCallback((id: string, score: number) => {
     const prevScore = effScoreOf(id);
-    if (prevScore === score) return;
-    setOverrides(prev => new Map(prev).set(id, score));
+    const prevIntent = effIntentOf(id);
+    if (prevScore === score && !prevIntent) return;
     setFailed(prev => { const n = new Map(prev); n.delete(id); return n; });
-    queueRef.current.push({ id, score, prevScore });
+
+    // Leaving an intent row for a score row clears the intent. The server does
+    // this too (`writePersonal` drops it on a real score), but only for a real
+    // score — dropping onto the TRAY is `score: 0`, an un-rating, which the
+    // server leaves alone. So the board has to say so explicitly, or a card
+    // dragged from « Sans avis » to « à noter » would snap straight back.
+    if (prevIntent) {
+      setIntentOverrides(prev => new Map(prev).set(id, null));
+      queueRef.current.push({ kind: 'intent', id, intent: null, prevIntent });
+    }
+    if (prevScore !== score) {
+      setOverrides(prev => new Map(prev).set(id, score));
+      queueRef.current.push({ kind: 'score', id, score, prevScore });
+    }
     processQueue();
-  }, [effScoreOf, processQueue]);
+  }, [effScoreOf, effIntentOf, processQueue]);
+
+  /**
+   * Drop onto « À revoir » / « Sans avis ». The score is cleared alongside,
+   * because the two rows mean "this one has no number" — leaving a stale score
+   * behind would make the card jump back to its score row on the next load,
+   * where `getRatingIntent` would already have dropped the intent as stale.
+   */
+  const assignIntent = useCallback((id: string, intent: RatingIntent) => {
+    const prevIntent = effIntentOf(id);
+    const prevScore = effScoreOf(id);
+    if (prevIntent === intent && prevScore === 0) return;
+    setFailed(prev => { const n = new Map(prev); n.delete(id); return n; });
+
+    if (prevScore !== 0) {
+      setOverrides(prev => new Map(prev).set(id, 0));
+      queueRef.current.push({ kind: 'score', id, score: 0, prevScore });
+    }
+    if (prevIntent !== intent) {
+      setIntentOverrides(prev => new Map(prev).set(id, intent));
+      queueRef.current.push({ kind: 'intent', id, intent, prevIntent });
+    }
+    processQueue();
+  }, [effIntentOf, effScoreOf, processQueue]);
 
   // ---- Drag & drop (native HTML5 — zero-dep; score is the only persisted state). ----
   const onDragStart = (e: React.DragEvent, id: string) => {
@@ -341,10 +475,13 @@ export default function TierPage() {
     setPreview(null);
   };
   const onDragEnd = () => setDraggingId(null);
-  const onDropTo = (e: React.DragEvent, score: number) => {
+  const onDropTo = (e: React.DragEvent, row: TierRow) => {
     e.preventDefault();
     const id = e.dataTransfer.getData('text/plain');
-    if (id) assignScore(id, score);
+    if (id) {
+      if (isIntentRow(row)) assignIntent(id, row);
+      else assignScore(id, row);
+    }
     setDraggingId(null);
   };
   const allowDrop = (e: React.DragEvent) => e.preventDefault();
@@ -367,7 +504,16 @@ export default function TierPage() {
   const thumbW = THUMB_W[state.thumbSize];
   const thumbH = Math.round(thumbW / POSTER_RATIO);
 
-  const placedCount = useMemo(() => filtered.length - board.tray.length, [filtered, board]);
+  // On `me`, "notés" counts REAL scores — an intent-marked card is placed on the
+  // board but deliberately unscored, so folding it in here would report the very
+  // pile the two rows exist to take titles out of. On a reading axis there are no
+  // intent rows, so "placed" is simply everything off the tray.
+  const placedCount = useMemo(
+    () => state.by === 'me'
+      ? filtered.filter(a => effScoreOf(a.id) > 0).length
+      : filtered.length - board.tray.length,
+    [filtered, board, state.by, effScoreOf],
+  );
 
   const renderCard = (a: AnimeRecord) => {
     const thumb = a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large || '';
@@ -557,21 +703,34 @@ export default function TierPage() {
             <div className="board">
               {rows.map(r => (
                 <div
-                  key={r}
-                  className="tier-row"
+                  key={String(r)}
+                  className={`tier-row${isIntentRow(r) ? ' intent-row' : ''}`}
                   onDragOver={readOnly ? undefined : allowDrop}
                   onDrop={readOnly ? undefined : (e) => onDropTo(e, r)}
                 >
                   <div
-                    className={`tier-label ${state.by === 'gap' ? 'wide' : ''}`}
-                    style={{ background: state.by === 'gap' ? gapColor(r) : scoreColor(r) }}
+                    className={`tier-label ${state.by === 'gap' || isIntentRow(r) ? 'wide' : ''}`}
+                    style={{
+                      background: isIntentRow(r)
+                        ? INTENT_COLOR[r]
+                        : state.by === 'gap' ? gapColor(r) : scoreColor(r),
+                    }}
                   >
-                    <span className="tier-num">
-                      {state.by === 'gap' ? (r > 0 ? `+${r}` : r < 0 ? `−${-r}` : '0') : r}
-                    </span>
-                    <span className="tier-word">
-                      {t(state.by === 'gap' ? gapKey(r) : (`tierWord.${r}` as TranslationKey))}
-                    </span>
+                    {isIntentRow(r) ? (
+                      <>
+                        <span className="tier-num">{r === 'rewatch' ? '🔁' : '🤷'}</span>
+                        <span className="tier-word">{t(`ratingIntent.${r}` as TranslationKey)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="tier-num">
+                          {state.by === 'gap' ? (r > 0 ? `+${r}` : r < 0 ? `−${-r}` : '0') : r}
+                        </span>
+                        <span className="tier-word">
+                          {t(state.by === 'gap' ? gapKey(r) : (`tierWord.${r}` as TranslationKey))}
+                        </span>
+                      </>
+                    )}
                   </div>
                   <div className="tier-cards">
                     {board.byRow.get(r)!.map(renderCard)}
@@ -634,6 +793,14 @@ export default function TierPage() {
         .tier-num { font-size: 1.6rem; font-weight: 800; line-height: 1; }
         .tier-word { font-size: 0.7rem; opacity: 0.9; text-align: center; }
         .tier-cards { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; flex: 1 1 auto; align-content: flex-start; }
+
+        /* The two intent rows are not part of the 10→1 ladder, so they are set
+           off from it rather than continuing it: a gap above the first one and a
+           dashed border, the same visual language as the « à noter » tray, which
+           is the other "no number here" destination. */
+        .tier-row.intent-row { border-style: dashed; }
+        .tier-row.intent-row:first-of-type { margin-top: 10px; }
+        .intent-row .tier-num { font-size: 1.15rem; }
 
         .tray { border: 1px dashed var(--border-color); border-radius: 8px; background: var(--bg-secondary, var(--bg-primary)); margin-top: 6px; }
         .tray-label { padding: 6px 10px; color: var(--text-secondary); font-weight: 600; }

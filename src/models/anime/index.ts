@@ -84,6 +84,39 @@ export interface RelatedAnime {
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
 
 /**
+ * Why a *completed* title carries no score — the owner's own annotation, and
+ * deliberately NOT a sixth `UserAnimeStatus`.
+ *
+ * `UserAnimeStatus` is MAL's five-value vocabulary: every provider's slice is
+ * normalized onto it at write time and every writer pushes it back out. A sixth
+ * value would be unrepresentable outward (MAL's API rejects it) and would force
+ * all four writers to invent a mapping. Both of these ARE `completed` to every
+ * provider; what they add is a local judgement no provider has a field for:
+ *
+ * - `rewatch`    — « À revoir ». Seen long ago, liked it, want to rewatch
+ *                  before committing a score. The score is *deferred*.
+ * - `no_opinion` — « Sans avis ». Seen, forgotten, will not rewatch. The score
+ *                  is *declined* — which is not a verdict on the show.
+ *
+ * So it lives in `user/rating_intent.json` beside `user/hidden.json` and
+ * `user/reco_feedback.json`, off provider precedence entirely, and surfaces as
+ * a status-like chip. It is meaningful only while the title is unrated — a
+ * score write clears it (see `writePersonal`).
+ */
+export type RatingIntent = 'rewatch' | 'no_opinion';
+
+export const RATING_INTENTS: RatingIntent[] = ['rewatch', 'no_opinion'];
+
+/**
+ * What the status filter ranges over — a PARTITION of the row set, not a union
+ * of independent flags. Beyond MAL's five: `not_defined` for a row with no
+ * status at all, and the two `RatingIntent` values, which are `completed` to
+ * every provider but answer to their own chip here. `getStatusFilterKey` is the
+ * one function that maps a record onto this.
+ */
+export type StatusFilterValue = UserAnimeStatus | RatingIntent | 'not_defined';
+
+/**
  * MAL's personal-list block. This is the API **wire** shape — MAL ships it
  * inline on `MALAnime.my_list_status` on every fetch. The API-shaped field names
  * are load-bearing.
@@ -656,6 +689,12 @@ export interface AnimeRecord {
   sources: AnimeSources;
   provenance: RecordProvenance;
   hidden?: boolean;
+  /**
+   * Why this completed title is unrated, when the owner has said so. Rides here
+   * exactly like `hidden` — a `user/` annotation joined onto the row, never
+   * provider state. Only meaningful while `personal.score` is unset.
+   */
+  ratingIntent?: RatingIntent;
   discrepancy?: Discrepancy | null;
 }
 

@@ -47,7 +47,7 @@ import {
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
-import { getEffectiveStatus, getPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
+import { getEffectiveStatus, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
 import { makeT, DEFAULT_LANG, type Lang } from '@/lib/i18n';
@@ -161,6 +161,13 @@ export function computeAnchored(
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
     if (hiddenCanonical.has(anime.id) || downCanonical.has(anime.id)) continue;
+    // ⚠️ NOT behind `excludeSeen`. "Plus comme ça" deliberately keeps seen
+    // titles (marked « Déjà vu ») because its pool is ~25 edges wide and
+    // dropping them would gut the block — but a rating intent is not the same
+    // claim as a watch status: it is the owner saying "stop putting this in
+    // front of me", which holds however small the pool is. Same tier as
+    // `hidden` and 👎, and unconditional for the same reason.
+    if (getRatingIntent(anime)) continue;
     if (isPrematureSequel(anime, relations)) continue;
     if (options.excludeSeen) {
       const st = getEffectiveStatus(anime);

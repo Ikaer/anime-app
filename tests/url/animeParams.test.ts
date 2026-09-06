@@ -19,7 +19,7 @@ import {
   type AnimeFiltersState,
 } from '@/lib/url/animeParams';
 import { applyNarrowingFilters } from '@/lib/domain/animeUtils';
-import type { AnimeRecord, UserAnimeStatus, SeasonName, SortColumn } from '@/models/anime';
+import type { AnimeRecord, StatusFilterValue, SeasonName, SortColumn } from '@/models/anime';
 
 /** `encodeStateToUrl` returns a path (`/?s=…`), not a bare query string. */
 const query = (url: string) => new URLSearchParams(url.slice(url.indexOf('?') + 1));
@@ -27,9 +27,14 @@ const roundTrip = (state: AnimeFiltersState) => decodeUrlToState(query(encodeSta
 
 const keysOf = <T extends string>(o: Record<T, 0>) => Object.keys(o) as T[];
 
+// `StatusFilterValue`, not `UserAnimeStatus | 'not_defined'`: the filter ranges
+// over the two rating intents as well, and pinning the narrower union here is
+// what would let a new code ship with no round-trip coverage — silently, since
+// an unknown code decodes to `undefined` and is simply filtered out.
 const STATUSES = keysOf({
   watching: 0, completed: 0, on_hold: 0, dropped: 0, plan_to_watch: 0, not_defined: 0,
-} satisfies Record<UserAnimeStatus | 'not_defined', 0>);
+  rewatch: 0, no_opinion: 0,
+} satisfies Record<StatusFilterValue, 0>);
 
 const SEASONS = keysOf({
   winter: 0, spring: 0, summer: 0, fall: 0,

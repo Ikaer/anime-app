@@ -484,6 +484,19 @@
     color: white;
 }
 
+/* The two rating intents. Both are completed titles, so they sit in the green
+   family rather than getting a signal colour of their own — teal for « À revoir »
+   (a score is still coming), slate for « Sans avis » (the file is closed). */
+.rewatch {
+    background: #0d9488;
+    color: white;
+}
+
+.noOpinion {
+    background: #64748b;
+    color: white;
+}
+
 .noImage{
     display: flex;
     align-items: center;

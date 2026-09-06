@@ -27,13 +27,14 @@ import assert from 'node:assert/strict';
 import fr from '@/locales/fr.json';
 import { PROVIDER_CAPABILITIES, type PersonalDimension } from '@/lib/providers/capabilities';
 import { SOURCE_META, RECO_WEIGHT_PRESETS } from '@/lib/reco/weights';
-import { VIEW_PRESETS } from '@/lib/url/animeParams';
+import { ALL_STATUSES, VIEW_PRESETS } from '@/lib/url/animeParams';
 import { GENRE_AXES } from '@/lib/domain/genreAxis';
 import { STAFF_ROLE_TIERS } from '@/lib/domain/staffRole';
 import { TITLE_LANGUAGES } from '@/lib/url/viewDefaults';
 import { STATS_DIMENSIONS } from '@/lib/domain/stats';
 import { GRAPH_FOCAL_TYPES } from '@/lib/domain/animeGraph';
 import { CRON_FRESHNESS_LEVELS, type CronRejectionReason } from '@/lib/domain/cronFreshness';
+import { RATING_INTENTS } from '@/models/anime';
 import type { UserAnimeStatus, SeasonName } from '@/models/anime';
 import type { TierAxis } from '@/lib/domain/tierGap';
 // Type-only: `useTierUrlState` is a hook module, and the transpile elides an
@@ -87,9 +88,23 @@ const CRON_REJECTION_REASONS = keysOf({
  */
 const AIRING_STATUSES = ['finished_airing', 'currently_airing', 'not_yet_aired'] as const;
 
-/** The owner's watch status, on the card, the detail page, /activity, /stats… */
-family('status.*', STATUSES, s => `status.${s}`);
-family('statusShort.*', STATUSES, s => `statusShort.${s}`);
+/**
+ * The owner's watch status, on the card, the detail page, /activity, /stats…
+ *
+ * The two families have DIFFERENT id sources, and neither is `UserAnimeStatus`:
+ * `status.*` is driven from `ALL_STATUSES`, the filter vocabulary, because the
+ * sidebar renders a chip per entry — which includes `not_defined` and the two
+ * rating intents. `statusShort.*` is the badge, which never renders a row with
+ * no status (`getStatusFilterKey` returns undefined and the badge is skipped),
+ * so it covers the five real statuses plus the intents and deliberately not
+ * `not_defined` — asserting a key nothing renders would only invite a dead one.
+ */
+family('status.*', ALL_STATUSES, s => `status.${s}`);
+family('statusShort.*', [...STATUSES, ...RATING_INTENTS], s => `statusShort.${s}`);
+
+/** The « pourquoi pas de note » chips on the detail page, label + tooltip. */
+family('ratingIntent.*', RATING_INTENTS, i => `ratingIntent.${i}`);
+family('ratingIntentHint.*', RATING_INTENTS, i => `ratingIntentHint.${i}`);
 family('seasonName.*', SEASONS, s => `seasonName.${s}`);
 family('airing.*', AIRING_STATUSES, s => `airing.${s}`);
 

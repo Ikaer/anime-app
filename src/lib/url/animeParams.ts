@@ -16,7 +16,7 @@
  */
 
 import {
-  UserAnimeStatus,
+  StatusFilterValue,
   SortColumn,
   SortDirection,
   SeasonName,
@@ -30,7 +30,7 @@ import { SHIPPED_VIEW_DEFAULTS, ViewDefaults, ViewFilterDefaults } from '@/lib/u
 // ============================================================================
 
 export interface AnimeFiltersState {
-  statusFilters: (UserAnimeStatus | 'not_defined')[];
+  statusFilters: StatusFilterValue[];
   searchQuery: string;
   seasons: SeasonInfo[];
   mediaTypes: string[];
@@ -68,22 +68,27 @@ export type AnimeUrlState = AnimeFiltersState;
 // Short Code Mappings
 // ============================================================================
 
-// Status codes: w=watching, c=completed, h=on_hold, d=dropped, p=plan_to_watch, n=not_defined
-const STATUS_TO_CODE: Record<UserAnimeStatus | 'not_defined', string> = {
+// Status codes: w=watching, c=completed, h=on_hold, d=dropped, p=plan_to_watch,
+// n=not_defined, r=rewatch (« À revoir »), o=no_opinion (« Sans avis »).
+const STATUS_TO_CODE: Record<StatusFilterValue, string> = {
   watching: 'w',
   completed: 'c',
   on_hold: 'h',
   dropped: 'd',
   plan_to_watch: 'p',
   not_defined: 'n',
+  rewatch: 'r',
+  no_opinion: 'o',
 };
-const CODE_TO_STATUS: Record<string, UserAnimeStatus | 'not_defined'> = {
+const CODE_TO_STATUS: Record<string, StatusFilterValue> = {
   w: 'watching',
   c: 'completed',
   h: 'on_hold',
   d: 'dropped',
   p: 'plan_to_watch',
   n: 'not_defined',
+  r: 'rewatch',
+  o: 'no_opinion',
 };
 
 // Season codes: w=winter, sp=spring, su=summer, f=fall
@@ -123,8 +128,19 @@ const CODE_TO_DIR: Record<string, SortDirection> = { a: 'asc', d: 'desc' };
 // Default Values
 // ============================================================================
 
-const ALL_STATUSES: (UserAnimeStatus | 'not_defined')[] = [
-  'watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch', 'not_defined'
+/**
+ * The status-filter vocabulary, and a PARTITION: every row answers to exactly
+ * one of these. `not_defined` covers rows with no status at all; `rewatch` and
+ * `no_opinion` are the two rating intents (see `RatingIntent`), which are
+ * `completed` to every provider but answer to their own chip here rather than
+ * to « Terminé » — see `getStatusFilterKey`.
+ *
+ * Exported so the sidebar's chip list and the URL codec cannot offer different
+ * sets, the same reason `MEDIA_TYPES` is shared.
+ */
+export const ALL_STATUSES: StatusFilterValue[] = [
+  'watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch', 'not_defined',
+  'rewatch', 'no_opinion',
 ];
 
 /**
@@ -219,7 +235,7 @@ const PARAM_KEYS = {
 // Encoding Functions
 // ============================================================================
 
-function encodeStatuses(statuses: (UserAnimeStatus | 'not_defined')[]): string | null {
+function encodeStatuses(statuses: StatusFilterValue[]): string | null {
   // If all statuses selected, omit from URL
   if (statuses.length === ALL_STATUSES.length &&
     ALL_STATUSES.every(s => statuses.includes(s))) {
@@ -324,12 +340,12 @@ export function encodeStateToUrl(state: Partial<AnimeUrlState>): string {
 // Decoding Functions
 // ============================================================================
 
-function decodeStatuses(value: string | null): (UserAnimeStatus | 'not_defined')[] {
+function decodeStatuses(value: string | null): StatusFilterValue[] {
   if (value === null) return ALL_STATUSES;
   if (value === '') return [];
   return value.split(',')
     .map(code => CODE_TO_STATUS[code])
-    .filter((s): s is UserAnimeStatus | 'not_defined' => s !== undefined);
+    .filter((s): s is StatusFilterValue => s !== undefined);
 }
 
 function decodeSeasons(value: string | null): SeasonInfo[] {

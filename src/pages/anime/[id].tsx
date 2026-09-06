@@ -456,6 +456,7 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
             progress={effProgress}
             numEpisodes={anime.catalog.numEpisodes}
             canClearStatus={canClearStatus}
+            ratingIntent={anime.ratingIntent}
             onWritten={() => router.replace(router.asPath, undefined, { scroll: false })}
           />
           {/* One row per provider, not a MAL/SIMKL column pair — the same long
