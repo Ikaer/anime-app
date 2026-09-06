@@ -34,6 +34,7 @@ declare const styles: {
   readonly "imageActions": string;
   readonly "imageContainer": string;
   readonly "infoRow": string;
+  readonly "muteSeedButton": string;
   readonly "noImage": string;
   readonly "noOpinion": string;
   readonly "notYetAired": string;

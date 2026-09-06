@@ -2,7 +2,8 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { computeFeed } from '@/lib/reco/feed';
 import { getFeedbackAnime } from '@/lib/reco/feedback';
 import { getRecommendationsData } from '@/lib/reco/data';
-import { applyNarrowingFilters } from '@/lib/domain/animeUtils';
+import { getMutedSeedAnime } from '@/lib/reco/seedMutes';
+import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { parseSourceWeights } from '@/lib/reco/weights';
 import { getTitleLanguage } from '@/lib/config/settings';
 
@@ -46,13 +47,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const lang = req.query.lang === 'en' ? 'en' : 'fr';
 
     const data = getRecommendationsData();
+    const titleLang = getTitleLanguage();
     const ranked = computeFeed({
       nicheMode: niche,
       threshold: Number.isFinite(thr as number) ? thr : null,
       weights,
       diversity,
       lang,
-      titleLang: getTitleLanguage(),
+      titleLang,
     });
     const animes = applyNarrowingFilters(ranked, narrowing);
 
@@ -62,6 +64,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       lastRefresh: data.lastRefresh,
       seedThreshold: data.seedThreshold,
       nicheMode: niche,
+      /**
+       * The muted seeds' review-and-undo list, resolved to titles here rather
+       * than behind its own endpoint: the page already makes this request on
+       * every knob change, and a mute changes the feed, so the two can never be
+       * fetched independently without going out of step. The ACTIVE seeds need
+       * no such payload — the sidebar counts them off each card's `topSeeds`.
+       */
+      mutedSeeds: getMutedSeedAnime()
+        .map(a => ({ id: a.id, title: getPrimaryTitle(a, titleLang) }))
+        .sort((x, y) => x.title.localeCompare(y.title)),
     });
   } catch (error) {
     console.error('Get recommendations feed error:', error);

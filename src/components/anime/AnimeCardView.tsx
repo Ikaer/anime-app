@@ -22,6 +22,13 @@ interface AnimeCardViewProps {
     feedbackMode?: 'feed' | RecoVerdict | null;
     /** When true, every card's "Pourquoi ?" breakdown is expanded (global override). */
     allExplainsOpen?: boolean;
+    /**
+     * « Ne plus partir de ce titre » on the card's seed hint. Passed only by the
+     * feed, which is the one surface where a seed is something the ranking chose
+     * rather than something the reader picked — muting from `/mix` or « Plus
+     * comme ça » would silence an anchor the reader had just selected.
+     */
+    onMuteSeed?: (seedId: string, seedTitle: string) => void;
 }
 
 function formatRecoHint(meta: RecoMeta, t: TFunction): string {
@@ -35,6 +42,40 @@ function formatRecoHint(meta: RecoMeta, t: TFunction): string {
     return '';
 }
 
+/**
+ * The hint with a mute control appended when the card names a seed.
+ *
+ * The sentence « Recommandé par les fans de X » IS the diagnosis — it is the
+ * moment the reader thinks "stop starting from X" — so the fix sits on it rather
+ * than on a settings page they would have to go and find. Falls back to the
+ * plain string whenever there is no seed to mute (a suggestions-only card) or no
+ * handler (every surface but the feed).
+ */
+function renderRecoHint(
+    meta: RecoMeta,
+    t: TFunction,
+    onMuteSeed: ((seedId: string, seedTitle: string) => void) | undefined
+): React.ReactNode {
+    const text = formatRecoHint(meta, t);
+    if (!text) return null;
+    const top = meta.topSeeds[0];
+    if (!onMuteSeed || !top) return text;
+    return (
+        <>
+            {text}
+            <button
+                type="button"
+                className={styles.muteSeedButton}
+                onClick={() => onMuteSeed(top.id, top.title)}
+                title={t('reco.muteSeedTitle', { title: top.title })}
+                aria-label={t('reco.muteSeedTitle', { title: top.title })}
+            >
+                ⊘
+            </button>
+        </>
+    );
+}
+
 export default function AnimeCardView({
     animes,
     cardsPerRow,
@@ -42,7 +83,8 @@ export default function AnimeCardView({
     onFeedback,
     onRemoveFeedback,
     feedbackMode,
-    allExplainsOpen
+    allExplainsOpen,
+    onMuteSeed
 }: AnimeCardViewProps) {
     const t = useT();
     const titleLang = useTitleLanguage();
@@ -343,7 +385,7 @@ export default function AnimeCardView({
                             </span>
                         </div>
                         {anime.recoMeta && formatRecoHint(anime.recoMeta, t) && (
-                            <div className={styles.recoHint}>{formatRecoHint(anime.recoMeta, t)}</div>
+                            <div className={styles.recoHint}>{renderRecoHint(anime.recoMeta, t, onMuteSeed)}</div>
                         )}
                         {anime.recoMeta && anime.recoMeta.breakdown.length > 0 && (
                             <div className={styles.explainWrap}>

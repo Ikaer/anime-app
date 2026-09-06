@@ -196,7 +196,15 @@ export function buildServer(): McpServer {
         '`becauseOf` lists only the liked seeds whose crowd recommendations point at the title, ' +
         'so it is positive by construction — do not read it as the full explanation, and do not ' +
         'conclude from it that the dropped or low-scored titles are unused signal. `why` is ' +
-        'trimmed per sign, so a penalty is never crowded out by a larger positive.',
+        'trimmed per sign, so a penalty is never crowded out by a larger positive. ' +
+        'SEED CONCENTRATION — `seedInfluence` tallies, ' +
+        'across the RETURNED items (`seedInfluenceWindow` is the denominator), which of the ' +
+        'titles the owner rated highly the ranking leans on: ' +
+        '`leads` counts candidates a seed is the STRONGEST backer of, which is what the owner ' +
+        'experiences as "this one title keeps deciding my feed". One seed leading a large share ' +
+        'is worth saying out loud. The owner can silence a seed in the app (« ne plus partir de ' +
+        'ce titre », on the feed card or the « Sources » sidebar section); already-silenced ones ' +
+        'come back in `mutedSeeds`. This tool cannot mute or unmute — suggest, do not act.',
       inputSchema: {
         limit: z.number().int().min(1).max(50).optional().describe('How many to return (default 15, max 50).'),
         nicheMode: z.boolean().optional()

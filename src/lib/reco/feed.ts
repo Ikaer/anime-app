@@ -37,6 +37,7 @@ import {
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
+import { getSeedMuteSet } from '@/lib/reco/seedMutes';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
@@ -76,11 +77,16 @@ export interface FeedOptions {
  * `getEffectiveScore`, never `my_list_status!.score`.
  *
  * Exported because `refresh.ts` seeds the fetch from the same set — the seed
- * definition is one function, not one per half of the engine.
+ * definition is one function, not one per half of the engine. That is also why
+ * the seed MUTES are applied here rather than at each call site: a muted title
+ * is not a seed, so it drops out of the ranking's taste profiles AND out of the
+ * refresh's fetch list (which saves its provider calls) from one filter.
  */
 export function getSeeds(threshold: number): AnimeRecord[] {
+  const muted = getSeedMuteSet();
   return getAnimeForDisplay()
     .filter(a => {
+      if (muted.has(a.id)) return false;
       if (getEffectiveStatus(a) !== 'completed') return false;
       const score = getEffectiveScore(a);
       return score != null && score >= threshold;
@@ -196,6 +202,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   const feedback = getFeedback();
   const upIds = feedbackIds(feedback, 'up');
   const downIds = feedbackIds(feedback, 'down');
+  /**
+   * « Ne plus partir de ce titre ». `getSeeds` already drops these from the
+   * taste profiles, but the two crowd loops below iterate the CACHE — whose
+   * edges were fetched before the mute existed — so the gate has to be repeated
+   * here or a mute would do nothing until the next refresh.
+   */
+  const mutedSeeds = getSeedMuteSet();
 
   // Accumulate affinity from edges, grouped by originating seed.
   const acc = new Map<string, Accumulator>();
@@ -207,6 +220,10 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   };
 
   for (const [seedId, edges] of Object.entries(data.seeds)) {
+    // ⚠️ Before the weight branches, not inside the threshold one: a muted title
+    // that is ALSO thumbed-up would otherwise fall through to the 👍 fallback
+    // and keep seeding at `FEEDBACK_SEED_WEIGHT`.
+    if (mutedSeeds.has(seedId)) continue;
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
     // Live threshold filter, with a fallback for 👍 seeds (no personal score).
@@ -243,6 +260,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     a.perSeed.set(seedId, (a.perSeed.get(seedId) || 0) + backers);
   };
   for (const [seedId, edges] of Object.entries(data.anilistSeeds || {})) {
+    if (mutedSeeds.has(seedId)) continue; // same gate, same reason as above
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
     let weight: number;

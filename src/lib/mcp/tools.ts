@@ -28,6 +28,8 @@ import { searchCatalog, MIN_QUERY_LENGTH } from '@/lib/domain/globalSearch';
 import { computeStats, STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 import { computeFeed } from '@/lib/reco/feed';
 import { getRecommendationsData } from '@/lib/reco/data';
+// Readers only — the two writers are blocked by name in eslint.config.mjs.
+import { getMutedSeedAnime } from '@/lib/reco/seedMutes';
 import { loadSimilarTo, type SimilarSources } from '@/lib/reco/similarFetch';
 import type { Lang } from '@/lib/i18n';
 import { buildRelationIndex, resolveRelations, type RelationIndex } from '@/lib/domain/relations';
@@ -48,7 +50,7 @@ import {
   getBoxes, getBox, createBox, updateBox, setBoxMembers, rankBoxCandidates,
 } from '@/lib/reco/boxes';
 import { DEFAULT_BOX_EMOJI } from '@/models/anime';
-import type { AnimeRecord, RecoContribution, SortColumn } from '@/models/anime';
+import type { AnimeRecord, RecoContribution, RecoMeta, SortColumn } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 /** Default page size for list_anime; the tool schema caps the ceiling. */
@@ -461,13 +463,69 @@ export interface RecommendParams {
   lang?: Lang;
 }
 
+/** One of the owner's own titles, and how much of the feed it is responsible for. */
+export interface McpSeedInfluence {
+  id: string;
+  title: string;
+  /** Candidates this seed is the PRIMARY backer of — what "dominates my feed" means. */
+  leads: number;
+  /** Candidates it backs at all (primary or second). */
+  appears: number;
+}
+
 export interface RecommendResult {
   items: McpRecommendation[];
   total: number;
   /** ISO timestamp of the last cache refresh, or null if it has never run. */
   lastRefresh: string | null;
+  /**
+   * The heaviest seeds behind the RETURNED items — the aggregate `becauseOf`
+   * does not give, since it is per card.
+   *
+   * ⚠️ **The window matters, and it is deliberately the returned slice rather
+   * than the whole narrowed feed.** Seed concentration is a top-of-feed
+   * phenomenon: measured on the live store, the leading seed holds 15% of the
+   * top 20, 8% of the top 50 and 1% of all 968 candidates, and by the full-feed
+   * window the titles actually dominating the top are no longer even in the top
+   * five. A whole-feed tally would therefore answer a question nobody asked and
+   * would hide the one being asked. `window` states the denominator so a share
+   * can be computed rather than guessed.
+   */
+  seedInfluence: McpSeedInfluence[];
+  /** How many items `seedInfluence` was tallied over — the share's denominator. */
+  seedInfluenceWindow: number;
+  /**
+   * Seeds the owner has muted (« ne plus partir de ce titre »). Reported so a
+   * concentration reading is not made against a stale picture, and so the same
+   * title is not proposed for muting twice. Omitted when there are none.
+   */
+  mutedSeeds?: Array<{ id: string; title: string }>;
   /** Set when the answer is empty or degraded, so a thin feed is never silent. */
   note?: string;
+}
+
+/** How many seeds to report. The binding constraint here is TOKENS, not rows. */
+const SEED_INFLUENCE_LIMIT = 5;
+
+/**
+ * Tally `topSeeds` across the feed. Exported so the leads-before-appears
+ * ordering can be asserted: the two disagree whenever a seed backs many
+ * candidates without ever being the strongest voice on one, and it is `leads`
+ * that matches what the owner perceives.
+ */
+export function projectSeedInfluence(metas: RecoMeta[]): McpSeedInfluence[] {
+  const rows = new Map<string, McpSeedInfluence>();
+  for (const meta of metas) {
+    meta.topSeeds.forEach((seed, rank) => {
+      const row = rows.get(seed.id) ?? { id: seed.id, title: seed.title, leads: 0, appears: 0 };
+      row.appears += 1;
+      if (rank === 0) row.leads += 1;
+      rows.set(seed.id, row);
+    });
+  }
+  return [...rows.values()]
+    .sort((a, b) => b.leads - a.leads || b.appears - a.appears)
+    .slice(0, SEED_INFLUENCE_LIMIT);
 }
 
 const DEFAULT_RECO_LIMIT = 15;
@@ -565,7 +623,18 @@ export function recommend(params: RecommendParams, titleLang: TitleLanguage): Re
     note = `${ranked.length} candidates ranked, but none matched the filters.`;
   }
 
-  return { items, total: filtered.length, lastRefresh: data.lastRefresh, ...(note ? { note } : {}) };
+  const muted = getMutedSeedAnime().map(a => ({ id: a.id, title: getPrimaryTitle(a, titleLang) }));
+
+  return {
+    items,
+    total: filtered.length,
+    lastRefresh: data.lastRefresh,
+    // Over `items`, not `filtered` — see the field's note on the window.
+    seedInfluence: projectSeedInfluence(filtered.slice(0, limit).map(f => f.recoMeta)),
+    seedInfluenceWindow: Math.min(limit, filtered.length),
+    ...(muted.length > 0 ? { mutedSeeds: muted } : {}),
+    ...(note ? { note } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------

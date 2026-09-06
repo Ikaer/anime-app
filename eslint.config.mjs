@@ -70,6 +70,16 @@ const WRITE_MODULES = [
   '@/lib/reco/feedback',
 ].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
 
+const SEED_MUTE_WRITE_MESSAGE =
+  "Muting a seed is the OWNER's call, not this surface's. Reading the mutes is fine " +
+  "(getSeedMutes / getSeedMuteSet / getMutedSeedAnime) and is what lets a model report which " +
+  "titles dominate the feed; writing one is not. A mute silently changes every later ranking, " +
+  "so a model that could set one would be tuning the answer it is about to give — the same " +
+  "'marking its own homework' objection that keeps ratings and statuses read-only, and a " +
+  "sharper one than boxes faced, since a box is a named object the owner sees on /boxes while " +
+  "a mute is a subtraction. The tool surface reports the diagnosis; the owner clicks the mute " +
+  "in the app (the feed card's seed hint, or the « Sources » sidebar section).";
+
 const READ_ONLY_MESSAGE =
   'The MCP surface is read-only: it exists so a model can ASK about the local record, ' +
   'not edit it. Reads are fine (getAnimeForDisplay, getAnimeByCanonicalId, the get*/list* ' +
@@ -161,6 +171,17 @@ export default defineConfig([
               importNames: ['deleteBox'],
               allowTypeImports: true,
               message: BOX_WRITE_MESSAGE,
+            },
+            {
+              // Seed mutes: the READERS are the point of the tool surface (a
+              // model should be able to say which of the owner's titles is
+              // dominating the feed, and which are already muted), so this is a
+              // name block rather than a `WRITE_MODULES` pattern — the pattern
+              // would take `getSeedMutes` down with the writers.
+              name: '@/lib/reco/seedMutes',
+              importNames: ['addSeedMute', 'removeSeedMute'],
+              allowTypeImports: true,
+              message: SEED_MUTE_WRITE_MESSAGE,
             },
           ],
           patterns: [

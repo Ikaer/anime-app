@@ -198,6 +198,88 @@ The audit's remaining ideas were assessed and not built: a **predicted-rating mo
 
 **Feedback (👍 "bonne pioche" / 👎 "pas pour moi").** Durable standalone store `user/reco_feedback.json` (`id → 'up'|'down'`) in `DATA_PATH`, decoupled from the transient feed. Thumbing a feed card files the verdict and removes it; **both** up and down ids are hard-excluded from the feed server-side in `computeFeed` (a 👍'd title isn't in the MAL list, so without this it would resurrect on reload). Two effects: (1) **re-rank** — the `feedback` source is an IDF-weighted genre+studio profile over the 👍 set (own tunable slider, shows in the explain as "Comme tes bonnes pioches …"); 👎 items fold into the existing `rejection` profile (hide + negative taste, no separate slider — an intentional 👍/👎 asymmetry). (2) **reshape** — at refresh, 👍 anime join the crowd **seeds** (synthetic `FEEDBACK_SEED_WEIGHT`, no MAL score) so their MAL crowd recos pull *new* candidates into the feed. The `dismissed` sub-view is replaced by two review-and-undo lists (`?rev=up` / `?rev=down`). URL key `rev`. The legacy pure-hide `user/reco_dismissed.json` is **gone** — it was kept read-only "so dismissed titles stay excluded", but no such file existed on the live store, so the exclusion and its MAL-keyed lookup were dead weight.
 
+### « Ne plus partir de ce titre » — seed mutes
+
+A durable set of canonical ids that stop acting as SEEDS, in `user/seed_mutes.json`
+(a bare `string[]`, beside `hidden.json` / `reco_feedback.json` / `rating_intent.json`).
+The title keeps its score, keeps counting in `/stats`, stays in its boxes and stays
+excluded from the feed as already-seen — all it loses is the right to project crowd
+edges and to feed the positive taste profile. Store is
+[reco/seedMutes.ts](src/lib/reco/seedMutes.ts), filed in `reco/` for `feedback.ts`'s
+reason: it is an engine annotation, off the seven-slice join, so a write here cannot
+change an assembled row and does not invalidate the row cache.
+
+**It removes a term from the sum; it never adds a negative one**, and that is the
+whole design. Measured on the live store, three titles (Kimi no Na wa, Koe no Katachi,
+GITS) were the PRIMARY backer of 5 of the top 20; muting them dropped that cluster
+(Kimi no Suizou #2 → #291, Kokoro ga Sakebitagatterunda #7 → out of the top 300,
+Byousoku 5cm #15 → #165) and moved nothing else. The two shapes NOT to reach for:
+
+- ⚠️ **Subtracting a disliked set's crowd edges** is the negative-crowd-seeds
+  experiment that was built, measured monotonically worse at all three cutoffs and
+  reverted (see the ⚠️ above) — it cancels `crowd` rather than adding signal. A mute
+  has no such failure mode because it asserts nothing.
+- ⚠️ **An "anti-box" folding these titles into the `rejection` profile is
+  arithmetically a no-op.** The titles worth muting are high-scored completions, so
+  they sit in `likedAnimes`; `buildDiscriminativeProfiles` nets each side's rate
+  against the other, so their genres, studios and T1 staff cancel to ~zero. Removing
+  them from the positive side IS the mute.
+
+⚠️ **The gate lives in TWO places and neither is redundant.** `getSeeds()` covers the
+ranking's taste profiles AND `refresh.ts`'s fetch from one filter (the seed definition
+is one function) — but `computeFeed` does not read `getSeeds` for the crowd
+accumulation, it iterates `data.seeds` from the **cache**, whose edges were fetched
+before the mute existed. So both crowd loops carry their own `continue`, and it sits
+**before the weight branches**: inside the threshold branch, a muted title that is
+also 👍'd would fall through to the fallback and keep seeding at `FEEDBACK_SEED_WEIGHT`.
+Verified by measurement — 0 of 704 topSeed attributions name a muted seed, in normal
+and niche mode, with the muted titles thumbed-up.
+
+⚠️ **`anchored.ts` deliberately does NOT honour it.** On `/mix`, `/boxes`' recos tab and
+« Plus comme ça » the anchor is something the reader just picked; silencing it there
+would be the annotation overruling an explicit choice. A mute is about what the feed
+*starts from on its own*.
+
+⚠️ **Any tally of "which seed dominates" must be WINDOWED to the top of the feed.**
+Concentration is a top-of-feed phenomenon and washes out completely at full length:
+live-measured, the leading seed holds 15% of the top 20, 8% of the top 50 and **1% of
+all 968 candidates**, and over the full feed the titles actually crowding the top no
+longer place in the top five at all. A whole-feed tally ranks the merely-prolific seeds
+above the ones the reader is complaining about. `RecoSeedsSection` uses `TALLY_WINDOW =
+50`; the MCP tallies the RETURNED slice and reports `seedInfluenceWindow` as the
+denominator. Ordering is `leads` (candidates a seed is the strongest backer of) with
+`appears` only as a tie-break — the two disagree exactly for a broadly-connected title
+that is second on everything and decisive on nothing. Both rules are pinned in
+[tests/mcp/seedInfluence.test.ts](tests/mcp/seedInfluence.test.ts).
+
+**UI is two placements, both on `/recommendations`** — no URL key, since this is durable
+state like `hidden.json` rather than view state. (1) A quiet ⊘ on the card's
+« Recommandé par les fans de X » hint: that sentence IS the diagnosis, so the fix sits
+on it. `AnimeCardView` takes `onMuteSeed` and the feed is the only caller. (2) The
+« Sources » sidebar section — the seeds behind the visible feed, ranked by `leads`, with
+the muted ones struck through below a divider carrying the ↩ undo. Muting **auto-expands
+that section** (a card mute otherwise has no confirmation and its undo is collapsed out
+of sight), and the collapsed header states the muted count so an old mute stays findable.
+Write route is `POST`/`DELETE /api/anime/animes/[id]/seed-mute`, `hide.ts`'s shape for
+`rating-intent.ts`'s reason — a `user/` annotation with no remote to fan out to.
+
+**The MCP reads it and must never write it.** `recommend` honours mutes for free (it goes
+through `computeFeed`) and reports `seedInfluence` / `seedInfluenceWindow` / `mutedSeeds`
+so a model can state the concentration and *suggest* a mute. ⚠️ `addSeedMute` /
+`removeSeedMute` are blocked **by name** in [eslint.config.mjs](eslint.config.mjs) — a
+name block rather than a `WRITE_MODULES` pattern, which would take the readers down with
+them. A mute silently changes every ranking that follows, so a model able to set one
+would be tuning the answer it is about to give: the same objection that keeps ratings
+read-only, and sharper than the boxes carve-out faced, since a box is a named object the
+owner sees on `/boxes` while a mute is a subtraction.
+
+⚠️ **`scripts/backtest-reco.js` will score a mute WORSE, and that is not an argument
+against it.** The harness grades on titles the owner went on to complete and score >= 8,
+so removing a genuine 8+ seed removes real predictive signal. The harness judges ranking
+changes; a mute is not one — it is the owner overriding the ranking on purpose, the same
+category as the `num_episodes` commitment knob that was rejected, but inverted: that one
+was a guess dressed as a model change, this one is the owner speaking directly.
+
 ### MAL sync
 
 - `/api/anime/mal/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)

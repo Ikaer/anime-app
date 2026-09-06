@@ -6,8 +6,10 @@ import {
   RecoFiltersSection,
   RecoWeightPresetsSection,
   RecoWeightsSection,
+  RecoSeedsSection,
   GenresSection,
 } from '@/components/anime/sidebar';
+import type { MutedSeed } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
@@ -23,6 +25,7 @@ export default function RecommendationsPage() {
 
   // Feed data.
   const [animes, setAnimes] = useState<RecoCard[]>([]);
+  const [mutedSeeds, setMutedSeeds] = useState<MutedSeed[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -37,7 +40,7 @@ export default function RecommendationsPage() {
 
   // Sidebar collapse state (local — not URL-persisted on this page).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    recos: true, views: true, weights: false, filters: true, genres: false, display: true,
+    recos: true, views: true, seeds: false, weights: false, filters: true, genres: false, display: true,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -77,6 +80,7 @@ export default function RecommendationsPage() {
       if (res.ok) {
         const data = await res.json();
         setAnimes(data.animes || []);
+        setMutedSeeds(data.mutedSeeds || []);
         if (!state.review) setRecoLastRefresh(data.lastRefresh ?? null);
       } else {
         const errorData = await res.json().catch(() => ({}));
@@ -155,6 +159,30 @@ export default function RecommendationsPage() {
     }
   };
 
+  /**
+   * « Ne plus partir de ce titre » / « Repartir de ce titre ».
+   *
+   * Both refetch rather than patching state locally: a mute changes which
+   * candidates EXIST and how every remaining one scores, so there is no
+   * optimistic edit that would be honest — dropping the muted seed's cards
+   * client-side would leave the rest of the feed at its old ranks and positions.
+   */
+  const setSeedMute = async (seedId: string, muted: boolean) => {
+    try {
+      const res = await fetch(`/api/anime/animes/${seedId}/seed-mute`, {
+        method: muted ? 'POST' : 'DELETE',
+      });
+      if (!res.ok) throw new Error('failed');
+      // Muting is most often done from a CARD, where the only feedback would
+      // otherwise be the feed quietly re-ranking. Opening « Sources » puts the
+      // title that just went quiet — and its ↩ undo — directly in view.
+      if (muted) setExpanded(prev => ({ ...prev, seeds: true }));
+      await loadFeed();
+    } catch {
+      setError(t('reco.seedMuteFailed'));
+    }
+  };
+
   // ↩ Remettre from a review list: clear the verdict and drop it from the list.
   const handleRemoveFeedback = async (animeId: string) => {
     try {
@@ -194,6 +222,25 @@ export default function RecommendationsPage() {
       <CollapsibleSection title={t('section.views')} isExpanded={expanded.views} onToggle={() => toggle('views')}>
         <RecoWeightPresetsSection onApply={(w) => update({ weights: w })} />
       </CollapsibleSection>
+
+      {/* Only on the feed itself — the review sub-views (`rev=up` / `rev=down`)
+          are flat lists with no seeds behind them, so the tally would read 0. */}
+      {!state.review && (
+        <CollapsibleSection
+          title={mutedSeeds.length > 0
+            ? t('reco.section.seedsMuted', { count: mutedSeeds.length })
+            : t('reco.section.seeds')}
+          isExpanded={expanded.seeds}
+          onToggle={() => toggle('seeds')}
+        >
+          <RecoSeedsSection
+            metas={animes.map(a => a.recoMeta).filter((m): m is RecoMeta => !!m)}
+            muted={mutedSeeds}
+            onMute={(id) => setSeedMute(id, true)}
+            onUnmute={(id) => setSeedMute(id, false)}
+          />
+        </CollapsibleSection>
+      )}
 
       <CollapsibleSection title={t('reco.sourceWeights')} isExpanded={expanded.weights} onToggle={() => toggle('weights')}>
         <RecoWeightsSection
@@ -279,6 +326,7 @@ export default function RecommendationsPage() {
                 onRemoveFeedback={handleRemoveFeedback}
                 feedbackMode={state.review ?? 'feed'}
                 allExplainsOpen={showAllExplains}
+                onMuteSeed={state.review ? undefined : (seedId) => setSeedMute(seedId, true)}
               />
             )}
           </div>
