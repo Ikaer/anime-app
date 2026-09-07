@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeRecord, RecoMeta, RecoVerdict } from '@/models/anime';
+import { AnimeRecord, AffinityMark, AnticipationMark, RecoMeta, RecoVerdict } from '@/models/anime';
 import { getStatusFilterKey, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
@@ -9,7 +9,13 @@ import { Button } from '@/components/shared';
 import DiscrepancyBadge from './DiscrepancyBadge';
 import styles from './AnimeCardView.module.css';
 
-type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
+type RecoCard = AnimeRecord & {
+  recoMeta?: RecoMeta;
+  /** The main list's taste mark — see `lib/reco/affinity.ts`. */
+  affinity?: AffinityMark;
+  /** Pre-air member count, ranked within its season. Never set once a mean exists. */
+  anticipation?: AnticipationMark;
+};
 
 interface AnimeCardViewProps {
     animes: RecoCard[];
@@ -29,6 +35,21 @@ interface AnimeCardViewProps {
      * comme ça » would silence an anchor the reader had just selected.
      */
     onMuteSeed?: (seedId: string, seedTitle: string) => void;
+}
+
+/**
+ * The mark's tooltip: which of the owner's own tastes this title matched.
+ *
+ * A badge that cannot say why it fired is the failure the MCP audit is a
+ * standing lesson about — a confident label with no visible basis gets trusted
+ * or dismissed on vibes rather than read.
+ */
+function formatAffinityHint(mark: AffinityMark, t: TFunction): string {
+  const parts = mark.why
+    .filter(w => w.values.length > 0)
+    .map(w => `${t(`reco.source.${w.field}.label` as TranslationKey)} : ${w.values.join(', ')}`);
+  const head = t(mark.tier === 'strong' ? 'affinity.strongTitle' : 'affinity.notableTitle');
+  return parts.length > 0 ? `${head}\n${parts.join('\n')}` : head;
 }
 
 function formatRecoHint(meta: RecoMeta, t: TFunction): string {
@@ -257,6 +278,15 @@ export default function AnimeCardView({
                             {anime.catalog.airingStatus === 'currently_airing' && <div className={styles.pulsingDot} />}
                             {formatStatus(anime.catalog.airingStatus)}
                         </div>
+                        {anime.affinity && (
+                            <div
+                                className={`${styles.affinityBadge} ${anime.affinity.tier === 'strong' ? styles.affinityStrong : styles.affinityNotable}`}
+                                title={formatAffinityHint(anime.affinity, t)}
+                            >
+                                <span className={styles.affinityIcon}>{anime.affinity.tier === 'strong' ? '★' : '☆'}</span>
+                                {t(anime.affinity.tier === 'strong' ? 'affinity.strong' : 'affinity.notable')}
+                            </div>
+                        )}
                         {onHideToggle && (
                             <button
                                 className={styles.closeBtn}
@@ -380,9 +410,26 @@ export default function AnimeCardView({
                                     <span className={styles.personalStatusText}>{t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}</span>
                                 </span>
                             )}
-                            <span className={`${styles.score} ${getScoreClass(anime.catalog.mean)}`}>
-                                {anime.catalog.mean ? anime.catalog.mean.toFixed(2) : 'N/A'}
-                            </span>
+                            {/* Anticipation REPLACES the score rather than joining it:
+                                it only exists on titles with no mean, and once a show
+                                airs its member count stops being hype and becomes
+                                success, which the mean already reports. */}
+                            {!anime.catalog.mean && anime.anticipation ? (
+                                <span
+                                    className={`${styles.anticipation} ${anime.anticipation.percentile >= 0.9 ? styles.anticipationHot : ''}`}
+                                    title={t('affinity.anticipationTitle', {
+                                        users: anime.anticipation.users.toLocaleString(),
+                                        rank: anime.anticipation.rank,
+                                        total: anime.anticipation.cohort,
+                                    })}
+                                >
+                                    🔥 {t('affinity.anticipationRank', { rank: anime.anticipation.rank })}
+                                </span>
+                            ) : (
+                                <span className={`${styles.score} ${getScoreClass(anime.catalog.mean)}`}>
+                                    {anime.catalog.mean ? anime.catalog.mean.toFixed(2) : 'N/A'}
+                                </span>
+                            )}
                         </div>
                         {anime.recoMeta && formatRecoHint(anime.recoMeta, t) && (
                             <div className={styles.recoHint}>{renderRecoHint(anime.recoMeta, t, onMuteSeed)}</div>

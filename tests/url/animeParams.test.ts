@@ -42,7 +42,7 @@ const SEASONS = keysOf({
 
 const SORT_COLUMNS = keysOf({
   title: 0, mean: 0, start_date: 0, status: 0, num_episodes: 0,
-  rank: 0, popularity: 0, num_list_users: 0, num_scoring_users: 0,
+  rank: 0, popularity: 0, num_list_users: 0, num_scoring_users: 0, affinity: 0,
 } satisfies Record<SortColumn, 0>);
 
 /**

@@ -4,6 +4,9 @@ import { SortColumn, SortDirection } from '@/models/anime';
 import { useT, type TranslationKey } from '@/lib/i18n';
 
 const SORT_OPTIONS: Array<{ key: SortColumn; labelKey: TranslationKey }> = [
+  // First in the list on purpose: at season start it is the only column with
+  // anything to say — `mean` is null on every row of a season that has not aired.
+  { key: 'affinity', labelKey: 'field.affinity' },
   { key: 'title', labelKey: 'field.title' },
   { key: 'mean', labelKey: 'field.score' },
   { key: 'start_date', labelKey: 'field.startDate' },

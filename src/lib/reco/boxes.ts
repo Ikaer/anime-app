@@ -34,6 +34,8 @@ import {
   FIELD_EXTRACTORS,
   computeIdf,
   buildFieldProfile,
+  flooredFieldMatch,
+  MATCH_DENOM_FLOOR,
 } from '@/lib/reco/scoring';
 
 const BOXES_FILE = dataFile('user/boxes.json');
@@ -203,57 +205,6 @@ function boxExtractors(minRank: number): Record<MetaField, (a: AnimeRecord) => F
   };
 }
 
-/**
- * Denominator floors for the box's own `fieldMatch`, per field.
- *
- * ⚠️ **Not cosmetic — without this the ranker is dominated by titles that carry
- * almost no metadata.** `fieldMatch` scores `Σ profile-weight / candidate value
- * COUNT`, which is the right normalization when candidates carry comparable
- * amounts of metadata. Over the statused list they do not: qualifying tags run
- * p25 10 / median 14 / p90 23, but 24 of 712 titles carry fewer than four. A
- * title with exactly ONE tag that happens to match therefore scores a perfect
- * 1.0 on the field carrying the whole box. Live-measured before this floor
- * existed, the `exotic-adventure` probe ranked *LONA* second and *Ghost: Yoru
- * no Hate* fourth — both on the single tag `Female Protagonist`, both ahead of
- * *Girls' Last Tour*.
- *
- * A floor says: below this much metadata there is not enough evidence to score
- * a full match, so the same overlap counts for proportionally less. Values are
- * each field's p25 over the statused list — a well-covered title is unaffected,
- * an evidence-poor one is discounted rather than excluded (excluding it would
- * hide a real member on a data gap; this only stops it *leading*).
- *
- * The floor lives here rather than in `scoring.ts` because the feed does not
- * have this problem: there `crowd` anchors the ranking and metadata only
- * re-ranks, so a sparse title cannot ride one tag to the top.
- */
-const MATCH_DENOM_FLOOR: Record<MetaField, number> = {
-  genre: 3,
-  studio: 1,
-  nsfw: 1,
-  rating: 1,
-  anilistTags: 10,
-  anilistStaff: 20,
-};
-
-/** `fieldMatch` with the floor above applied to the denominator. */
-function boxFieldMatch(
-  candidate: AnimeRecord,
-  profile: FieldProfile,
-  floor: number
-): { score: number; matched: FieldValue[] } {
-  const vals = profile.extract(candidate);
-  if (vals.length === 0) return { score: 0, matched: [] };
-  let sum = 0;
-  const matched: FieldValue[] = [];
-  for (const v of vals) {
-    const w = profile.weights.get(v) || 0;
-    sum += w;
-    if (w > 0) matched.push(v);
-  }
-  return { score: sum / Math.max(vals.length, floor), matched };
-}
-
 export interface RankBoxOptions {
   limit?: number;
   /** Override for tuning probes; defaults to `BOX_WEIGHTS`. */
@@ -346,7 +297,7 @@ export function rankBoxCandidates(
     for (const field of BOX_FIELDS) {
       if (weights[field] <= 0) continue;
       const profile = profiles[field];
-      const hit = boxFieldMatch(anime, profile, MATCH_DENOM_FLOOR[field]);
+      const hit = flooredFieldMatch(anime, profile, MATCH_DENOM_FLOOR[field]);
       if (hit.score <= 0) continue;
       const weighted = weights[field] * hit.score;
       score += weighted;

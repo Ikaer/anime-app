@@ -116,6 +116,7 @@ const SORT_TO_CODE: Record<SortColumn, string> = {
   popularity: 'p',
   num_list_users: 'lu',
   num_scoring_users: 'su',
+  affinity: 'af',
 };
 
 const CODE_TO_SORT: Record<string, SortColumn> = Object.fromEntries(

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeSidebar, AnimeListHeader, AnimeCardView, FirstRunOnboarding } from '@/components/anime';
-import { AnimeRecord, StatusFilterValue } from '@/models/anime';
+import { AnimeListRow, AnimeRecord, StatusFilterValue } from '@/models/anime';
 import { useAnimeUrlState } from '@/hooks';
 import { useT } from '@/lib/i18n';
 
@@ -10,7 +10,10 @@ export default function AnimePage() {
   const { filters, display, updateFilters, setSidebarExpanded, setCardsPerRow, isReady } = useAnimeUrlState();
 
   // Data state
-  const [animes, setAnimes] = useState<AnimeRecord[]>([]);
+  // `AnimeListRow`, not `AnimeRecord`: the API attaches the affinity and
+  // anticipation marks as siblings of the record, and dropping them here would
+  // silently strip the badges before the grid ever sees them.
+  const [animes, setAnimes] = useState<AnimeListRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   // First-run gate: null = checking, true = registry is empty → onboarding.

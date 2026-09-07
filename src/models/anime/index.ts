@@ -734,7 +734,7 @@ export interface SyncMetadata {
 }
 
 // Filter and sort options
-export type SortColumn = 'title' | 'mean' | 'start_date' | 'status' | 'num_episodes' | 'rank' | 'popularity' | 'num_list_users' | 'num_scoring_users';
+export type SortColumn = 'title' | 'mean' | 'start_date' | 'status' | 'num_episodes' | 'rank' | 'popularity' | 'num_list_users' | 'num_scoring_users' | 'affinity';
 export type SortDirection = 'asc' | 'desc';
 
 // Seasons (shared across API and UI)
@@ -770,6 +770,39 @@ export type SourceWeights = Record<RecoSource, number>;
 
 /** A user's explicit thumb on a recommendation: 👍 keep / 👎 not for me. */
 export type RecoVerdict = 'up' | 'down';
+
+// ---------------------------------------------------------------------------
+// « Recommandé » — the taste mark on the main list (see lib/reco/affinity.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Two tiers rather than one, so a glance carries a ranking without a sort.
+ * `strong` cuts at the 97th percentile of the scoreable unseen catalog,
+ * `notable` at the 90th — a fixed population, so a weak season is allowed to
+ * come out with two marks and a strong one with fifteen.
+ */
+export type AffinityTier = 'strong' | 'notable';
+
+/** The mark itself, computed per request and attached beside the record. */
+export interface AffinityMark {
+  tier: AffinityTier;
+  score: number;
+  /** Which fields earned it, strongest first — the tooltip's whole content. */
+  why: { field: string; values: string[] }[];
+}
+
+/**
+ * MAL member count read as anticipation, ranked within the title's own season.
+ * Only ever present on a title with no `mean` yet — see `buildAnticipationIndex`
+ * for why it is scoped that way and why it stays out of the affinity score.
+ */
+export interface AnticipationMark {
+  users: number;
+  rank: number;
+  cohort: number;
+  /** 1 = most anticipated of its season, 0 = least. */
+  percentile: number;
+}
 
 /**
  * One hand-drawn taste axis — « une boîte » — over the owner's own watched list.
@@ -860,9 +893,23 @@ export interface RecoMeta {
  */
 export type ImageSize = 0 | 1 | 2 | 3;
 
+/**
+ * A list row: the record plus the two per-request marks.
+ *
+ * ⚠️ Sibling fields on a COPY, never written onto the record. `getAnimeForDisplay()`
+ * hands back the shared row-cache array, and the `jsonStore` shared-reference
+ * contract means a mutation there leaks into every later reader — the same
+ * reason `RecoCard` is `AnimeRecord & { recoMeta? }` rather than a field on
+ * `AnimeRecord`.
+ */
+export type AnimeListRow = AnimeRecord & {
+  affinity?: AffinityMark;
+  anticipation?: AnticipationMark;
+};
+
 // API response model for anime list endpoint
 export interface AnimeListResponse {
-  animes: AnimeRecord[];
+  animes: AnimeListRow[];
   total: number;
   // Filters echoed back as strings as they appear in query for traceability
   filters: {
@@ -880,4 +927,14 @@ export interface AnimeListResponse {
   sort: { column: SortColumn; direction: SortDirection };
   page: { limit: number | 'all'; offset: number; count: number };
   mode: 'full' | 'compact';
+  /**
+   * What the « Recommandé » pass could see. `scoreable` well below `unseen`
+   * means AniList metadata is missing, not that nothing suits the owner — an
+   * absent mark has two very different meanings and only this can separate them.
+   */
+  affinity?: {
+    scoreable: number;
+    unseen: number;
+    seedCount: number;
+  };
 }

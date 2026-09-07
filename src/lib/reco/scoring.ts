@@ -258,6 +258,61 @@ export function fieldMatch(candidate: AnimeRecord, profile: FieldProfile): { sco
 }
 
 /**
+ * Denominator floors for `flooredFieldMatch`, per field.
+ *
+ * ⚠️ **Not cosmetic — without this a ranker is dominated by titles that carry
+ * almost no metadata.** `fieldMatch` scores `Σ profile-weight / candidate value
+ * COUNT`, which is the right normalization when candidates carry comparable
+ * amounts of metadata. They often do not: qualifying tags run p25 10 / median
+ * 14 / p90 23 over the statused list, but 24 of 712 titles carry fewer than
+ * four. A title with exactly ONE tag that happens to match therefore scores a
+ * perfect 1.0 on whichever field is carrying the ranking. Live-measured before
+ * this floor existed, the box ranker put *LONA* second and *Ghost: Yoru no
+ * Hate* fourth — both on the single tag `Female Protagonist`, both ahead of
+ * *Girls' Last Tour*.
+ *
+ * A floor says: below this much metadata there is not enough evidence to score
+ * a full match, so the same overlap counts for proportionally less. Values are
+ * each field's p25 over the statused list — a well-covered title is unaffected,
+ * an evidence-poor one is discounted rather than excluded (excluding it would
+ * hide a real match on a data gap; this only stops it *leading*).
+ *
+ * **The feed does not use it, and that is not an oversight**: there `crowd`
+ * anchors the ranking and metadata only re-ranks, so a sparse title cannot ride
+ * one tag to the top. The floor is for the rankers that have no such anchor —
+ * `boxes.ts` (which measured it into existence) and `affinity.ts`, whose whole
+ * population is season-start titles carrying a median of 4 tags. It lives here
+ * rather than in either of them because two copies of a measured constant is
+ * one copy too many.
+ */
+export const MATCH_DENOM_FLOOR: Record<MetaField, number> = {
+  genre: 3,
+  studio: 1,
+  nsfw: 1,
+  rating: 1,
+  anilistTags: 10,
+  anilistStaff: 20,
+};
+
+/** `fieldMatch` with a minimum denominator — see `MATCH_DENOM_FLOOR`. */
+export function flooredFieldMatch(
+  candidate: AnimeRecord,
+  profile: FieldProfile,
+  floor: number
+): { score: number; matched: FieldValue[] } {
+  const vals = profile.extract(candidate);
+  if (vals.length === 0) return { score: 0, matched: [] };
+  let sum = 0;
+  const matched: FieldValue[] = [];
+  for (const v of vals) {
+    const w = profile.weights.get(v) || 0;
+    sum += w;
+    if (w > 0) matched.push(v);
+  }
+  return { score: sum / Math.max(vals.length, floor), matched };
+}
+
+/**
  * Share of a weighted set's total mass carried by each value.
  *
  * The scale-free form the netting below needs: raw mass is not comparable

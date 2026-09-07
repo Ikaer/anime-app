@@ -1,9 +1,15 @@
 declare const styles: {
   readonly "actionButton": string;
   readonly "actions": string;
+  readonly "affinityBadge": string;
+  readonly "affinityIcon": string;
+  readonly "affinityNotable": string;
+  readonly "affinityStrong": string;
   readonly "airingBadge": string;
   readonly "altTitle": string;
   readonly "animeImage": string;
+  readonly "anticipation": string;
+  readonly "anticipationHot": string;
   readonly "card": string;
   readonly "cardContent": string;
   readonly "cardGrid": string;

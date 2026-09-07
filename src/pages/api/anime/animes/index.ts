@@ -2,7 +2,36 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { applyNarrowingFilters, getStatusFilterKey, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
-import { SortColumn, SortDirection, AnimeListResponse } from '@/models/anime';
+import { buildAffinityIndex, buildAnticipationIndex, type AffinityIndex } from '@/lib/reco/affinity';
+import { getFeedback, feedbackIds } from '@/lib/reco/feedback';
+import { AnimeRecord, AnticipationMark, SortColumn, SortDirection, AnimeListResponse, AnimeListRow } from '@/models/anime';
+
+/**
+ * The « Recommandé » marks, memoized on the row array's IDENTITY — the WeakMap
+ * trick `byCredits`, `api/anime/genres` and `getFranchiseIndex` all use. The row
+ * array is replaced whenever a slice's mtime moves, so this self-invalidates
+ * with the store and never needs a TTL.
+ *
+ * It has to be computed over the whole catalog rather than over the page: the
+ * tier cuts are percentiles of the entire scoreable unseen population, which a
+ * 200-row slice cannot see. Measured at ~230 ms for 25.6k records, once per
+ * store change; every request after that is a Map lookup.
+ */
+const affinityCache = new WeakMap<AnimeRecord[], {
+  affinity: AffinityIndex;
+  anticipation: Map<string, AnticipationMark>;
+}>();
+
+function getMarks(all: AnimeRecord[]) {
+  const hit = affinityCache.get(all);
+  if (hit) return hit;
+  const built = {
+    affinity: buildAffinityIndex(all, { downIds: feedbackIds(getFeedback(), 'down') }),
+    anticipation: buildAnticipationIndex(all),
+  };
+  affinityCache.set(all, built);
+  return built;
+}
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -31,7 +60,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     } = req.query;
 
     // Start from full dataset
-    let animeList = getAnimeForDisplay();
+    const allRecords = getAnimeForDisplay();
+    let animeList: AnimeRecord[] = allRecords;
+    const marks = getMarks(allRecords);
 
     // Pagination settings
     let pageLimit: number | 'all' = 200;
@@ -142,7 +173,25 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const sortColumn = sortBy as SortColumn;
     const sortDirection = sortDir as SortDirection;
 
-    animeList = sortAnimeRecords(animeList, sortColumn, sortDirection, getTitleLanguage());
+    if (sortColumn === 'affinity') {
+      // Not a `sortAnimeRecords` case: the affinity score is a per-request
+      // sibling of the record, not a catalog field, and threading the index
+      // into the shared sorter would give every other caller a parameter it has
+      // no value for. Unscored rows sort last whatever the direction, matching
+      // the `numOrNull` rule there.
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      animeList = [...animeList].sort((a, b) => {
+        const av = marks.affinity.scores.get(a.id);
+        const bv = marks.affinity.scores.get(b.id);
+        if (av === undefined || bv === undefined) {
+          if (av === bv) return 0;
+          return av === undefined ? 1 : -1;
+        }
+        return av < bv ? -dir : av > bv ? dir : 0;
+      });
+    } else {
+      animeList = sortAnimeRecords(animeList, sortColumn, sortDirection, getTitleLanguage());
+    }
 
     // Pagination already defaulted to 200; no view-specific overrides
 
@@ -160,9 +209,19 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // since. De-bloating the payload properly is still open.
     const useFull = typeof full === 'string' && full.toLowerCase() === 'true';
 
+    // Attach the marks to the PAGE only, on copies — `animeList` may still be
+    // the shared row-cache array, and writing to a row would leak into every
+    // other reader of the store (the `jsonStore` shared-reference contract).
+    const rows: AnimeListRow[] = animeList.map(anime => {
+      const affinity = marks.affinity.marks.get(anime.id);
+      const anticipation = marks.anticipation.get(anime.id);
+      if (!affinity && !anticipation) return anime;
+      return { ...anime, ...(affinity ? { affinity } : {}), ...(anticipation ? { anticipation } : {}) };
+    });
+
     // Return the filtered and sorted (and limited) list
     const response: AnimeListResponse = {
-      animes: animeList,
+      animes: rows,
       total: totalBeforePaging,
       filters: {
         search: (typeof search === 'string' ? search : null),
@@ -178,7 +237,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       },
       sort: { column: sortColumn, direction: sortDirection },
       page: { limit: pageLimit, offset: pageOffset, count: animeList.length },
-      mode: useFull ? 'full' : 'compact'
+      mode: useFull ? 'full' : 'compact',
+      affinity: {
+        scoreable: marks.affinity.coverage.scoreable,
+        unseen: marks.affinity.coverage.unseen,
+        seedCount: marks.affinity.seedCount,
+      }
     };
     res.json(response);
 
