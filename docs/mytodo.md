@@ -20,6 +20,10 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
   consumer: model field + `catalogFromAnilist` + the `/stats` read + coverage/dedup
   against the cast slice + a re-sweep. Weigh it against the reason cast is
   off-join at all — `catalog/anilist.json` is parsed on every cold row build.
+  **The naming half is settled** (measured 2026-08-26, see
+  [CREDITS-ID-NAMESPACE.md](CREDITS-ID-NAMESPACE.md)): the bucket is a production
+  committee, "Producteurs" stays, and the 9.7% of licence-buyers in it must NOT be
+  filtered out by name.
 - **A real per-episode watch log.** `/activity` shipped, but SIMKL gives exactly
   ONE `watched_at` per title, so the feed can say when you last touched a show
   and never which day a given episode was. Capturing SIMKL's activity endpoint on
