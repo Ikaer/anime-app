@@ -51,7 +51,7 @@
  */
 
 import { AnimeRecord, AffinityMark, AffinityTier, AnticipationMark } from '@/models/anime';
-import { getEffectiveStatus, getEffectiveScore } from '@/lib/domain/animeUtils';
+import { getEffectiveStatus, getEffectiveScore, getRatingIntent } from '@/lib/domain/animeUtils';
 import { buildRelationIndex } from '@/lib/domain/relations';
 import {
   TUNING,
@@ -197,6 +197,14 @@ function isScoreable(a: AnimeRecord): boolean {
  * Score every unseen title against the owner's taste, and mark the top of the
  * distribution.
  *
+ * ⚠️ **The mark is the MAIN LIST's, and is deliberately not threaded into
+ * `/recommendations` or `/mix`**, which render the same `AnimeCardView`. Those
+ * surfaces already answer "why is this here" with `recoMeta` — a second,
+ * differently-derived verdict beside it would read as a contradiction whenever
+ * they disagreed, and they measure different things (crowd-anchored affinity vs
+ * metadata-only). A title that is ★ on `/` therefore shows nothing there, on
+ * purpose.
+ *
  * Eligibility follows the feed's `SEEN_STATUSES` rather than "has any status":
  * `plan_to_watch` is a title you flagged, not one you judged, and both
  * `computeFeed` and `/mix` count it as unseen — a mark that disagreed would put
@@ -255,6 +263,13 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
   for (const anime of all) {
     const status = getEffectiveStatus(anime);
     if (status && SEEN_STATUSES.has(status)) continue;
+    // A rating intent means « seen, and I have decided about scoring it » —
+    // « À revoir » or « Sans avis ». Today those ride on a `completed` title, so
+    // the line above already catches them; this one states the rule the mark
+    // actually needs, rather than inheriting it from where the intent happens to
+    // be stored. Recommending a show the owner has watched and declined to score
+    // is the premature-sequel failure in another costume.
+    if (getRatingIntent(anime)) continue;
     if (anime.hidden || downIds.has(anime.id)) continue;
     unseen++;
     if (!isScoreable(anime)) continue;

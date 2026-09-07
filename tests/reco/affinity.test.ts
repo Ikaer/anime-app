@@ -26,6 +26,7 @@ interface Fixture {
   genres?: string[];
   tags?: string[];
   hidden?: boolean;
+  ratingIntent?: 'rewatch' | 'no_opinion';
   mean?: number;
   users?: number;
   season?: { year: number; season: SeasonName };
@@ -48,6 +49,7 @@ const anime = (id: string, f: Fixture = {}): AnimeRecord => ({
     : {},
   provenance: { catalog: {}, personal: {} },
   hidden: f.hidden,
+  ratingIntent: f.ratingIntent,
 } as unknown as AnimeRecord);
 
 /** A seed set that makes `Action`+`sf` the owner's taste. */
@@ -97,6 +99,29 @@ test('the mark is for unseen, unhidden, un-thumbed-down titles only', () => {
     assert.equal(index.marks.has(id), false, `${id} must not be marked`);
     assert.equal(index.scores.has(id), false, `${id} must not be scored`);
   }
+});
+
+test('a title carrying a rating intent is never marked', () => {
+  // « À revoir » / « Sans avis » mean the owner has SEEN it and decided about
+  // scoring it. They ride on a `completed` title today, so `SEEN_STATUSES`
+  // already excludes them — this pins the rule itself, so moving where the
+  // intent is stored cannot quietly put « Recommandé » on a show that was
+  // watched and deliberately left unscored.
+  const all = [
+    ...seeds(),
+    anime('declined', { status: 'completed', ratingIntent: 'no_opinion', genres: ['Action'], tags: ['Space'] }),
+    anime('rewatch', { status: 'completed', ratingIntent: 'rewatch', genres: ['Action'], tags: ['Space'] }),
+    // The case that pins the intent check ITSELF rather than the status check:
+    // an intent with no seen status. `getRatingIntent` does not require one, so
+    // only the explicit guard excludes this row.
+    anime('declinedNoStatus', { ratingIntent: 'no_opinion', genres: ['Action'], tags: ['Space'] }),
+    anime('fresh', { genres: ['Action'], tags: ['Space'] }),
+  ];
+  const index = buildAffinityIndex(all);
+  assert.equal(index.marks.has('fresh'), true);
+  assert.equal(index.marks.has('declined'), false);
+  assert.equal(index.marks.has('rewatch'), false);
+  assert.equal(index.marks.has('declinedNoStatus'), false);
 });
 
 test('no seeds, no marks — an empty taste profile badges nothing', () => {
