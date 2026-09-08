@@ -35,6 +35,18 @@ interface AnimeCardViewProps {
      * comme ça » would silence an anchor the reader had just selected.
      */
     onMuteSeed?: (seedId: string, seedTitle: string) => void;
+    /**
+     * « Oui, c'est ça » / « Non » — the box recos tab's LABELING pair.
+     *
+     * ⚠️ **Deliberately not `onFeedback`, and the two must never be merged.**
+     * The thumbs write `user/reco_feedback.json`, which reshapes the GLOBAL feed
+     * (👍 titles become crowd seeds, 👎 ones join the rejection profile). A box
+     * verdict is box-local: « oui » files the title in this box, « non » adds it
+     * to this box's « écartés » and says nothing about any other surface. Wiring
+     * the box's buttons to the thumbs would let a judgement about one taste axis
+     * silently re-rank « Pour toi ».
+     */
+    onBoxVerdict?: (animeId: string, verdict: 'yes' | 'no') => void;
 }
 
 /**
@@ -104,6 +116,7 @@ export default function AnimeCardView({
     onFeedback,
     onRemoveFeedback,
     feedbackMode,
+    onBoxVerdict,
     allExplainsOpen,
     onMuteSeed
 }: AnimeCardViewProps) {
@@ -453,7 +466,7 @@ export default function AnimeCardView({
                             whether a SIMKL slice existed, which hid the row from every
                             AniList-only or local-only user even though DiscrepancyBadge
                             had something to render for them. */}
-                        {(feedbackMode || anime.discrepancy || anime.personal.status || anime.personal.score) && (
+                        {(feedbackMode || onBoxVerdict || anime.discrepancy || anime.personal.status || anime.personal.score) && (
                         <div className={styles.actions}>
                             <DiscrepancyBadge anime={anime} />
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (
@@ -487,6 +500,31 @@ export default function AnimeCardView({
                                     </Button>
                                 </>
                             ) : null}
+                            {/* The box recos tab, with seen titles left in: each
+                                card is a question about THIS box, and answering
+                                it either way removes the card from the list. */}
+                            {onBoxVerdict && (
+                                <>
+                                    <Button
+                                        onClick={() => onBoxVerdict(anime.id, 'yes')}
+                                        variant="primary-positive"
+                                        size="xs"
+                                        className={styles.actionButton}
+                                        title={t('boxReco.yesTitle')}
+                                    >
+                                        {t('boxReco.yes')}
+                                    </Button>
+                                    <Button
+                                        onClick={() => onBoxVerdict(anime.id, 'no')}
+                                        variant="primary-negative"
+                                        size="xs"
+                                        className={styles.actionButton}
+                                        title={t('boxReco.noTitle')}
+                                    >
+                                        {t('boxReco.no')}
+                                    </Button>
+                                </>
+                            )}
                         </div>
                         )}
                     </div>

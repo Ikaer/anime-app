@@ -840,6 +840,83 @@ export interface Box {
   description?: string;
   /** Canonical ids. Order is insertion order and carries no meaning. */
   members: string[];
+  /**
+   * Canonical ids judged « pas cet axe » — a durable "no", not a skip.
+   *
+   * Skips were deliberately transient ("a skip means not now"), which was
+   * defensible at three boxes and is the dominant cost at 26: the same
+   * proposals are re-judged on every visit. "No, not this axis" is a judgement
+   * of the same kind as membership, so it persists like one.
+   *
+   * ⚠️ **This list contains UNWATCHED ids.** The recos tab surfaces unseen
+   * candidates and « Non » files them here, so nothing that renders or counts
+   * it may join it against the watched list — that is the failure shape that
+   * made a seiyuu filmography derived from the cast slice return only titles
+   * already watched.
+   *
+   * ⚠️ **Box-local, and it must never reach the global feed.** It is not a 👎,
+   * not a hide and not a seed mute: excluded from `Absolute cinema` says
+   * nothing about `/recommendations`.
+   *
+   * Absent rather than `[]` when empty, like `description` and `emoji`.
+   */
+  excluded?: string[];
+  /**
+   * `UserGroup` ids whose collapse applies in THIS box — a lens over
+   * `members`, never a second membership list.
+   *
+   * ⚠️ **Application is declared per box; the definition stays global.** A
+   * group is not a universal fact, it is a judgement made with an aim in mind,
+   * and the aim is the box. Auto-applying every group wherever its members
+   * happened to land was designed first and is wrong: a broad « Gundam » group
+   * made for a mecha box (the wide-scope component is 131 entries) would then
+   * fuse 08th MS Team and Iron-Blooded Orphans inside `Absolute cinema`, where
+   * they are two separate artistic achievements deliberately filed as two. The
+   * defect is the silence — the owner was never asked that question here.
+   *
+   * ⚠️ **A declaration NEVER adds membership.** `members` is authoritative and
+   * every consumer (`/mix?box=`, `computeAnchored`, `box_candidates`,
+   * `list_boxes`) reads it alone, so a title present here but not in `members`
+   * would be invisible to the very ranking this exists to fix. Under the lens
+   * rule a declared-but-unfiled group contributes nothing, a deleted group is
+   * an unresolvable id to ignore, and removing a title needs no bookkeeping.
+   */
+  groups?: string[];
+  /** ISO 8601. */
+  createdAt: string;
+}
+
+/**
+ * « Mes regroupements » — a hand-drawn statement that several titles ARE one
+ * thing, stored in `user/groups.json`.
+ *
+ * **Why it exists.** `buildFieldProfile` weights every box member `() => 1`, so
+ * N filed entries of one show cast N votes. Measured on the live store, that
+ * gives the biggest show **50% of the vote** in three of the 13 non-empty boxes
+ * (Demon Slayer 7 + Bleach 5 + Chainsaw Man 2 = `Shonen I dig`), and holding
+ * the exclusion set fixed, collapsing each show to one vote changes 11 of the
+ * top 15 proposals for `Absolute cinema`. It is a ranking bug, not a cosmetic
+ * one.
+ *
+ * **The provider relation graph is a suggestion it is seeded from, never an
+ * authority it obeys** — that is the whole point of drawing one by hand. A
+ * title may belong to several groups, deliberately: the owner picks different
+ * subsets of seasons depending on what a box is about.
+ *
+ * ⚠️ **Durable user data.** Like `boxes.json`, no provider can re-supply it. It
+ * belongs in CLAUDE.md's "costs that are real" list, not the reprocess-freely
+ * one.
+ *
+ * Client-safe here for `DEFAULT_BOX_EMOJI`'s reason: the quick-edit panes
+ * resolve their own groups regions in the browser, and importing the type from
+ * the `fs`-bound store would be an `import type` away from a bundling mistake.
+ */
+export interface UserGroup {
+  /** Slug minted from the name and deduped — the same mint as `Box`. */
+  id: string;
+  name: string;
+  /** Canonical ids. */
+  members: string[];
   /** ISO 8601. */
   createdAt: string;
 }

@@ -15,6 +15,7 @@ import { getFranchiseIndex } from '@/lib/domain/franchise';
 import { canClearStatus } from '@/lib/providers/registry';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection, ProvenanceChip } from '@/components/anime';
+import AnimeBoxChips from '@/components/anime/boxes/AnimeBoxChips';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
 
 /**
@@ -512,6 +513,22 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
               </ul>
             </div>
           )}
+        </section>
+
+        {/* ---------- « Mes boîtes » ----------
+            Sits immediately after the personal state because it answers the same
+            KIND of question — "what do I make of this" — where the sections above
+            answer "what else is like this". It is also the fix for the labeling
+            surface's real problem: the chip grid on `/boxes` asks an O(titles ×
+            boxes) question (473 groups × 26 boxes) that nobody answers 473 times,
+            and 15% coverage after two sessions is the evidence. Here the question
+            is the inverse and cheap: one title, one row. */}
+        <section className="section">
+          <h2>{t('detail.boxes')}</h2>
+          <p className="reco-sub">{t('detail.boxes.sub')}</p>
+          {/* ⚠️ Files THIS title, never its franchise component — the unasked-for
+              bulk add is what put 487 unwatched entries of 1,539 into the boxes. */}
+          <AnimeBoxChips animeId={anime.id} />
         </section>
 
         {/* ---------- Catalog facts (MAL authority) ---------- */}

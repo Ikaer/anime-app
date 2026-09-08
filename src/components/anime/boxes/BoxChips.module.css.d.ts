@@ -3,6 +3,7 @@ declare const styles: {
   readonly "chip": string;
   readonly "emoji": string;
   readonly "empty": string;
+  readonly "error": string;
   readonly "label": string;
   readonly "on": string;
   readonly "row": string;

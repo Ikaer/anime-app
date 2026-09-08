@@ -11,6 +11,8 @@ import {
 } from '@/lib/store';
 import { computeAnchored, type AnchoredEdge } from '@/lib/reco/anchored';
 import { getBox } from '@/lib/reco/boxes';
+import { getGroups } from '@/lib/reco/groups';
+import { resolveBoxUnits } from '@/lib/domain/boxUnits';
 import { fetchRecoEdges } from '@/lib/reco/refresh';
 import { fetchAnilistRecommendations } from '@/lib/providers/anilist/sync';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
@@ -59,8 +61,9 @@ export const MAX_MIX_ANCHORS = 12;
  * per-anchor edge cache means the fetch is paid ONCE for the process's life.
  * AniList costs one request for all of them either way (`id_in`).
  *
- * Over the cap, the highest-scored members win — a box's best-loved entries are
- * the ones whose crowd neighbourhoods best describe what the box is.
+ * Over the cap, the highest-scored UNITS win — a box's best-loved entries are
+ * the ones whose crowd neighbourhoods best describe what the box is, and the
+ * anchors are collapsed by group before the cap is applied (see the handler).
  */
 export const MAX_BOX_ANCHORS = 40;
 
@@ -169,8 +172,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // anchor disappearing from the store, and the response says which were kept.
   let anchorIds = Array.from(new Set(requested)).filter(id => byId.has(id));
   if (box) {
-    anchorIds = anchorIds
-      .sort((a, b) => (byId.get(b)!.personal.score || 0) - (byId.get(a)!.personal.score || 0))
+    // ⚠️ **Anchors are collapsed by group: ONE representative per unit** (§6.3),
+    // the highest-scored member.
+    //
+    // A representative here, and fractional weights in `rankBoxCandidates` —
+    // the two are not inconsistent. The profile ranker reads every member's
+    // METADATA, so splitting a unit's vote across its cours keeps a tag all four
+    // share at 1 and a tag unique to one at 1/4. This route fetches CROWD EDGES
+    // per anchor: you either ask MAL about a title or you do not, so a
+    // fractional weight has nothing to apply to. Asking about seven Demon Slayer
+    // cours would return seven near-identical neighbourhoods, eat the
+    // `MAX_BOX_ANCHORS` budget with one show, and cost six extra MAL requests.
+    const units = resolveBoxUnits(box, getGroups());
+    const byScore = (a: string, b: string) =>
+      (byId.get(b)!.personal.score || 0) - (byId.get(a)!.personal.score || 0);
+    const present = new Set(anchorIds);
+    anchorIds = units.units
+      .map(unit => unit.members.filter(id => present.has(id)).sort(byScore)[0])
+      .filter((id): id is string => !!id)
+      // Best-loved units first, because the cap bites here: a box's strongest
+      // entries are the ones whose crowd neighbourhoods best describe it.
+      .sort(byScore)
       .slice(0, MAX_BOX_ANCHORS);
   } else {
     anchorIds = anchorIds.slice(0, MAX_MIX_ANCHORS);
@@ -193,6 +215,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   );
   // Seen titles are excluded by default here (unlike the drill-down): the pool
   // is N anchors wide and the question is what to watch NEXT.
+  //
+  // ⚠️ The BOX recos tab flips that default on its own side and sends
+  // `includeSeen=true` — with seen titles in, each card becomes a question about
+  // the box (« Oui, c'est ça » / « Non ») rather than a watch suggestion, and
+  // that is the only fill mechanism that works for a FORM axis, because the
+  // crowd graph encodes tone where no catalog field does (§6.3). The default
+  // here stays off: `/mix` is a different question.
   const includeSeen = req.query.includeSeen === 'true';
 
   const { mediaType, search, minScore, maxScore, minYear, maxYear, genres } = req.query;

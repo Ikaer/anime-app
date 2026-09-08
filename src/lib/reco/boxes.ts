@@ -22,11 +22,15 @@
  * client-safety block.
  */
 
-import { AnimeRecord, Box, DEFAULT_BOX_EMOJI } from '@/models/anime';
+import { AnimeRecord, Box, UserGroup, DEFAULT_BOX_EMOJI } from '@/models/anime';
 import { getAnimeForDisplay } from '@/lib/store';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { getEffectiveStatus } from '@/lib/domain/animeUtils';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
+import { mintSlugId } from '@/lib/domain/slug';
+import { resolveBoxUnits, unitWeightFn } from '@/lib/domain/boxUnits';
+import { nextExcluded, nextGroups, nextMembers } from '@/lib/domain/boxWrites';
+import { getGroups } from '@/lib/reco/groups';
 import {
   type MetaField,
   type FieldValue,
@@ -49,28 +53,11 @@ export function getBox(id: string): Box | undefined {
   return getBoxes().find(b => b.id === id);
 }
 
-/**
- * Slug from the name, deduped against what already exists. Kept readable rather
- * than random because it is the `/boxes/[id]` URL — a bookmarked box should say
- * which one it is.
- */
-function mintId(name: string, taken: Set<string>): string {
-  const base = name
-    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    || 'boite';
-  if (!taken.has(base)) return base;
-  for (let n = 2; ; n++) {
-    const candidate = `${base}-${n}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-}
-
 export function createBox(name: string, emoji?: string, description?: string): Box {
   const boxes = getBoxes();
   const desc = description?.trim();
   const box: Box = {
-    id: mintId(name, new Set(boxes.map(b => b.id))),
+    id: mintSlugId(name, new Set(boxes.map(b => b.id))),
     name: name.trim() || 'Sans nom',
     emoji: emoji?.trim() || DEFAULT_BOX_EMOJI,
     // Absent rather than empty: `description` is optional on the model, and an
@@ -132,6 +119,46 @@ export function setBoxMembers(id: string, memberIds: string[]): Box | undefined 
   box.members = [...new Set(memberIds)];
   writeJsonFile(BOXES_FILE, boxes);
   return box;
+}
+
+/**
+ * Persist an incremental membership edit.
+ *
+ * `add`/`remove` rather than a full replacement, for the API route's race
+ * argument: many chips against many boxes means many in-flight writes, and a
+ * client-side read-modify-write would let the second clobber the first.
+ *
+ * The DECISION is `domain/boxWrites.ts`'; this is the file half.
+ */
+export function editBoxMembers(id: string, add: string[] = [], remove: string[] = []): Box | undefined {
+  return applyToBox(id, box => nextMembers(box, add, remove));
+}
+
+/** Persist an « écartés » edit. See `nextExcluded` for the two rules. */
+export function editBoxExcluded(id: string, add: string[] = [], remove: string[] = []): Box | undefined {
+  return applyToBox(id, box => nextExcluded(box, add, remove));
+}
+
+/** Persist a group-declaration edit. See `nextGroups` for the lens rule. */
+export function editBoxGroups(id: string, declare: string[] = [], undeclare: string[] = []): Box | undefined {
+  return applyToBox(id, box => nextGroups(box, declare, undeclare));
+}
+
+/**
+ * Read, apply a pure reducer, write back.
+ *
+ * The one seam every incremental box write goes through, so the rules in
+ * `domain/boxWrites.ts` cannot be bypassed by a caller that reaches for the file
+ * directly — and so those rules stay testable without a store on disk.
+ */
+function applyToBox(id: string, reduce: (box: Box) => Box): Box | undefined {
+  const boxes = getBoxes();
+  const index = boxes.findIndex(b => b.id === id);
+  if (index === -1) return undefined;
+  const next = reduce(boxes[index]);
+  boxes[index] = next;
+  writeJsonFile(BOXES_FILE, boxes);
+  return next;
 }
 
 /** Every box holding this title — the chip row's state, for one card. */
@@ -211,6 +238,15 @@ export interface RankBoxOptions {
   weights?: Record<MetaField, number>;
   /** Override for tuning probes; defaults to `BOX_TAG_MIN_RANK`. */
   tagMinRank?: number;
+  /**
+   * The global « Mes regroupements » definitions; defaults to `getGroups()`.
+   *
+   * A parameter so `scripts/probe-box.js` can sweep a hand-written fixture —
+   * ⚠️ which is how a collapse is measured at all, since the weighting has NO
+   * effect until a group is DECLARED on the box (`Box.groups`), and a live store
+   * whose boxes declare nothing ranks exactly as it did before.
+   */
+  groups?: UserGroup[];
 }
 
 /** Matched values shown per field. Enough to justify a row, not enough to read as a list. */
@@ -280,8 +316,21 @@ export function rankBoxCandidates(
 
   const idf = idfFor(all, minRank);
   const extractors = boxExtractors(minRank);
+
+  // ⚠️ **One vote per UNIT, not per entry.** `() => 1` here was a ranking bug,
+  // not a simplification: N filed cours of one show cast N votes, which on the
+  // live store handed the biggest show 50% of the profile in three of the 13
+  // non-empty boxes (Demon Slayer 7 + Bleach 5 + Chainsaw Man 2 = `Shonen I
+  // dig`). What it drowned is the giveaway — holding the exclusion set fixed,
+  // collapsing changed 11 of the top 15 proposals for `Absolute cinema` and
+  // surfaced the box's own third show from under its Bleach and Link Click blocs.
+  //
+  // The collapse is `domain/boxUnits.ts`' and reads only the box's DECLARED
+  // groups, so a box that declares none is weighted exactly as before — the
+  // fix is inert until the owner says two entries are one thing.
+  const weightOf = unitWeightFn(resolveBoxUnits(box, options.groups ?? getGroups()));
   const profiles = Object.fromEntries(
-    BOX_FIELDS.map(f => [f, buildFieldProfile(members, () => 1, extractors[f], idf[f])])
+    BOX_FIELDS.map(f => [f, buildFieldProfile(members, weightOf, extractors[f], idf[f])])
   ) as Record<MetaField, FieldProfile>;
 
   const franchises = getFranchiseIndex(all, 'direct');

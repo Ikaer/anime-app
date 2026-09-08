@@ -1,11 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getBox, updateBox, deleteBox, setBoxMembers } from '@/lib/reco/boxes';
+import { getBox, updateBox, deleteBox, setBoxMembers, editBoxMembers, editBoxExcluded, editBoxGroups } from '@/lib/reco/boxes';
 import { isCanonicalId } from '@/lib/store';
 
 /**
  * One box.
  *   PATCH  { name?, emoji?, description? }    — rename / re-emoji / re-describe (the id never moves)
- *   PUT    { members } | { add?, remove? }    — membership
+ *   PUT    { members } | { add?, remove?, exclude?, unexclude?, declare?, undeclare? }
+ *          — membership, the « écartés » set, and which groups collapse here
  *   DELETE                                    — drop the box
  *
  * ⚠️ **`add`/`remove` exist because the chip rows would otherwise race.** The
@@ -54,15 +55,34 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
         const add = req.body?.add === undefined ? [] : idList(req.body.add);
         const remove = req.body?.remove === undefined ? [] : idList(req.body.remove);
-        if (!add || !remove) {
-          return res.status(400).json({ error: 'add/remove must be arrays of canonical ids' });
+        const exclude = req.body?.exclude === undefined ? [] : idList(req.body.exclude);
+        const unexclude = req.body?.unexclude === undefined ? [] : idList(req.body.unexclude);
+        if (!add || !remove || !exclude || !unexclude) {
+          return res.status(400).json({ error: 'add/remove/exclude/unexclude must be arrays of canonical ids' });
         }
-        if (add.length === 0 && remove.length === 0) {
-          return res.status(400).json({ error: 'nothing to do: pass members, add or remove' });
+        // Group ids are slugs, not canonical ids, so they get their own check.
+        const slugList = (v: unknown): string[] | null =>
+          v === undefined ? [] : (Array.isArray(v) && v.every(x => typeof x === 'string' && x.length > 0) ? v as string[] : null);
+        const declare = slugList(req.body?.declare);
+        const undeclare = slugList(req.body?.undeclare);
+        if (!declare || !undeclare) {
+          return res.status(400).json({ error: 'declare/undeclare must be arrays of group ids' });
         }
-        const dropped = new Set(remove);
-        const next = [...box.members.filter(m => !dropped.has(m)), ...add];
-        return res.status(200).json({ box: setBoxMembers(boxId, next) });
+
+        const nothing = [add, remove, exclude, unexclude, declare, undeclare].every(a => a.length === 0);
+        if (nothing) {
+          return res.status(400).json({ error: 'nothing to do: pass members, add, remove, exclude, unexclude, declare or undeclare' });
+        }
+
+        // Order matters in exactly one place: `editBoxExcluded` drops whatever it
+        // excludes from `members`, so it must run AFTER the membership edit or a
+        // combined { add, exclude } would re-file the title it just excluded.
+        // The other two are independent — `declare` never touches membership.
+        let updated = box;
+        if (add.length > 0 || remove.length > 0) updated = editBoxMembers(boxId, add, remove) ?? updated;
+        if (exclude.length > 0 || unexclude.length > 0) updated = editBoxExcluded(boxId, exclude, unexclude) ?? updated;
+        if (declare.length > 0 || undeclare.length > 0) updated = editBoxGroups(boxId, declare, undeclare) ?? updated;
+        return res.status(200).json({ box: updated });
       }
 
       case 'DELETE':

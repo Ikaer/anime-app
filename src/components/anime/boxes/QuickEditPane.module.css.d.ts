@@ -1,0 +1,33 @@
+declare const styles: {
+  readonly "act": string;
+  readonly "acts": string;
+  readonly "card": string;
+  readonly "cardOn": string;
+  readonly "cardTitle": string;
+  readonly "chev": string;
+  readonly "chip": string;
+  readonly "count": string;
+  readonly "empty": string;
+  readonly "group": string;
+  readonly "groupAct": string;
+  readonly "groupActs": string;
+  readonly "groupBody": string;
+  readonly "groupCount": string;
+  readonly "groupHead": string;
+  readonly "groupName": string;
+  readonly "groupOn": string;
+  readonly "head": string;
+  readonly "meta": string;
+  readonly "nudge": string;
+  readonly "pane": string;
+  readonly "paneDrop": string;
+  readonly "poster": string;
+  readonly "region": string;
+  readonly "regionLabel": string;
+  readonly "stack": string;
+  readonly "stackPoster": string;
+  readonly "text": string;
+  readonly "title": string;
+};
+export = styles;
+

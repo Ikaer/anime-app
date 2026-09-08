@@ -22,6 +22,7 @@ const SERVER_ONLY = [
   '@/lib/reco/data',
   '@/lib/reco/feed',
   '@/lib/reco/feedback',
+  '@/lib/reco/groups',
   '@/lib/reco/refresh',
   '@/lib/reco/similar',
 ].flatMap((p) => [p, p.replace(/^@\//, '**/')]);
@@ -69,6 +70,15 @@ const WRITE_MODULES = [
   '@/lib/reco/refresh',
   '@/lib/reco/feedback',
 ].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
+
+const GROUP_WRITE_MESSAGE =
+  "« Mes regroupements » are the OWNER's call. Reading them is fine (getGroups / getGroup / " +
+  "groupsContaining), and saying « these four cours look like one show » is exactly the kind of " +
+  "suggestion this surface is open for; writing one is not. A group is GLOBAL and declared per " +
+  "box, so editing its members silently re-ranks every box that declared it — a wider blast " +
+  "radius than the box carve-out faced, where a wrong fill costs a few chip clicks in one place. " +
+  "deleteGroup is worse still: like deleteBox, it throws away labeling that exists nowhere else " +
+  "and that no provider can re-supply. The owner draws a group in the blade on /boxes/[id].";
 
 const SEED_MUTE_WRITE_MESSAGE =
   "Muting a seed is the OWNER's call, not this surface's. Reading the mutes is fine " +
@@ -171,6 +181,16 @@ export default defineConfig([
               importNames: ['deleteBox'],
               allowTypeImports: true,
               message: BOX_WRITE_MESSAGE,
+            },
+            {
+              // Groups: a name block rather than a `WRITE_MODULES` pattern, for
+              // the seedMutes reason below — the pattern would take the readers
+              // down with the writers, and the readers are what let a model
+              // explain a box's unit count.
+              name: '@/lib/reco/groups',
+              importNames: ['createGroup', 'updateGroup', 'deleteGroup', 'editGroupMembers'],
+              allowTypeImports: true,
+              message: GROUP_WRITE_MESSAGE,
             },
             {
               // Seed mutes: the READERS are the point of the tool surface (a

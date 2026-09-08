@@ -1,0 +1,26 @@
+declare const styles: {
+  readonly "blade": string;
+  readonly "cancel": string;
+  readonly "close": string;
+  readonly "count": string;
+  readonly "error": string;
+  readonly "foot": string;
+  readonly "head": string;
+  readonly "hint": string;
+  readonly "name": string;
+  readonly "note": string;
+  readonly "picker": string;
+  readonly "poster": string;
+  readonly "row": string;
+  readonly "rowFocus": string;
+  readonly "rowLabel": string;
+  readonly "rowMeta": string;
+  readonly "rowText": string;
+  readonly "rowTitle": string;
+  readonly "rows": string;
+  readonly "save": string;
+  readonly "scrim": string;
+  readonly "title": string;
+};
+export = styles;
+

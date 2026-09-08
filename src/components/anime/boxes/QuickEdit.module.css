@@ -1,0 +1,213 @@
+/*
+ * Quick edit's own layout. CSS Module, not the page's `<style jsx>` — a page
+ * rule never reaches a component's own markup (CLAUDE.md).
+ */
+
+.wrap {
+  display: grid;
+  /* The rail is the filter sidebar's usual width; the rest is working space.
+     At the 1280 target that leaves ~960px for two panes, which is what makes a
+     title readable on both sides. */
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.rail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.body { min-width: 0; }
+
+/* Two panes side by side: source left, box right. */
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.picker { margin-bottom: 8px; }
+
+/* ---- the declaration nudge ---- */
+
+.nudges { margin-bottom: 10px; }
+
+.nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 8px;
+  padding: 7px 12px;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.nudgeYes {
+  margin-left: auto;
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nudgeYes:hover { background: var(--accent-hover); }
+
+/* ---- « Mes regroupements » index ---- */
+
+.index {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.indexHead {
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--text-primary);
+}
+
+.newGroup {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.newGroup:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+
+.indexList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.indexRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.indexRow:hover { background: var(--bg-tertiary); }
+
+.indexName {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* « 4/12 » — how much of the group is already in THIS box. The index's whole
+   value over a bare list is answering that without opening anything. */
+.indexCount {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.indexEmpty { font-size: 0.74rem; color: var(--text-muted); margin: 0; }
+
+/* ---- écartés ---- */
+
+.excluded {
+  margin-top: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 8px 12px 10px;
+}
+
+.excludedHead {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.excludedHead:hover { color: var(--text-primary); }
+
+.excludedEmpty { font-size: 0.76rem; color: var(--text-muted); margin: 6px 0 0; }
+
+/* ---- the bulk bar ---- */
+
+/* Fixed to the foot of the viewport: a selection is made by scrolling a ~600-row
+   pane, so a bar that scrolled with the list would be off screen exactly when it
+   is needed. */
+.bulk {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-primary);
+  border-radius: 999px;
+  padding: 7px 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.bulkCount {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bulkBtn,
+.bulkAdd {
+  border-radius: 999px;
+  font-size: 0.78rem;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bulkBtn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.bulkBtn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+.bulkAdd {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  color: #fff;
+}
+
+.bulkAdd:hover { background: var(--accent-hover); }
+
+.note { color: var(--text-muted); font-size: 0.8rem; }

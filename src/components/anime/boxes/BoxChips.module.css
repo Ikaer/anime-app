@@ -59,3 +59,13 @@
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* A write that did not land. Rendered by the container (`AnimeBoxChips`), not by
+   the chip row — which is why it lives in this module rather than in the detail
+   page's `<style jsx>` block: styled-jsx scopes only the markup a component
+   returns itself, so a page-level rule would silently match nothing here. */
+.error {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--accent-danger, #f87171);
+}

@@ -1,0 +1,26 @@
+/*
+ * The box recos tab. CSS Module, not the page's `<style jsx>` — a page rule
+ * never reaches a component's own markup (CLAUDE.md).
+ */
+
+.seen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* The tab means two different things depending on that checkbox, so it says
+   which one is on rather than leaving the reader to infer it from the cards. */
+.hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 10px 0;
+  line-height: 1.4;
+}
+
+.note { color: var(--text-muted); font-size: 0.84rem; padding: 16px 0; }
+.error { color: var(--accent-danger, #f87171); font-size: 0.85rem; }

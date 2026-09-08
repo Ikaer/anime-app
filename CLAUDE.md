@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, and a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it), `domain/boxWrites` (excluding also unfiles; declaring never files), `domain/boxComposition` (every tally counts UNITS, not entries), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -87,7 +87,8 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `sync/cron_health.json` — the cron watermark: last scheduled arrival, last scheduled run, last MANUAL run (recorded but never counted), last rejection. Feeds the `/connections` freshness indicator; see "Scheduled sync". Rebuildable in the sense that a deleted file simply reports `unknown` until the next tick.
 - `user/reco_feedback.json` — "Pour toi" thumbs, `{ canonicalId: 'up' | 'down' }` (see the "Pour toi" section)
 - `user/rating_intent.json` — why a completed title is deliberately unscored, `{ canonicalId: 'rewatch' | 'no_opinion' }` (see "Rating intent" below)
-- `user/boxes.json` — « Mes boîtes »: hand-drawn taste axes, a bare `Box[]` whose `members` are canonical ids (see the "/boxes" section)
+- `user/boxes.json` — « Mes boîtes »: hand-drawn taste axes, a bare `Box[]` whose `members` are canonical ids, plus the optional `excluded` (« écartés ») and `groups` (which regroupements collapse HERE) — see the "/boxes" section
+- `user/groups.json` — « Mes regroupements »: a bare `UserGroup[]`, the owner's own statements that several titles are ONE thing. Global definitions; a box declares which of them apply to it. ⚠️ Durable user data like `boxes.json` — no provider can re-supply it
 - `cache/recommendations.json` — cached recommendations feed data (the one **rebuildable** file: `cache/` says so) (crowd/AniList seeds + hydrated candidates); the code constant is `RECOMMENDATIONS_FILE`. **Canonical-id-keyed like every other file here** since E10 (docs/DECISIONS.md), and carrying a `v` (`RECO_CACHE_VERSION`): an older MAL-keyed file parses fine but would miss every lookup and render an empty feed silently, so a version mismatch **discards** it rather than migrating — it is `cache/`, the next refresh rebuilds it.
 - `logs/connection_log.json` — the sync-progress feed. Named like diagnostics, but it is **app data**: the Connections panel and the first-run onboarding bar *poll* it (there is no SSE for meta-sync, the cast sweep or the catalog crawl — this log IS the transport). So it lives in the store under `DATA_PATH`, **not** under `LOGS_PATH`, which consequently has no writer left and stays reserved for real debug output.
 
@@ -665,9 +666,11 @@ The detail page's second reco block ([MoreLikeThis.tsx](src/components/anime/Mor
 ### "/boxes" — « Mes boîtes », hand-drawn taste axes
 
 [/boxes](src/pages/boxes/index.tsx) + [/boxes/[id]](src/pages/boxes/[id].tsx) over
-`user/boxes.json`, with the store and both rankers in
+`user/boxes.json` and `user/groups.json`, with the store and both rankers in
 [src/lib/reco/boxes.ts](src/lib/reco/boxes.ts). A box is a label the owner draws by hand
 over their WATCHED list — "quand je suis fatigué", "pour l'animation", "concept bizarre".
+Rebuilt v1 → v2 in one swap; docs/boxesV2/DESIGN.md is the design and
+docs/boxesV2/PLAN.md records what each phase measured.
 
 - **Why it exists: the feed's positive signal is derived entirely from SCORES.** Every
   seed is a `completed` title scored >= 8, so nothing records *why* one was liked. The
@@ -678,70 +681,188 @@ over their WATCHED list — "quand je suis fatigué", "pour l'animation", "conce
   it is evidence that PRE-WATCH labeling fails.
 - **A box IS an anchor set, and that is the whole payoff.** `members` is a flat canonical-id
   array precisely so `computeAnchored` consumes it unmodified: `/api/anime/recommendations/mix`
-  takes `box=<id>` alongside its own `ids=`, and the detail page's `recos` tab is `/mix`
-  pointed at the box. `MAX_BOX_ANCHORS = 40` rather than `MAX_MIX_ANCHORS = 12` — `ids=` is
-  arbitrary URL input, a box is a curated file, and the per-anchor edge cache makes MAL's
-  one-request-per-anchor a once-per-process cost. Over the cap the highest-scored members win.
-- ⚠️ **Franchise scope is `direct`, never `franchise`** — measured on the live store:
-  712 statused titles collapse to **467** groups under sequel/prequel vs 447 under the wider
-  scope, but the wider one chains Gundam SEED, 00, Iron-Blooded Orphans and Witch from Mercury
-  into ONE **129-entry** component. It saves 20 decisions and costs a single chip click that
-  files four unrelated shows. Same reasoning as `/catch-up`'s « suites directes ».
+  takes `box=<id>` alongside its own `ids=`, and the recos tab is `/mix` pointed at the box.
+  `MAX_BOX_ANCHORS = 40` rather than `MAX_MIX_ANCHORS = 12` — `ids=` is arbitrary URL input,
+  a box is a curated file, and the per-anchor edge cache makes MAL's one-request-per-anchor a
+  once-per-process cost.
 - ⚠️ **Membership persists as canonical ids, never a franchise key**, even though the UI writes
-  a whole component per click. Components are derived from relation data that changes on every
+  a whole show per click. Components are derived from relation data that changes on every
   AniList sync, so a stored key would silently re-scope; ids also give the per-title override a
   recap movie or a comedy spin-off needs.
+
+#### « Mes regroupements » — the owner's own units, in `user/groups.json`
+
+A `UserGroup` (`{ id, name, members, createdAt }`) is a global, reusable, hand-drawn
+statement that several titles **are one thing**. The provider relation graph is a
+*suggestion* it is seeded from, never an authority it obeys. Store is
+[reco/groups.ts](src/lib/reco/groups.ts) (`fs`, server-only); the arithmetic is the
+client-safe [domain/boxUnits.ts](src/lib/domain/boxUnits.ts), because the quick-edit panes
+resolve their own regions in the browser. ⚠️ Durable user data — no provider can re-supply
+it; it belongs in the "costs that are real" list.
+
+- ⚠️ **It is an OVERLAY, not a membership unit.** `Box.members` stays a flat id array and a
+  group never appears in it. Per-title control survives ("TYBW in, base Bleach out" would
+  otherwise mean splitting a GLOBAL group and silently re-scoping every other box using it);
+  `/mix?box=`, `computeAnchored` and the four MCP box tools keep reading a flat id array; and
+  reuse costs one click rather than a rebuild. "Add all 17" is a **button**, not the storage
+  model.
+- ⚠️ **Application is declared PER BOX** (`Box.groups`), definition stays global. Auto-applying
+  every group wherever its members landed was designed first and **rejected**: a broad
+  « Gundam » group made for a mecha box would fuse 08th MS Team and Iron-Blooded Orphans in
+  `Absolute cinema`, where they are two achievements deliberately filed as two. The silence is
+  the problem — the owner never asked that question there. A group may be declared by any
+  number of boxes; editing its members changes all of them, which is the intended behaviour.
+- ⚠️ **A declaration NEVER adds membership.** `members` is authoritative, `groups` is a lens
+  over it. If declaring also filed the titles, the two would be sources of truth that can
+  drift — and every consumer reads `members` alone, so a title in `groups` but not `members`
+  would be invisible to the very ranking this fixes. Under the lens rule a declared-but-unfiled
+  group contributes nothing and a deleted group is an unresolvable id to ignore, which is why
+  `deleteGroup` deliberately does NOT sweep `Box.groups`.
+- **Collapse arithmetic** (`resolveBoxUnits`): connected components of "shares a DECLARED group
+  with", **restricted to the box's own members**, weighting each member `1 / componentSize`.
+  Both restrictions are load-bearing — counting a group's unfiled members would divide TYBW's
+  four cours by five. The invariant it buys: **every unit sums to exactly one vote**, whatever
+  the topology. Two overlapping declared groups fuse into one unit in the MATH and still render
+  as two cards; math and display answer different questions and need not agree. ⚠️ Do not
+  reintroduce a single-draw rule — an earlier draft paid for that assumption with an invented
+  tie-break and a divergence marker, both removed.
+- ⚠️ **Fractional weights in the profile ranker, a REPRESENTATIVE in the mix route**, and they
+  are not inconsistent. `buildFieldProfile` reads every member's metadata, so fractional
+  weighting keeps a tag all four cours share at 1 and a cour-specific one at 1/4; electing one
+  member would replace TYBW's tags with base Bleach's. `/api/anime/recommendations/mix?box=`
+  fetches CROWD EDGES per anchor — you either ask MAL about a title or you do not, so there is
+  nothing for a fraction to apply to. Live: `Shonen I dig` asks about **3** anchors instead of
+  14.
+- Pinned in [tests/domain/boxUnits.test.ts](tests/domain/boxUnits.test.ts) and
+  [tests/reco/boxWrites.test.ts](tests/reco/boxWrites.test.ts) — every rule there fails
+  SILENTLY, which is the whole reason those files exist.
+
+#### The two rankers, and which box each one works for
+
 - **The grow ranker is metadata-only and touches no network** — `computeIdfSet` /
   `buildFieldProfile` / a floored `fieldMatch` over the owner's own statused list. Crowd edges
   are the WRONG signal here: they point at titles not yet seen, which is the opposite question.
-  Two things it does NOT share with the feed, both measured with
-  `node scripts/probe-box.js` (which reruns the whole thing, `--weights` / `--tagrank` to sweep):
+  Two things it does NOT share with the feed, both measured with `node scripts/probe-box.js`:
   - **`BOX_WEIGHTS`, not `ANCHORED_WEIGHTS`.** The feed's weighting returned *Black Bullet*,
     *Freezing* and *Shield Hero* for an adventure box — every one a Kinema Citrus title, because
     Made in Abyss is. `studio` is near-binary, so `fieldMatch`'s divide-by-value-count makes a
     studio hit score ~1.0 against a tag hit's ~0.4, and studio/staff double-count the same
-    evidence. Tags now lead (1.0), studio is demoted to 0.05. Fine for the feed, wrong for
-    "is this the same KIND of thing" — a production house is not a kind of thing.
+    evidence. Tags lead (1.0), studio is demoted to 0.05.
   - **`MATCH_DENOM_FLOOR` and `BOX_TAG_MIN_RANK = 60`.** Qualifying tags run p25 10 / median 14,
     but 24 of 712 titles carry fewer than four, so a title with ONE matching tag scored a perfect
     1.0 — *LONA* ranked #2 on `Female Protagonist` alone, ahead of *Girls' Last Tour*.
+  - ⚠️ **It weights by UNIT, not by entry.** `() => 1` was a ranking bug: N filed cours cast N
+    votes, which on the live store handed the biggest show **50% of the profile in three of the
+    13 non-empty boxes** (and 71% in `Laugh++`). Measured with `probe-box.js --diff`, collapsing
+    changed 10 of the top 15 proposals for `Absolute cinema` and surfaced the box's own third
+    show from under its Bleach and Link Click blocs. The fix is **inert until a group is
+    declared** — `Bancal et je l'assume` churns 0/15 — which is §4's ruling observed rather than
+    argued.
 - ⚠️ **How well the grow loop works depends on the box, and that is the measured finding, not a
   defect.** A content axis projects beautifully (an "aventure exotique" box shares `Steampunk`
-  5/6, `Lost Civilization` 5/6, `Aviation` 4/6 and proposes Girls' Last Tour, Sound of the Sky,
-  **Mirai Shounen Conan**). A FORM axis does not: eight deliberately-weird titles shared only
-  `Philosophy` and exactly **one** T1 credit, and the ranking drifted to Death Note and Monster.
-  No catalog field encodes form. For those boxes the `recos` tab is the answer — the crowd graph
-  encodes tone even though no field does. Neither tab is a fallback for the other.
-- **Toggles, not drag-and-drop.** `/tier` drags because a score is EXCLUSIVE: one destination,
-  and leaving the source is correct. A title belongs to any number of boxes, so a card must stay
-  put, a source list that never shrinks shows no progress, and filing 467 groups across a few
-  boxes would be ~1,100 drags. [BoxChips](src/components/anime/boxes/BoxChips.tsx) is one click
-  per (group, box) pair. Writes are **incremental** (`add`/`remove`, never a full `members`
-  replacement) because the grid fires many toggles against many boxes and a read-modify-write
-  would let the second clobber the first.
+  5/6, `Lost Civilization` 5/6, `Aviation` 4/6 and proposes **Mirai Shounen Conan**). A FORM axis
+  does not: eight deliberately-weird titles shared only `Philosophy` and exactly **one** T1
+  credit, and the ranking drifted to Death Note and Monster. No catalog field encodes form. For
+  those boxes the **recos tab** is the answer — the crowd graph encodes tone even though no field
+  does. Neither tab is a fallback for the other, and the composition block (below) is what tells
+  the two apart before either is trusted.
+
+#### The pages
+
+**`/boxes` is the list of BOXES**, not of titles, and the inversion is the point. The page it
+replaced asked an O(titles × boxes) question — 473 franchise groups down the page, a 26-chip row
+under each, 12,298 cells — and the coverage said nobody answers it: **108 of 720 watched titles
+(15%) filed anywhere, 13 of 26 boxes empty** after two labeling sessions. Each card now carries
+in-place name/emoji/description editing, a picker behind `+`, an empty-box CTA, and:
+
+- **A top ten of UNITS, not of entries.** By entry, `Shonen I dig`'s top ten is seven Demon
+  Slayer cours and three other things. ⚠️ The card's `×` removes the whole UNIT — dropping only
+  the faced title of a « +6 » slot would leave six behind and re-face the slot, which reads as a
+  control that did nothing.
+- **An honest count: « 3 séries · 14 entrées ».** Where the inflation becomes visible per box and
+  therefore fixable by judgement. ⚠️ There is deliberately **no migration** collapsing existing
+  memberships — the four TYBW cours may well be filed on purpose.
+
+**`/boxes/[id]` is three tabs** — présentation (default), recos, écartés — with quick edit as a
+MODE on présentation rather than a fourth tab, because "what is this box" stays the page's
+answer. One request feeds all of it: `GET /api/anime/boxes/[id]/members` ships the box record,
+the resolved units, the écartés rows and the composition block.
+
+- **« De quoi cette boîte est faite »** ([domain/boxComposition.ts](src/lib/domain/boxComposition.ts))
+  — shared tags, studios, T1 staff, score range, year range. It is a DIAGNOSIS: it says whether
+  an axis is a content axis (will project) or a form axis (will not) before any ranked list is
+  trusted. Live, `Absolute cinema` — a box holding three shows — reports Bleach's composer,
+  character designer and original creator at 5/10 each. ⚠️ **Every tally counts UNITS**, or the
+  block would reproduce the inflation in the one place the owner goes to check for it; the score
+  and year RANGES are over entries on purpose, being immune to duplication. Pinned in
+  [tests/domain/boxComposition.test.ts](tests/domain/boxComposition.test.ts).
+- **Quick edit** is source-left / box-right with « écartés » as one full-width collapsible strip
+  below. ⚠️ **Each pane is TWO regions** — a groups region (one card per group with **≥2**
+  members present) over a flat region — and the two panes populate it from DIFFERENT sets: the
+  box pane shows only `box.groups`, because that region is a picture of how the ranker sees the
+  box; the source pane shows every global group, because nothing there is declared yet and the
+  region exists to let one click file a whole show. A group with one member present stays flat,
+  carrying a chip. Card body = select (shift-click ranges, Escape clears), hover buttons act on
+  one card, drag moves — and dragging a selected card drags the selection. Native HTML5 drag,
+  `/tier`'s rule. The declaration **nudge** sits ABOVE the box pane, never inside its groups
+  region, or the region would stop meaning what it means.
+- **The group blade** ([GroupBlade](src/components/anime/boxes/GroupBlade.tsx)) is a blade, not a
+  modal, so the pane being filed stays readable. Seeded from `GET /api/anime/franchise-component`
+  (direct scope) with every entry checked and the name pre-filled from the earliest AIRED member;
+  a picker for what the graph does not connect; overlaps labelled with the other group's name
+  (informational, never blocking); **unwatched entries listable and checkable**, inert until one
+  is filed. ⚠️ It measures the app header rather than hardcoding a top offset — the nav wraps to
+  two lines on a narrow viewport, i.e. exactly when a constant would be wrong.
+- **The recos tab flips `includeSeen` ON by default**, the opposite of `/mix`. With seen titles
+  in, every card is a question about the box — « Oui, c'est ça » files it, « Non » sets it aside
+  — and it is the only fill mechanism that works for a form axis. The checkbox stays; the URL
+  carries the **OFF** case (`seen=0`). ⚠️ « Non » goes through `AnimeCardView`'s `onBoxVerdict`,
+  never `onFeedback`: the thumbs reshape the GLOBAL feed, while a box verdict is box-local. ⚠️ A
+  « Oui » does not remove the card from an `includeSeen` feed on its own (the title is still a
+  crowd neighbour), so answered cards are hidden client-side.
+- ⚠️ **`Box.excluded` will contain UNWATCHED ids** — the recos tab surfaces unseen candidates and
+  « Non » files them — so nothing that renders or counts that list may join it against the
+  watched list. Same failure shape as deriving a seiyuu filmography from the cast slice. It is
+  **box-local and must never reach the global feed**: not a 👎, not a hide, not a seed mute.
+  Excluding also drops the title from `members`; un-excluding is deliberately **not** symmetric.
+
+**Toggles, not drag-and-drop, for the per-title chips.** `/tier` drags because a score is
+EXCLUSIVE: one destination, and leaving the source is correct. A title belongs to any number of
+boxes, so a card must stay put. [BoxChips](src/components/anime/boxes/BoxChips.tsx) is one click
+per (title, box) pair, and its caller is now the **anime detail page**
+([AnimeBoxChips](src/components/anime/boxes/AnimeBoxChips.tsx)) — filing became a side-effect of
+browsing rather than a labeling session. Writes are **incremental** (`add`/`remove`, never a full
+`members` replacement) because many toggles fire against many boxes and a read-modify-write would
+let the second clobber the first. The pure half of every box write lives in the client-safe
+[domain/boxWrites.ts](src/lib/domain/boxWrites.ts) so its two silent rules can be tested without
+a store on disk.
+
 - **Every box carries an emoji** (`DEFAULT_BOX_EMOJI` in `@/models/anime` — client-safe, because
   the create form is client-rendered and importing it from `reco/boxes` would pull `fs` into the
   browser bundle, which `src/pages/**` being exempt from the client-safety rule would NOT have
-  caught). An iconless chip renders shorter than its neighbours, so a row stops lining up; the
-  list projection falls back for older boxes and the detail page edits it in place.
+  caught). An iconless chip renders shorter than its neighbours, so a row stops lining up.
 - **`description` is optional prose and nothing ranks on it** — the axis stated in the owner's
   own words, so a box that is only a name months later still says where its line was drawn.
-  `rankBoxCandidates` never reads it. Unlike `emoji` it is **not** defaulted on the way out:
-  its absence is what makes the editor show a placeholder and the chip tooltip fall back to the
-  name. Editable in place on `/boxes/[id]` (blur saves, blank clears — a box must always have a
-  name, and must be allowed to have no description) and optional on the create form. The MCP
-  reads it on `list_boxes` and can write it, which is the point of exposing it there: it is the
-  one field that tells a model what a box MEANS rather than what it happens to contain, and
-  `edit_box`'s description says to overwrite it only on the owner's request.
-- Routes: `boxes/index` (list + create), `boxes/[id]/index` (PATCH/PUT/DELETE),
-  `boxes/[id]/grow`, `boxes/[id]/members`, plus
-  [watched-groups](src/pages/api/anime/watched-groups.ts) for the labeling grid. The last one
-  looks like `/quick-rate` and is not: that scopes the whole ~25k catalog and expands
-  filter-matched SEEDS to their franchises, this scopes the watched list and lets the filters
-  describe the rows themselves, because you can only box what you have seen. Both project through
-  [domain/leanRow.ts](src/lib/domain/leanRow.ts) — one shared lean row, so neither API route has
-  to import values out of the other (nothing in this repo does that; `stats.tsx` importing a
-  *type* from its route is the whole precedent).
+  Unlike `emoji` it is **not** defaulted on the way out: its absence is what makes the editor show
+  a placeholder. The MCP reads it on `list_boxes` and can write it, which is the point of
+  exposing it there.
+- **French singulars are separate keys chosen by a ternary** (`boxes.countOne` / `entriesOne`),
+  never a constructed key — building one needs a `TranslationKey` cast, and that cast is exactly
+  what disables the missing-key compile check. ⚠️ The test is `<= 1`, not `=== 1`: French takes
+  the singular at zero too, and half the boxes are empty.
+- Routes: `boxes/index` (list + create), `boxes/[id]/index` (PATCH/PUT/DELETE, with `add`/
+  `remove`/`exclude`/`unexclude`/`declare`/`undeclare`), `boxes/[id]/members` (the detail read),
+  `groups/index` + `groups/[id]` (« Mes regroupements » CRUD), `franchise-component` (the blade's
+  seed), and [watched](src/pages/api/anime/watched.ts) — the quick-edit source query, flat and
+  unpaginated. ⚠️ That last one **used to group by provider franchise and paginate**, for the
+  chip grid that no longer exists; the v2 panes group by the owner's own regroupements instead,
+  so the provider's components are the wrong axis there. ⚠️ `search` stays SERVER-side while every
+  other filter runs in the browser: `applyNarrowingFilters` matches romaji + English + Japanese +
+  synonyms, and a `LeanAnimeRow` carries only the displayed title, so a client-side match would
+  stop a `native` reader finding a show by the name on their own screen. Both project through
+  [domain/leanRow.ts](src/lib/domain/leanRow.ts), and `projectGroup` lives in
+  [domain/groupSummary.ts](src/lib/domain/groupSummary.ts), for `leanRow.ts`'s own reason —
+  nothing in this repo imports a value out of another API route.
 
 ### Tier list rating board — a dedicated page that WRITES scores
 
@@ -1039,6 +1160,14 @@ tools, in [mcp/server.ts](src/lib/mcp/server.ts) (schemas) over [mcp/tools.ts](s
   to undo, but dropping one throws away labeling that exists in exactly one place and that no
   provider can re-supply. Keep any future carve-out this shape — a named exception with a stated
   reason, never widening the pattern list.
+- ⚠️ **« Mes regroupements » did NOT get the same carve-out.** `@/lib/reco/groups` is importable
+  for its readers and its four writers (`createGroup` / `updateGroup` / `deleteGroup` /
+  `editGroupMembers`) are blocked by name, the seed-mute shape. Saying « these four cours look
+  like one show » is exactly the suggestion this surface is open for; making it is not. A group is
+  **global** and declared per box, so editing its members silently re-ranks every box that
+  declared it — a wider blast radius than boxes faced, where a wrong fill costs a few chip clicks
+  in one place. The readers stay open because they are what let a model explain a box's unit
+  count.
 - **The tools are thin adapters over the existing domain functions**, never a second
   implementation: `searchCatalog`, `computeStats`, `computeFeed`, `loadSimilarTo`,
   `applyNarrowingFilters`, `sortAnimeRecords`, `tierGap.ts`. A tool needing new behaviour gets it
@@ -1361,7 +1490,7 @@ meets on the site most of these titles come from.
 
 Everything under [src/lib/store/](src/lib/store/) uses Node.js `fs`/`path` (via `jsonStore.ts`) and must never be bundled client-side. Only **pages** (`getServerSideProps`, API routes) import it, and always as values, since they run server-side. Client **components** never need it — they get their types (`AnimeRecord`, `UserAnimeStatus`, etc.) from [@/models/anime](src/models/anime/index.ts), which has no `fs` dependency and is safe to import as values from either side.
 
-**This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers,cronSync}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{anchored,boxes,data,feed,feedback,refresh,similar}` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
+**This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers,cronSync}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{anchored,boxes,data,feed,feedback,groups,refresh,similar}` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
 
 **Next 16 removed `next lint`, and `next build` no longer lints at all**, so the guard's enforcement is deliberately re-wired through `prebuild` (`css:types && lint && test`) — that script is the only reason a build still fails on a bad import, and now the only reason it fails on a broken invariant. Don't "simplify" `prebuild` back to `css:types` alone. **CI is `npm run build` and nothing else** ([.github/workflows/ci.yml](.github/workflows/ci.yml), push to main; no `pull_request` — this repo commits straight to main), so a check that belongs in CI belongs in `prebuild`, where local and CI cannot disagree. ⚠️ The sibling `copilot-setup-steps.yml` keeps its filename and job id because **both are reserved** — GitHub's Copilot coding agent runs that exact job to prepare its environment, so renaming it unhooks the agent silently. That is why the build moved into `ci.yml` instead of that file being renamed. The config is flat (`eslint.config.mjs`, ESLint 9); the parser/plugin come from the `typescript-eslint` meta package rather than the two `@typescript-eslint/*` packages, which is also what `eslint-config-next` itself depends on. Two rules from `eslint-plugin-react-hooks` v7 (the React Compiler set: `set-state-in-effect`, `refs`) are downgraded to **warnings** there — they flag ~26 long-standing fetch-in-effect patterns that are perf advisories, not bugs, and silencing them as errors is what keeps the real errors visible. There is a **second `files` block** in the same config, unrelated to client safety: it keeps `src/lib/mcp/**` and `api/anime/mcp.ts` from importing any write path, so the MCP surface stays read-only by build failure rather than by discipline.
 
