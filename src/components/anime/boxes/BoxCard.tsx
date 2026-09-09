@@ -148,7 +148,10 @@ const BoxCard: React.FC<BoxCardProps> = ({ box, onPatch, onAdd, onRemove, href }
         <div className={styles.strip}>
           {box.top.map(entry => (
             <div key={entry.row.id} className={styles.slot}>
-              <div className={styles.thumb}>
+              {/* A collapsed unit is ringed, not just badged: « +6 » is 10px of
+                  text in a corner, and "which of these ten slots is one show and
+                  which is one entry" is the question the whole revamp is about. */}
+              <div className={`${styles.thumb} ${entry.extra > 0 ? styles.thumbUnit : ''}`}>
                 <Link href={`/anime/${entry.row.id}`} title={entry.row.title}>
                   {entry.row.picture ? (
                     <Image

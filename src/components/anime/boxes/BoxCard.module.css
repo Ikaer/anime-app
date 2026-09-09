@@ -143,6 +143,17 @@
   display: block;
   width: 74px;
   height: 105px;
+  border-radius: 6px;
+}
+
+/* The slot stands for a whole regroupement. A ring rather than a border, via
+   box-shadow: it draws OUTSIDE the 74px box and so cannot shift the strip's
+   layout, which a border on the poster would (the image is a fixed 74x105).
+   One accent colour for every unit, deliberately — the ring says "this slot is
+   more than one entry", and a colour per group would imply an identity the card
+   has no legend for. Which group it is belongs to the detail page. */
+.thumbUnit {
+  box-shadow: 0 0 0 2px var(--accent-primary);
 }
 
 .poster {

@@ -24,6 +24,13 @@
   display: block;
   width: 92px;
   height: 131px;
+  border-radius: 6px;
+}
+
+/* A collapsed unit, ringed exactly as on the landing card. box-shadow rather
+   than a border so the grid cannot shift. */
+.thumbUnit {
+  box-shadow: 0 0 0 2px var(--accent-primary);
 }
 
 .poster {

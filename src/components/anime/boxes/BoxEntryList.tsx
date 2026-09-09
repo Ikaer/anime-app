@@ -52,7 +52,9 @@ const BoxEntryList: React.FC<BoxEntryListProps> = ({ entries, actionIcon, action
 
   const slot = (row: LeanAnimeRow, extra: number, expanded: boolean, entryId: string, act: () => void) => (
     <div className={styles.slot}>
-      <div className={styles.thumb}>
+      {/* Ringed when the slot stands for a whole unit — the same signal the
+          landing card gives, so a box reads the same way at both lengths. */}
+      <div className={`${styles.thumb} ${extra > 0 ? styles.thumbUnit : ''}`}>
         <Link href={`/anime/${row.id}`} title={row.title}>
           {row.picture ? (
             <Image src={row.picture} alt="" width={92} height={131} className={styles.poster} unoptimized />

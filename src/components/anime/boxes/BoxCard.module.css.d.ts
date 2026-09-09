@@ -20,6 +20,7 @@ declare const styles: {
   readonly "slotTitle": string;
   readonly "strip": string;
   readonly "thumb": string;
+  readonly "thumbUnit": string;
 };
 export = styles;
 
