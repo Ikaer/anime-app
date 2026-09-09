@@ -837,6 +837,7 @@
   "boxes.entriesOne": "{units} show · {entries} entry",
   "boxes.descShort": "Describe the axis…",
   "boxes.showAll": "Show all",
+  "boxes.open": "Open",
   "boxes.add": "Add a title",
   "boxes.addClose": "Close",
   "boxes.remove": "Remove {title}",

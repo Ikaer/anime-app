@@ -112,9 +112,16 @@ const BoxCard: React.FC<BoxCardProps> = ({ box, onPatch, onAdd, onRemove, href }
           <button type="button" className={styles.btn} onClick={() => setPicking(p => !p)}>
             {picking ? t('boxes.addClose') : `+ ${t('boxes.add')}`}
           </button>
-          {box.count > box.top.length && (
-            <Link href={href} className={styles.btn}>{t('boxes.showAll')}</Link>
-          )}
+          {/* ⚠️ **Always rendered, never conditional on truncation.** This link was
+              behind `box.count > box.top.length`, so a box whose strip already
+              shows everything had NO route to its own detail page — 9 of the 13
+              non-empty boxes on the live store, since the strip holds ten units
+              and most boxes are smaller than that. The empty ones had their CTA
+              and the four big ones had this, so the whole middle was a dead end.
+              The label still says which case you are in. */}
+          <Link href={href} className={styles.btn}>
+            {box.count > box.top.length ? t('boxes.showAll') : t('boxes.open')}
+          </Link>
         </div>
       </div>
 

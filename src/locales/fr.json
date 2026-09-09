@@ -837,6 +837,7 @@
   "boxes.entriesOne": "{units} série · {entries} entrée",
   "boxes.descShort": "Décris l’axe…",
   "boxes.showAll": "Tout afficher",
+  "boxes.open": "Ouvrir",
   "boxes.add": "Ajouter un titre",
   "boxes.addClose": "Fermer",
   "boxes.remove": "Retirer {title}",
