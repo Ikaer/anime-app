@@ -48,8 +48,15 @@ import {
 import { projectCard, projectDetail, type McpAnimeCard, type McpAnimeDetail } from '@/lib/mcp/project';
 import {
   getBoxes, getBox, createBox, updateBox, setBoxMembers, rankBoxCandidates,
+  editBoxExcluded, editBoxGroups, BOX_TAG_MIN_RANK,
 } from '@/lib/reco/boxes';
-import { DEFAULT_BOX_EMOJI } from '@/models/anime';
+import {
+  getGroups, getGroup, createGroup, updateGroup, editGroupMembers,
+} from '@/lib/reco/groups';
+import { resolveBoxUnits, faceUnits, groupsPresentIn } from '@/lib/domain/boxUnits';
+import { buildBoxComposition, type BoxComposition } from '@/lib/domain/boxComposition';
+import { getFranchiseIndex } from '@/lib/domain/franchise';
+import { DEFAULT_BOX_EMOJI, type UserGroup } from '@/models/anime';
 import type { AnimeRecord, RecoContribution, RecoMeta, SortColumn } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -974,7 +981,19 @@ export interface McpBox {
    * there is, and a proposal has nothing to check itself against.
    */
   description?: string;
+  /** Raw entries filed. */
   count: number;
+  /**
+   * ⚠️ Resolved UNITS — « 3 séries · 14 entrées ». Read THIS as the box's real
+   * size: `count` counts filed entries, and seven cours of one show are seven
+   * of those and one unit. A proposal reasoned off `count` alone will
+   * systematically over-weight whatever the owner filed most granularly.
+   */
+  units: number;
+  /** « Mes regroupements » declared here — the ones whose collapse applies. */
+  groups?: { id: string; name: string }[];
+  /** How many titles the owner has set aside from this box. See get_box. */
+  excludedCount?: number;
   /** Member titles, best-scored first — what the box actually looks like. */
   members: { id: string; title: string; score?: number }[];
 }
@@ -983,6 +1002,8 @@ export interface McpBox {
 export function listBoxes(titleLang: TitleLanguage): { boxes: McpBox[] } {
   const all = getAnimeForDisplay();
   const byId = new Map(all.map(a => [a.id, a]));
+  const groups = getGroups();
+  const nameOf = new Map(groups.map(g => [g.id, g.name]));
   return {
     boxes: getBoxes().map(box => ({
       id: box.id,
@@ -990,6 +1011,14 @@ export function listBoxes(titleLang: TitleLanguage): { boxes: McpBox[] } {
       emoji: box.emoji || DEFAULT_BOX_EMOJI,
       ...(box.description ? { description: box.description } : {}),
       count: box.members.length,
+      units: resolveBoxUnits(box, groups).units.length,
+      // A declared id the store no longer resolves is skipped rather than
+      // reported: `deleteGroup` deliberately leaves declarations behind, so a
+      // dangling one is expected and means nothing to a caller.
+      ...(box.groups?.length
+        ? { groups: box.groups.filter(id => nameOf.has(id)).map(id => ({ id, name: nameOf.get(id)! })) }
+        : {}),
+      ...(box.excluded?.length ? { excludedCount: box.excluded.length } : {}),
       members: box.members
         .map(id => byId.get(id))
         .filter((a): a is AnimeRecord => !!a)
@@ -1069,9 +1098,18 @@ export function createBoxTool(
  */
 export function editBox(
   boxId: string,
-  patch: { name?: string; emoji?: string; description?: string; add?: string[]; remove?: string[] },
+  patch: {
+    name?: string; emoji?: string; description?: string;
+    add?: string[]; remove?: string[];
+    exclude?: string[]; unexclude?: string[];
+    declare?: string[]; undeclare?: string[];
+  },
   titleLang: TitleLanguage
-): { found: false; error: string } | { found: true; box: McpBox; added: string[]; removed: string[]; rejected: string[] } {
+): { found: false; error: string } | {
+  found: true; box: McpBox;
+  added: string[]; removed: string[]; excluded: string[]; declared: string[];
+  rejected: string[];
+} {
   const box = getBox(boxId);
   if (!box) return { found: false, error: `No box with id "${boxId}". Call list_boxes.` };
 
@@ -1101,6 +1139,299 @@ export function editBox(
     setBoxMembers(boxId, [...current.filter(m => !dropped.has(m)), ...add]);
   }
 
+  // ⚠️ AFTER the membership edit, never before: excluding also drops the title
+  // from `members`, so a combined { add, exclude } run the other way round would
+  // re-file the very title it just set aside.
+  const exclude = valid(patch.exclude);
+  const unexclude = valid(patch.unexclude);
+  if (exclude.length > 0 || unexclude.length > 0) editBoxExcluded(boxId, exclude, unexclude);
+
+  // Group ids are slugs, not canonical ids, so they get their own check — and an
+  // unknown one is rejected rather than stored, since a declaration naming
+  // nothing is silently inert.
+  const knownGroups = new Set(getGroups().map(g => g.id));
+  const groupIds = (ids: string[] | undefined): string[] =>
+    (ids ?? []).filter(id => {
+      const ok = knownGroups.has(id);
+      if (!ok) rejected.push(id);
+      return ok;
+    });
+  const declare = groupIds(patch.declare);
+  const undeclare = groupIds(patch.undeclare);
+  // ⚠️ Declaring NEVER files anything: `members` is authoritative and `groups`
+  // is a lens over it. A title in a declared group but not in `members`
+  // contributes nothing.
+  if (declare.length > 0 || undeclare.length > 0) editBoxGroups(boxId, declare, undeclare);
+
   const updated = listBoxes(titleLang).boxes.find(b => b.id === boxId)!;
-  return { found: true, box: updated, added: add, removed: remove, rejected };
+  return {
+    found: true, box: updated,
+    added: add, removed: remove, excluded: exclude, declared: declare,
+    rejected,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// One box in full — contents AND candidates, so a proposal takes one call
+// ---------------------------------------------------------------------------
+
+export interface McpBoxUnit {
+  /** The unit's best-scored member — what it is called. */
+  id: string;
+  title: string;
+  score?: number;
+  /**
+   * The other entries this unit collapses, if any. Present only when the owner
+   * declared a group that fuses them.
+   */
+  alsoIn?: { id: string; title: string }[];
+  /** Which declared regroupement(s) collapsed it. */
+  groups?: string[];
+}
+
+export interface McpBoxDetail {
+  box: McpBox;
+  /**
+   * The box as the RANKER sees it: one entry per unit. `box.members` is the raw
+   * filed list; this is what actually votes.
+   */
+  units: McpBoxUnit[];
+  /**
+   * ⚠️ Titles the owner has set aside from this box — « non, pas cet axe ».
+   * **Never propose one of these again.** The candidate ranker already skips
+   * them; this list is here so a model reasoning from `list_anime` or its own
+   * knowledge does not re-suggest what has already been refused.
+   *
+   * It may contain titles the owner has NOT watched: the box's recos tab
+   * surfaces unseen candidates and « Non » files them here.
+   */
+  excluded: { id: string; title: string }[];
+  /**
+   * What the box is made of — shared tags, studios and T1 staff, counted over
+   * UNITS, plus the score and year ranges.
+   *
+   * ⚠️ Read this before trusting `candidates`. Values shared by most units mean
+   * the axis is a CONTENT axis and the metadata ranking below is strong. Little
+   * or nothing shared means it is a FORM or tone axis — no catalog field encodes
+   * form, the ranking will drift toward whatever is merely adjacent, and your
+   * own judgement about tone is worth more than the ordering. Say which case you
+   * think it is rather than presenting the ranking as fact.
+   */
+  composition: BoxComposition;
+  /**
+   * Provider franchise components with ≥2 members in the box that NO declared
+   * regroupement already collapses — i.e. what the box is probably
+   * over-counting right now.
+   *
+   * A suggestion drawn from the relation graph, never an authority: propose the
+   * group to the owner, do not assume it. Creating one is `create_group`, and
+   * making it count in this box is `edit_box`'s `declare`.
+   */
+  suggestedGroups: { title: string; members: { id: string; title: string }[] }[];
+  /** The metadata ranker's proposals. Empty when `candidates: 0` was asked for. */
+  candidates: McpBoxCandidate[];
+}
+
+export interface McpBoxCandidate {
+  id: string;
+  title: string;
+  score: number;
+  /** Every id accepting the whole franchise would add, the anchor excluded. */
+  franchise: string[];
+  matched: { field: string; values: string[] }[];
+}
+
+/**
+ * One box, resolved: what it holds, what it means, what it refuses, and what the
+ * ranker proposes — in a single call.
+ *
+ * Built as one tool rather than three because a proposal needs all of it at
+ * once: the units (so a show filed as seven cours is not read as seven shows),
+ * the écartés (so a refused title is not re-suggested), the composition (so the
+ * ranking is trusted or discounted for the right reason), and only then the
+ * ranking itself.
+ */
+export function getBoxDetail(
+  boxId: string,
+  candidateLimit: number,
+  titleLang: TitleLanguage
+): { found: false; error: string } | ({ found: true } & McpBoxDetail) {
+  const box = getBox(boxId);
+  if (!box) return { found: false, error: `No box with id "${boxId}". Call list_boxes.` };
+
+  const all = getAnimeForDisplay();
+  const byId = new Map(all.map(a => [a.id, a]));
+  const groups = getGroups();
+  const title = (id: string) => {
+    const a = byId.get(id);
+    return a ? getPrimaryTitle(a, titleLang) : id;
+  };
+
+  // Display order: personal score desc — the same order every box surface uses,
+  // so the unit a model names is the one the owner sees on the card.
+  const rank = new Map(
+    box.members
+      .map(id => byId.get(id))
+      .filter((a): a is AnimeRecord => !!a)
+      .sort((a, b) => (getEffectiveScore(b) || 0) - (getEffectiveScore(a) || 0))
+      .map((a, i) => [a.id, i] as const)
+  );
+  const resolution = resolveBoxUnits(box, groups);
+  const faced = faceUnits(resolution, rank);
+  const declared = groups.filter(g => (box.groups ?? []).includes(g.id));
+
+  const units: McpBoxUnit[] = faced.map(unit => {
+    const score = byId.get(unit.face) ? getEffectiveScore(byId.get(unit.face)!) : undefined;
+    const rest = unit.members.slice(1);
+    const held = declared.filter(g => unit.members.some(id => g.members.includes(id)));
+    return {
+      id: unit.face,
+      title: title(unit.face),
+      ...(score ? { score } : {}),
+      ...(rest.length > 0 ? { alsoIn: rest.map(id => ({ id, title: title(id) })) } : {}),
+      ...(held.length > 0 ? { groups: held.map(g => g.name) } : {}),
+    };
+  });
+
+  // Provider franchises the box over-counts: ≥2 members present, and no declared
+  // group already fusing them. `direct` scope — the wide one chains four
+  // unrelated Gundam series into one 129-entry component.
+  const memberSet = new Set(box.members);
+  const collapsed = new Set(
+    faced.filter(u => u.members.length > 1).flatMap(u => u.members)
+  );
+  const franchises = getFranchiseIndex(all, 'direct');
+  const seen = new Set<string>();
+  const suggestedGroups: McpBoxDetail['suggestedGroups'] = [];
+  for (const id of box.members) {
+    const component = franchises.get(id);
+    if (!component || seen.has(component[0].id)) continue;
+    seen.add(component[0].id);
+    const present = component.filter(a => memberSet.has(a.id) && !collapsed.has(a.id));
+    if (present.length < 2) continue;
+    suggestedGroups.push({
+      title: getPrimaryTitle(present[0], titleLang),
+      members: present.map(a => ({ id: a.id, title: getPrimaryTitle(a, titleLang) })),
+    });
+  }
+
+  const excludedIds = box.excluded ?? [];
+  return {
+    found: true,
+    box: listBoxes(titleLang).boxes.find(b => b.id === boxId)!,
+    units,
+    // Resolved from ids alone — this list contains unwatched titles by design.
+    excluded: excludedIds.map(id => ({ id, title: title(id) })),
+    composition: buildBoxComposition(faced, byId, BOX_TAG_MIN_RANK),
+    suggestedGroups,
+    candidates: candidateLimit <= 0 ? [] : rankBoxCandidates(box, all, { limit: candidateLimit }).map(g => {
+      const anchor = g.members.find(a => a.id === g.id) ?? g.members[0];
+      return {
+        id: g.id,
+        title: getPrimaryTitle(anchor, titleLang),
+        score: Number(g.score.toFixed(4)),
+        franchise: g.members.filter(a => !memberSet.has(a.id)).map(a => a.id),
+        matched: g.matched.map(m => ({ field: m.field, values: m.values.map(String) })),
+      };
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// « Mes regroupements » — the owner's own units
+// ---------------------------------------------------------------------------
+
+export interface McpGroup {
+  id: string;
+  name: string;
+  count: number;
+  members: { id: string; title: string }[];
+  /**
+   * Boxes that DECLARE this group, i.e. every box whose ranking changes if its
+   * membership is edited. The blast radius, stated rather than left to be
+   * discovered.
+   */
+  declaredBy: { id: string; name: string }[];
+}
+
+function projectMcpGroup(
+  group: UserGroup,
+  byId: Map<string, AnimeRecord>,
+  titleLang: TitleLanguage
+): McpGroup {
+  const boxes = getBoxes().filter(b => (b.groups ?? []).includes(group.id));
+  return {
+    id: group.id,
+    name: group.name,
+    count: group.members.length,
+    members: group.members.map(id => {
+      const a = byId.get(id);
+      return { id, title: a ? getPrimaryTitle(a, titleLang) : id };
+    }),
+    declaredBy: boxes.map(b => ({ id: b.id, name: b.name })),
+  };
+}
+
+/** Every regroupement, with what each one holds and which boxes it moves. */
+export function listGroups(titleLang: TitleLanguage): { groups: McpGroup[] } {
+  const byId = new Map(getAnimeForDisplay().map(a => [a.id, a]));
+  return { groups: getGroups().map(g => projectMcpGroup(g, byId, titleLang)) };
+}
+
+/**
+ * Create a regroupement. Additive and safe: a new definition changes no ranking
+ * until a box declares it (`edit_box`'s `declare`).
+ */
+export function createGroupTool(
+  name: string,
+  members: string[],
+  titleLang: TitleLanguage
+): { group: McpGroup; rejected: string[] } {
+  const byId = new Map(getAnimeForDisplay().map(a => [a.id, a]));
+  const rejected = members.filter(id => !isCanonicalId(id) || !byId.has(id));
+  const valid = members.filter(id => isCanonicalId(id) && byId.has(id));
+  const created = createGroup(name, valid);
+  return { group: projectMcpGroup(created, byId, titleLang), rejected };
+}
+
+/**
+ * Edit a regroupement's membership or name.
+ *
+ * ⚠️ **A group is GLOBAL.** Editing its members changes the ranking of every box
+ * that declares it, not just the one you are working on — which is the intended
+ * behaviour (a group is one statement about what those titles are) and also the
+ * reason the result reports `declaredBy`. Say what else moved.
+ *
+ * Incremental for `edit_box`'s reason: a full replacement from a stale snapshot
+ * would silently drop whatever was added since.
+ */
+export function editGroup(
+  groupId: string,
+  patch: { name?: string; add?: string[]; remove?: string[] },
+  titleLang: TitleLanguage
+): { found: false; error: string } | { found: true; group: McpGroup; added: string[]; removed: string[]; rejected: string[] } {
+  const group = getGroup(groupId);
+  if (!group) return { found: false, error: `No group with id "${groupId}". Call list_groups.` };
+
+  const byId = new Map(getAnimeForDisplay().map(a => [a.id, a]));
+  const rejected: string[] = [];
+  const valid = (ids: string[] | undefined): string[] =>
+    (ids ?? []).filter(id => {
+      const ok = isCanonicalId(id) && byId.has(id);
+      if (!ok) rejected.push(id);
+      return ok;
+    });
+
+  if (patch.name !== undefined) updateGroup(groupId, { name: patch.name });
+  const add = valid(patch.add);
+  const remove = valid(patch.remove);
+  if (add.length > 0 || remove.length > 0) editGroupMembers(groupId, add, remove);
+
+  return {
+    found: true,
+    group: projectMcpGroup(getGroup(groupId)!, byId, titleLang),
+    added: add,
+    removed: remove,
+    rejected,
+  };
 }

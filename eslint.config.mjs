@@ -71,14 +71,12 @@ const WRITE_MODULES = [
   '@/lib/reco/feedback',
 ].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
 
-const GROUP_WRITE_MESSAGE =
-  "« Mes regroupements » are the OWNER's call. Reading them is fine (getGroups / getGroup / " +
-  "groupsContaining), and saying « these four cours look like one show » is exactly the kind of " +
-  "suggestion this surface is open for; writing one is not. A group is GLOBAL and declared per " +
-  "box, so editing its members silently re-ranks every box that declared it — a wider blast " +
-  "radius than the box carve-out faced, where a wrong fill costs a few chip clicks in one place. " +
-  "deleteGroup is worse still: like deleteBox, it throws away labeling that exists nowhere else " +
-  "and that no provider can re-supply. The owner draws a group in the blade on /boxes/[id].";
+const GROUP_DELETE_MESSAGE =
+  "Dropping a « regroupement » throws away labeling that exists in exactly one place and that " +
+  "no provider can re-supply — deleteBox's objection, unchanged. Creating and editing one IS " +
+  "open here: naming what several cours have in common is the thing this surface is for, and " +
+  "the owner reads every proposal before it lands. Deleting is not a proposal, it is a loss. " +
+  "The owner drops a group in the blade on /boxes/[id].";
 
 const SEED_MUTE_WRITE_MESSAGE =
   "Muting a seed is the OWNER's call, not this surface's. Reading the mutes is fine " +
@@ -183,14 +181,21 @@ export default defineConfig([
               message: BOX_WRITE_MESSAGE,
             },
             {
-              // Groups: a name block rather than a `WRITE_MODULES` pattern, for
-              // the seedMutes reason below — the pattern would take the readers
-              // down with the writers, and the readers are what let a model
-              // explain a box's unit count.
+              // « Mes regroupements »: the SECOND writable surface, opened on
+              // request once the box tools existed to make it useful. Naming
+              // what several cours have in common is exactly what a model is
+              // good at, and a group changes nothing until a box DECLARES it —
+              // two steps, so a grouping made for one box is never silently
+              // imposed on another.
+              //
+              // ⚠️ `deleteGroup` stays blocked by name, `deleteBox`'s carve-out
+              // in the same shape and for the same reason. Keep any future
+              // opening this shape too: a named exception with a stated reason,
+              // never widening the pattern list.
               name: '@/lib/reco/groups',
-              importNames: ['createGroup', 'updateGroup', 'deleteGroup', 'editGroupMembers'],
+              importNames: ['deleteGroup'],
               allowTypeImports: true,
-              message: GROUP_WRITE_MESSAGE,
+              message: GROUP_DELETE_MESSAGE,
             },
             {
               // Seed mutes: the READERS are the point of the tool surface (a

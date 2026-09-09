@@ -311,6 +311,17 @@ export function rankBoxCandidates(
 
   const byId = new Map(all.map(a => [a.id, a]));
   const memberSet = new Set(box.members);
+  /**
+   * ⚠️ « Écartés » are candidates the owner has already said NO to, so
+   * re-proposing them is the one thing the field exists to prevent. Skipping
+   * them here rather than filtering afterwards keeps the `limit` honest: a
+   * post-filter would silently return fewer than asked for.
+   *
+   * It is box-local, like the set itself — a title set aside from
+   * `Absolute cinema` says nothing about any other box, and nothing about the
+   * global feed.
+   */
+  const excludedSet = new Set(box.excluded ?? []);
   const members = box.members.map(id => byId.get(id)).filter((a): a is AnimeRecord => !!a);
   if (members.length === 0) return [];
 
@@ -339,6 +350,7 @@ export function rankBoxCandidates(
   const best = new Map<string, BoxCandidateGroup>();
   for (const anime of all) {
     if (memberSet.has(anime.id)) continue;
+    if (excludedSet.has(anime.id)) continue;
     if (!getEffectiveStatus(anime)) continue;
 
     let score = 0;

@@ -751,6 +751,10 @@ it; it belongs in the "costs that are real" list.
   - **`MATCH_DENOM_FLOOR` and `BOX_TAG_MIN_RANK = 60`.** Qualifying tags run p25 10 / median 14,
     but 24 of 712 titles carry fewer than four, so a title with ONE matching tag scored a perfect
     1.0 — *LONA* ranked #2 on `Female Protagonist` alone, ahead of *Girls' Last Tour*.
+  - ⚠️ **It skips the box's « écartés ».** Those are candidates the owner already said no to,
+    so re-proposing them is the one thing that set exists to prevent — and it was doing exactly
+    that until the MCP tools were built on it. Skipped inside the loop rather than filtered
+    afterwards, or `limit` would silently return fewer rows than asked for.
   - ⚠️ **It weights by UNIT, not by entry.** `() => 1` was a ranking bug: N filed cours cast N
     votes, which on the live store handed the biggest show **50% of the profile in three of the
     13 non-empty boxes** (and 71% in `Laugh++`). Measured with `probe-box.js --diff`, collapsing
@@ -1139,11 +1143,19 @@ One focal node, its direct neighbours, and **re-centring as the only expansion**
 ### MCP — the store as a read-only tool surface
 
 `POST /api/anime/mcp` ([mcp.ts](src/pages/api/anime/mcp.ts)) exposes the local record to an MCP
-client (`claude mcp add --transport http anime-tracker http://<host>:12350/api/anime/mcp`). Twelve
+client (`claude mcp add --transport http anime-tracker http://<host>:12350/api/anime/mcp`). Sixteen
 tools, in [mcp/server.ts](src/lib/mcp/server.ts) (schemas) over [mcp/tools.ts](src/lib/mcp/tools.ts)
 (handlers): `search_anime`, `get_anime`, `list_anime`, `list_genres`, `my_stats`, `recommend`,
-`similar_to`, `tier_list`, plus the four box tools — `list_boxes`, `box_candidates`, `create_box`,
-`edit_box`.
+`similar_to`, `tier_list`, plus the box and group tools — `list_boxes`, `get_box`,
+`box_candidates`, `create_box`, `edit_box`, `list_groups`, `create_group`, `edit_group`.
+
+⚠️ **`get_box` is the one to start from when proposing**, not `box_candidates`: it returns the
+box's UNITS, its « écartés », the composition block and the ranking in ONE call, because a
+proposal needs all four at once. Reasoning off `box.count` over-weights whatever the owner filed
+most granularly; re-proposing an écarté is the one thing that set exists to prevent; and the
+composition is what says whether the ranking below it is strong (content axis) or drifting (form
+axis). Its `suggestedGroups` names the provider franchises a box is over-counting with no
+regroupement collapsing them — the group nudge in tool form.
 
 - **Read-only about the RECORD, enforced — with exactly one carve-out: boxes.** A *second* `files`
   block in [eslint.config.mjs](eslint.config.mjs) fails the build when anything under
@@ -1160,14 +1172,15 @@ tools, in [mcp/server.ts](src/lib/mcp/server.ts) (schemas) over [mcp/tools.ts](s
   to undo, but dropping one throws away labeling that exists in exactly one place and that no
   provider can re-supply. Keep any future carve-out this shape — a named exception with a stated
   reason, never widening the pattern list.
-- ⚠️ **« Mes regroupements » did NOT get the same carve-out.** `@/lib/reco/groups` is importable
-  for its readers and its four writers (`createGroup` / `updateGroup` / `deleteGroup` /
-  `editGroupMembers`) are blocked by name, the seed-mute shape. Saying « these four cours look
-  like one show » is exactly the suggestion this surface is open for; making it is not. A group is
-  **global** and declared per box, so editing its members silently re-ranks every box that
-  declared it — a wider blast radius than boxes faced, where a wrong fill costs a few chip clicks
-  in one place. The readers stay open because they are what let a model explain a box's unit
-  count.
+- **« Mes regroupements » is the SECOND writable surface**, opened once the box tools existed to
+  make it useful. Naming what several cours have in common is exactly what a model is good at, and
+  the blast radius is contained by the two-step shape the data model already had: `create_group`
+  changes **no ranking at all** until a box declares it, so a grouping made for one box is never
+  silently imposed on another. `edit_group` returns `declaredBy` — every box a membership edit
+  moves — and its description says to report that rather than let it be discovered.
+  ⚠️ **`deleteGroup` stays blocked by name**, `deleteBox`'s carve-out in the same shape and for
+  the same reason: creating and editing are proposals the owner reads, deleting is a loss of
+  labeling that exists in exactly one place.
 - **The tools are thin adapters over the existing domain functions**, never a second
   implementation: `searchCatalog`, `computeStats`, `computeFeed`, `loadSimilarTo`,
   `applyNarrowingFilters`, `sortAnimeRecords`, `tierGap.ts`. A tool needing new behaviour gets it

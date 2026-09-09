@@ -21,7 +21,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
   getAnime, listAnime, listGenres, myStats, recommend, searchAnime, similarTo, tierList,
-  listBoxes, boxCandidates, createBoxTool, editBox, MCP_SORT_KEYS,
+  listBoxes, boxCandidates, getBoxDetail, createBoxTool, editBox,
+  listGroups, createGroupTool, editGroup, MCP_SORT_KEYS,
 } from '@/lib/mcp/tools';
 import { STATS_DIMENSIONS, type StatsDimension } from '@/lib/domain/stats';
 import { getTitleLanguage } from '@/lib/config/settings';
@@ -60,7 +61,8 @@ export function buildServer(): McpServer {
         'community average. It cannot rate, update, hide or sync anything — the owner\'s ' +
         'scores and statuses are read-only here, deliberately: they are the ground truth ' +
         'every ranking in this app is measured against. The ONE writable thing is BOXES ' +
-        '(list_boxes / box_candidates / create_box / edit_box): hand-drawn taste axes over ' +
+        '(list_boxes / get_box / box_candidates / create_box / edit_box, plus list_groups / '  +
+        'create_group / edit_group): hand-drawn taste axes over ' +
         'titles the owner has watched, like "made me cry" or "watch it for the animation". ' +
         'Helping name and fill those is what this server is open for; boxes cannot be ' +
         'deleted through it.',
@@ -362,6 +364,113 @@ export function buildServer(): McpServer {
   );
 
   server.registerTool(
+    'get_box',
+    {
+      title: 'One box in full, with candidates',
+      description:
+        'Everything needed to propose for one box, in a single call: what it holds as UNITS, ' +
+        'what the owner has set aside, what the box is made of, which franchises it is ' +
+        'probably over-counting, and the ranker\'s proposals. Start here, not at ' +
+        'box_candidates. Four fields decide whether a proposal is any good: ' +
+        '(1) `units` is the box\'s real size — `box.count` counts filed ENTRIES, and seven ' +
+        'cours of one show are seven of those and one unit, so reasoning off the count ' +
+        'over-weights whatever the owner filed most granularly. ' +
+        '(2) `excluded` is what they already refused — never propose one of those again. ' +
+        '(3) `composition` says whether this is a CONTENT axis (values shared by most units: ' +
+        'the ranking below is strong, filter it) or a FORM or tone axis (little shared: no ' +
+        'catalog field encodes form, the ranking drifts to whatever is merely adjacent, and ' +
+        'your own reading of tone is worth more than the ordering — say so rather than ' +
+        'presenting it as fact). ' +
+        '(4) `suggestedGroups` are franchises with several entries filed and no regroupement ' +
+        'collapsing them, i.e. exactly what is inflating the count; propose one with ' +
+        'create_group and make it count with edit_box\'s `declare`.',
+      inputSchema: {
+        boxId: z.string().describe('Box id from list_boxes.'),
+        candidates: z
+          .number()
+          .int()
+          .min(0)
+          .max(100)
+          .optional()
+          .describe('How many ranked proposals to include; 0 returns the contents alone. Default 20.'),
+      },
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ boxId, candidates }) => {
+      const result = getBoxDetail(boxId, candidates ?? 20, titleLang);
+      if (!result.found) return { ...json({ error: result.error }), isError: true };
+      return json(result);
+    }
+  );
+
+  // --- « Mes regroupements »: global units the owner draws by hand ----------
+  server.registerTool(
+    'list_groups',
+    {
+      title: 'List regroupements',
+      description:
+        'The owner\'s own statements that several titles are ONE thing — usually a show ' +
+        'filed as several cours or seasons. A regroupement is GLOBAL and reusable; a box ' +
+        'then declares which ones apply to it, and only a declared one changes that box\'s ' +
+        'ranking. `declaredBy` names every box a membership edit would move, which is the ' +
+        'blast radius to state before changing one.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async () => json(listGroups(titleLang))
+  );
+
+  server.registerTool(
+    'create_group',
+    {
+      title: 'Create a regroupement',
+      description:
+        'Declare that several titles are one thing. Safe and additive: a new group changes ' +
+        'NO ranking until a box declares it with edit_box\'s `declare` — creating and ' +
+        'declaring are deliberately two steps, because a grouping made for one box is not ' +
+        'automatically right in another (a broad Gundam group is one show in a mecha box and ' +
+        'four unrelated series in a box about direction). ' +
+        'Name it the way the owner would say it, and get the members from get_box\'s ' +
+        '`suggestedGroups` where possible — those are the franchises actually inflating a ' +
+        'box. Ids that do not resolve come back in `rejected`, so CHECK that field.',
+      inputSchema: {
+        name: z.string().min(1).describe('What the owner would call this show.'),
+        members: z.array(z.string()).min(1).describe('Canonical ids that are one thing.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ name, members }) => json(createGroupTool(name, members, titleLang))
+  );
+
+  server.registerTool(
+    'edit_group',
+    {
+      title: 'Edit a regroupement',
+      description:
+        'Add or remove members, or rename. Incremental, never a replacement, so a stale ' +
+        'list_groups snapshot cannot wipe anything; unresolved ids come back in `rejected`. ' +
+        'IMPORTANT: a regroupement is GLOBAL, so editing its members re-ranks EVERY box that ' +
+        'declares it, not only the one you are working on. The result\'s `declaredBy` names ' +
+        'them — report what else moved rather than leaving it to be discovered. If the change ' +
+        'is only right for one box, undeclare it there instead, or make a second group. ' +
+        'There is no delete: dropping a grouping throws away labeling that exists in exactly ' +
+        'one place, so the owner does that in the app.',
+      inputSchema: {
+        groupId: z.string().describe('Group id from list_groups.'),
+        add: z.array(z.string()).optional().describe('Canonical ids to add.'),
+        remove: z.array(z.string()).optional().describe('Canonical ids to take out.'),
+        name: z.string().min(1).optional().describe('New name.'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ groupId, add, remove, name }) => {
+      const result = editGroup(groupId, { add, remove, name }, titleLang);
+      if (!result.found) return { ...json({ error: result.error }), isError: true };
+      return json(result);
+    }
+  );
+
+  server.registerTool(
     'create_box',
     {
       title: 'Create a taste box',
@@ -399,11 +508,28 @@ export function buildServer(): McpServer {
         'judgement, and a wrong member quietly skews the recommendations built from it. ' +
         'Writing `description` REPLACES the owner\'s own words with yours, so only do it when ' +
         'they asked for it or dictated the wording; an empty string erases it. ' +
-        'There is no delete — boxes are removed in the app.',
+        'There is no delete — boxes are removed in the app. ' +
+        '`exclude` records a refusal, which is a different act from `remove`: removing just ' +
+        'unfiles, while excluding also stops the title being proposed again. Use it when the ' +
+        'owner says no to a suggestion. `declare` makes a regroupement count in this box — ' +
+        'that is how you fix a box whose count is inflated by one show filed as many cours.',
       inputSchema: {
         boxId: z.string().describe('Box id from list_boxes.'),
         add: z.array(z.string()).optional().describe('Canonical ids to file into the box.'),
         remove: z.array(z.string()).optional().describe('Canonical ids to take out.'),
+        exclude: z.array(z.string()).optional().describe(
+          'Canonical ids to set aside — « non, pas cet axe ». Box-local: it is not a hide, ' +
+          'not a thumbs-down and not a seed mute, and says nothing about any other surface. ' +
+          'It also REMOVES the title from the box, and stops the ranker proposing it again.'
+        ),
+        unexclude: z.array(z.string()).optional().describe(
+          'Undo a set-aside. It does NOT file the title back in — that is a separate `add`.'
+        ),
+        declare: z.array(z.string()).optional().describe(
+          'Regroupement ids (from list_groups) whose collapse should apply HERE, so their ' +
+          'members count as one instead of several. Declaring files nothing.'
+        ),
+        undeclare: z.array(z.string()).optional().describe('Stop applying a regroupement here.'),
         name: z.string().min(1).optional().describe('New name.'),
         emoji: z.string().max(4).optional().describe('New icon.'),
         description: z.string().optional().describe(
@@ -413,8 +539,12 @@ export function buildServer(): McpServer {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ boxId, add, remove, name, emoji, description }) => {
-      const result = editBox(boxId, { add, remove, name, emoji, description }, titleLang);
+    async ({ boxId, add, remove, exclude, unexclude, declare, undeclare, name, emoji, description }) => {
+      const result = editBox(
+        boxId,
+        { add, remove, exclude, unexclude, declare, undeclare, name, emoji, description },
+        titleLang
+      );
       if (!result.found) return { ...json({ error: result.error }), isError: true };
       return json(result);
     }
