@@ -45,8 +45,15 @@ export interface QuickEditProps {
   /** Declared group ids. */
   declared: string[];
   excluded: LeanAnimeRow[];
-  /** Fired after any write; the page reloads the box and hands new props back. */
-  onWrite: (body: Record<string, unknown>) => Promise<void>;
+  /**
+   * Fired after any write; the page reloads the box and hands new props back.
+   *
+   * ⚠️ It resolves `false` when the write FAILED. That is load-bearing rather
+   * than informational: the panes move the card before the server answers, so
+   * without a failure signal a rejected write leaves the overlay asserting a
+   * move that never happened, and the pane lies until the next reload.
+   */
+  onWrite: (body: Record<string, unknown>) => Promise<boolean>;
 }
 
 interface Filters {
@@ -65,6 +72,18 @@ const NO_FILTERS: Filters = {
 /** Which pane a selection belongs to. A range is only meaningful within one. */
 type PaneKind = 'source' | 'box';
 
+/**
+ * Where a title sits. The three panes ARE this union, which is what lets one
+ * `Map<id, Place>` stand for every move: filing, un-filing, setting aside and
+ * restoring all just name a destination, and re-moving the same title
+ * overwrites its entry instead of stacking a second pending op.
+ */
+type Place = 'box' | 'source' | 'aside';
+
+/** Where the server says a title is — the truth the overlay is reconciled against. */
+const placeOf = (id: string, memberIds: Set<string>, asideIds: Set<string>): Place =>
+  memberIds.has(id) ? 'box' : asideIds.has(id) ? 'aside' : 'source';
+
 const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, excluded, onWrite }) => {
   const t = useT();
 
@@ -76,6 +95,23 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
 
   const [selection, setSelection] = useState<{ pane: PaneKind; ids: string[] } | null>(null);
   const [blade, setBlade] = useState<{ seedFrom?: string; group?: GroupSummary } | null>(null);
+
+  /**
+   * Moves already on screen that the server has not confirmed yet.
+   *
+   * ⚠️ **The panes render through this, and that is the whole fix.** A file used
+   * to be a PUT plus a full box reload before ANYTHING moved, with no pending
+   * state in between — so on a slow host the card sat still for seconds and the
+   * only way to tell a click had registered was that it eventually worked. The
+   * reload still happens and the server is still the authority; it just stopped
+   * being on the path between the click and the card moving.
+   *
+   * Held HERE and not on the page on purpose: the page's `editing` gate reads
+   * `box.members.length`, so an optimistic member count would unmount this whole
+   * surface mid-interaction the moment the last member was removed. Keeping the
+   * overlay below that line leaves every count the page renders on server truth.
+   */
+  const [pending, setPending] = useState<Map<string, Place>>(new Map());
 
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     setFilters(f => ({ ...f, [key]: value }));
@@ -113,8 +149,54 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
     return () => document.removeEventListener('keydown', onKey);
   }, [blade]);
 
-  const memberIds = useMemo(() => new Set(members.map(r => r.id)), [members]);
-  const excludedIds = useMemo(() => new Set(excluded.map(r => r.id)), [excluded]);
+  const serverMemberIds = useMemo(() => new Set(members.map(r => r.id)), [members]);
+  const serverAsideIds = useMemo(() => new Set(excluded.map(r => r.id)), [excluded]);
+
+  /**
+   * Drop overlay entries the server has caught up with.
+   *
+   * Confirmation rather than a generation counter, which also disarms
+   * out-of-order reloads for free: a stale response simply fails to agree, so
+   * the entry survives until a fresh one confirms it. Nothing here can clobber
+   * a move the owner has already made.
+   */
+  useEffect(() => {
+    setPending(prev => {
+      if (prev.size === 0) return prev;
+      const next = new Map(prev);
+      for (const [id, place] of prev) {
+        if (placeOf(id, serverMemberIds, serverAsideIds) === place) next.delete(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [serverMemberIds, serverAsideIds]);
+
+  /** Every row this surface can name, so an optimistically moved id resolves to a card. */
+  const rowById = useMemo(() => {
+    const map = new Map<string, LeanAnimeRow>();
+    for (const r of watched) map.set(r.id, r);
+    for (const r of members) map.set(r.id, r);
+    for (const r of excluded) map.set(r.id, r);
+    return map;
+  }, [watched, members, excluded]);
+
+  /** The three sets as they are ON SCREEN — server truth with the overlay applied. */
+  const memberIds = useMemo(() => {
+    const ids = new Set(serverMemberIds);
+    for (const [id, place] of pending) { if (place === 'box') ids.add(id); else ids.delete(id); }
+    return ids;
+  }, [serverMemberIds, pending]);
+
+  const excludedIds = useMemo(() => {
+    const ids = new Set(serverAsideIds);
+    for (const [id, place] of pending) { if (place === 'aside') ids.add(id); else ids.delete(id); }
+    return ids;
+  }, [serverAsideIds, pending]);
+
+  const asideRows = useMemo(
+    () => [...excludedIds].map(id => rowById.get(id)).filter((r): r is LeanAnimeRow => !!r),
+    [excludedIds, rowById]
+  );
 
   /** The cheap filters, applied in the browser over the whole fetched set. */
   const passes = useCallback((row: LeanAnimeRow) => {
@@ -137,7 +219,10 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
     () => watched.filter(r => !memberIds.has(r.id) && !excludedIds.has(r.id) && passes(r)),
     [watched, memberIds, excludedIds, passes]
   );
-  const boxRows = useMemo(() => members.filter(passes), [members, passes]);
+  const boxRows = useMemo(
+    () => [...memberIds].map(id => rowById.get(id)).filter((r): r is LeanAnimeRow => !!r).filter(passes),
+    [memberIds, rowById, passes]
+  );
 
   const groupsByAnime = useMemo(() => {
     const map = new Map<string, GroupSummary[]>();
@@ -204,9 +289,47 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
     });
   };
 
+  /**
+   * Apply a move on screen, then write it.
+   *
+   * ⚠️ Only the four ROW moves are optimistic. `declare`/`undeclare` restructure
+   * the group regions, which are derived from a prop this component does not
+   * own, so they ride the reload — a group card filed with `{ add, declare }`
+   * moves its titles at once and grows its region when the box comes back.
+   */
   const act = useCallback(async (body: Record<string, unknown>) => {
     setSelection(null);
-    await onWrite(body);
+
+    const moves = new Map<string, Place>();
+    const move = (key: string, place: Place) => {
+      const ids = body[key];
+      if (Array.isArray(ids)) for (const id of ids) if (typeof id === 'string') moves.set(id, place);
+    };
+    move('add', 'box');
+    move('remove', 'source');
+    move('exclude', 'aside');
+    move('unexclude', 'source');
+
+    if (moves.size > 0) {
+      setPending(prev => {
+        const next = new Map(prev);
+        for (const [id, place] of moves) next.set(id, place);
+        return next;
+      });
+    }
+
+    const ok = await onWrite(body);
+    if (!ok && moves.size > 0) {
+      // Roll the overlay back to whatever the server last said, so a failed
+      // write reads as "it did not move" rather than as a move that silently
+      // un-happens on the next reload.
+      setPending(prev => {
+        const next = new Map(prev);
+        for (const id of moves.keys()) next.delete(id);
+        return next;
+      });
+    }
+    return ok;
   }, [onWrite]);
 
   const selectedIds = useMemo(() => new Set(selection?.ids ?? []), [selection]);
@@ -326,13 +449,13 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
             rarer state than the other two. */}
         <section className={styles.excluded}>
           <button type="button" className={styles.excludedHead} onClick={() => setShowExcluded(v => !v)}>
-            {showExcluded ? '▾' : '▸'} {t('quickEdit.excluded', { count: excluded.length })}
+            {showExcluded ? '▾' : '▸'} {t('quickEdit.excluded', { count: asideRows.length })}
           </button>
           {showExcluded && (
-            excluded.length === 0
+            asideRows.length === 0
               ? <p className={styles.excludedEmpty}>{t('boxes.excludedEmpty')}</p>
               : <BoxEntryList
-                  entries={excluded.map(row => ({ row, members: [row] }))}
+                  entries={asideRows.map(row => ({ row, members: [row] }))}
                   actionIcon="↩"
                   actionLabel={title => t('boxes.restore', { title })}
                   onAct={ids => act({ unexclude: ids })}

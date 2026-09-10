@@ -22,7 +22,7 @@
  * It was built alongside the page it replaces and swapped over it in one commit
  * (§2), so nothing here ever had to keep the old three-view page working.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import AnimePicker from '@/components/anime/AnimePicker';
@@ -33,6 +33,12 @@ import BoxRecos from '@/components/anime/boxes/BoxRecos';
 import { useBoxUrlState, type BoxTab } from '@/hooks';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import type { BoxMembersResponse } from '../api/anime/boxes/[id]/members';
+
+/**
+ * The reload throttle's window. Long enough to swallow a run of clicks, short
+ * enough that the header counts settle while you are still looking at the pane.
+ */
+const RELOAD_DEBOUNCE_MS = 400;
 
 export default function BoxV2DetailPage() {
   const t = useT();
@@ -53,22 +59,62 @@ export default function BoxV2DetailPage() {
    */
   const [reloadToken, setReloadToken] = useState(0);
 
+  /**
+   * ⚠️ Generation-guarded, because reloads are no longer awaited one at a time:
+   * two can be in flight on a slow host, and the older landing last would put
+   * stale counts on screen.
+   */
+  const loadGen = useRef(0);
   const load = useCallback(async () => {
     if (!boxId) return;
+    const gen = ++loadGen.current;
     try {
       const res = await fetch(`/api/anime/boxes/${encodeURIComponent(boxId)}/members`);
+      if (gen !== loadGen.current) return;
       if (res.status === 404) { setNotFound(true); return; }
       if (!res.ok) throw new Error('box');
-      setData(await res.json());
+      const json = await res.json();
+      if (gen !== loadGen.current) return;
+      setData(json);
       setError('');
     } catch {
-      setError(t('boxes.loadError'));
+      if (gen === loadGen.current) setError(t('boxes.loadError'));
     } finally {
-      setLoading(false);
+      if (gen === loadGen.current) setLoading(false);
     }
   }, [boxId, t]);
 
   useEffect(() => { if (isReady) load(); }, [isReady, load]);
+
+  /**
+   * Reload debounced, so a burst of files costs ONE reload rather than one each.
+   *
+   * The reload is O(catalog) server-side — `/members` maps every record by id,
+   * and a cold row cache rebuilds ~26k rows (1.3s measured on a desktop, and
+   * this app's host is a NAS). Filing ten titles used to pay that ten times, in
+   * series, with each one blocking the next click's feedback.
+   */
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadQueued = useRef(false);
+  /**
+   * A throttle with a trailing call, NOT a plain debounce: the first write
+   * reloads at once — the reading view has no optimistic overlay, so delaying it
+   * would make a single click feel slower than before — and anything inside the
+   * window collapses into one trailing reload. A burst of ten files costs two.
+   */
+  const scheduleLoad = useCallback(() => {
+    if (reloadTimer.current) { reloadQueued.current = true; return; }
+    load();
+    const tick = () => {
+      reloadTimer.current = null;
+      if (!reloadQueued.current) return;
+      reloadQueued.current = false;
+      load();
+      reloadTimer.current = setTimeout(tick, RELOAD_DEBOUNCE_MS);
+    };
+    reloadTimer.current = setTimeout(tick, RELOAD_DEBOUNCE_MS);
+  }, [load]);
+  useEffect(() => () => { if (reloadTimer.current) clearTimeout(reloadTimer.current); }, []);
 
   /**
    * Every write reloads the box rather than patching state locally.
@@ -77,8 +123,19 @@ export default function BoxV2DetailPage() {
    * from the collapse, so a local patch would have to re-derive them in the
    * browser to stay honest — and drifting from what the ranker sees is the one
    * thing this page must not do. One cheap request instead.
+   *
+   * ⚠️ **Fill mode is the one carve-out, and it is narrow.** `QuickEdit` renders
+   * neither `units` nor `composition` — only the two panes and the set-aside
+   * strip, all of which are plain membership — so it moves the card on click and
+   * reconciles when this reload lands (see its `pending` overlay). The reading
+   * view's writes stay reload-only, because those DO render the collapse. The
+   * rule above is unchanged; what changed is that it no longer sits between the
+   * click and the card moving.
+   *
+   * So this no longer awaits `load()`, and it reports whether the write itself
+   * succeeded — the overlay has to roll back a rejected move.
    */
-  const write = useCallback(async (body: Record<string, unknown>) => {
+  const write = useCallback(async (body: Record<string, unknown>): Promise<boolean> => {
     try {
       const res = await fetch(`/api/anime/boxes/${encodeURIComponent(boxId)}`, {
         method: 'PUT',
@@ -86,12 +143,15 @@ export default function BoxV2DetailPage() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('write');
+      setError('');
       setReloadToken(n => n + 1);
-      await load();
+      scheduleLoad();
+      return true;
     } catch {
       setError(t('boxes.saveError'));
+      return false;
     }
-  }, [boxId, load, t]);
+  }, [boxId, scheduleLoad, t]);
 
   const patch = useCallback(async (body: Record<string, unknown>) => {
     try {
@@ -281,7 +341,7 @@ export default function BoxV2DetailPage() {
               // ⚠️ « Non » writes `exclude`, which is BOX-LOCAL. It is not a 👎,
               // not a hide and not a seed mute: a title set aside here says
               // nothing about `/recommendations` (§3).
-              onVerdict={(id, v) => write(v === 'yes' ? { add: [id] } : { exclude: [id] })}
+              onVerdict={async (id, v) => { await write(v === 'yes' ? { add: [id] } : { exclude: [id] }); }}
               reloadToken={reloadToken}
             />
           )
@@ -374,11 +434,19 @@ export default function BoxV2DetailPage() {
           color: inherit;
         }
         .bx2d-identity { flex: 1; min-width: 0; }
+        /*
+         * ⚠️ These carry a background AT REST, not only on hover. The
+         * description is a textarea with resize: vertical, so the browser paints
+         * a resize grabber at its bottom-right corner — and over a transparent
+         * field that little diagonal floats in open space, attached to nothing.
+         * A faint fill is what makes it read as the corner of a box. Do NOT
+         * "clean this up" back to background: none; the grabber comes with it.
+         */
         .bx2d-name, .bx2d-desc {
           display: block;
           width: 100%;
-          background: none;
-          border: 1px solid transparent;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
           border-radius: 6px;
           padding: 2px 6px;
           color: var(--text-primary);
@@ -386,7 +454,9 @@ export default function BoxV2DetailPage() {
         }
         .bx2d-name { font-size: 1.35rem; font-weight: 600; }
         .bx2d-desc { font-size: 0.86rem; color: var(--text-secondary); resize: vertical; min-height: 1.6rem; }
-        .bx2d-emoji:hover, .bx2d-name:hover, .bx2d-desc:hover { border-color: var(--border-color); }
+        /* The fields already carry their edge, so hover only brightens it. */
+        .bx2d-emoji:hover { border-color: var(--border-color); }
+        .bx2d-name:hover, .bx2d-desc:hover { border-color: var(--text-muted); }
         .bx2d-emoji:focus, .bx2d-name:focus, .bx2d-desc:focus {
           border-color: var(--accent-primary);
           outline: none;
