@@ -29,6 +29,14 @@ import styles from './AnimePicker.module.css';
  * the cost is measuring on open, scroll and resize — and the scroll listener
  * must be in CAPTURE phase, because scroll events on a nested scroller do not
  * bubble.
+ *
+ * ⚠️ **It opens downward and FLIPS above when the room below is short**, the
+ * same rule `SeasonPicker` carries. A downward-only panel is not merely cramped
+ * where the field sits low — it is unusable: in `GroupBlade` the picker sits
+ * between the `flex: 1` entry list and the footer, so the panel opened into
+ * ~100px of room and the hits rendered under the taskbar. The `maxHeight` floor
+ * is deliberately LOWER than the flip threshold; a floor above it is what let
+ * the panel claim more room than existed in the first place.
  */
 export interface AnimePickerProps {
   /** Ids already chosen — shown marked and inert rather than filtered out. */
@@ -43,9 +51,14 @@ export interface AnimePickerProps {
   autoFocus?: boolean;
 }
 
-/** Panel geometry, in viewport coordinates (it is `position: fixed`). */
+/**
+ * Panel geometry, in viewport coordinates (it is `position: fixed`). ⚠️ Exactly
+ * ONE of `top`/`bottom` is set — see the flip in `measure`. Setting both leaves
+ * the panel anchored downward, with the flip silently doing nothing.
+ */
 interface PanelPos {
-  top: number;
+  top?: number;
+  bottom?: number;
   left: number;
   width: number;
   maxHeight: number;
@@ -55,6 +68,13 @@ interface PanelPos {
 const PANEL_MIN_WIDTH = 460;
 const PANEL_MAX_WIDTH = 620;
 const VIEWPORT_MARGIN = 12;
+const PANEL_GAP = 6;
+/**
+ * Below this much room underneath, the panel opens upward instead. Higher than
+ * `SeasonPicker`'s 220 because these rows carry a 48px poster — 220px is three
+ * season labels but barely four hits.
+ */
+const PANEL_MIN_HEIGHT = 260;
 const MIN_TERM = 2;
 
 const AnimePicker: React.FC<AnimePickerProps> = ({
@@ -94,15 +114,29 @@ const AnimePicker: React.FC<AnimePickerProps> = ({
     return () => { clearTimeout(timer); ctrl.abort(); };
   }, [term]);
 
-  /** Anchor the panel under the input, widened past its container and kept on screen. */
+  /**
+   * Anchor the panel to the input, widened past its container and kept on
+   * screen. It opens downward, and flips above when there is not enough room
+   * below — the group blade's picker sits directly above the footer, where a
+   * downward panel is a two-row sliver running off the bottom of the screen.
+   */
   const measure = useCallback(() => {
     const el = fieldRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     const width = Math.min(Math.max(r.width, PANEL_MIN_WIDTH), PANEL_MAX_WIDTH, window.innerWidth - VIEWPORT_MARGIN * 2);
     const left = Math.max(VIEWPORT_MARGIN, Math.min(r.left, window.innerWidth - width - VIEWPORT_MARGIN));
-    const top = r.bottom + 6;
-    setPos({ top, left, width, maxHeight: Math.max(200, window.innerHeight - top - VIEWPORT_MARGIN) });
+    const below = window.innerHeight - r.bottom - PANEL_GAP - VIEWPORT_MARGIN;
+    const above = r.top - PANEL_GAP - VIEWPORT_MARGIN;
+    const flip = below < PANEL_MIN_HEIGHT && above > below;
+    setPos({
+      left,
+      width,
+      maxHeight: Math.max(120, flip ? above : below),
+      ...(flip
+        ? { bottom: window.innerHeight - r.top + PANEL_GAP }
+        : { top: r.bottom + PANEL_GAP }),
+    });
   }, []);
 
   useEffect(() => {
@@ -178,7 +212,7 @@ const AnimePicker: React.FC<AnimePickerProps> = ({
         <div
           className={styles.panel}
           ref={panelRef}
-          style={{ top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
+          style={{ top: pos.top, bottom: pos.bottom, left: pos.left, width: pos.width, maxHeight: pos.maxHeight }}
         >
           {loading && <p className={styles.panelNote}>{t('common.loading')}</p>}
           {!loading && hits.length === 0 && <p className={styles.panelNote}>{t('mix.noHits')}</p>}
