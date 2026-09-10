@@ -169,7 +169,8 @@ export default function BoxV2DetailPage() {
     <>
       <Head><title>{box ? `${box.emoji} ${box.name}` : t('boxes.title')} — Anime Tracker</title></Head>
 
-      <div className="bx2d">
+      {/* Fill mode gets a wider canvas — see the rule in the style block. */}
+      <div className={`bx2d ${editing ? 'bx2d-wide' : ''}`}>
         <Link href="/boxes" className="bx2d-back">← {t('boxes.back')}</Link>
 
         {box && (
@@ -321,6 +322,41 @@ export default function BoxV2DetailPage() {
           because a rule here would NOT reach them. */}
       <style jsx>{`
         .bx2d { max-width: 1100px; margin: 0 auto; padding: 16px 20px 48px; }
+
+        /*
+         * Fill mode is three parallel columns (rail + two panes), so it is the
+         * one state on this page that spends width on content rather than on
+         * line length — and at 1100 it was spending it on ellipses instead.
+         * Measured on the live store at a 2000px viewport: 138 of 687 source
+         * titles truncated, falling to 35 at 1300 and 7 at 1600. Past 1600 the
+         * curve is flat and the remaining gain costs the whole side margin, so
+         * that is the knee rather than a round number.
+         *
+         * ⚠️ It is a clamp and NOT a flat 1600, because the design target is a
+         * 4K TV at 300% zoom, about 1280 CSS px, where the old 1100 cap was
+         * binding: a flat 1600 measured 1201 there, quietly spending the TV's
+         * side margin on a layout that had been tuned with it. The middle term
+         * holds 200px of margin on each side, so the canvas is EXACTLY 1100 up
+         * to a 1500px viewport (the TV included, unchanged) and only grows on
+         * the wide desktops that have room to give — reaching 1600 at 2000px.
+         * No breakpoint, so there is no jump to land on either.
+         *
+         * Gated on the mode rather than applied to the page, because the
+         * reading view is a description over one entry list — prose, which a
+         * 1600px measure makes worse.
+         */
+        .bx2d-wide { max-width: clamp(1100px, 100vw - 400px, 1600px); }
+        /*
+         * The canvas widens for the panes, not for the prose. Name and
+         * description are borderless until hover, so at 1600 the only tell was
+         * a 1342px focus box around one short sentence. Capped at a readable
+         * measure, and only in the wide mode — the reading view keeps the
+         * geometry it already had. The two caps differ in ch because the fonts
+         * do (1.35rem against 0.86rem); they are chosen to land on the same
+         * ~530px, so the two fields read as one block rather than a step.
+         */
+        .bx2d-wide .bx2d-name { max-width: 44ch; }
+        .bx2d-wide .bx2d-desc { max-width: 72ch; }
 
         .bx2d-head {
           display: flex;
