@@ -184,12 +184,20 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
         if (raw) onDropIds(JSON.parse(raw) as string[]);
       }}
     >
-      <header className={styles.head}>
-        <h3 className={styles.title}>{title}</h3>
-        <span className={styles.count}>{rows.length}</span>
-      </header>
+      {/* ⚠️ The header AND the children pin together, in one sticky block.
+          `{children}` is the source pane's picker, and the pane is the
+          scrollport — so a sticky header with a static picker under it scrolled
+          the field out of reach after one flick of the ~600-row list, leaving a
+          pinned title above a list with no way to add to it. Found on screen:
+          the field measured at y = -151 with the header still at the top. */}
+      <div className={styles.top}>
+        <header className={styles.head}>
+          <h3 className={styles.title}>{title}</h3>
+          <span className={styles.count}>{rows.length}</span>
+        </header>
 
-      {children}
+        {children}
+      </div>
 
       {groupRegions.length > 0 && (
         <div className={styles.region}>

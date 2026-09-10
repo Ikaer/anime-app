@@ -24,16 +24,34 @@
   background: var(--bg-tertiary);
 }
 
-.head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+/*
+ * The pane's pinned top: the title AND whatever the caller slotted in — which
+ * on the source pane is the "add an unwatched title" picker. ⚠️ It has to be
+ * ONE sticky block: the pane is the scrollport, so a sticky header with the
+ * picker static beneath it scrolled the field away on the first flick of the
+ * ~600-row list, and a pinned title over an unreachable field is worse than
+ * neither being pinned.
+ *
+ * `top: -10px` cancels `.pane`'s own 10px top padding, so the block pins flush
+ * with the pane's inner edge rather than 10px down it; the `-4px` margin plus
+ * `4px` padding is the same trick on the header's own leading, keeping the
+ * unscrolled spacing while giving the pinned state something opaque to paint.
+ * Both were measured on screen, not derived — re-check there if either moves.
+ */
+.top {
   position: sticky;
   top: -10px;
   background: var(--bg-secondary);
   padding: 4px 0 6px;
   margin: -4px 0 0;
-  z-index: 1;
+  /* Above the group cards AND their posters, which scroll under it. */
+  z-index: 2;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .title {

@@ -28,6 +28,7 @@ declare const styles: {
   readonly "stackPoster": string;
   readonly "text": string;
   readonly "title": string;
+  readonly "top": string;
 };
 export = styles;
 
