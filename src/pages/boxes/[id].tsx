@@ -448,12 +448,19 @@ export default function BoxV2DetailPage() {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
           border-radius: 6px;
-          padding: 2px 6px;
+          /* Roomier than the 2px/6px these had while transparent: padding that
+             reads as breathing room around bare text reads as a cramped field
+             once the box around it is visible. */
+          padding: 6px 9px;
           color: var(--text-primary);
           font: inherit;
         }
-        .bx2d-name { font-size: 1.35rem; font-weight: 600; }
-        .bx2d-desc { font-size: 0.86rem; color: var(--text-secondary); resize: vertical; min-height: 1.6rem; }
+        /* The two fields are a stack, not one control — they need a seam. */
+        .bx2d-name { font-size: 1.35rem; font-weight: 600; margin-bottom: 6px; }
+        /* min-height is a border-box floor (globals sets box-sizing globally),
+           so it has to clear one line PLUS the padding and border, or the
+           textarea is clamped under its own single row. */
+        .bx2d-desc { font-size: 0.86rem; color: var(--text-secondary); resize: vertical; min-height: 2.3rem; }
         /* The fields already carry their edge, so hover only brightens it. */
         .bx2d-emoji:hover { border-color: var(--border-color); }
         .bx2d-name:hover, .bx2d-desc:hover { border-color: var(--text-muted); }
@@ -467,7 +474,9 @@ export default function BoxV2DetailPage() {
           display: flex;
           gap: 12px;
           flex-wrap: wrap;
-          margin: 6px 0 0 6px;
+          /* Left offset tracks the fields' border + padding, so the counts sit
+             under the name rather than under the box's edge. */
+          margin: 7px 0 0 10px;
           font-size: 0.78rem;
           color: var(--text-muted);
         }
