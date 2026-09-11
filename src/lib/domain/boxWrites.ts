@@ -77,6 +77,33 @@ export function nextGroups(box: Box, declare: string[], undeclare: string[]): Bo
 }
 
 /**
+ * What « Créer et ajouter à la boîte » files: the new group's members that are
+ * WATCHED, not already in the box, and not set aside in it.
+ *
+ * The group blade's shortcut for the fill loop that used to take five steps —
+ * create the group, scroll up to its card, « Ajouter les N », scroll back down to
+ * find your place. It sends the same `{ add, declare }` pair the card does, so
+ * this only decides the `add` half. Two exclusions, both silent if dropped:
+ *
+ * - ⚠️ **« Écartés » are skipped.** The owner already answered « non » for this
+ *   box; re-filing a set-aside title is the one thing that set exists to
+ *   prevent, and it would happen with no symptom beyond the title quietly
+ *   leaving the strip.
+ * - ⚠️ **Unwatched members are skipped.** A group is drawn from the relation
+ *   graph and routinely holds the unaired sequel; the source pane is watched-only
+ *   by scope, and filing what it could never have offered would put titles the
+ *   owner has not seen into a box about what they have.
+ */
+export function groupMembersToFile(
+  members: string[],
+  watched: Set<string>,
+  filed: Set<string>,
+  excluded: Set<string>
+): string[] {
+  return [...new Set(members)].filter(id => watched.has(id) && !filed.has(id) && !excluded.has(id));
+}
+
+/**
  * Apply an incremental membership edit. Deduped and order-preserving, the same
  * contract `setBoxMembers` has.
  */

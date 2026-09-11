@@ -926,6 +926,7 @@
   "groups.addTitle": "Ajouter un titre au regroupement…",
   "groups.selected": "{count} entrées",
   "groups.save": "Enregistrer",
+  "groups.saveAndFile": "Créer et ajouter à la boîte",
   "groups.saving": "Enregistrement…",
   "groups.cancel": "Annuler",
   "groups.loadError": "Chargement impossible.",

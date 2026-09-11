@@ -10,7 +10,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nextExcluded, nextGroups } from '@/lib/domain/boxWrites';
+import { groupMembersToFile, nextExcluded, nextGroups } from '@/lib/domain/boxWrites';
 import type { Box } from '@/models/anime';
 
 const box = (patch: Partial<Box> = {}): Box => ({
@@ -73,4 +73,18 @@ test('undeclaring drops the declaration and touches nothing else', () => {
 test('declarations dedupe, so a double click cannot count a group twice', () => {
   const next = nextGroups(box({ groups: ['bleach'] }), ['bleach'], []);
   assert.deepEqual(next.groups, ['bleach']);
+});
+
+test('« Créer et ajouter » never re-files an écarté', () => {
+  // The owner already said « non » for this box. Re-filing it would pull the
+  // title out of the strip with no other symptom.
+  const add = groupMembersToFile(['a_1', 'a_2', 'a_3'], new Set(['a_1', 'a_2', 'a_3']), new Set(), new Set(['a_2']));
+  assert.deepEqual(add, ['a_1', 'a_3']);
+});
+
+test('« Créer et ajouter » files only WATCHED members, and nothing already filed', () => {
+  // A group drawn from the relation graph holds the unaired sequel; the source
+  // pane could never have offered it, so the shortcut must not file it either.
+  const add = groupMembersToFile(['a_1', 'a_2', 'a_9'], new Set(['a_1', 'a_2']), new Set(['a_1']), new Set());
+  assert.deepEqual(add, ['a_2']);
 });

@@ -25,6 +25,7 @@ declare const styles: {
   readonly "rowTitle": string;
   readonly "rows": string;
   readonly "save": string;
+  readonly "saveFile": string;
   readonly "scrim": string;
   readonly "title": string;
 };

@@ -39,7 +39,9 @@ import styles from './GroupBlade.module.css';
  * ⚠️ It writes the group DEFINITION only. Declaring it on a box, and filing any
  * membership, are the caller's business — `groups` is a lens over `members`, and
  * a declaration that added membership would make the two sources of truth that
- * can drift.
+ * can drift. « Créer et ajouter à la boîte » does not break that: the blade
+ * still saves only the definition and hands the caller a `file` flag, and the
+ * caller sends the explicit `{ add, declare }` pair a group card would.
  */
 export interface GroupBladeProps {
   /**
@@ -51,8 +53,21 @@ export interface GroupBladeProps {
   group?: GroupSummary;
   /** Every group, so an entry already in one can say so. */
   allGroups: GroupSummary[];
-  /** Called with the saved group; the caller decides what to do about the box. */
-  onSaved: (group: GroupSummary, created: boolean) => void;
+  /**
+   * Called with the saved group; the caller decides what to do about the box.
+   * `file` is true when the owner pressed « Créer et ajouter à la boîte » rather
+   * than « Enregistrer » — still a request, never an action this blade takes.
+   */
+  onSaved: (group: GroupSummary, created: boolean, file: boolean) => void;
+  /**
+   * Offer « Créer et ajouter à la boîte » when drafting a NEW group. Quick edit
+   * sets it: a group created while filling a box is, nearly every time, a group
+   * the owner means to file there, and without the shortcut that took scrolling
+   * to the new card, « Ajouter les N », and scrolling back to find their place.
+   * Never offered when editing — changing an existing definition is not a
+   * statement about this box.
+   */
+  canFile?: boolean;
   /**
    * Called once an existing group is gone. Separate from `onSaved` because the
    * caller has more to refresh: a box that declared it stops collapsing it, so
@@ -68,7 +83,7 @@ interface BladeRow {
   checked: boolean;
 }
 
-const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onSaved, onDeleted, onClose }) => {
+const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onSaved, onDeleted, onClose, canFile }) => {
   const t = useT();
   const [name, setName] = useState(group?.name ?? '');
   const [rows, setRows] = useState<BladeRow[]>([]);
@@ -174,8 +189,9 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
   }, []);
 
   const checked = rows.filter(r => r.checked);
+  const offerFile = !!canFile && !group;
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (file: boolean) => {
     const trimmed = name.trim();
     if (!trimmed || checked.length === 0) return;
     setSaving(true);
@@ -204,7 +220,7 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
           body: JSON.stringify({ name: trimmed }),
         });
       }
-      onSaved({ ...saved, name: trimmed, members }, !group);
+      onSaved({ ...saved, name: trimmed, members }, !group, file && !group);
     } catch {
       setError(t('groups.saveError'));
     } finally {
@@ -348,13 +364,28 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
           <button type="button" className={styles.cancel} onClick={onClose}>{t('groups.cancel')}</button>
           <button
             type="button"
-            className={styles.save}
-            onClick={save}
+            // Demoted beside « Créer et ajouter », which is what this blade is
+            // opened for from quick edit; primary everywhere else.
+            className={offerFile ? styles.cancel : styles.save}
+            onClick={() => save(false)}
             disabled={saving || !name.trim() || checked.length === 0}
           >
             {saving ? t('groups.saving') : t('groups.save')}
           </button>
         </footer>
+
+        {/* Its own full-width row: the label is a sentence, and squeezed into the
+            footer beside Annuler and Enregistrer it wrapped at the blade's 420px. */}
+        {offerFile && (
+          <button
+            type="button"
+            className={`${styles.save} ${styles.saveFile}`}
+            onClick={() => save(true)}
+            disabled={saving || !name.trim() || checked.length === 0}
+          >
+            {saving ? t('groups.saving') : t('groups.saveAndFile')}
+          </button>
+        )}
       </aside>
     </>
   );

@@ -6,6 +6,7 @@ import GroupBlade from './GroupBlade';
 import BoxEntryList from './BoxEntryList';
 import { useT } from '@/lib/i18n';
 import { groupsPresentIn, groupsToFile } from '@/lib/domain/boxUnits';
+import { groupMembersToFile } from '@/lib/domain/boxWrites';
 import type { LeanAnimeRow } from '@/lib/domain/leanRow';
 import type { GroupSummary } from '@/lib/domain/groupSummary';
 import type { WatchedResponse } from '@/pages/api/anime/watched';
@@ -102,6 +103,16 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   const t = useT();
 
   const [watched, setWatched] = useState<LeanAnimeRow[]>([]);
+  /**
+   * Every watched id, whatever the search says — what « Créer et ajouter à la
+   * boîte » tests a group member against.
+   *
+   * ⚠️ Not `watched`: that is the SERVER-searched list, so with « Bleach » typed
+   * a group member whose titles do not match would read as unwatched and be
+   * silently left out of the filing. Captured from any unsearched response,
+   * which the mount fetch always is; statuses do not change on this surface.
+   */
+  const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [loading, setLoading] = useState(true);
@@ -154,7 +165,10 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
         const res = await fetch(`/api/anime/watched${qs}`);
         if (!res.ok) throw new Error('watched');
         const data: WatchedResponse = await res.json();
-        if (!cancelled) setWatched(data.rows);
+        if (!cancelled) {
+          setWatched(data.rows);
+          if (!qs) setWatchedIds(new Set(data.rows.map(r => r.id)));
+        }
       } catch { /* keep whatever is on screen */ }
       finally { if (!cancelled) setLoading(false); }
     }, filters.search ? 250 : 0);
@@ -519,8 +533,23 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
           seedFrom={blade.seedFrom}
           group={blade.group}
           allGroups={groups}
+          canFile
           onClose={() => setBlade(null)}
-          onSaved={async () => { setBlade(null); await loadGroups(); }}
+          onSaved={async (saved, created, file) => {
+            setBlade(null);
+            // « Créer et ajouter à la boîte »: the same `{ add, declare }` pair a
+            // group card's « Ajouter les N » sends, so the rows move at once and
+            // the box-side card appears on the reload (`declare` is not
+            // optimistic — see `act`). The declare still goes when nothing is
+            // left to add: everything filed is exactly when collapsing matters.
+            const filing = created && file
+              ? (() => {
+                  const add = groupMembersToFile(saved.members, watchedIds, memberIds, excludedIds);
+                  return act(add.length > 0 ? { add, declare: [saved.id] } : { declare: [saved.id] });
+                })()
+              : null;
+            await Promise.all([loadGroups(), filing]);
+          }}
           onDeleted={async () => { setBlade(null); await loadGroups(); onGroupsChanged?.(); }}
         />
       )}

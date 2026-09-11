@@ -172,6 +172,13 @@
 }
 
 .save:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* « Créer et ajouter à la boîte » — full width, under the footer row. */
+.saveFile {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
 .save:hover:not(:disabled) { background: var(--accent-hover); }
 
 .note { color: var(--text-muted); font-size: 0.82rem; }
