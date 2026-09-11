@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import AnimePicker from '@/components/anime/AnimePicker';
 import BoxEntryList from '@/components/anime/boxes/BoxEntryList';
 import BoxCompositionBlock from '@/components/anime/boxes/BoxCompositionBlock';
@@ -43,6 +44,15 @@ const RELOAD_DEBOUNCE_MS = 400;
 export default function BoxV2DetailPage() {
   const t = useT();
   const { boxId, state, update, setCardsPerRow, isReady } = useBoxUrlState();
+  const router = useRouter();
+  /**
+   * Deleting is two clicks, and the second one is IN PLACE rather than a
+   * `window.confirm`: this app has no native dialog anywhere, and the group
+   * blade is a blade precisely so it is not a modal. `user/boxes.json` is
+   * durable labeling no provider can re-supply, so the first click only arms.
+   */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [data, setData] = useState<BoxMembersResponse | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -167,6 +177,25 @@ export default function BoxV2DetailPage() {
     }
   }, [boxId, load, t]);
 
+  /**
+   * ⚠️ Navigates away rather than reloading: the box is gone, so `load()` would
+   * 404 into `setNotFound` and flash the not-found page before the redirect.
+   * Nothing else needs sweeping — regroupements are global and no file
+   * references a box id, so a box leaves no dangling pointer behind.
+   */
+  const removeBox = useCallback(async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/anime/boxes/${encodeURIComponent(boxId)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete');
+      await router.push('/boxes');
+    } catch {
+      setError(t('boxes.deleteError'));
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }, [boxId, router, t]);
+
   if (notFound) {
     return (
       <div className="bx2d">
@@ -282,8 +311,37 @@ export default function BoxV2DetailPage() {
               >
                 {state.edit ? t('quickEdit.close') : `✎ ${t('quickEdit.open')}`}
               </button>
+              <button
+                type="button"
+                className={`bx2d-btn bx2d-btnDanger ${confirmDelete ? 'bx2d-btnOn' : ''}`}
+                onClick={() => setConfirmDelete(v => !v)}
+                disabled={deleting}
+              >
+                🗑 {t('boxes.delete')}
+              </button>
             </div>
           </header>
+        )}
+
+        {/* The confirmation sits on its own line under the header rather than in
+            the actions column: it names the box and says what survives, which is
+            a sentence, and the actions column is sized for two short buttons. */}
+        {box && confirmDelete && (
+          <div className="bx2d-confirm" role="alertdialog" aria-label={t('boxes.delete')}>
+            <span className="bx2d-confirmText">
+              {entries === 0
+                ? t('boxes.deleteConfirmEmpty', { name: box.name })
+                : entries === 1
+                  ? t('boxes.deleteConfirmOne', { name: box.name })
+                  : t('boxes.deleteConfirm', { name: box.name, count: entries })}
+            </span>
+            <button type="button" className="bx2d-btn bx2d-btnDangerSolid" onClick={removeBox} disabled={deleting}>
+              {deleting ? t('boxes.deleting') : t('boxes.deleteYes')}
+            </button>
+            <button type="button" className="bx2d-btn" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+              {t('boxes.deleteNo')}
+            </button>
+          </div>
         )}
 
         <nav className="bx2d-tabs">
@@ -482,7 +540,20 @@ export default function BoxV2DetailPage() {
         }
         .bx2d-count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
-        .bx2d-actions { flex-shrink: 0; }
+        .bx2d-actions { flex-shrink: 0; display: flex; gap: 8px; }
+        .bx2d-btn:disabled { opacity: 0.6; cursor: default; }
+        .bx2d-confirm {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin: -4px 0 14px;
+          padding: 8px 12px;
+          border: 1px solid var(--accent-danger, #f87171);
+          border-radius: 8px;
+          background: var(--bg-secondary);
+        }
+        .bx2d-confirmText { flex: 1; min-width: 240px; font-size: 0.85rem; color: var(--text-primary); }
         .bx2d-btn {
           background: var(--bg-tertiary);
           border: 1px solid var(--border-color);
@@ -495,6 +566,19 @@ export default function BoxV2DetailPage() {
         }
         .bx2d-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
         .bx2d-btnOn { border-color: var(--accent-primary); color: var(--text-primary); }
+        /* After .bx2d-btn on purpose: same specificity, so source order decides. */
+        /* Quiet at rest, so the page's one destructive control does not compete
+           with « Remplir »; it only reads as dangerous once reached for. */
+        .bx2d-btnDanger:hover, .bx2d-btnDanger.bx2d-btnOn {
+          border-color: var(--accent-danger, #f87171);
+          color: var(--accent-danger, #f87171);
+        }
+        .bx2d-btnDangerSolid {
+          background: var(--accent-danger, #f87171);
+          border-color: var(--accent-danger, #f87171);
+          color: #fff;
+        }
+        .bx2d-btnDangerSolid:hover { color: #fff; filter: brightness(1.1); }
 
         .bx2d-tabs {
           display: flex;
