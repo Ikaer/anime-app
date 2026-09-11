@@ -221,6 +221,21 @@ export function groupsToFile(
   return out;
 }
 
+/**
+ * A box's declared group ids that still name a group — the ones worth COUNTING.
+ *
+ * `deleteGroup` deliberately does not sweep `Box.groups` (a declaration naming a
+ * deleted group is an unresolvable id the collapse simply ignores), so a raw
+ * `box.groups.length` over-reports once a group has been deleted: the header
+ * would say « 1 regroupement » over a box where nothing collapses. The math
+ * never needed this; the two routes that echo the count do.
+ */
+export const liveDeclared = (declared: string[] | undefined, groups: { id: string }[]): string[] => {
+  if (!declared?.length) return [];
+  const known = new Set(groups.map(g => g.id));
+  return declared.filter(id => known.has(id));
+};
+
 /** One unit prepared for DISPLAY: the slot's face, and everything it stands for. */
 export interface FacedUnit {
   /** The member id shown on the slot — the unit's best example. */

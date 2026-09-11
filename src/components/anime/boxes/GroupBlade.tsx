@@ -53,6 +53,12 @@ export interface GroupBladeProps {
   allGroups: GroupSummary[];
   /** Called with the saved group; the caller decides what to do about the box. */
   onSaved: (group: GroupSummary, created: boolean) => void;
+  /**
+   * Called once an existing group is gone. Separate from `onSaved` because the
+   * caller has more to refresh: a box that declared it stops collapsing it, so
+   * the box's own counts move too, not just the group list.
+   */
+  onDeleted?: (groupId: string) => void;
   onClose: () => void;
 }
 
@@ -62,7 +68,7 @@ interface BladeRow {
   checked: boolean;
 }
 
-const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onSaved, onClose }) => {
+const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onSaved, onDeleted, onClose }) => {
   const t = useT();
   const [name, setName] = useState(group?.name ?? '');
   const [rows, setRows] = useState<BladeRow[]>([]);
@@ -70,6 +76,15 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  /**
+   * Every box that declares this group, from the group's own GET. Deleting a
+   * group changes nothing in `members` — a group is a lens — but each of these
+   * boxes stops counting its entries as one, which the confirmation must say.
+   */
+  const [declaredBy, setDeclaredBy] = useState<{ id: string; name: string }[]>([]);
+  /** Two clicks, the second in place — the same shape as the box page's delete. */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   /**
    * Where the app header stops.
    *
@@ -114,8 +129,11 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
           const res = await fetch(`/api/anime/groups/${encodeURIComponent(group.id)}`);
           // The group GET ships full `rows` for exactly this; `preview` is the
           // index's 5-row slice and would silently truncate the carve.
-          const data: { rows?: LeanAnimeRow[] } = res.ok ? await res.json() : {};
-          if (!cancelled) setRows((data.rows ?? group.preview).map(row => ({ row, checked: true })));
+          const data: { rows?: LeanAnimeRow[]; declaredBy?: { id: string; name: string }[] } = res.ok ? await res.json() : {};
+          if (!cancelled) {
+            setRows((data.rows ?? group.preview).map(row => ({ row, checked: true })));
+            setDeclaredBy(data.declaredBy ?? []);
+          }
         } else if (seedFrom) {
           const res = await fetch(`/api/anime/franchise-component?id=${encodeURIComponent(seedFrom)}`);
           if (!res.ok) throw new Error('component');
@@ -193,6 +211,20 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
       setSaving(false);
     }
   }, [name, checked, group, onSaved, t]);
+
+  const remove = useCallback(async () => {
+    if (!group) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/anime/groups/${encodeURIComponent(group.id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete');
+      onDeleted?.(group.id);
+    } catch {
+      setError(t('groups.deleteError'));
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }, [group, onDeleted, t]);
 
   return (
     <>
@@ -273,7 +305,45 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
           />
         </div>
 
+        {/* Above the footer, full blade width: it names the group and the boxes
+            it moves, which is a sentence, and the footer is one row of buttons. */}
+        {group && confirmDelete && (
+          <div className={styles.confirm} role="alertdialog" aria-label={t('groups.delete')}>
+            <p className={styles.confirmText}>
+              {declaredBy.length === 0
+                ? t('groups.deleteConfirmNone', { name: group.name })
+                : declaredBy.length === 1
+                  ? t('groups.deleteConfirmOne', { name: group.name, box: declaredBy[0].name })
+                  : t('groups.deleteConfirm', {
+                      name: group.name,
+                      count: declaredBy.length,
+                      names: declaredBy.map(b => b.name).join(', '),
+                    })}
+            </p>
+            <div className={styles.confirmActs}>
+              <button type="button" className={styles.cancel} onClick={() => setConfirmDelete(false)} disabled={deleting}>
+                {t('groups.cancel')}
+              </button>
+              <button type="button" className={styles.deleteYes} onClick={remove} disabled={deleting}>
+                {deleting ? t('groups.deleting') : t('groups.deleteYes')}
+              </button>
+            </div>
+          </div>
+        )}
+
         <footer className={styles.foot}>
+          {/* Only for a group that exists — a blade drafting a new one has
+              nothing to delete, Annuler already discards it. */}
+          {group && (
+            <button
+              type="button"
+              className={`${styles.delete} ${confirmDelete ? styles.deleteOn : ''}`}
+              onClick={() => setConfirmDelete(v => !v)}
+              disabled={deleting || saving}
+            >
+              🗑 {t('groups.delete')}
+            </button>
+          )}
           <span className={styles.count}>{t('groups.selected', { count: checked.length })}</span>
           <button type="button" className={styles.cancel} onClick={onClose}>{t('groups.cancel')}</button>
           <button

@@ -176,3 +176,55 @@
 
 .note { color: var(--text-muted); font-size: 0.82rem; }
 .error { color: var(--accent-danger, #f87171); font-size: 0.8rem; margin: 4px 0; }
+
+/*
+ * Delete — quiet at rest, so it never competes with « Enregistrer »; it only
+ * reads as dangerous once reached for. Two clicks, the second in the
+ * confirmation block above the footer.
+ */
+.delete {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 6px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.delete:hover:not(:disabled),
+.deleteOn {
+  border-color: var(--accent-danger, #f87171);
+  color: var(--accent-danger, #f87171);
+}
+.delete:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.confirm {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-danger, #f87171);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+.confirmText {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+.confirmActs {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.deleteYes {
+  background: var(--accent-danger, #f87171);
+  border: 1px solid var(--accent-danger, #f87171);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.deleteYes:hover:not(:disabled) { filter: brightness(1.1); }
+.deleteYes:disabled { opacity: 0.6; cursor: default; }

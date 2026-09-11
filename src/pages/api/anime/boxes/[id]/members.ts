@@ -4,7 +4,7 @@ import { getGroups } from '@/lib/reco/groups';
 import { getAnimeForDisplay } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { toLeanRow, byAirDate, type LeanAnimeRow } from '@/lib/domain/leanRow';
-import { resolveBoxUnits, faceUnits } from '@/lib/domain/boxUnits';
+import { resolveBoxUnits, faceUnits, liveDeclared } from '@/lib/domain/boxUnits';
 import { buildBoxComposition, type BoxComposition } from '@/lib/domain/boxComposition';
 import { DEFAULT_BOX_EMOJI, type AnimeRecord } from '@/models/anime';
 
@@ -110,7 +110,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         .sort((a, b) => (b.personal.score || 0) - (a.personal.score || 0))
         .map((a, i) => [a.id, i] as const)
     );
-    const faced = faceUnits(resolveBoxUnits(box, getGroups()), rank);
+    const groups = getGroups();
+    const faced = faceUnits(resolveBoxUnits(box, groups), rank);
+    const declared = liveDeclared(box.groups, groups);
 
     const row = (id: string) => toLeanRow(byId.get(id)!, titleLang);
     const excludedIds = box.excluded ?? [];
@@ -129,7 +131,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         createdAt: box.createdAt,
         members: box.members,
         ...(box.excluded?.length ? { excluded: box.excluded } : {}),
-        ...(box.groups?.length ? { groups: box.groups } : {}),
+        // Live ids only: a deleted group's declaration is inert, and echoing it
+        // would inflate the header's count (see `liveDeclared`).
+        ...(declared.length ? { groups: declared } : {}),
       },
       members: resolved.sort(byAirDate(titleLang)).map(a => toLeanRow(a, titleLang)),
       units: faced.map(unit => ({ row: row(unit.face), members: unit.members.map(row) })),

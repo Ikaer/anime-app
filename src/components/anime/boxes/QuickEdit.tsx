@@ -54,6 +54,12 @@ export interface QuickEditProps {
    * move that never happened, and the pane lies until the next reload.
    */
   onWrite: (body: Record<string, unknown>) => Promise<boolean>;
+  /**
+   * A group was deleted. The page reloads the box, because a box that declared
+   * it no longer collapses it — its « N séries » and declared count move — and
+   * both are computed server-side, so no local patch could say what they became.
+   */
+  onGroupsChanged?: () => void;
 }
 
 interface Filters {
@@ -92,7 +98,7 @@ type Place = 'box' | 'source' | 'aside';
 const placeOf = (id: string, memberIds: Set<string>, asideIds: Set<string>): Place =>
   memberIds.has(id) ? 'box' : asideIds.has(id) ? 'aside' : 'source';
 
-const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, excluded, onWrite }) => {
+const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, excluded, onWrite, onGroupsChanged }) => {
   const t = useT();
 
   const [watched, setWatched] = useState<LeanAnimeRow[]>([]);
@@ -515,6 +521,7 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
           allGroups={groups}
           onClose={() => setBlade(null)}
           onSaved={async () => { setBlade(null); await loadGroups(); }}
+          onDeleted={async () => { setBlade(null); await loadGroups(); onGroupsChanged?.(); }}
         />
       )}
     </div>

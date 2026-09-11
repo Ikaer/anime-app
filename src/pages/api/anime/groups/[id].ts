@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getGroup, updateGroup, deleteGroup, editGroupMembers } from '@/lib/reco/groups';
+import { getBoxes } from '@/lib/reco/boxes';
 import { getAnimeForDisplay, isCanonicalId } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { projectGroup } from '@/lib/domain/groupSummary';
@@ -52,7 +53,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           .filter((a): a is AnimeRecord => !!a)
           .sort(byAirDate(titleLang))
           .map(a => toLeanRow(a, titleLang));
-        return res.status(200).json({ group: projectGroup(group, byId, titleLang), rows });
+        // `declaredBy`: every box a change to this group moves — the same filter
+        // the MCP's edit_group reports. The blade's delete confirmation names
+        // them, since "these boxes stop counting it as one" is what a delete
+        // actually does and nothing on screen would otherwise say so.
+        const declaredBy = getBoxes()
+          .filter(b => (b.groups ?? []).includes(group.id))
+          .map(b => ({ id: b.id, name: b.name }));
+        return res.status(200).json({ group: projectGroup(group, byId, titleLang), rows, declaredBy });
       }
 
       case 'PATCH': {

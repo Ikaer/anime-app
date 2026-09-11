@@ -930,6 +930,13 @@
   "groups.cancel": "Annuler",
   "groups.loadError": "Chargement impossible.",
   "groups.saveError": "Enregistrement impossible.",
+  "groups.delete": "Supprimer",
+  "groups.deleteConfirmNone": "Supprimer le regroupement « {name} » ? Aucune boîte ne le déclare, et les titres ne bougent pas.",
+  "groups.deleteConfirmOne": "Supprimer « {name} » ? « {box} » le déclare : elle comptera de nouveau ses entrées une par une. Les titres restent dans leurs boîtes.",
+  "groups.deleteConfirm": "Supprimer « {name} » ? {count} boîtes le déclarent ({names}) : elles compteront de nouveau ses entrées une par une. Les titres restent dans leurs boîtes.",
+  "groups.deleteYes": "Oui, supprimer",
+  "groups.deleting": "Suppression…",
+  "groups.deleteError": "Suppression impossible.",
   "boxes.loadError": "Chargement impossible.",
 
   "franchise.pageTitle": "{name} — dans l'ordre - Anime List",

@@ -717,7 +717,12 @@ it; it belongs in the "costs that are real" list.
   drift — and every consumer reads `members` alone, so a title in `groups` but not `members`
   would be invisible to the very ranking this fixes. Under the lens rule a declared-but-unfiled
   group contributes nothing and a deleted group is an unresolvable id to ignore, which is why
-  `deleteGroup` deliberately does NOT sweep `Box.groups`.
+  `deleteGroup` deliberately does NOT sweep `Box.groups`. ⚠️ The math ignores a dead id for free;
+  a COUNT does not — so the two routes that echo `box.groups` (`boxes/index`, `boxes/[id]/members`)
+  pass it through `liveDeclared` first, or « 1 regroupement » would sit over a box where nothing
+  collapses. Reachable since the group blade gained its delete button; its confirmation names the
+  boxes that declare the group (`declaredBy`, on the group GET), because "these stop counting it
+  as one" is what a group delete actually does.
 - **Collapse arithmetic** (`resolveBoxUnits`): connected components of "shares a DECLARED group
   with", **restricted to the box's own members**, weighting each member `1 / componentSize`.
   Both restrictions are load-bearing — counting a group's unfiled members would divide TYBW's

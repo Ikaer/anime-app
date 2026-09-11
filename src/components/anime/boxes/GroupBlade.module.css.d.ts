@@ -2,7 +2,13 @@ declare const styles: {
   readonly "blade": string;
   readonly "cancel": string;
   readonly "close": string;
+  readonly "confirm": string;
+  readonly "confirmActs": string;
+  readonly "confirmText": string;
   readonly "count": string;
+  readonly "delete": string;
+  readonly "deleteOn": string;
+  readonly "deleteYes": string;
   readonly "error": string;
   readonly "foot": string;
   readonly "head": string;

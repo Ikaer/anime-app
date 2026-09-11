@@ -369,6 +369,7 @@ export default function BoxV2DetailPage() {
               declared={box?.groups ?? []}
               excluded={excluded}
               onWrite={write}
+              onGroupsChanged={scheduleLoad}
             />
           ) : (
             <>

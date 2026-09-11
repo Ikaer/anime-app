@@ -930,6 +930,13 @@
   "groups.cancel": "Cancel",
   "groups.loadError": "Could not load.",
   "groups.saveError": "Could not save.",
+  "groups.delete": "Delete",
+  "groups.deleteConfirmNone": "Delete the group “{name}”? No box declares it, and no title moves.",
+  "groups.deleteConfirmOne": "Delete “{name}”? “{box}” declares it and will count its entries one by one again. Titles stay in their boxes.",
+  "groups.deleteConfirm": "Delete “{name}”? {count} boxes declare it ({names}) and will count its entries one by one again. Titles stay in their boxes.",
+  "groups.deleteYes": "Yes, delete",
+  "groups.deleting": "Deleting…",
+  "groups.deleteError": "Could not delete.",
   "boxes.loadError": "Could not load.",
 
   "franchise.pageTitle": "{name} — in order - Anime List",

@@ -4,7 +4,7 @@ import { getGroups } from '@/lib/reco/groups';
 import { getAnimeForDisplay } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { getPrimaryTitle } from '@/lib/domain/animeUtils';
-import { resolveBoxUnits } from '@/lib/domain/boxUnits';
+import { resolveBoxUnits, liveDeclared } from '@/lib/domain/boxUnits';
 import { toLeanRow, type LeanAnimeRow } from '@/lib/domain/leanRow';
 import { DEFAULT_BOX_EMOJI, type AnimeRecord } from '@/models/anime';
 
@@ -140,7 +140,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             // TYBW cours may well be deliberate.
             unitCount: units.units.length,
             ...(box.excluded?.length ? { excludedCount: box.excluded.length } : {}),
-            ...(box.groups?.length ? { groups: box.groups } : {}),
+            // Live ids only — see `liveDeclared`.
+            ...(liveDeclared(box.groups, groups).length ? { groups: liveDeclared(box.groups, groups) } : {}),
             top,
             covers: resolved
               .map(a => a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large)
