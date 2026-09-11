@@ -91,6 +91,14 @@ export interface AnchoredOptions {
    * wide and the question is what to watch NEXT.
    */
   excludeSeen?: boolean;
+  /**
+   * Ids the caller has already answered for, dropped before scoring. The box
+   * recos tab passes its `members` and `excluded`: both are verdicts on this
+   * box, and without this a « Non » came back on every reload — the tab only
+   * hid answered cards client-side. Dropped in pass 1 rather than off the
+   * result so they do not set the maxima that normalize everyone else.
+   */
+  excludeIds?: ReadonlySet<string>;
   /** Language for the server-built "Pourquoi ?" detail strings. */
   lang?: Lang;
   /** Which of a title's three names `anchorTitle`/card titles are built from. */
@@ -157,7 +165,7 @@ export function computeAnchored(
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   let minUsers: number = Infinity;
   for (const candId of new Set([...crowd.keys(), ...anilistCrowd.keys()])) {
-    if (excluded.has(candId)) continue;
+    if (excluded.has(candId) || options.excludeIds?.has(candId)) continue;
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
     if (hiddenCanonical.has(anime.id) || downCanonical.has(anime.id)) continue;

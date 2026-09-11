@@ -252,6 +252,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const ranked = computeAnchored(anchorIds, malEdges, anilistEdges, {
       weights,
       excludeSeen: !includeSeen,
+      // ⚠️ A box's « Oui » (members) and « Non » (excluded) are both answered
+      // questions, and must stay answered across a reload. Members matter too,
+      // not just the anchors: only one representative per unit is asked about
+      // and the cap bites at 40, so a filed title can still be a crowd
+      // neighbour of the rest of the box.
+      excludeIds: box ? new Set([...box.members, ...(box.excluded ?? [])]) : undefined,
       lang,
       titleLang,
     });

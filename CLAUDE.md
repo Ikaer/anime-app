@@ -842,7 +842,10 @@ the resolved units, the écartés rows and the composition block.
   carries the **OFF** case (`seen=0`). ⚠️ « Non » goes through `AnimeCardView`'s `onBoxVerdict`,
   never `onFeedback`: the thumbs reshape the GLOBAL feed, while a box verdict is box-local. ⚠️ A
   « Oui » does not remove the card from an `includeSeen` feed on its own (the title is still a
-  crowd neighbour), so answered cards are hidden client-side.
+  crowd neighbour), so answered cards are hidden client-side for the instant response — AND the
+  mix route passes the box's `members` ∪ `excluded` to `computeAnchored` as `excludeIds`. The
+  client-side half alone was a live bug: every « Non » came back on reload. Members count, not
+  just anchors: only one representative per unit is asked about, so filed cours reappeared too.
 - ⚠️ **`Box.excluded` will contain UNWATCHED ids** — the recos tab surfaces unseen candidates and
   « Non » files them — so nothing that renders or counts that list may join it against the
   watched list. Same failure shape as deriving a seiyuu filmography from the cast slice. It is
