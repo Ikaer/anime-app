@@ -5,7 +5,7 @@ import QuickEditPane, { type PaneGroupRegion } from './QuickEditPane';
 import GroupBlade from './GroupBlade';
 import BoxEntryList from './BoxEntryList';
 import { useT } from '@/lib/i18n';
-import { groupsPresentIn } from '@/lib/domain/boxUnits';
+import { groupsPresentIn, groupsToFile } from '@/lib/domain/boxUnits';
 import type { LeanAnimeRow } from '@/lib/domain/leanRow';
 import type { GroupSummary } from '@/lib/domain/groupSummary';
 import type { WatchedResponse } from '@/pages/api/anime/watched';
@@ -69,6 +69,14 @@ const NO_FILTERS: Filters = {
   search: '', mediaTypes: [], minScore: null, maxScore: null, minYear: null, maxYear: null,
 };
 
+/**
+ * Groups read alphabetically everywhere on this surface. `numeric` so « Season 2 »
+ * sorts before « Season 10 », `base` so case and accents do not split
+ * « Shōgun » from « Shogun ».
+ */
+const byGroupName = (a: { name: string }, b: { name: string }) =>
+  a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+
 /** Which pane a selection belongs to. A range is only meaningful within one. */
 type PaneKind = 'source' | 'box';
 
@@ -119,7 +127,11 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   const loadGroups = useCallback(async () => {
     try {
       const res = await fetch('/api/anime/groups');
-      if (res.ok) setGroups(((await res.json()) as GroupListResponse).groups);
+      // Sorted by name ONCE, here, because every group list on this surface
+      // derives from this array — the rail, both panes' groups regions, the
+      // nudge and the per-title chips all iterate it in order. Sorting at each
+      // render site instead is how one of them ends up in creation order.
+      if (res.ok) setGroups([...((await res.json()) as GroupListResponse).groups].sort(byGroupName));
     } catch { /* the panes degrade to their flat regions */ }
   }, []);
 
@@ -245,9 +257,11 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   // there is declared yet and the region exists to let one click file a show.
   // The box pane shows only the DECLARED ones, because that region is a picture
   // of how the ranker sees the box.
+  // ⚠️ `groupsToFile`, not `groupsPresentIn`: a show with one entry filed and
+  // one still to file must keep its card here — see the helper.
   const sourceRegions = useMemo(
-    () => toRegion(groupsPresentIn(groups, new Set(source.map(r => r.id)))),
-    [groups, source] // eslint-disable-line react-hooks/exhaustive-deps
+    () => toRegion(groupsToFile(groups, new Set(source.map(r => r.id)), memberIds)),
+    [groups, source, memberIds] // eslint-disable-line react-hooks/exhaustive-deps
   );
   const boxRegions = useMemo(
     () => toRegion(groupsPresentIn(groups.filter(g => declared.includes(g.id)), new Set(boxRows.map(r => r.id)))),
@@ -409,9 +423,11 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
             // `members` and the group id into `groups` (§4). One click, both
             // effects, so the ordinary path still feels automatic. A single `+`
             // does not declare: one title is not a statement about a show.
-            onAdd={ids => act(ids.length > 1
-              ? { add: ids, declare: sourceRegions.filter(r => r.members.every(m => ids.includes(m))).map(r => r.group.id) }
-              : { add: ids })}
+            // ⚠️ The card NAMES its group rather than this guessing from the id
+            // count. `ids.length > 1` used to stand in for "came from a group
+            // card", which a partially-filed show breaks: its card files one
+            // title, and would then have filed it without declaring anything.
+            onAdd={(ids, groupId) => act(groupId ? { add: ids, declare: [groupId] } : { add: ids })}
             onExclude={ids => act({ exclude: ids })}
             onOpenGroup={g => setBlade({ group: g })}
             onCreateGroup={id => setBlade({ seedFrom: id })}

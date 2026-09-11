@@ -17,6 +17,7 @@ import {
   unitWeightFn,
   unitCount,
   groupsPresentIn,
+  groupsToFile,
 } from '@/lib/domain/boxUnits';
 import type { Box, UserGroup } from '@/models/anime';
 
@@ -173,4 +174,27 @@ test('groupsPresentIn needs TWO members present, not one', () => {
 
   assert.deepEqual(hit.map(h => h.group.id), ['bleach']);
   assert.deepEqual(hit[0].members, ['a_1', 'a_2']);
+});
+
+test('groupsToFile keeps a PARTIALLY-FILED show, counting what is left', () => {
+  // The live case: Black Lagoon, S1 filed in the box, The Second Barrage still
+  // in the source, the OVA unwatched (in neither). Only ONE member is left to
+  // file, but the show spans two panes — and that is precisely when the card is
+  // the useful control. Counting the source alone dropped it to a chip.
+  const groups = [group('black-lagoon', ['a_805', 'a_1377', 'a_3823'])];
+  const hit = groupsToFile(groups, new Set(['a_1377']), new Set(['a_805']));
+
+  assert.deepEqual(hit.map(h => h.group.id), ['black-lagoon']);
+  // `members` is what is LEFT: the number the card shows and the click files.
+  assert.deepEqual(hit[0].members, ['a_1377']);
+});
+
+test('groupsToFile still keeps a lone title a chip, and drops a fully-filed show', () => {
+  // The exclusion groupsPresentIn exists for still holds: it is the TOTAL across
+  // both panes that must reach two, not the source count alone.
+  const lone = group('lone', ['a_1', 'a_9']);        // a_9 unwatched, nothing filed
+  const done = group('done', ['a_2', 'a_3']);        // both already in the box
+  const hit = groupsToFile([lone, done], new Set(['a_1']), new Set(['a_2', 'a_3']));
+
+  assert.deepEqual(hit, []);
 });

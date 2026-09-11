@@ -186,6 +186,41 @@ export function groupsPresentIn(
   return out;
 }
 
+/**
+ * The SOURCE pane's groups region: every group with something left to file.
+ *
+ * A group qualifies when at least one member is still in the source (there is
+ * something for « Tout ajouter » to act on) AND at least two of its members are
+ * present across the source and the box together. `members` is what is LEFT —
+ * the number the card counts and the click files.
+ *
+ * ⚠️ **Not `groupsPresentIn(groups, source)`, which is what this replaced.** That
+ * counts only what is still in the source, so a PARTIALLY-FILED show vanished
+ * from the region the moment its first entry went in: Black Lagoon with S1
+ * filed, The Second Barrage still to file and the OVA unwatched counts one, so
+ * the group rendered as nothing but a chip on the box-side title — exactly when
+ * the card is the useful thing, since « Tout ajouter » there both finishes the
+ * show and makes the box count it as one. Found on the live store.
+ *
+ * The lone-title exclusion `groupsPresentIn` exists for still holds, because it
+ * is the TOTAL that must reach two: a group with one watched entry and nothing
+ * filed is still a one-item card, and still stays a chip.
+ */
+export function groupsToFile(
+  groups: UserGroup[],
+  source: Set<string>,
+  filed: Set<string>
+): { group: UserGroup; members: string[] }[] {
+  const out: { group: UserGroup; members: string[] }[] = [];
+  for (const group of groups) {
+    const left = group.members.filter(id => source.has(id));
+    if (left.length === 0) continue;
+    const here = group.members.filter(id => filed.has(id)).length;
+    if (left.length + here >= 2) out.push({ group, members: left });
+  }
+  return out;
+}
+
 /** One unit prepared for DISPLAY: the slot's face, and everything it stands for. */
 export interface FacedUnit {
   /** The member id shown on the slot — the unit's best example. */

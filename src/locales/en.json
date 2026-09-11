@@ -892,6 +892,8 @@
   "quickEdit.expandGroup": "Show the entries",
   "quickEdit.addAll": "Add all {count}",
   "quickEdit.remaining": "{count} left",
+  "quickEdit.addAllOne": "Add it",
+  "quickEdit.remainingOne": "1 left",
   "quickEdit.present": "{count} here",
   "quickEdit.undeclare": "Stop counting as one",
   "quickEdit.nudge": "These {count} entries belong to the group “{name}”.",

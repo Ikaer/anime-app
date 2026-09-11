@@ -63,7 +63,12 @@ export interface QuickEditPaneProps {
   selected: Set<string>;
   onToggleSelect: (id: string, shift: boolean) => void;
   /** source: `+` and « Ajouter les N ». */
-  onAdd?: (ids: string[]) => void;
+  /**
+   * `groupId` is passed by a group card's « Tout ajouter » and by nothing else:
+   * that click files the titles AND declares the group, while a single `+` only
+   * files — one title is not a statement about a show.
+   */
+  onAdd?: (ids: string[], groupId?: string) => void;
   /** source: `⊘`. */
   onExclude?: (ids: string[]) => void;
   /** box: `−`. */
@@ -229,7 +234,10 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
                     {variant === 'source'
                       // « 4 restants » — in the source pane the card counts what
                       // is NOT filed yet, which is the number the click acts on.
-                      ? t('quickEdit.remaining', { count: members.length })
+                      // A singular is its own key, chosen by a ternary — never a
+                      // constructed one (CLAUDE.md). Reachable only since a
+                      // partially-filed show keeps its card with one title left.
+                      ? (members.length === 1 ? t('quickEdit.remainingOne') : t('quickEdit.remaining', { count: members.length }))
                       : t('quickEdit.present', { count: members.length })}
                   </span>
                 </div>
@@ -244,8 +252,8 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
                     // group id into `groups`. One click, both effects, so the
                     // ordinary path still feels automatic (§4).
                     <button type="button" className={styles.groupAct}
-                      onClick={() => onAdd?.(members)}>
-                      {t('quickEdit.addAll', { count: members.length })}
+                      onClick={() => onAdd?.(members, group.id)}>
+                      {members.length === 1 ? t('quickEdit.addAllOne') : t('quickEdit.addAll', { count: members.length })}
                     </button>
                   )}
 
