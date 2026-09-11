@@ -69,6 +69,10 @@ declare const styles: {
   readonly "status": string;
   readonly "title": string;
   readonly "titleRow": string;
+  readonly "verdictNo": string;
+  readonly "verdictRow": string;
+  readonly "verdictSeen": string;
+  readonly "verdictYes": string;
   readonly "watching": string;
 };
 export = styles;

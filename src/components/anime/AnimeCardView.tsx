@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, AffinityMark, AnticipationMark, RecoMeta, RecoVerdict } from '@/models/anime';
-import { getStatusFilterKey, getPrimaryTitle, getSecondaryTitle } from '@/lib/domain/animeUtils';
+import { getStatusFilterKey, getPrimaryTitle, getSecondaryTitle, getEffectiveStatus } from '@/lib/domain/animeUtils';
+import { SEEN_STATUSES } from '@/lib/reco/scoring';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
@@ -468,7 +469,11 @@ export default function AnimeCardView({
                             had something to render for them. */}
                         {(feedbackMode || onBoxVerdict || anime.discrepancy || anime.personal.status || anime.personal.score) && (
                         <div className={styles.actions}>
-                            <DiscrepancyBadge anime={anime} />
+                            {/* Not on the box recos tab: there the row is the
+                                question and nothing else. The chip also carried
+                                `white-space: nowrap` wide enough to push both
+                                verdict buttons off every watched card. */}
+                            {!onBoxVerdict && <DiscrepancyBadge anime={anime} />}
                             {feedbackMode === 'up' || feedbackMode === 'down' ? (
                                 <Button
                                     onClick={() => onRemoveFeedback?.(anime.id)}
@@ -502,14 +507,20 @@ export default function AnimeCardView({
                             ) : null}
                             {/* The box recos tab, with seen titles left in: each
                                 card is a question about THIS box, and answering
-                                it either way removes the card from the list. */}
+                                it either way removes the card from the list.
+                                A title already watched gets the OUTLINED pair:
+                                that card is a retrospective question ("does what
+                                I saw belong here?"), an unwatched one a guess,
+                                and the two should not read alike at a glance.
+                                Seen = `SEEN_STATUSES`, the rule `includeSeen`
+                                itself applies — `plan_to_watch` stays solid. */}
                             {onBoxVerdict && (
-                                <>
+                                <div className={`${styles.verdictRow} ${SEEN_STATUSES.has(getEffectiveStatus(anime) ?? '') ? styles.verdictSeen : ''}`}>
                                     <Button
                                         onClick={() => onBoxVerdict(anime.id, 'yes')}
                                         variant="primary-positive"
                                         size="xs"
-                                        className={styles.actionButton}
+                                        className={`${styles.actionButton} ${styles.verdictYes}`}
                                         title={t('boxReco.yesTitle')}
                                     >
                                         {t('boxReco.yes')}
@@ -518,12 +529,12 @@ export default function AnimeCardView({
                                         onClick={() => onBoxVerdict(anime.id, 'no')}
                                         variant="primary-negative"
                                         size="xs"
-                                        className={styles.actionButton}
+                                        className={`${styles.actionButton} ${styles.verdictNo}`}
                                         title={t('boxReco.noTitle')}
                                     >
                                         {t('boxReco.no')}
                                     </Button>
-                                </>
+                                </div>
                             )}
                         </div>
                         )}
