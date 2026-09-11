@@ -90,7 +90,7 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `user/boxes.json` — « Mes boîtes »: hand-drawn taste axes, a bare `Box[]` whose `members` are canonical ids, plus the optional `excluded` (« écartés ») and `groups` (which regroupements collapse HERE) — see the "/boxes" section
 - `user/groups.json` — « Mes regroupements »: a bare `UserGroup[]`, the owner's own statements that several titles are ONE thing. Global definitions; a box declares which of them apply to it. ⚠️ Durable user data like `boxes.json` — no provider can re-supply it
 - `cache/recommendations.json` — cached recommendations feed data (the one **rebuildable** file: `cache/` says so) (crowd/AniList seeds + hydrated candidates); the code constant is `RECOMMENDATIONS_FILE`. **Canonical-id-keyed like every other file here** since E10 (docs/DECISIONS.md), and carrying a `v` (`RECO_CACHE_VERSION`): an older MAL-keyed file parses fine but would miss every lookup and render an empty feed silently, so a version mismatch **discards** it rather than migrating — it is `cache/`, the next refresh rebuilds it.
-- `logs/connection_log.json` — the sync-progress feed. Named like diagnostics, but it is **app data**: the Connections panel and the first-run onboarding bar *poll* it (there is no SSE for meta-sync, the cast sweep or the catalog crawl — this log IS the transport). So it lives in the store under `DATA_PATH`, **not** under `LOGS_PATH`, which consequently has no writer left and stays reserved for real debug output.
+- `logs/connection_log.json` — the sync-progress feed. Named like diagnostics, but it is **app data**: the Connections panel and the first-run onboarding bar *poll* it (there is no SSE for meta-sync, the cast sweep or the catalog crawl — this log IS the transport). So it lives in the store under `DATA_PATH`, **not** under `LOGS_PATH`, which is reserved for real debug output — today the perf log (see "Perf log" below).
 
 [src/lib/store/jsonStore.ts](src/lib/store/jsonStore.ts) owns the raw file-I/O primitives (`DATA_PATH`, `dataFile`, `readJsonFile`, `writeJsonFile`); every module that persists a JSON file goes through it. `dataFile('personal/mal.json')` is the single seam the folder layout goes through, so `ensureDataDirectory` creates the file's **own parent**, not just `DATA_PATH` — otherwise the first write on a fresh install `ENOENT`s. A pre-layout store (flat `animes_*.json`, no `catalog/`) makes the first read **throw** rather than fall through to first-run onboarding on top of a full store; the flag latches only once the check passes, never before the throw, so every read fails consistently. `readJsonFile` carries a **parse cache keyed on the file's `mtimeMs + size`** (the big slices are ~40MB and ~26MB — parsing them dominated every cold path), and `writeJsonFile` evicts the entry. **Shared-reference contract:** callers may receive the same parsed object as other callers; mutate-then-write is safe (the write evicts), but never mutate a read result without writing it back — the mutation would leak into every later read.
 
@@ -1493,12 +1493,22 @@ meets on the site most of these titles come from.
   "the romaji title when it differs" rule was only correct while the primary was
   always English.
 
+### Perf log — where a slow request's time went
+
+[store/perf.ts](src/lib/store/perf.ts) + the client probe [clientPerf.ts](src/lib/clientPerf.ts), added (2026-09-11) to chase "`/boxes` and `/boxes/[id]` are fine for five minutes, then one load takes ~10s" on the NAS. JSON lines in `LOGS_PATH/perf.log` (NAS: `\\Syno\root4\AppData\AnimeTracker\logs\perf.log`), mirrored to `docker logs` as `[perf] …`; `GET /api/anime/perf` is a store-free snapshot (uptime, heap vs limit, last rebuild and why).
+
+- **Each line is built so the candidate causes leave different traces**: `rebuild` + `changed` (which cache input moved — a cold row build), `statMs` (the one disk touch a WARM read still makes — a sleeping data volume), `lagMaxMs` + `stall` (event loop blocked by something else), `gc`, `boot`/`up` (a restart), and the browser's `client` line (`queueMs`/`ttfbMs`/`serverMs`/`renderMs`, POSTed only when ≥1.5s) for time the server never saw. `ttfbMs − serverMs` is time before the handler ran — measured locally as ~0.5-1.3s on the FIRST hit of each route in a fresh process (route code loading), which the server line alone cannot see.
+- **Wired on the two box routes only** (`beginRequest` → `finish(res)` before the body, which also sets `Server-Timing`). The stat/read/parse/assemble accounting lives in `jsonStore`/`record.ts`, so another route is two lines to add.
+- ⚠️ **Appends are async on purpose**: the log sits on the data volume, and a synchronous append would add the very disk spin-up it may be measuring. Output only runs under `NEXT_RUNTIME`, so `node scripts/*.js` never writes lines.
+- Measured baselines (2026-09-11, prod store): local desktop cold build 1.3s (read 0.4 · parse 0.5 · assemble 0.36), rebuild after a `catalog/anilist.json` change 1.0s, after a small personal-slice change 0.3s (assembly alone), warm 4-7ms in the handler / ~45ms click-to-paint. NAS: cold `/api/anime/boxes` 6.1s, warm 47-150ms. API routes share ONE cache in the Turbopack prod build; SSR pages hold a second.
+
 ### Environment variables
 
 | Variable | Purpose |
 |---|---|
 | `DATA_PATH` | Root for JSON data files (default: `/app/data`) |
-| `LOGS_PATH` | Diagnostics directory. **No writer today** — the connection log moved into the store (`DATA_PATH/logs/`, see above); the setting stays valid and displayed. |
+| `LOGS_PATH` | Diagnostics directory. Its one writer is `perf.log` (see "Perf log" below) — the connection log moved into the store (`DATA_PATH/logs/`, see above). |
+| `PERF_LOG` | `0` turns the perf log's file/console output off (accounting and `Server-Timing` stay). |
 | `MAL_CLIENT_ID` | MyAnimeList OAuth app client ID |
 | `MAL_REDIRECT_URI` | OAuth redirect URI |
 | `CRON_SECRET` | Auth token for cron-sync endpoint. ⚠️ A `cronSecret` saved via `/settings` **overrides** this (`resolveSetting` reads stored before env) — see the cron-sync section |

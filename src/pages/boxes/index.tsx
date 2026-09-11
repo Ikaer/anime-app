@@ -17,9 +17,10 @@
  * writes against many boxes, and a client-side read-modify-write would let the
  * second clobber the first.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useT } from '@/lib/i18n';
+import { startLoadProbe } from '@/lib/clientPerf';
 import BoxCard from '@/components/anime/boxes/BoxCard';
 import type { BoxListResponse, BoxSummary } from '../api/anime/boxes';
 
@@ -32,11 +33,16 @@ export default function BoxesV2Page() {
   const [emoji, setEmoji] = useState('');
   const [description, setDescription] = useState('');
 
+  const loadedOnce = useRef(false);
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/anime/boxes');
+      const url = '/api/anime/boxes';
+      const probe = startLoadProbe('boxes', url, loadedOnce.current ? 'reload' : 'initial');
+      loadedOnce.current = true;
+      const res = await fetch(url);
       if (!res.ok) throw new Error('boxes');
       setBoxes(((await res.json()) as BoxListResponse).boxes);
+      probe.done();
       setError('');
     } catch {
       setError(t('boxes.loadError'));

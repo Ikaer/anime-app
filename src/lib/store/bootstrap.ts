@@ -66,12 +66,11 @@ export function resolveDataPath(): string {
  * Logs folder: `LOGS_PATH` env → bootstrap `logsPath` → the resolved data folder
  * (logs default to living beside the data, matching the pre-bootstrap behaviour).
  *
- * **Currently has no writer.** The connection log — its only ever consumer —
- * moved into the store as `logs/connection_log.json` under `DATA_PATH`, because
- * it is a feature's data rather than diagnostics.
- * The setting stays valid, resolved and displayed, reserved for real debug/error
- * output; `connectionLog.ts` still reads this location once as a migration
- * fallback. Deliberate, not an oversight.
+ * **Its one writer is the perf log** (`perf.log`, see `store/perf.ts`) — real
+ * diagnostics, which is what the folder was kept for. The connection log, its
+ * first consumer, moved into the store as `logs/connection_log.json` under
+ * `DATA_PATH` because it is a feature's data rather than diagnostics;
+ * `connectionLog.ts` still reads this location once as a migration fallback.
  */
 export function resolveLogsPath(): string {
   return process.env.LOGS_PATH || readBootstrapConfig().logsPath || resolveDataPath();

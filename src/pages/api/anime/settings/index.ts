@@ -93,9 +93,8 @@ function handleGet(req: NextApiRequest, res: NextApiResponse) {
     },
     logsPath: {
       stored: bootStored.logsPath ?? '',
-      // The only reader left: since the connection log moved into the store
-      // Nothing writes to LOGS_PATH today, but the setting
-      // stays valid and displayed, reserved for real diagnostics.
+      // Since the connection log moved into the store, the one writer here is
+      // the perf log (`lib/store/perf.ts`) — real diagnostics, as reserved.
       resolved: resolveLogsPath(),
       fromEnv: !!process.env.LOGS_PATH,
     },

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getBox, BOX_TAG_MIN_RANK } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
 import { getAnimeForDisplay } from '@/lib/store';
+import { beginRequest } from '@/lib/store/perf';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { toLeanRow, byAirDate, type LeanAnimeRow } from '@/lib/domain/leanRow';
 import { resolveBoxUnits, faceUnits, liveDeclared } from '@/lib/domain/boxUnits';
@@ -86,6 +87,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const boxId = typeof id === 'string' ? id : '';
 
   try {
+    const perf = beginRequest('box-members');
     const box = getBox(boxId);
     if (!box) return res.status(404).json({ error: 'Box not found' });
 
@@ -117,7 +119,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const row = (id: string) => toLeanRow(byId.get(id)!, titleLang);
     const excludedIds = box.excluded ?? [];
 
-    return res.status(200).json({
+    const body = {
       boxId,
       box: {
         id: box.id,
@@ -141,7 +143,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       composition: buildBoxComposition(faced, byId, BOX_TAG_MIN_RANK),
       missing,
       missingExcluded: excludedIds.filter(id => !byId.has(id)),
-    } satisfies BoxMembersResponse);
+    } satisfies BoxMembersResponse;
+    // Timed through the composition build, which is the route's own work.
+    perf.finish(res, { box: boxId, members: box.members.length });
+    return res.status(200).json(body);
   } catch (error) {
     console.error(`Error loading members of box ${boxId}:`, error);
     return res.status(500).json({ error: 'Internal Server Error' });

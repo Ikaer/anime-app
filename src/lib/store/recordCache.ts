@@ -21,6 +21,11 @@ import { AnimeRecord } from '@/models/anime';
 
 let cachedAnime: AnimeRecord[] | null = null;
 let cachedAnimeInputs: readonly unknown[] | null = null;
+/**
+ * The inputs of the last build, kept through `invalidateRecordCache` — for the
+ * perf log's "why did this rebuild", never for a cache decision.
+ */
+let lastBuiltInputs: readonly unknown[] | null = null;
 
 /** Cached rows if every cache input is reference-identical to last time, else null. */
 export function getCachedRows(inputs: readonly unknown[]): AnimeRecord[] | null {
@@ -32,6 +37,17 @@ export function getCachedRows(inputs: readonly unknown[]): AnimeRecord[] | null 
 export function setCachedRows(rows: AnimeRecord[], inputs: readonly unknown[]): void {
   cachedAnime = rows;
   cachedAnimeInputs = inputs;
+  lastBuiltInputs = inputs;
+}
+
+/**
+ * Positions of the inputs that differ from the last build. `null` when this
+ * module instance has never built — a cold start rather than a change. An empty
+ * array means nothing moved and the rebuild came from an explicit invalidation.
+ */
+export function changedCacheInputs(inputs: readonly unknown[]): number[] | null {
+  if (!lastBuiltInputs) return null;
+  return inputs.flatMap((v, i) => (v === lastBuiltInputs![i] ? [] : [i]));
 }
 
 /** Called by every slice write in `slices.ts` (except the cast one — see there). */

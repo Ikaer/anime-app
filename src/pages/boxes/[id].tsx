@@ -33,6 +33,7 @@ import QuickEdit from '@/components/anime/boxes/QuickEdit';
 import BoxRecos from '@/components/anime/boxes/BoxRecos';
 import { useBoxUrlState, type BoxTab } from '@/hooks';
 import { useT, type TranslationKey } from '@/lib/i18n';
+import { startLoadProbe } from '@/lib/clientPerf';
 import type { BoxMembersResponse } from '../api/anime/boxes/[id]/members';
 
 /**
@@ -75,17 +76,23 @@ export default function BoxV2DetailPage() {
    * stale counts on screen.
    */
   const loadGen = useRef(0);
+  const probedBox = useRef<string | null>(null);
   const load = useCallback(async () => {
     if (!boxId) return;
     const gen = ++loadGen.current;
     try {
-      const res = await fetch(`/api/anime/boxes/${encodeURIComponent(boxId)}/members`);
+      const url = `/api/anime/boxes/${encodeURIComponent(boxId)}/members`;
+      // The first load of THIS box is the one waited on; the rest follow writes.
+      const probe = startLoadProbe('box', url, probedBox.current === boxId ? 'reload' : 'initial');
+      probedBox.current = boxId;
+      const res = await fetch(url);
       if (gen !== loadGen.current) return;
       if (res.status === 404) { setNotFound(true); return; }
       if (!res.ok) throw new Error('box');
       const json = await res.json();
       if (gen !== loadGen.current) return;
       setData(json);
+      probe.done();
       setError('');
     } catch {
       if (gen === loadGen.current) setError(t('boxes.loadError'));

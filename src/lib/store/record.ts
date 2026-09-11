@@ -18,7 +18,8 @@ import { toAnimeRecord, type CatalogPrecedenceOverrides } from '@/lib/domain/ani
 import { getCatalogPrecedenceByField } from '@/lib/config/settings';
 import { getResolvedPersonalPrecedence } from '@/lib/providers/registry';
 import { getRegistry, resolveByMalId, toNum } from '@/lib/store/registry';
-import { getCachedRows, setCachedRows } from '@/lib/store/recordCache';
+import { getCachedRows, setCachedRows, changedCacheInputs } from '@/lib/store/recordCache';
+import { beginRowsCall } from '@/lib/store/perf';
 import {
   getAllAnime,
   getAllAnilistMeta,
@@ -108,7 +109,19 @@ function assembleDisplayRow(
   );
 }
 
+/**
+ * Names for the positions of `getAnimeForDisplay`'s cache inputs, so the perf
+ * log can say WHICH one moved. Kept beside the array it describes — reorder one,
+ * reorder both.
+ */
+const CACHE_INPUT_NAMES = [
+  'catalog/mal.json', 'personal/mal.json', 'user/hidden.json', 'user/rating_intent.json',
+  'personal/simkl.json', 'catalog/anilist.json', 'personal/anilist.json', 'personal/local.json',
+  'registry.json', 'personalPrecedence', 'catalogPrecedence',
+];
+
 export function getAnimeForDisplay(): AnimeRecord[] {
+  const done = beginRowsCall();
   // Every slice is keyed by canonical id (the migration + resolve-at-write
   // invariant guarantee it). The row set is the UNION of every slice's keys —
   // not just the MAL slice — so an AniList-only canonical id (no MAL slice,
@@ -142,8 +155,13 @@ export function getAnimeForDisplay(): AnimeRecord[] {
   // change invalidates too.
   const inputs = [malAnime, malPersonalByCanonical, hiddenIdList, ratingIntents, simklByCanonical, anilistMetaByCanonical, anilistPersonalByCanonical, localByCanonical, registry, personalPrecedence.join('|'), catalogPrecedenceKey(catalogPrecedenceByField)];
   const cached = getCachedRows(inputs);
-  if (cached) return cached;
+  if (cached) {
+    done(true, cached.length);
+    return cached;
+  }
 
+  const moved = changedCacheInputs(inputs);
+  const assembleStart = performance.now();
   const hiddenIds = new Set(hiddenIdList);
 
   const canonicalIds = new Set<string>([
@@ -164,6 +182,8 @@ export function getAnimeForDisplay(): AnimeRecord[] {
     if (row) rows.push(row);
   }
   setCachedRows(rows, inputs);
+  done(false, rows.length, performance.now() - assembleStart,
+    moved === null ? ['cold'] : moved.length ? moved.map(i => CACHE_INPUT_NAMES[i]) : ['invalidated']);
   return rows;
 }
 

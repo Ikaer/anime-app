@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { resolveDataPath } from '@/lib/store/bootstrap';
+import { recordStoreRead } from '@/lib/store/perf';
 
 /**
  * The JSON-file store that stands in for a database. Every persisted file lives
@@ -110,20 +111,33 @@ export function readJsonFile<T>(filePath: string, defaultValue: T): T {
   assertMigratedLayout();
   try {
     let stat: fs.Stats;
+    // Timed even on a cache hit: the stat is the one disk touch a warm read
+    // still makes, so it is where a sleeping data volume would show (see perf.ts).
+    const t0 = performance.now();
     try {
       stat = fs.statSync(filePath);
     } catch {
+      recordStoreRead(path.relative(DATA_PATH, filePath), performance.now() - t0);
       // Missing file — pin (and reuse) a stable default reference.
       const cached = parseCache.get(filePath);
       if (cached && cached.mtimeMs === -1) return cached.value as T;
       parseCache.set(filePath, { mtimeMs: -1, size: -1, value: defaultValue });
       return defaultValue;
     }
+    const t1 = performance.now();
     const cached = parseCache.get(filePath);
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      recordStoreRead(path.relative(DATA_PATH, filePath), t1 - t0);
       return cached.value as T;
     }
-    const value = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
+    const text = fs.readFileSync(filePath, 'utf-8');
+    const t2 = performance.now();
+    const value = JSON.parse(text) as T;
+    recordStoreRead(path.relative(DATA_PATH, filePath), t1 - t0, {
+      bytes: stat.size,
+      readMs: t2 - t1,
+      parseMs: performance.now() - t2,
+    });
     parseCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, value });
     return value;
   } catch (error) {

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getBoxes, createBox } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
 import { getAnimeForDisplay } from '@/lib/store';
+import { beginRequest } from '@/lib/store/perf';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { resolveBoxUnits, liveDeclared } from '@/lib/domain/boxUnits';
@@ -78,6 +79,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     switch (req.method) {
       case 'GET': {
+        const perf = beginRequest('boxes');
         const all = getAnimeForDisplay();
         const byId = new Map<string, AnimeRecord>(all.map(a => [a.id, a]));
         const titleLang = getTitleLanguage();
@@ -151,6 +153,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           };
         });
 
+        perf.finish(res, { boxes: boxes.length });
         return res.status(200).json({ boxes } satisfies BoxListResponse);
       }
 
