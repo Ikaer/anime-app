@@ -1,4 +1,7 @@
 declare const styles: {
+  readonly "areaBox": string;
+  readonly "areaGroups": string;
+  readonly "areaSource": string;
   readonly "body": string;
   readonly "bulk": string;
   readonly "bulkAdd": string;
@@ -7,10 +10,8 @@ declare const styles: {
   readonly "excluded": string;
   readonly "excludedEmpty": string;
   readonly "excludedHead": string;
-  readonly "index": string;
   readonly "indexCount": string;
   readonly "indexEmpty": string;
-  readonly "indexHead": string;
   readonly "indexList": string;
   readonly "indexName": string;
   readonly "indexRow": string;
@@ -19,6 +20,8 @@ declare const styles: {
   readonly "nudge": string;
   readonly "nudgeYes": string;
   readonly "nudges": string;
+  readonly "others": string;
+  readonly "othersHead": string;
   readonly "panes": string;
   readonly "picker": string;
   readonly "rail": string;

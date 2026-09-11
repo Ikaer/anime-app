@@ -909,6 +909,8 @@
   "quickEdit.groupsIndex": "Mes regroupements",
   "quickEdit.newGroup": "Nouveau regroupement",
   "quickEdit.noGroups": "Aucun regroupement pour l’instant.",
+  "quickEdit.groupsNothingToFile": "Aucun regroupement à compléter ici.",
+  "quickEdit.otherGroups": "Autres regroupements",
   "quickEdit.indexHere": "{here}/{count} ici",
   "quickEdit.excluded": "Écartés ({count})",
   "quickEdit.selected": "{count} sélectionnés",

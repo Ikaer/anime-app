@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/boxWrites` (excluding also unfiles; declaring never files), `domain/boxComposition` (every tally counts UNITS, not entries), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -805,12 +805,18 @@ the resolved units, the écartés rows and the composition block.
   block would reproduce the inflation in the one place the owner goes to check for it; the score
   and year RANGES are over entries on purpose, being immune to duplication. Pinned in
   [tests/domain/boxComposition.test.ts](tests/domain/boxComposition.test.ts).
-- **Quick edit** is source-left / box-right with « écartés » as one full-width collapsible strip
-  below. ⚠️ **Each pane is TWO regions** — a groups region (one card per group with **≥2**
-  members present) over a flat region — and the two panes populate it from DIFFERENT sets: the
-  box pane shows only `box.groups`, because that region is a picture of how the ranker sees the
-  box; the source pane shows every global group, because nothing there is declared yet and the
-  region exists to let one click file a whole show. A group with one member present stays flat,
+- **Quick edit** is three panes — watched list, box, « Mes regroupements » — with « écartés » as
+  one full-width collapsible strip below. The groups column is the SOURCE side's groups region,
+  split out of the watched list whose scroll it used to share (browsing meant scrolling past every
+  group, and reaching a card lost your place); it also carries every group without a card, so it
+  is a superset of the rail index it replaced. ⚠️ Box in the middle, and three columns only from
+  a **1900px** viewport — below that the groups column wraps under the watched list. Measured off
+  the page's canvas clamp: three panes reach the 392px the TV's two panes get at a 1904px
+  viewport, and at the TV's ~1280 they would be 257px. ⚠️ **The box pane keeps its groups region
+  inside it** — a groups region (one card per group with **≥2** members present) over a flat
+  region — populated from `box.groups` only, because that region is a picture of how the ranker
+  sees the box; the source groups column shows every global group, because nothing there is
+  declared yet and it exists to let one click file a whole show. A group with one member present stays flat,
   carrying a chip — ⚠️ except in the SOURCE pane, where the two-member test counts the source AND
   the box together (`groupsToFile`): a partially-filed show (Black Lagoon: S1 filed, Second
   Barrage left, the OVA unwatched) keeps its « 1 restant » card, because « Ajouter » there both
@@ -826,7 +832,9 @@ the resolved units, the écartés rows and the composition block.
   (direct scope) with every entry checked and the name pre-filled from the earliest AIRED member;
   a picker for what the graph does not connect; overlaps labelled with the other group's name
   (informational, never blocking); **unwatched entries listable and checkable**, inert until one
-  is filed. ⚠️ It measures the app header rather than hardcoding a top offset — the nav wraps to
+  is filed. From quick edit, a NEW group also offers « Créer et ajouter à la boîte »: the blade
+  still saves only the definition, and `QuickEdit` sends the card's own `{ add, declare }` pair
+  over `groupMembersToFile` (watched, unfiled, and ⚠️ never an écarté — pinned). ⚠️ It measures the app header rather than hardcoding a top offset — the nav wraps to
   two lines on a narrow viewport, i.e. exactly when a constant would be wrong.
 - **The recos tab flips `includeSeen` ON by default**, the opposite of `/mix`. With seen titles
   in, every card is a question about the box — « Oui, c'est ça » files it, « Non » sets it aside

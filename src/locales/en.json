@@ -909,6 +909,8 @@
   "quickEdit.groupsIndex": "My groups",
   "quickEdit.newGroup": "New group",
   "quickEdit.noGroups": "No groups yet.",
+  "quickEdit.groupsNothingToFile": "No group left to complete here.",
+  "quickEdit.otherGroups": "Other groups",
   "quickEdit.indexHere": "{here}/{count} here",
   "quickEdit.excluded": "Set aside ({count})",
   "quickEdit.selected": "{count} selected",

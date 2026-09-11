@@ -6,7 +6,8 @@ import type { GroupSummary } from '@/lib/domain/groupSummary';
 import styles from './QuickEditPane.module.css';
 
 /**
- * One quick-edit pane — source or box.
+ * One quick-edit pane — source, box, or the source side's groups column
+ * (`groupsOnly`, which renders the groups region alone; see that prop).
  *
  * ⚠️ **Each pane is TWO regions, not one flat list** (§6.2), and that split is
  * what removes §4's tie-break. A groups region on top holds one card per group
@@ -79,14 +80,26 @@ export interface QuickEditPaneProps {
   onCreateGroup: (seedFrom: string) => void;
   /** Ids dropped onto this pane. */
   onDropIds: (ids: string[]) => void;
-  /** Rendered above the list — the source pane's picker. */
+  /** Rendered above the list, pinned with the header — the source pane's picker. */
   children?: React.ReactNode;
+  /**
+   * The groups column: this pane renders its groups region and nothing else.
+   *
+   * The source side is TWO panes, split out of one: the groups region used to
+   * sit on top of the watched list and share its scroll, so browsing titles
+   * meant scrolling past every group first, and going up to a group card threw
+   * away your place in the list. Only the SOURCE side splits — the box pane's
+   * groups region is a picture of how the ranker sees that box, and stays in it.
+   */
+  groupsOnly?: boolean;
+  /** groupsOnly: rendered after the cards — the groups with no card here. */
+  after?: React.ReactNode;
 }
 
 const QuickEditPane: React.FC<QuickEditPaneProps> = ({
   variant, title, rows, groupRegions, groupsByAnime, selected,
   onToggleSelect, onAdd, onExclude, onRemove, onUndeclare,
-  onOpenGroup, onCreateGroup, onDropIds, children,
+  onOpenGroup, onCreateGroup, onDropIds, children, groupsOnly, after,
 }) => {
   const t = useT();
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -198,15 +211,20 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
       <div className={styles.top}>
         <header className={styles.head}>
           <h3 className={styles.title}>{title}</h3>
-          <span className={styles.count}>{rows.length}</span>
+          <span className={styles.count}>{groupsOnly ? groupRegions.length : rows.length}</span>
         </header>
 
         {children}
       </div>
 
+      {groupsOnly && groupRegions.length === 0 && (
+        <p className={styles.empty}>{t('quickEdit.groupsNothingToFile')}</p>
+      )}
+
       {groupRegions.length > 0 && (
         <div className={styles.region}>
-          <p className={styles.regionLabel}>{t('quickEdit.groupsRegion')}</p>
+          {/* The groups column's own title already says it. */}
+          {!groupsOnly && <p className={styles.regionLabel}>{t('quickEdit.groupsRegion')}</p>}
           {groupRegions.map(({ group, members }) => {
             const expanded = open.has(group.id);
             return (
@@ -282,14 +300,16 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
         </div>
       )}
 
-      <div className={styles.region}>
-        {groupRegions.length > 0 && <p className={styles.regionLabel}>{t('quickEdit.flatRegion')}</p>}
-        {flat.length === 0 ? (
-          <p className={styles.empty}>{t('quickEdit.paneEmpty')}</p>
-        ) : (
-          flat.map(row => card(row, false))
-        )}
-      </div>
+      {groupsOnly ? after : (
+        <div className={styles.region}>
+          {groupRegions.length > 0 && <p className={styles.regionLabel}>{t('quickEdit.flatRegion')}</p>}
+          {flat.length === 0 ? (
+            <p className={styles.empty}>{t('quickEdit.paneEmpty')}</p>
+          ) : (
+            flat.map(row => card(row, false))
+          )}
+        </div>
+      )}
     </section>
   );
 };

@@ -22,12 +22,40 @@
 
 .body { min-width: 0; }
 
-/* Two panes side by side: source left, box right. */
+/*
+ * Three panes: the watched list, the box, and the groups column — box in the
+ * middle so both source panes sit beside the box they drag into.
+ *
+ * ⚠️ The groups column wraps UNDER the watched list below 1900px, and that
+ * number is measured, not round. The page canvas is
+ * clamp(1100px, 100vw - 400px, 1600px) with 20px padding each side, the rail
+ * takes 250 + 14, so a pane is (canvas - 328) / 3 in three columns. At the TV
+ * target (~1280 CSS px, canvas 1100) two panes are 392px each, the width the
+ * canvas clamp's truncation counts were tuned against; three would be 257px,
+ * which ellipsizes most titles. Three columns reach 392px at a 1504px canvas,
+ * i.e. a 1904px viewport — so the TV keeps its two wide panes and a 2000px
+ * desktop gets three of ~424px.
+ */
 .panes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "source box"
+    "groups box";
   gap: 12px;
+  align-items: start;
 }
+
+@media (min-width: 1900px) {
+  .panes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas: "source box groups";
+  }
+}
+
+.areaSource { grid-area: source; min-width: 0; }
+.areaBox { grid-area: box; min-width: 0; }
+.areaGroups { grid-area: groups; min-width: 0; }
 
 .picker { margin-bottom: 8px; }
 
@@ -62,21 +90,7 @@
 
 .nudgeYes:hover { background: var(--accent-hover); }
 
-/* ---- « Mes regroupements » index ---- */
-
-.index {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.indexHead {
-  font-size: 0.78rem;
-  font-weight: 600;
-  margin: 0 0 8px;
-  color: var(--text-primary);
-}
+/* ---- the groups column's extras: « + Nouveau », and the groups with no card ---- */
 
 .newGroup {
   width: 100%;
@@ -87,17 +101,27 @@
   font-size: 0.78rem;
   padding: 5px 10px;
   cursor: pointer;
-  margin-bottom: 8px;
+  margin-top: 6px;
 }
 
 .newGroup:hover { border-color: var(--accent-primary); color: var(--text-primary); }
 
+.others { margin-top: 10px; }
+
+/* Matches the panes' own region labels. */
+.othersHead {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 8px 0 4px;
+}
+
+/* No scroll of its own: the pane is the scrollport. */
 .indexList {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 260px;
-  overflow-y: auto;
 }
 
 .indexRow {
@@ -133,7 +157,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.indexEmpty { font-size: 0.74rem; color: var(--text-muted); margin: 0; }
+.indexEmpty { font-size: 0.74rem; color: var(--text-muted); margin: 6px 0 0; }
 
 /* ---- écartés ---- */
 

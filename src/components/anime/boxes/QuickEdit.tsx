@@ -17,9 +17,13 @@ import styles from './QuickEdit.module.css';
  * Quick edit — the fill surface, and the thing that replaces « Remplir »
  * entirely (§6.2).
  *
- * Three regions: source (top left), the box (top right), and « écartés » as one
- * full-width collapsible strip below — not a quadrant, because excluded is a
- * much rarer state than the other two and does not deserve half the screen.
+ * Four regions: the watched list, the box, the groups column (« Mes
+ * regroupements » — the source side's group cards plus every other group), and
+ * « écartés » as one full-width collapsible strip below — not a quadrant,
+ * because excluded is a much rarer state than the others and does not deserve
+ * half the screen. The groups column was split out of the watched list, whose
+ * scroll it used to share: browsing titles meant scrolling past every group,
+ * and reaching a group card lost your place in the list.
  *
  * **It is a MODE on présentation, not a fourth tab.** "What is this box" stays
  * the page's answer; filling it is something you do to that answer.
@@ -84,8 +88,11 @@ const NO_FILTERS: Filters = {
 const byGroupName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
-/** Which pane a selection belongs to. A range is only meaningful within one. */
-type PaneKind = 'source' | 'box';
+/**
+ * Which pane a selection belongs to. A range is only meaningful within one.
+ * `groups` is the source side's groups column, and acts like `source`.
+ */
+type PaneKind = 'source' | 'groups' | 'box';
 
 /**
  * Where a title sits. The three panes ARE this union, which is what lets one
@@ -284,6 +291,25 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
     () => toRegion(groupsToFile(groups, new Set(source.map(r => r.id)), memberIds)),
     [groups, source, memberIds] // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  /**
+   * The source side is two panes: the groups column holds the titles drawn in a
+   * group card, the watched list holds everything else. Each source title is on
+   * screen exactly once — a collapsed card still names its titles by count.
+   */
+  const cardedIds = useMemo(() => new Set(sourceRegions.flatMap(r => r.members)), [sourceRegions]);
+  const singles = useMemo(() => source.filter(r => !cardedIds.has(r.id)), [source, cardedIds]);
+  const cardedRows = useMemo(() => source.filter(r => cardedIds.has(r.id)), [source, cardedIds]);
+  /**
+   * Every group without a card, so the column is a SUPERSET of the index it
+   * replaced: a fully-filed group, or one with a single watched entry, stays
+   * reachable from here to be edited.
+   */
+  const otherGroups = useMemo(() => {
+    const carded = new Set(sourceRegions.map(r => r.group.id));
+    return groups.filter(g => !carded.has(g.id));
+  }, [groups, sourceRegions]);
+
   const boxRegions = useMemo(
     () => toRegion(groupsPresentIn(groups.filter(g => declared.includes(g.id)), new Set(boxRows.map(r => r.id)))),
     [groups, declared, boxRows] // eslint-disable-line react-hooks/exhaustive-deps
@@ -306,7 +332,12 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   );
 
   const select = (pane: PaneKind, id: string, shift: boolean) => {
-    const list = (pane === 'source' ? source : boxRows).map(r => r.id);
+    // Each pane's DISPLAYED order, so a shift-range selects what lies between on
+    // screen — ranging over the full source list would also pick up titles
+    // folded inside group cards in the other column.
+    const list = pane === 'source' ? singles.map(r => r.id)
+      : pane === 'groups' ? sourceRegions.flatMap(r => r.members)
+      : boxRows.map(r => r.id);
     setSelection(prev => {
       // A range is only meaningful within one pane, so switching panes starts over.
       if (!prev || prev.pane !== pane) return { pane, ids: [id] };
@@ -385,35 +416,6 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
           maxYear={filters.maxYear}
           onYearChange={(min, max) => setFilters(f => ({ ...f, minYear: min, maxYear: max }))}
         />
-
-        {/* Placement 2 of 3 (§4): the index — every group, its size, and the way
-            in to edit or create one. It costs no working-pane width, which is
-            why it is here and not a fourth pane. */}
-        <section className={styles.index}>
-          <h3 className={styles.indexHead}>{t('quickEdit.groupsIndex')}</h3>
-          <button type="button" className={styles.newGroup} onClick={() => setBlade({})}>
-            + {t('quickEdit.newGroup')}
-          </button>
-          {groups.length === 0 ? (
-            <p className={styles.indexEmpty}>{t('quickEdit.noGroups')}</p>
-          ) : (
-            <ul className={styles.indexList}>
-              {groups.map(g => {
-                const here = g.members.filter(id => memberIds.has(id)).length;
-                return (
-                  <li key={g.id}>
-                    <button type="button" className={styles.indexRow} onClick={() => setBlade({ group: g })}>
-                      <span className={styles.indexName}>{g.name}</span>
-                      <span className={styles.indexCount}>
-                        {here > 0 ? t('quickEdit.indexHere', { here, count: g.count }) : g.count}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
       </aside>
 
       <div className={styles.body}>
@@ -431,55 +433,108 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
           </div>
         )}
 
+        {/* ⚠️ Three panes on a wide screen, and the groups column wraps under
+            the watched list on a narrow one — see `.panes` for the measured
+            breakpoint. The order is the owner's: box in the middle, so BOTH
+            source panes sit next to the box they drag into. */}
         <div className={styles.panes}>
-          <QuickEditPane
-            variant="source"
-            title={t('quickEdit.sourceTitle')}
-            rows={source}
-            groupRegions={sourceRegions}
-            groupsByAnime={groupsByAnime}
-            selected={selection?.pane === 'source' ? selectedIds : new Set()}
-            onToggleSelect={(id, shift) => select('source', id, shift)}
-            // ⚠️ Filing from a source GROUP card writes both — the ids into
-            // `members` and the group id into `groups` (§4). One click, both
-            // effects, so the ordinary path still feels automatic. A single `+`
-            // does not declare: one title is not a statement about a show.
-            // ⚠️ The card NAMES its group rather than this guessing from the id
-            // count. `ids.length > 1` used to stand in for "came from a group
-            // card", which a partially-filed show breaks: its card files one
-            // title, and would then have filed it without declaring anything.
-            onAdd={(ids, groupId) => act(groupId ? { add: ids, declare: [groupId] } : { add: ids })}
-            onExclude={ids => act({ exclude: ids })}
-            onOpenGroup={g => setBlade({ group: g })}
-            onCreateGroup={id => setBlade({ seedFrom: id })}
-            // Dropped ON the source pane = taken out of the box.
-            onDropIds={ids => act({ remove: ids })}
-          >
-            {/* The picker stays (§1): adding an unwatched title deliberately is
-                a wanted feature, and the source pane is watched-only by scope. */}
-            <div className={styles.picker}>
-              <AnimePicker
-                picked={memberIds}
-                onPick={hit => act({ add: [hit.id] })}
-                placeholder={t('quickEdit.pickerPlaceholder')}
-              />
-            </div>
-          </QuickEditPane>
+          <div className={styles.areaGroups}>
+            <QuickEditPane
+              variant="source"
+              groupsOnly
+              title={t('quickEdit.groupsIndex')}
+              rows={cardedRows}
+              groupRegions={sourceRegions}
+              groupsByAnime={groupsByAnime}
+              selected={selection?.pane === 'groups' ? selectedIds : new Set()}
+              onToggleSelect={(id, shift) => select('groups', id, shift)}
+              // ⚠️ Filing from a source GROUP card writes both — the ids into
+              // `members` and the group id into `groups` (§4). One click, both
+              // effects, so the ordinary path still feels automatic. A single `+`
+              // does not declare: one title is not a statement about a show.
+              // ⚠️ The card NAMES its group rather than this guessing from the id
+              // count. `ids.length > 1` used to stand in for "came from a group
+              // card", which a partially-filed show breaks: its card files one
+              // title, and would then have filed it without declaring anything.
+              onAdd={(ids, groupId) => act(groupId ? { add: ids, declare: [groupId] } : { add: ids })}
+              onExclude={ids => act({ exclude: ids })}
+              onOpenGroup={g => setBlade({ group: g })}
+              onCreateGroup={id => setBlade({ seedFrom: id })}
+              // Dropped ON a source pane = taken out of the box.
+              onDropIds={ids => act({ remove: ids })}
+              after={otherGroups.length > 0 && (
+                // Placement 2 of 3 (§4), folded in from the rail: every group
+                // without a card, its size and how much of it is here.
+                <div className={styles.others}>
+                  <p className={styles.othersHead}>{t('quickEdit.otherGroups')}</p>
+                  <ul className={styles.indexList}>
+                    {otherGroups.map(g => {
+                      const here = g.members.filter(id => memberIds.has(id)).length;
+                      return (
+                        <li key={g.id}>
+                          <button type="button" className={styles.indexRow} onClick={() => setBlade({ group: g })}>
+                            <span className={styles.indexName}>{g.name}</span>
+                            <span className={styles.indexCount}>
+                              {here > 0 ? t('quickEdit.indexHere', { here, count: g.count }) : g.count}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            >
+              <button type="button" className={styles.newGroup} onClick={() => setBlade({})}>
+                + {t('quickEdit.newGroup')}
+              </button>
+              {groups.length === 0 && <p className={styles.indexEmpty}>{t('quickEdit.noGroups')}</p>}
+            </QuickEditPane>
+          </div>
 
-          <QuickEditPane
-            variant="box"
-            title={t('quickEdit.boxTitle')}
-            rows={boxRows}
-            groupRegions={boxRegions}
-            groupsByAnime={groupsByAnime}
-            selected={selection?.pane === 'box' ? selectedIds : new Set()}
-            onToggleSelect={(id, shift) => select('box', id, shift)}
-            onRemove={ids => act({ remove: ids })}
-            onUndeclare={id => act({ undeclare: [id] })}
-            onOpenGroup={g => setBlade({ group: g })}
-            onCreateGroup={id => setBlade({ seedFrom: id })}
-            onDropIds={ids => act({ add: ids })}
-          />
+          <div className={styles.areaSource}>
+            <QuickEditPane
+              variant="source"
+              title={t('quickEdit.sourceTitle')}
+              rows={singles}
+              groupRegions={[]}
+              groupsByAnime={groupsByAnime}
+              selected={selection?.pane === 'source' ? selectedIds : new Set()}
+              onToggleSelect={(id, shift) => select('source', id, shift)}
+              onAdd={ids => act({ add: ids })}
+              onExclude={ids => act({ exclude: ids })}
+              onOpenGroup={g => setBlade({ group: g })}
+              onCreateGroup={id => setBlade({ seedFrom: id })}
+              onDropIds={ids => act({ remove: ids })}
+            >
+              {/* The picker stays (§1): adding an unwatched title deliberately is
+                  a wanted feature, and the source pane is watched-only by scope. */}
+              <div className={styles.picker}>
+                <AnimePicker
+                  picked={memberIds}
+                  onPick={hit => act({ add: [hit.id] })}
+                  placeholder={t('quickEdit.pickerPlaceholder')}
+                />
+              </div>
+            </QuickEditPane>
+          </div>
+
+          <div className={styles.areaBox}>
+            <QuickEditPane
+              variant="box"
+              title={t('quickEdit.boxTitle')}
+              rows={boxRows}
+              groupRegions={boxRegions}
+              groupsByAnime={groupsByAnime}
+              selected={selection?.pane === 'box' ? selectedIds : new Set()}
+              onToggleSelect={(id, shift) => select('box', id, shift)}
+              onRemove={ids => act({ remove: ids })}
+              onUndeclare={id => act({ undeclare: [id] })}
+              onOpenGroup={g => setBlade({ group: g })}
+              onCreateGroup={id => setBlade({ seedFrom: id })}
+              onDropIds={ids => act({ add: ids })}
+            />
+          </div>
         </div>
 
         {/* One full-width collapsible strip, not a quadrant: excluded is a much
@@ -508,7 +563,7 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
       {selection && selection.ids.length > 0 && (
         <div className={styles.bulk}>
           <span className={styles.bulkCount}>{t('quickEdit.selected', { count: selection.ids.length })}</span>
-          {selection.pane === 'source' ? (
+          {selection.pane !== 'box' ? (
             <>
               <button type="button" className={styles.bulkAdd} onClick={() => act({ add: selection.ids })}>
                 {t('quickEdit.bulkAdd', { count: selection.ids.length })}
