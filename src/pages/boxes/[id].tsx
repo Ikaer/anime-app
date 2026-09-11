@@ -240,8 +240,16 @@ export default function BoxV2DetailPage() {
    * box the right pane is a blank rectangle taking half the screen to say
    * nothing — the same emptiness the rule exists to avoid, just laid out. The
    * `✎` button is one click away for anyone who wants the panes.
+   *
+   * ⚠️ So the gate is the explicit request and NOTHING else. It used to be
+   * `state.edit && entries > 0`, which made that "one click away" false on every
+   * empty box: the button's label reads `state.edit` and flipped to « Fermer le
+   * remplissage » while the content read this and stayed on the picker. The
+   * default needs no clause — `e` is absent until the button is pressed. The
+   * same clause also threw you out of quick-edit the moment the last title was
+   * removed, mid-filing; an empty box pane is a state quick-edit renders fine.
    */
-  const editing = state.edit && entries > 0;
+  const editing = state.edit;
 
   const tab = (key: BoxTab, labelKey: TranslationKey, badge?: number) => (
     <button

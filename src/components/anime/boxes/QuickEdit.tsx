@@ -114,10 +114,11 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
    * reload still happens and the server is still the authority; it just stopped
    * being on the path between the click and the card moving.
    *
-   * Held HERE and not on the page on purpose: the page's `editing` gate reads
-   * `box.members.length`, so an optimistic member count would unmount this whole
-   * surface mid-interaction the moment the last member was removed. Keeping the
-   * overlay below that line leaves every count the page renders on server truth.
+   * Held HERE and not on the page on purpose. This component holds the watched
+   * rows, which is what turns an optimistically added id into a card at all; and
+   * keeping the overlay below the page leaves every count the page renders — the
+   * header's « N séries · M entrées », computed server-side from the collapse —
+   * on server truth rather than on a guess.
    */
   const [pending, setPending] = useState<Map<string, Place>>(new Map());
 
