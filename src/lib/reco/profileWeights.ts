@@ -244,6 +244,14 @@ export function resetProfileField(weights: ProfileWeights, field: ProfileField):
   return next;
 }
 
+/**
+ * The icon of a profile with none of its own, and of the feature's own UI.
+ * ⚠️ Carries U+FE0F on purpose: 🎚 (U+1F39A) is text-presentation by default, so
+ * without the selector Windows draws it as a grey outline beside colour emoji —
+ * live-seen on the `/profiles` heading and on every emoji-less profile card.
+ */
+export const DEFAULT_PROFILE_EMOJI = '\u{1F39A}\u{FE0F}';
+
 /** A shipped starting point — sparse, merged like `RECO_WEIGHT_PRESETS`. */
 export interface ProfilePreset {
   /** i18n: `profiles.preset.<key>` / `profiles.presetHint.<key>`. */

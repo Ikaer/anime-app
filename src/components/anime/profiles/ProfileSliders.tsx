@@ -173,6 +173,8 @@ const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, pool, di
             three-show box is a lookup table of a few people, not an axis. */}
         <p className={styles.regime}>
           {!diagnostic ? t('profiles.diag.noAnchor')
+            // One unit: "nobody is shared between two of them" has no two to speak of.
+            : diagnostic.units <= 1 ? t('profiles.regime.single')
             : agreeing.length === 0
               ? t('profiles.regime.lookup', { units: diagnostic.units })
               : t('profiles.regime.agrees', {

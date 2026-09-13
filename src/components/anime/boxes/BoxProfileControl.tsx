@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useT } from '@/lib/i18n';
-import type { ProfileSummary } from '@/lib/reco/profileWeights';
+import { DEFAULT_PROFILE_EMOJI, type ProfileSummary } from '@/lib/reco/profileWeights';
 import styles from './BoxProfileControl.module.css';
 
 /**
@@ -39,7 +39,7 @@ const BoxProfileControl: React.FC<BoxProfileControlProps> = ({ boxId, profileId,
 
   return (
     <div className={styles.control}>
-      <label className={styles.label} htmlFor={`bx-profile-${boxId}`}>🎚 {t('boxes.profileLabel')}</label>
+      <label className={styles.label} htmlFor={`bx-profile-${boxId}`}>{DEFAULT_PROFILE_EMOJI} {t('boxes.profileLabel')}</label>
       <select
         id={`bx-profile-${boxId}`}
         className={styles.select}
@@ -49,7 +49,7 @@ const BoxProfileControl: React.FC<BoxProfileControlProps> = ({ boxId, profileId,
       >
         <option value="">{t('boxes.profileNone')}</option>
         {profiles?.map(p => (
-          <option key={p.id} value={p.id}>{`${p.emoji ?? '🎚'} ${p.name}`}</option>
+          <option key={p.id} value={p.id}>{`${p.emoji ?? DEFAULT_PROFILE_EMOJI} ${p.name}`}</option>
         ))}
       </select>
       {profileId ? (

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import AnimeCardView from '../AnimeCardView';
 import AnimeListHeader from '../AnimeListHeader';
 import { useT } from '@/lib/i18n';
+import { DEFAULT_PROFILE_EMOJI } from '@/lib/reco/profileWeights';
 import type { AnimeRecord, RecoMeta } from '@/models/anime';
 import styles from './BoxRecos.module.css';
 
@@ -126,7 +127,7 @@ const BoxRecos: React.FC<BoxRecosProps> = ({
       </p>
       {profile && (
         <p className={styles.profile}>
-          {profile.emoji ?? '🎚'} {t('boxReco.profile', { name: profile.name })}
+          {profile.emoji ?? DEFAULT_PROFILE_EMOJI} {t('boxReco.profile', { name: profile.name })}
           {profile.staffZeroed && <span className={styles.profileNote}> · {t('boxReco.profileStaffZeroed')}</span>}
           {' '}
           <Link

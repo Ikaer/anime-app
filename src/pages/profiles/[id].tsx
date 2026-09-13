@@ -35,6 +35,7 @@ import { autoGrow } from '@/components/anime/boxes/autoGrow';
 import { useProfileUrlState, MAX_ANCHORS } from '@/hooks';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
 import {
+  DEFAULT_PROFILE_EMOJI,
   PREVIEW_POOLS,
   PROFILE_PRESETS,
   type PreviewPool,
@@ -322,7 +323,11 @@ export default function ProfilePage() {
         if (!outcome.ok) parts.push(t('mix.sourceDown', { source: name, error: outcome.error || '' }));
       }
     }
-    if (r.anchors.asked) parts.push(t('profiles.asked', { count: r.anchors.asked.length }));
+    if (r.anchors.asked) {
+      const count = r.anchors.asked.length;
+      // `<= 1`: French takes the singular at zero too.
+      parts.push(count <= 1 ? t('profiles.askedOne', { count }) : t('profiles.asked', { count }));
+    }
     parts.push(`${r.ms} ms`);
     return parts.join(' · ');
   })();
@@ -330,7 +335,7 @@ export default function ProfilePage() {
   return (
     <>
       {/* One string: React warns on (and drops) a <title> with several children. */}
-      <Head><title>{`${profile ? `${profile.emoji ?? '🎚'} ${profile.name}` : t('profiles.title')} — Anime Tracker`}</title></Head>
+      <Head><title>{`${profile ? `${profile.emoji ?? DEFAULT_PROFILE_EMOJI} ${profile.name}` : t('profiles.title')} — Anime Tracker`}</title></Head>
 
       <div className="pf" style={{ ['--pf-top' as string]: `${headerH + 12}px` }}>
         <Link href="/profiles" className="pf-back">← {t('profiles.back')}</Link>
@@ -341,7 +346,7 @@ export default function ProfilePage() {
               className="pf-emoji pf-field"
               defaultValue={profile.emoji ?? ''}
               key={`e-${profile.emoji ?? ''}`}
-              placeholder="🎚"
+              placeholder={DEFAULT_PROFILE_EMOJI}
               maxLength={4}
               aria-label="emoji"
               onBlur={e => { const v = e.target.value.trim(); if (v !== (profile.emoji ?? '')) saveMeta({ emoji: v || null }); }}
@@ -412,7 +417,10 @@ export default function ProfilePage() {
             <span className="pf-confirmText">
               {usedBy.length === 0
                 ? t('profiles.deleteConfirmUnused', { name: profile.name })
-                : t('profiles.deleteConfirm', { name: profile.name, boxes: usedBy.map(b => `${b.emoji} ${b.name}`).join(', ') })}
+                : t(usedBy.length === 1 ? 'profiles.deleteConfirmOne' : 'profiles.deleteConfirm', {
+                    name: profile.name,
+                    boxes: usedBy.map(b => `${b.emoji} ${b.name}`).join(', '),
+                  })}
             </span>
             <button type="button" className="pf-btn pf-btnDangerSolid" onClick={remove} disabled={deleting}>
               {deleting ? t('profiles.deleting') : t('profiles.deleteYes')}

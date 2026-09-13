@@ -62,15 +62,21 @@ test('every key interpolates the same placeholders in both languages', () => {
  * The group HEADINGS are deliberately bare (they are labels, not destinations),
  * as is `nav.others`, the dropdown trigger. Those are the only exemptions; a
  * new `nav.*` key is assumed to be a destination and must lead with a glyph.
+ *
+ * ⚠️ "A glyph" is not enough: it must RENDER as a colour emoji. 🎛 🎚 🕸 are
+ * text-presentation by default, and without a trailing U+FE0F Windows draws them
+ * as grey outlines among colour icons — live-seen on `/mix`, `/graph` and
+ * `/profiles`, which a non-ASCII check passed for months.
  */
 test('every nav destination label leads with an emoji, in both languages', () => {
   const isHeading = (key: string) => key.startsWith('nav.group.') || key === 'nav.others';
   const destinations = Object.keys(fr).filter(k => k.startsWith('nav.') && !isHeading(k));
+  const leadsWithColourEmoji = /^(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)/u;
 
   assert.ok(destinations.length > 10, 'sanity: the nav families should not be empty');
 
   for (const [lang, dict] of Object.entries(DICTS)) {
-    const bare = destinations.filter(k => (dict[k].codePointAt(0) ?? 0) < 0x80);
-    assert.deepEqual(bare, [], `nav labels with no leading emoji in ${lang}.json`);
+    const bare = destinations.filter(k => !leadsWithColourEmoji.test(dict[k]));
+    assert.deepEqual(bare, [], `nav labels not leading with a colour emoji in ${lang}.json`);
   }
 });

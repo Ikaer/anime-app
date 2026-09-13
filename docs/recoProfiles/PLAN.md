@@ -455,3 +455,15 @@ avec le profil … » line, and detaching through that select (the key left `box
 identical to before. (The Desktop preview pane was hidden for most of this run; a fresh load of a
 DYNAMIC route never becomes `router.isReady` there, so the box page was reached by client-side
 navigation from a static page — worth knowing before blaming a page that sits on « Chargement… ».)
+
+**Re-checked with the pane visible** (production build): a fresh load of `/profiles/[id]` and
+`/boxes/[id]` (présentation, `?e=1`, `?t=recos`) hydrates normally — the earlier failure was the
+hidden pane, not the pages. Walked again end to end: attach from edition's select, the recos tab's
+profile line and its « Régler → » URL, family rows in « Pourquoi ? », a keyboard slider move saving
+one sparse key, ↺, the catalog pool disabling crowd rows and the Staff AniList ↺, `/mix`'s
+« Tester un profil » carrying `a=` onto every profile link, and a delete of an attached profile
+leaving « Profil supprimé (inactif) ». What it found and fixed: 🎚 (and the nav's 🎛 / 🕸) drawn
+as grey text glyphs — now `DEFAULT_PROFILE_EMOJI` with U+FE0F and a stricter nav test; « Autres »
+not lit on any `[id]` sub-route; the list cards showing the implied « Staff AniList 0.00 »; and three
+French plurals reachable at 1 (« … reviendront » for one box, « 1 ancres interrogées », « Sur ces 1
+séries … entre deux d'entre elles »).

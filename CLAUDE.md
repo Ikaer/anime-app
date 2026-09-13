@@ -1494,6 +1494,9 @@ and `OTHER_NAV`, rather than a hand-written `<Link>` per entry as before.
   maintained list it had already drifted: `/graph` and `/precedence` were in the
   menu but absent from the list, so the parent read as inactive on both pages.
   Deriving it makes that unrepresentable — adding a menu entry cannot forget it.
+  An entry also owns its sub-routes (`isRouteActive`: exact, or `href + '/'`
+  prefix, `/` exact-only), so `/boxes/[id]` and `/profiles/[id]` light it too —
+  an exact `pathname` match left every detail page reading as nowhere.
 - **`/connections` sits in the dropdown**, which costs nothing because the three
   connection badges to the right of the bar are themselves links to it. The
   badges are the permanent entry point; the menu item is the discoverable one.
@@ -1508,6 +1511,10 @@ and `OTHER_NAV`, rather than a hand-written `<Link>` per entry as before.
   so the split would read at a glance; the group headings now do that job
   properly, and a menu where two thirds of the rows have an icon looked
   unfinished. Adding an entry means adding an icon in BOTH locale files.
+  ⚠️ **And it must render in COLOUR**: 🎛 🎚 🕸 are text-presentation by default,
+  so without a trailing U+FE0F Windows draws a grey outline among colour icons
+  (live-seen on Mon mix, Graphe and Profils de recos). `locales.test.ts` checks
+  the leading glyph is `Emoji_Presentation` or pictographic + U+FE0F.
 
 ### First-run onboarding (empty store)
 

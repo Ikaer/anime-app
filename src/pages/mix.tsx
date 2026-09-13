@@ -31,6 +31,7 @@ import { AnimeRecord } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useMixUrlState, MAX_ANCHORS } from '@/hooks';
 import { encodeSourceWeights, ANCHORED_WEIGHTS, ANCHORED_SOURCES } from '@/lib/reco/weights';
+import { DEFAULT_PROFILE_EMOJI } from '@/lib/reco/profileWeights';
 import { useI18n } from '@/lib/i18n';
 
 type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
@@ -199,7 +200,7 @@ export default function MixPage() {
                 onClick={() => router.push(`/profiles?a=${state.anchors.join(',')}`)}
                 title={t('mix.testProfileHint')}
               >
-                🎚 {t('mix.testProfile')}
+                {DEFAULT_PROFILE_EMOJI} {t('mix.testProfile')}
               </Button>
             )}
           </AnimeListHeader>

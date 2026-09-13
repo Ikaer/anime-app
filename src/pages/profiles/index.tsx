@@ -17,7 +17,14 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useT, type TranslationKey } from '@/lib/i18n';
-import { PROFILE_PRESETS, type ProfilePreset, type ProfileSummary, type ProfileField } from '@/lib/reco/profileWeights';
+import {
+  DEFAULT_PROFILE_EMOJI,
+  PROFILE_PRESETS,
+  type ProfilePreset,
+  type ProfileSummary,
+  type ProfileField,
+} from '@/lib/reco/profileWeights';
+import { isStaffFamily } from '@/lib/reco/staffFields';
 import { decodeProfileQuery, toProfileQuery } from '@/hooks';
 import type { ProfileListResponse } from '../api/anime/profiles';
 
@@ -75,7 +82,14 @@ export default function ProfilesPage() {
   }, [name, emoji, preset, creating, router, t, carried]);
 
   const summary = (p: ProfileSummary) => {
-    const entries = (Object.entries(p.weights) as [ProfileField, number][])
+    const all = Object.entries(p.weights) as [ProfileField, number][];
+    // Every family preset states `anilistStaff: 0` by house rule and the resolver
+    // forces it anyway, so on a card it read as a choice (« Staff AniList 0.00 »)
+    // beside the two that define the profile. Only that implied zero is dropped:
+    // a hand-set `genre: 0` still says something.
+    const familyOn = all.some(([f, v]) => isStaffFamily(f) && v !== 0);
+    const entries = all
+      .filter(([f, v]) => !(familyOn && f === 'anilistStaff' && v === 0))
       .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
     if (entries.length === 0) return <span className="pf2-muted">{t('profiles.summaryDefault')}</span>;
     return (
@@ -98,7 +112,7 @@ export default function ProfilesPage() {
 
       <div className="pf2">
         <header className="pf2-head">
-          <h1>🎚 {t('profiles.title')}</h1>
+          <h1>{DEFAULT_PROFILE_EMOJI} {t('profiles.title')}</h1>
           <p className="pf2-sub">{t('profiles.subtitle')}</p>
         </header>
 
@@ -107,7 +121,7 @@ export default function ProfilesPage() {
             className="pf2-emoji"
             value={emoji}
             onChange={e => setEmoji(e.target.value)}
-            placeholder="🎚"
+            placeholder={DEFAULT_PROFILE_EMOJI}
             aria-label="emoji"
             maxLength={4}
           />
@@ -144,7 +158,7 @@ export default function ProfilesPage() {
             {profiles.map(p => (
               <article key={p.id} className="pf2-card">
                 <Link href={hrefFor(p.id)} className="pf2-cardHead">
-                  <span className="pf2-cardEmoji" aria-hidden="true">{p.emoji ?? '🎚'}</span>
+                  <span className="pf2-cardEmoji" aria-hidden="true">{p.emoji ?? DEFAULT_PROFILE_EMOJI}</span>
                   <span className="pf2-cardName">{p.name}</span>
                 </Link>
                 {p.description && <p className="pf2-desc">{p.description}</p>}

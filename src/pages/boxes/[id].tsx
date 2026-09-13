@@ -34,6 +34,7 @@ import BoxProfileControl from '@/components/anime/boxes/BoxProfileControl';
 import { useBoxUrlState, type BoxTab } from '@/hooks';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import { startLoadProbe } from '@/lib/clientPerf';
+import { DEFAULT_PROFILE_EMOJI } from '@/lib/reco/profileWeights';
 import { autoGrow } from '@/components/anime/boxes/autoGrow';
 import type { BoxMembersResponse } from '../api/anime/boxes/[id]/members';
 
@@ -282,7 +283,7 @@ export default function BoxV2DetailPage() {
       {box?.profile ? (
         <span className="bx2d-metaSep">
           <Link href={`/profiles/${encodeURIComponent(box.profile.id)}?box=${encodeURIComponent(box.id)}`} className="bx2d-profile">
-            {box.profile.emoji ?? '🎚'} {t('boxes.profileAttached', { name: box.profile.name })}
+            {box.profile.emoji ?? DEFAULT_PROFILE_EMOJI} {t('boxes.profileAttached', { name: box.profile.name })}
           </Link>
         </span>
       ) : box?.profileId ? (

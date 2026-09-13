@@ -89,6 +89,15 @@ const OTHER_NAV_GROUPS: NavGroup[] = [
  */
 const OTHER_ROUTES: string[] = OTHER_NAV_GROUPS.flatMap(g => g.items).map(item => item.href);
 
+/**
+ * A nav entry owns its sub-routes: `/boxes/[id]` and `/profiles/[id]` are the
+ * `/boxes` and `/profiles` sections, so an exact `pathname` match left both
+ * reading as nowhere in the app. `/` is exact-only — every route starts with it.
+ */
+function isRouteActive(pathname: string, href: string): boolean {
+  return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+}
+
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
   const next: Lang = lang === 'fr' ? 'en' : 'fr';
@@ -111,7 +120,7 @@ function OthersDropdown() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const isActive = OTHER_ROUTES.includes(router.pathname);
+  const isActive = OTHER_ROUTES.some(href => isRouteActive(router.pathname, href));
 
   // Close on outside click.
   useEffect(() => {
@@ -158,7 +167,7 @@ function OthersDropdown() {
                   key={item.href}
                   href={item.href}
                   role="menuitem"
-                  className={`nav-dropdown-item ${router.pathname === item.href ? 'active' : ''}`}
+                  className={`nav-dropdown-item ${isRouteActive(router.pathname, item.href) ? 'active' : ''}`}
                 >
                   {t(item.key)}
                 </Link>
@@ -188,7 +197,7 @@ export default function Layout({ children }: LayoutProps) {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`nav-link ${router.pathname === item.href ? 'active' : ''}`}
+                    className={`nav-link ${isRouteActive(router.pathname, item.href) ? 'active' : ''}`}
                   >
                     {t(item.key)}
                   </Link>
