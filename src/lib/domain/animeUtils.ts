@@ -355,6 +355,20 @@ export function getEffectiveProgress(anime: AnimeRecord): number | undefined {
 }
 
 /**
+ * When you last watched this title — SIMKL's `watched_at`, an ISO instant.
+ *
+ * ⚠️ Deliberately NOT a precedence read like the three above: SIMKL is the only
+ * provider with a usable watch clock (MAL's `updated_at` is a bulk-sync artefact,
+ * AniList's import carries no date, local's is an edit mtime — measured in
+ * `api/anime/activity.ts`). One function so `/activity` and every other "most
+ * recently watched" order read the same clock. Advances per EPISODE, not per
+ * completion.
+ */
+export function getLastWatchedAt(anime: AnimeRecord): string | undefined {
+  return anime.sources.simkl?.watched_at || undefined;
+}
+
+/**
  * Is this title's rating intent in force? Only while it is genuinely unrated —
  * the annotation answers "why is this completed title unscored", so a score
  * settles the question and the intent stops applying. `writePersonal` clears it

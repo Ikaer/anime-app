@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), `domain/leanRow`'s `sortLeanRows` (unrated last in BOTH score directions, undated last in `feed`, ties keep the input order), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -823,7 +823,12 @@ the resolved units, the écartés rows and the composition block.
   finishes the show and declares it. Counting the source alone dropped it to a bare chip. The card
   passes its group id to `onAdd`; the old `ids.length > 1` stand-in for "came from a group card"
   would have filed that one title without declaring anything. All group lists here sort by name,
-  once, where `QuickEdit` loads them. Card body = select (shift-click ranges, Escape clears), hover buttons act on
+  once, where `QuickEdit` loads them. The **title** lists (watched, box, écartés) follow the
+  rail's « Trier par » — `sortLeanRows` in [domain/leanRow.ts](src/lib/domain/leanRow.ts): my
+  score ↓/↑, title, or « Vu récemment » off `getLastWatchedAt` (SIMKL's clock, the one `/activity`
+  reads; the option is not offered when no row carries one). Client-side over the one fetch, like
+  the filters, and ⚠️ applied inside the memos rather than at render, because shift-range
+  selection reads those same arrays. Group cards keep their own order. Card body = select (shift-click ranges, Escape clears), hover buttons act on
   one card, drag moves — and dragging a selected card drags the selection. Native HTML5 drag,
   `/tier`'s rule. The declaration **nudge** sits ABOVE the box pane, never inside its groups
   region, or the region would stop meaning what it means.
@@ -1036,7 +1041,8 @@ day" is not a filter combination.
   distinct days with 183 sharing one (a bulk-sync artefact, not a history);
   AniList's import carries **no date field at all**; `LocalPersonalEntry.
   updated_at` is an edit mtime, a different question. Same finding the reco
-  backtest harness rests on.
+  backtest harness rests on. Read through `getLastWatchedAt` in `domain/animeUtils.ts`, so every
+  "most recently watched" order (this page, quick edit's « Vu récemment ») reads the same clock.
 - ⚠️ **`watched_at` advances per EPISODE, not per completion** — the most recent
   rows are `watching` at partial progress, which is what makes this a feed
   rather than a completion log. It is also the ceiling: SIMKL gives exactly ONE

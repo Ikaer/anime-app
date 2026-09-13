@@ -4,10 +4,10 @@ import { RecoFiltersSection } from '../sidebar';
 import QuickEditPane, { type PaneGroupRegion } from './QuickEditPane';
 import GroupBlade from './GroupBlade';
 import BoxEntryList from './BoxEntryList';
-import { useT } from '@/lib/i18n';
+import { useT, type TranslationKey } from '@/lib/i18n';
 import { groupsPresentIn, groupsToFile } from '@/lib/domain/boxUnits';
 import { groupMembersToFile } from '@/lib/domain/boxWrites';
-import type { LeanAnimeRow } from '@/lib/domain/leanRow';
+import { sortLeanRows, type LeanAnimeRow, type LeanRowSort } from '@/lib/domain/leanRow';
 import type { GroupSummary } from '@/lib/domain/groupSummary';
 import type { WatchedResponse } from '@/pages/api/anime/watched';
 import type { GroupListResponse } from '@/pages/api/anime/groups';
@@ -81,6 +81,19 @@ const NO_FILTERS: Filters = {
 };
 
 /**
+ * The rail's sort, applied to every title list on this surface — the watched
+ * list, the box and « écartés » — like the filters above it. Group cards keep
+ * their own order: by name, and a card's members in the group's sequence.
+ * Literal keys, never a constructed one (CLAUDE.md).
+ */
+const SORT_OPTIONS: { key: LeanRowSort; labelKey: TranslationKey }[] = [
+  { key: 'scoreDesc', labelKey: 'quickEdit.sortScoreDesc' },
+  { key: 'scoreAsc', labelKey: 'quickEdit.sortScoreAsc' },
+  { key: 'label', labelKey: 'quickEdit.sortLabel' },
+  { key: 'feed', labelKey: 'quickEdit.sortFeed' },
+];
+
+/**
  * Groups read alphabetically everywhere on this surface. `numeric` so « Season 2 »
  * sorts before « Season 10 », `base` so case and accents do not split
  * « Shōgun » from « Shogun ».
@@ -122,6 +135,15 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   const [watchedIds, setWatchedIds] = useState<Set<string>>(new Set());
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [sort, setSort] = useState<LeanRowSort>('scoreDesc');
+  /**
+   * Whether the store has a watch clock at all — false on an install without
+   * SIMKL, where « Vu récemment » would be an option that does nothing, so it is
+   * not offered. Captured from an UNSEARCHED response like `watchedIds`: a search
+   * matching only undated titles must not pull the option out from under a
+   * selected sort.
+   */
+  const [hasClock, setHasClock] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showExcluded, setShowExcluded] = useState(false);
 
@@ -174,7 +196,10 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
         const data: WatchedResponse = await res.json();
         if (!cancelled) {
           setWatched(data.rows);
-          if (!qs) setWatchedIds(new Set(data.rows.map(r => r.id)));
+          if (!qs) {
+            setWatchedIds(new Set(data.rows.map(r => r.id)));
+            setHasClock(data.rows.some(r => !!r.watchedAt));
+          }
         }
       } catch { /* keep whatever is on screen */ }
       finally { if (!cancelled) setLoading(false); }
@@ -234,8 +259,8 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   }, [serverAsideIds, pending]);
 
   const asideRows = useMemo(
-    () => [...excludedIds].map(id => rowById.get(id)).filter((r): r is LeanAnimeRow => !!r),
-    [excludedIds, rowById]
+    () => sortLeanRows([...excludedIds].map(id => rowById.get(id)).filter((r): r is LeanAnimeRow => !!r), sort),
+    [excludedIds, rowById, sort]
   );
 
   /** The cheap filters, applied in the browser over the whole fetched set. */
@@ -259,9 +284,12 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
     () => watched.filter(r => !memberIds.has(r.id) && !excludedIds.has(r.id) && passes(r)),
     [watched, memberIds, excludedIds, passes]
   );
+  // ⚠️ Sorted HERE, in the memos, not where the panes map them: `select` takes a
+  // shift-range off these same arrays, so a sort applied at render would select
+  // what lies between two cards in some order other than the one on screen.
   const boxRows = useMemo(
-    () => [...memberIds].map(id => rowById.get(id)).filter((r): r is LeanAnimeRow => !!r).filter(passes),
-    [memberIds, rowById, passes]
+    () => sortLeanRows([...memberIds].map(id => rowById.get(id)).filter((r): r is LeanAnimeRow => !!r).filter(passes), sort),
+    [memberIds, rowById, passes, sort]
   );
 
   const groupsByAnime = useMemo(() => {
@@ -298,7 +326,10 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
    * screen exactly once — a collapsed card still names its titles by count.
    */
   const cardedIds = useMemo(() => new Set(sourceRegions.flatMap(r => r.members)), [sourceRegions]);
-  const singles = useMemo(() => source.filter(r => !cardedIds.has(r.id)), [source, cardedIds]);
+  const singles = useMemo(
+    () => sortLeanRows(source.filter(r => !cardedIds.has(r.id)), sort),
+    [source, cardedIds, sort]
+  );
   const cardedRows = useMemo(() => source.filter(r => cardedIds.has(r.id)), [source, cardedIds]);
   /**
    * Every group without a card, so the column is a SUPERSET of the index it
@@ -403,6 +434,15 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   return (
     <div className={styles.wrap}>
       <aside className={styles.rail}>
+        <div className={styles.sort}>
+          <label className={styles.sortLabel} htmlFor="quick-edit-sort">{t('quickEdit.sortBy')}</label>
+          <select id="quick-edit-sort" className={styles.sortSelect} value={sort}
+            onChange={e => setSort(e.target.value as LeanRowSort)}>
+            {SORT_OPTIONS.filter(o => o.key !== 'feed' || hasClock).map(o => (
+              <option key={o.key} value={o.key}>{t(o.labelKey)}</option>
+            ))}
+          </select>
+        </div>
         <RecoFiltersSection
           search={filters.search}
           onSearchChange={v => set('search', v)}

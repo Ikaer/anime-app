@@ -25,6 +25,9 @@ declare const styles: {
   readonly "panes": string;
   readonly "picker": string;
   readonly "rail": string;
+  readonly "sort": string;
+  readonly "sortLabel": string;
+  readonly "sortSelect": string;
   readonly "wrap": string;
 };
 export = styles;

@@ -37,6 +37,7 @@ import {
   applyNarrowingFilters,
   getEffectiveScore,
   getEffectiveStatus,
+  getLastWatchedAt,
   getPrimaryTitle,
 } from '@/lib/domain/animeUtils';
 import { getTitleLanguage } from '@/lib/config/settings';
@@ -141,7 +142,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const dated: { record: AnimeRecord; watchedAt: string }[] = [];
     let undated = 0;
     for (const a of filtered) {
-      const watchedAt = a.sources.simkl?.watched_at;
+      const watchedAt = getLastWatchedAt(a);
       if (watchedAt) dated.push({ record: a, watchedAt });
       else undated++;
     }
@@ -149,7 +150,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // `available` asks whether the STORE has a clock, so it is measured before
     // the filters — otherwise a narrow filter would misreport a SIMKL install as
     // having no watch history at all.
-    const available = all.some(a => !!a.sources.simkl?.watched_at);
+    const available = all.some(a => !!getLastWatchedAt(a));
 
     dated.sort((x, y) => y.watchedAt.localeCompare(x.watchedAt));
 
