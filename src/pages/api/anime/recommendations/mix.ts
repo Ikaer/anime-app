@@ -3,7 +3,7 @@ import { getAnimeForDisplay, isCanonicalId } from '@/lib/store';
 import { computeAnchored } from '@/lib/reco/anchored';
 import { getBox } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
-import { boxAnchorIds, loadMixEdges, MAX_MIX_ANCHORS } from '@/lib/reco/mixFetch';
+import { boxAnchorIds, boxAnsweredIds, loadMixEdges, MAX_MIX_ANCHORS } from '@/lib/reco/mixFetch';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { parseSourceWeights, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import { getBoxProfile } from '@/lib/reco/profiles';
@@ -127,12 +127,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       weights: resolved.weights,
       families: resolved.families,
       excludeSeen: !includeSeen,
-      // ⚠️ A box's « Oui » (members) and « Non » (excluded) are both answered
-      // questions, and must stay answered across a reload. Members matter too,
-      // not just the anchors: only one representative per unit is asked about
-      // and the cap bites at 40, so a filed title can still be a crowd
-      // neighbour of the rest of the box.
-      excludeIds: box ? new Set([...box.members, ...(box.excluded ?? [])]) : undefined,
+      // ⚠️ A box's « Oui » and « Non » stay answered across a reload — see
+      // `boxAnsweredIds`.
+      excludeIds: box ? boxAnsweredIds(box) : undefined,
       lang,
       titleLang,
     });

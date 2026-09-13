@@ -78,9 +78,18 @@ export const profileBoxRef = (b: Box): ProfileBoxRef =>
  * name, silently re-binding those boxes to a weighting nobody attached. So
  * every id a box still names is reserved. Pure, so the rule is pinned without a
  * store on disk.
+ *
+ * ⚠️ **So are the ids a static route under `api/anime/profiles/` owns.** Next
+ * resolves a static route before a dynamic one, so a profile minted `preview` —
+ * from a profile named « Preview » — would be unreachable through
+ * `profiles/[id]`: every GET, PATCH and DELETE would land on the preview route
+ * and answer 405. Nothing would error at creation.
  */
+export const RESERVED_PROFILE_IDS: readonly string[] = ['preview'];
+
 export function mintProfileId(name: string, profiles: { id: string }[], boxes: Pick<Box, 'profileId'>[]): string {
   const taken = new Set([
+    ...RESERVED_PROFILE_IDS,
     ...profiles.map(p => p.id),
     ...boxes.map(b => b.profileId).filter((id): id is string => !!id),
   ]);

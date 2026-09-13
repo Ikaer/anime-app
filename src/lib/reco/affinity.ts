@@ -188,9 +188,65 @@ function labelFor(field: MetaField, value: FieldValue, anime: AnimeRecord): stri
 }
 
 /** A title AniList has told us nothing about cannot be scored — only skipped. */
-function isScoreable(a: AnimeRecord): boolean {
+export function isScoreable(a: AnimeRecord): boolean {
   const src = a.sources.anilist;
   return !!src && ((src.tags?.length ?? 0) > 0 || (src.staff?.length ?? 0) > 0);
+}
+
+/**
+ * Unseen, and not refused — the first half of the mark's eligibility, and the
+ * half that decides whether a title COUNTS toward `coverage.unseen`.
+ *
+ * Exported so the reco-profile preview (docs/recoProfiles/DESIGN.md §7) draws
+ * its pool from exactly this rule rather than a transcription of it. ⚠️ It is
+ * deliberately NOT one flat predicate over all five conditions: `isScoreable`
+ * and `isPrematureSequel` run AFTER the `unseen` count, and folding them in
+ * here would silently change what the mark's coverage reports.
+ *
+ * `plan_to_watch` passes — a title you flagged, not one you judged, the reading
+ * `computeFeed` and `/mix` share. A rating intent fails even without a seen
+ * status: « À revoir » / « Sans avis » mean the owner watched it and decided.
+ */
+export function isUnseenCandidate(anime: AnimeRecord, downIds: ReadonlySet<string>): boolean {
+  const status = getEffectiveStatus(anime);
+  if (status && SEEN_STATUSES.has(status)) return false;
+  if (getRatingIntent(anime)) return false;
+  return !anime.hidden && !downIds.has(anime.id);
+}
+
+/** The unseen catalog a ranker may propose from, and how much of it could be scored. */
+export interface UnseenPool {
+  /** Ids passing all of the mark's eligibility — unseen, scoreable, not a premature sequel. */
+  eligible: Set<string>;
+  /** Unseen-and-not-refused rows, scoreable or not — `coverage.unseen`'s count. */
+  unseen: number;
+}
+
+/**
+ * The mark's eligible population as a set, for a ranker other than the mark.
+ *
+ * The three checks run in `buildAffinityIndex`'s order, and are the same three
+ * functions, so the preview pool and the mark's population cannot drift apart
+ * — pinned by comparing the two on one fixture.
+ *
+ * ⚠️ **Not memoized, on purpose.** It depends on `downIds`, and the 👎 store is
+ * off the seven-slice join: a 👎 does not produce a new row array, so a WeakMap
+ * keyed on `all` would serve a stale pool. One pass is cheap next to the rank it
+ * feeds (measured in docs/recoProfiles/PLAN.md); the relation index it reads IS
+ * memoized.
+ */
+export function buildUnseenPool(all: AnimeRecord[], downIds: ReadonlySet<string>): UnseenPool {
+  const relations = buildRelationIndex(all);
+  const eligible = new Set<string>();
+  let unseen = 0;
+  for (const anime of all) {
+    if (!isUnseenCandidate(anime, downIds)) continue;
+    unseen++;
+    if (!isScoreable(anime)) continue;
+    if (isPrematureSequel(anime, relations)) continue;
+    eligible.add(anime.id);
+  }
+  return { eligible, unseen };
 }
 
 /**
@@ -261,16 +317,12 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
   let unseen = 0;
 
   for (const anime of all) {
-    const status = getEffectiveStatus(anime);
-    if (status && SEEN_STATUSES.has(status)) continue;
-    // A rating intent means « seen, and I have decided about scoring it » —
-    // « À revoir » or « Sans avis ». Today those ride on a `completed` title, so
-    // the line above already catches them; this one states the rule the mark
-    // actually needs, rather than inheriting it from where the intent happens to
-    // be stored. Recommending a show the owner has watched and declined to score
-    // is the premature-sequel failure in another costume.
-    if (getRatingIntent(anime)) continue;
-    if (anime.hidden || downIds.has(anime.id)) continue;
+    // Unseen and not refused (`isUnseenCandidate`). Its rating-intent check
+    // states the rule the mark needs — « À revoir » / « Sans avis » mean seen and
+    // decided — rather than inheriting it from those riding on `completed`:
+    // recommending a show the owner watched and declined to score is the
+    // premature-sequel failure in another costume.
+    if (!isUnseenCandidate(anime, downIds)) continue;
     unseen++;
     if (!isScoreable(anime)) continue;
     if (isPrematureSequel(anime, relations)) continue;

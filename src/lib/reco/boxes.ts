@@ -236,6 +236,22 @@ export interface RankBoxOptions {
    * The MCP box tools resolve it at the call site.
    */
   profile?: ProfileWeights;
+  /**
+   * The ids candidates are drawn from. Default: the owner's STATUSED list —
+   * the fill loop, whose proposals must be things the owner watched and can
+   * judge.
+   *
+   * The reco-profile preview passes the unseen catalog (`buildUnseenPool`,
+   * DESIGN §7) instead, because on a small box the statused pool is silence: «
+   * Absolute cinema »'s director slider reaches 2 statused titles against 119
+   * catalog ones. Same ranker, same weights, same unit weighting — only the pool
+   * moves, so the preview predicts what the profile does rather than what a
+   * second ranker would. ⚠️ The box's members and « écartés » are still skipped
+   * inside the loop: in an unseen pool the écartés are REACHABLE (the recos tab
+   * files unwatched titles there), and re-proposing one is the thing that set
+   * exists to prevent.
+   */
+  pool?: ReadonlySet<string>;
   /** Override for tuning probes; defaults to `BOX_TAG_MIN_RANK`. */
   tagMinRank?: number;
   /**
@@ -301,7 +317,8 @@ function idfFor(all: AnimeRecord[], minRank: number): Record<MetaField, Map<Fiel
  * instant and re-ranks on every accept.
  *
  * Scope is the statused list, not the catalog, because a box member has to be
- * something the owner watched and can judge. Grouping is `direct`
+ * something the owner watched and can judge — unless `options.pool` says
+ * otherwise, which only the reco-profile preview does. Grouping is `direct`
  * (sequel/prequel) rather than `franchise`: measured on the live store, the
  * wider scope chains Gundam SEED, 00, Iron-Blooded Orphans and Witch from
  * Mercury into ONE 129-entry component, so a single click would file four
@@ -368,7 +385,7 @@ export function rankBoxCandidates(
   for (const anime of all) {
     if (memberSet.has(anime.id)) continue;
     if (excludedSet.has(anime.id)) continue;
-    if (!getEffectiveStatus(anime)) continue;
+    if (options.pool ? !options.pool.has(anime.id) : !getEffectiveStatus(anime)) continue;
 
     let score = 0;
     const matched: { field: MatchField; values: string[]; weight: number }[] = [];

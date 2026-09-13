@@ -106,6 +106,21 @@ export function boxAnchorIds(
 }
 
 /**
+ * What a box has already ANSWERED, dropped from its crowd-anchored ranking.
+ *
+ * ⚠️ A box's « Oui » (members) and « Non » (excluded) are both answered
+ * questions, and must stay answered across a reload — the recos tab once hid
+ * them only client-side and every « Non » came back. Members count, not just
+ * the anchors: one representative per unit is asked about and the cap bites at
+ * 40, so a filed title can still be a crowd neighbour of the rest of the box.
+ * Shared by the mix route and the profile preview's `anchored` pool, so the
+ * preview cannot show a card the tab would hide.
+ */
+export function boxAnsweredIds(box: Box): Set<string> {
+  return new Set([...box.members, ...(box.excluded ?? [])]);
+}
+
+/**
  * Per-anchor edge caches, canonical-keyed. Process-lifetime, no TTL (see above).
  * Module-level, so shared by every importer in the process — today the mix route
  * and the probe script, which run in separate processes anyway.

@@ -42,7 +42,7 @@ Each phase ends with `npm run build` green.
 | 2 | ✅ **Profile model + resolver** — `RecoProfile` / `ProfileField`, the sparse resolver that zeroes `anilistStaff` whenever a family is non-zero, the shipped presets; tests | nothing visible | §6, §8 presets |
 | 3 | ✅ **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
 | 4 | ✅ **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
-| 5 | **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
+| 5 | ✅ **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
 | 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; the page-only i18n (the family `reco.source.*` keys and their `dynamicKeys.test.ts` driver landed in phase 4); CLAUDE.md | the feature | §8 |
 
 ## Phase 1 — what it decided beyond the design
@@ -294,3 +294,77 @@ the same box under `Défaut`:
   `profile` came back with `staffZeroed: true`. The MCP `get_box` returned the profile and
   `staffDirector=[…]` in `matched`. Then detached, deleted, `user/reco_profiles.json` removed, and
   `user/boxes.json` verified byte-identical to its backup (sha1 `accee660…`).
+
+## Phase 5 — what it decided beyond the design
+
+`POST /api/anime/profiles/preview` over [reco/profilePreview.ts](../../src/lib/reco/profilePreview.ts):
+`{ weights? | profileId?, box | anchors, pool?, limit?, includeSeen?, lang? }` → lean rows, the
+§8 diagnostic, the pool's `base` (with `families` and `staffZeroed`), and per pool its `coverage`
+or crowd `sources`. Nothing is saved or attached; no page reads it yet.
+
+- **The pool is the mark's, by extraction — as two predicates, not one.** `affinity.ts` exports
+  `isUnseenCandidate` (seen / intent / hidden / 👎 — the half that decides `coverage.unseen`) and
+  `isScoreable`; `buildUnseenPool` runs them and `isPrematureSequel` in `buildAffinityIndex`'s
+  own order. A single five-condition predicate would have silently changed what the mark's
+  coverage counts. Pinned by comparing the pool with the mark's scored set on one fixture; on the
+  live store the two are the same 15,271 of 25,854. `buildAffinityIndex` is otherwise untouched
+  (DESIGN §10: no profile reaches the mark) — `probe-affinity.js` reads byte-identically for
+  2024-fall, 2025-spring and 2023-winter.
+- **Not memoized.** The pool depends on the 👎 store, which is off the seven-slice join: a 👎
+  produces no new row array, so a WeakMap on `all` would serve a stale pool. It costs 24-65 ms;
+  the IDF it feeds is what was expensive, and that is memoized. Pinned (same array, new 👎).
+- **Same ranker, different pool** — the one call deliberately departing from the advisor's
+  suggestion of a second, flat scoring loop. `rankBoxCandidates` takes `pool?: ReadonlySet`
+  (default: the statused list, so the fill loop and `probe-box.js` are byte-identical), which
+  makes the preview predict what the attached profile does rather than what a sibling ranker
+  would, and inherits two rules for free: écartés are skipped inside the loop (reachable here —
+  `Box.excluded` holds unwatched ids), and results group by direct franchise. The grouping is
+  right for an unseen pool too: without it a watched show's unseen side entries flood the top
+  (DESIGN §8's own "Shingeki no Kyojin ×4"). A row reports `franchise`, the other entries it
+  stands for.
+- **Three pools, each over the base its real ranker uses**: `catalog` (default, a pure local read)
+  and `statused` resolve over `BOX_WEIGHTS`; `anchored` — the recos tab — over
+  `ANCHORED_WEIGHTS`, through `mixFetch` (the only one reaching MAL / AniList), with seen titles
+  in for a box as the tab has them. `boxAnsweredIds` (members ∪ écartés) moved into `mixFetch` so
+  the anchored preview and the tab cannot disagree on what a box has answered.
+- **The §8 diagnostic is [reco/profileDiagnostic.ts](../../src/lib/reco/profileDiagnostic.ts)**
+  (pure): per family, people, how many recur across two or more UNITS, the recurring people
+  named, and a verdict enum `empty | retrieval | axis` — the sentence stays phase 6's, so no
+  locale keys yet. `probe-profile.js --box` now reads it (three unit readings: every entry alone,
+  the declared units, the §2 proxy) instead of its own inline copy — and the rewired probe printed
+  the previous run's 167 lines exactly, two independent implementations agreeing.
+- **`profileId` in the body previews a saved profile as stored** (`weights` wins when both are
+  sent, the create route's rule over `preset`); phase 6 sends `weights`, the live slider state.
+- ⚠️ **`preview` is a reserved profile id.** A static route beats a dynamic one, so a profile
+  named « Preview » would mint `preview` and every GET / PATCH / DELETE on it would land on the
+  preview route. `RESERVED_PROFILE_IDS` feeds `mintProfileId`, and a test reads
+  `src/pages/api/anime/profiles/` so a future static route there must be reserved too.
+- `probe-profile.js --rank` now calls `previewProfile` for every pool and defaults to `catalog`.
+
+### Phase 5 — measured (2026-09-13, office store)
+
+**Regressions**, captured before the first edit: `probe-affinity.js` (three seasons) and
+`probe-box.js --box all` byte-identical, timings masked; the diagnostic identical as above.
+
+`probe-profile.js --rank --box <id> --weights <w>` on the catalog pool, against `Défaut`:
+
+| box | profile | top changed | what rose |
+|---|---|---|---|
+| Absolute cinema | `staffDirector: 1` | **11/15** (statused: 3/10) | *Evangelion: Death & Rebirth* (Anno), *Innocence* and *GITS 2.0* (Oshii), Haoling Li's Chinese animation, *Sousei no Onmyouji* (Taguchi) — §7's "reaches 119, not 2", seen |
+| Bancal et je l'assume | `staffDirector: 1` | 7/12 | Araki (*Death Note: Rewrite*, *Kabaneri Movie 1*) and Hiroyuki Tanaka (*Claymore*, *Chobits*, *Shisha no Teikoku*) — the two people the diagnostic names as this box's axis |
+| Laugh | `staffMusic: 1` | **10/12** | **Tomoki Kikuya holds 8 of the 12** (*Bocchi the Rock! Movie*, *Hidamari Sketch*, *Ika Musume*, *Nisekoi*…) |
+
+- ⚠️ **One person can take most of the page, which is §8's mechanism working as specified.** On
+  Laugh the diagnostic calls music an AXIS — Kikuya is credited on 4 of the box's units — so his
+  filmography rising is the box agreeing on him, and it stays comedic. §8's Yuuki Hayashi example
+  is the same arithmetic on a person who writes for shonen. The page's job (phase 6) is to print
+  the diagnostic beside the list so the owner can tell which of the two it is.
+- Cost on the dev server: a catalog preview answers in **107-416 ms warm** (1.6 s cold, IDF and
+  row build included), `statused` in 23 ms; the pool build is 24-65 ms of that. DESIGN §7
+  estimated 541 ms for one catalog rank; the family IDF memo and the rank-floored `idfFor` memo
+  are what keep it under.
+- **Live check** (dev server, office store; the preview writes nothing, and every `user/*.json`
+  sha1 matched after): catalog default and profiled, the clamp (`staffDirector: 7` → 1, unknown
+  key dropped), statused, ad-hoc anchors (three Miyazaki-era titles → his filmography, 29 of 30
+  rows with a family line), and anchored on « Bancal » (both crowd sources ok, the diagnostic
+  naming Araki and Tanaka as the axis). Eight invalid requests each answered their 4xx.

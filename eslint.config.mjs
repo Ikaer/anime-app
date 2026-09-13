@@ -24,6 +24,7 @@ const SERVER_ONLY = [
   '@/lib/reco/feedback',
   '@/lib/reco/groups',
   '@/lib/reco/mixFetch',
+  '@/lib/reco/profilePreview',
   '@/lib/reco/profiles',
   '@/lib/reco/refresh',
   '@/lib/reco/similar',
