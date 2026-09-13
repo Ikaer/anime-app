@@ -40,7 +40,7 @@ Each phase ends with `npm run build` green.
 |---|---|---|---|
 | 1 | ✅ **Staff families** — `reco/staffFields.ts` (client-safe): the eight whitelists, `staffFamilyOf`, extractors, `PROFILE_DENOM`, `denomFor`, the family IDF; tests; `scripts/probe-profile.js` | nothing visible — numbers | §3, §4, §5, §11 |
 | 2 | ✅ **Profile model + resolver** — `RecoProfile` / `ProfileField`, the sparse resolver that zeroes `anilistStaff` whenever a family is non-zero, the shipped presets; tests | nothing visible | §6, §8 presets |
-| 3 | **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
+| 3 | ✅ **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
 | 4 | **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
 | 5 | **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
 | 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; i18n (a `satisfies Record<StaffFamily, 0>` driver in `dynamicKeys.test.ts`); CLAUDE.md | the feature | §8 |
@@ -136,6 +136,38 @@ client-safe `reco/` module rather than `@/models/anime` because its key type is 
 - **Presets** name a lead family at 1.0 — "counts as much as the tags" after `PROFILE_DENOM`, tags
   being 1.0 in `BOX_WEIGHTS` — and a supporting field at ~0.5. Starting points for a slider, not
   measured optima: nothing here has a ground truth to fit against.
+
+## Phase 3 — what it decided beyond the design
+
+Store [reco/profiles.ts](../../src/lib/reco/profiles.ts), routes `api/anime/profiles` (GET list with
+`usedBy`, POST with `weights` or a `preset` key) and `api/anime/profiles/[id]` (GET, PATCH, DELETE),
+`Box.profileId`, and `PUT /api/anime/boxes/[id]` taking `profileId` (`null` detaches).
+
+- **DELETE refuses with 409 + `usedBy` while a box points at the profile**, and succeeds with
+  `?confirm=1` — the design's "confirmation naming those boxes", with the naming done by the server.
+- **A confirmed delete does NOT sweep `Box.profileId`** — `deleteGroup`'s reason: the dangling id
+  is inert (`getBoxProfile` reads it as "no profile") and `boxes.json` is the one file no provider
+  can re-supply. ⚠️ **But inert is only safe if it can never become live again**, and `mintSlugId`
+  frees a deleted slug: re-creating a profile of the same name would silently re-bind every box
+  still naming it — a weighting nobody attached. So `mintProfileId` treats every id a box still
+  names as taken. Live-verified: delete-while-attached then re-create the same name mints
+  `realisation-test-2`, with `usedBy: []`.
+- **`profileId` rides on the box's PUT, not its PATCH.** PATCH is the box's *description* (what
+  `updateBox` and the MCP's `edit_box` write); a profile changes how the box *ranks*, the same side
+  of the line as `groups`. And attaching is its own function, `setBoxProfile`, rather than a field on
+  `updateBox`, because `boxes.ts` is importable from the MCP — the only way to block the attach
+  there is by name, which needs a name of its own. Blocked, alongside the three profile writers;
+  both lint blocks were verified by importing each blocked name into `src/lib/mcp/`.
+- **Existence of the profile is the route's check**, not `setBoxProfile`'s: `profiles.ts` imports
+  `boxes.ts` (for `usedBy` and the mint), so the reverse import would be a cycle. Attaching an
+  unknown id is a 404 rather than a silent no-op on every ranking.
+- **`weights` on PATCH replaces the whole map.** A slider reset is a key deletion, which a merge
+  cannot express; `boxes.ts`' incremental-write race argument (many chips, many boxes, at once) does
+  not describe one page editing one profile a slider release at a time.
+- Live-checked end to end on the office store against the dev server (create from preset, clamp and
+  drop-unknown on PATCH, attach, `profileId` surviving a group edit, a member edit and a PATCH, 409,
+  confirmed delete, re-mint), then `user/boxes.json` restored to its exact original hash and the
+  test `reco_profiles.json` removed.
 
 ## ⚠️ Phase 4 is bigger than its table row — settle these before wiring
 

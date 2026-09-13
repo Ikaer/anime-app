@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  resolveProfile, sanitizeProfileWeights, PROFILE_PRESETS,
+  resolveProfile, sanitizeProfileWeights, mintProfileId, PROFILE_PRESETS,
 } from '@/lib/reco/profileWeights';
 import { BOX_WEIGHTS, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import { STAFF_FAMILIES } from '@/lib/reco/staffFields';
@@ -68,6 +68,18 @@ test('sanitizing clamps families to 0-1 and a source to its slider bounds', () =
     sanitizeProfileWeights({ staffDirector: 4, staffArt: -1, rejection: 0.5, anilistStaff: 9 }),
     { staffDirector: 1, staffArt: 0, rejection: 0, anilistStaff: 3 }
   );
+});
+
+/**
+ * A deleted profile leaves every box's `profileId` in place, inert. If the mint
+ * handed that freed slug to the next profile of the same name, those boxes would
+ * silently start ranking with a weighting nobody attached to them.
+ */
+test('a dead profile id a box still names is never re-minted', () => {
+  const boxes = [{ profileId: 'realisation' }, {}];
+  assert.equal(mintProfileId('Réalisation', [], boxes), 'realisation-2');
+  assert.equal(mintProfileId('Réalisation', [{ id: 'realisation' }], []), 'realisation-2');
+  assert.equal(mintProfileId('Réalisation', [], [{}]), 'realisation');
 });
 
 test('every preset that turns a family on states anilistStaff: 0', () => {

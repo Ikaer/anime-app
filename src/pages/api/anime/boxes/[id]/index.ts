@@ -1,13 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getBox, updateBox, deleteBox, setBoxMembers, editBoxMembers, editBoxExcluded, editBoxGroups } from '@/lib/reco/boxes';
+import { getBox, updateBox, deleteBox, setBoxMembers, editBoxMembers, editBoxExcluded, editBoxGroups, setBoxProfile } from '@/lib/reco/boxes';
+import { getProfile } from '@/lib/reco/profiles';
 import { isCanonicalId } from '@/lib/store';
 
 /**
  * One box.
  *   PATCH  { name?, emoji?, description? }    — rename / re-emoji / re-describe (the id never moves)
- *   PUT    { members } | { add?, remove?, exclude?, unexclude?, declare?, undeclare? }
- *          — membership, the « écartés » set, and which groups collapse here
+ *   PUT    { members } | { add?, remove?, exclude?, unexclude?, declare?, undeclare?, profileId? }
+ *          — membership, the « écartés » set, which groups collapse here, and
+ *            the reco profile its recos rank with (`profileId: null` detaches)
  *   DELETE                                    — drop the box
+ *
+ * `profileId` rides on PUT rather than PATCH because PATCH is the box's
+ * DESCRIPTION (what `updateBox` and the MCP's `edit_box` write), while a profile
+ * changes how the box ranks — the same side of the line as its groups.
  *
  * ⚠️ **`add`/`remove` exist because the chip rows would otherwise race.** The
  * browse grid renders many cards against many boxes, and a full-replacement
@@ -69,9 +75,22 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           return res.status(400).json({ error: 'declare/undeclare must be arrays of group ids' });
         }
 
-        const nothing = [add, remove, exclude, unexclude, declare, undeclare].every(a => a.length === 0);
+        // `undefined` leaves the attachment alone, `null` detaches, a string attaches.
+        const profileId: string | null | undefined = req.body?.profileId;
+        if (profileId !== undefined && profileId !== null && typeof profileId !== 'string') {
+          return res.status(400).json({ error: 'profileId must be a profile id or null' });
+        }
+        // Checked here, not in `setBoxProfile`: `boxes.ts` cannot import
+        // `profiles.ts`, which imports it. Attaching an id that resolves to
+        // nothing would be a silent no-op on every ranking — refuse it instead.
+        if (typeof profileId === 'string' && !getProfile(profileId)) {
+          return res.status(404).json({ error: 'Profile not found' });
+        }
+
+        const nothing = [add, remove, exclude, unexclude, declare, undeclare].every(a => a.length === 0)
+          && profileId === undefined;
         if (nothing) {
-          return res.status(400).json({ error: 'nothing to do: pass members, add, remove, exclude, unexclude, declare or undeclare' });
+          return res.status(400).json({ error: 'nothing to do: pass members, add, remove, exclude, unexclude, declare, undeclare or profileId' });
         }
 
         // Order matters in exactly one place: `editBoxExcluded` drops whatever it
@@ -82,6 +101,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         if (add.length > 0 || remove.length > 0) updated = editBoxMembers(boxId, add, remove) ?? updated;
         if (exclude.length > 0 || unexclude.length > 0) updated = editBoxExcluded(boxId, exclude, unexclude) ?? updated;
         if (declare.length > 0 || undeclare.length > 0) updated = editBoxGroups(boxId, declare, undeclare) ?? updated;
+        if (profileId !== undefined) updated = setBoxProfile(boxId, profileId) ?? updated;
         return res.status(200).json({ box: updated });
       }
 

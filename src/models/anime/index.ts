@@ -882,6 +882,19 @@ export interface Box {
    * an unresolvable id to ignore, and removing a title needs no bookkeeping.
    */
   groups?: string[];
+  /**
+   * The reco profile (`user/reco_profiles.json`) this box's recos are ranked
+   * with — docs/recoProfiles/DESIGN.md §6.
+   *
+   * ⚠️ **Referenced, not copied.** Editing a profile must move every box
+   * pointing at it; that is the whole reason a profile is an object rather than
+   * a per-box weight blob. An id that no longer resolves is inert — read as "no
+   * profile" — and `mintProfileId` never re-mints one, so a deleted profile's
+   * slug cannot silently re-bind a box to a new profile of the same name.
+   *
+   * Absent when unset, like `emoji` / `description` / `excluded`.
+   */
+  profileId?: string;
   /** ISO 8601. */
   createdAt: string;
 }

@@ -19,9 +19,10 @@
  * narrow vocabulary would force a translation layer on the other.
  */
 
-import type { RecoSource } from '@/models/anime';
+import type { Box, RecoSource } from '@/models/anime';
 import { STAFF_FAMILIES, isStaffFamily, type StaffFamily } from '@/lib/reco/staffFields';
 import { SOURCE_META } from '@/lib/reco/weights';
+import { mintSlugId } from '@/lib/domain/slug';
 
 export type ProfileField = RecoSource | StaffFamily;
 
@@ -46,6 +47,44 @@ export interface RecoProfile {
   weights: ProfileWeights;
   /** ISO 8601. */
   createdAt: string;
+}
+
+/** Just enough of a box to name it — the delete confirmation and the list both say WHICH. */
+export interface ProfileBoxRef {
+  id: string;
+  name: string;
+  emoji?: string;
+}
+
+/** A profile as the routes ship it: with the boxes pointing at it. */
+export interface ProfileSummary extends RecoProfile {
+  usedBy: ProfileBoxRef[];
+}
+
+/**
+ * Here rather than in `api/anime/profiles`, because both profile routes need it
+ * and nothing in this repo imports a value out of another API route —
+ * `domain/leanRow.ts`' reason.
+ */
+export const profileBoxRef = (b: Box): ProfileBoxRef =>
+  ({ id: b.id, name: b.name, ...(b.emoji ? { emoji: b.emoji } : {}) });
+
+/**
+ * The id a new profile gets: a slug of its name, deduped.
+ *
+ * ⚠️ **Dead ids are taken too.** A deleted profile leaves every box's
+ * `profileId` in place, inert (`deleteProfile` does not sweep `boxes.json`).
+ * `mintSlugId` alone would hand that freed slug to the next profile of the same
+ * name, silently re-binding those boxes to a weighting nobody attached. So
+ * every id a box still names is reserved. Pure, so the rule is pinned without a
+ * store on disk.
+ */
+export function mintProfileId(name: string, profiles: { id: string }[], boxes: Pick<Box, 'profileId'>[]): string {
+  const taken = new Set([
+    ...profiles.map(p => p.id),
+    ...boxes.map(b => b.profileId).filter((id): id is string => !!id),
+  ]);
+  return mintSlugId(name, taken, 'profil');
 }
 
 /**

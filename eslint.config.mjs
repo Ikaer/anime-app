@@ -23,6 +23,7 @@ const SERVER_ONLY = [
   '@/lib/reco/feed',
   '@/lib/reco/feedback',
   '@/lib/reco/groups',
+  '@/lib/reco/profiles',
   '@/lib/reco/refresh',
   '@/lib/reco/similar',
 ].flatMap((p) => [p, p.replace(/^@\//, '**/')]);
@@ -31,7 +32,7 @@ const SERVER_ONLY_MESSAGE =
   'Server-only module (transitively reaches fs) — components and hooks must not bundle it. ' +
   'Types are fine: use `import type`. Values belong in a page, getServerSideProps or an API route; ' +
   'the client-safe helpers are @/lib/domain/**, @/lib/url/**, @/lib/i18n, ' +
-  '@/lib/reco/{weights,scoring,byCredits,staffFields} and @/lib/providers/{capabilities,personalState,discrepancy}.';
+  '@/lib/reco/{weights,scoring,byCredits,staffFields,profileWeights} and @/lib/providers/{capabilities,personalState,discrepancy}.';
 
 // Store exports that WRITE. The MCP surface is read-only by contract, and these
 // are the names that would break it — including `resolveCanonicalId(s)`, which
@@ -87,6 +88,15 @@ const SEED_MUTE_WRITE_MESSAGE =
   "sharper one than boxes faced, since a box is a named object the owner sees on /boxes while " +
   "a mute is a subtraction. The tool surface reports the diagnosis; the owner clicks the mute " +
   "in the app (the feed card's seed hint, or the « Sources » sidebar section).";
+
+const PROFILE_WRITE_MESSAGE =
+  "Reco profiles are READABLE here, never writable (docs/recoProfiles/DESIGN.md §9). The boxes " +
+  "carve-out is not precedent: a box is a named object the owner sees on /boxes, while a profile " +
+  "is a weighting that silently changes every ranking that follows — so a model able to create, " +
+  "edit or attach one would be tuning the answer it is about to give, addSeedMute's objection " +
+  "and a sharper one. Reading a profile (to explain a ranking, or to suggest a weighting in " +
+  "prose) is fine: getProfiles / getProfile / getBoxProfile / boxesUsingProfile. The owner " +
+  "tunes and attaches profiles in the app.";
 
 const READ_ONLY_MESSAGE =
   'The MCP surface is read-only: it exists so a model can ASK about the local record, ' +
@@ -179,6 +189,24 @@ export default defineConfig([
               importNames: ['deleteBox'],
               allowTypeImports: true,
               message: BOX_WRITE_MESSAGE,
+            },
+            {
+              // ⚠️ `setBoxProfile` lives in the importable `boxes.ts`, so the
+              // profile block below would not reach it on its own. It is a
+              // separate function from `updateBox` precisely so it can be named
+              // here: attaching a profile re-weights the box's rankings.
+              name: '@/lib/reco/boxes',
+              importNames: ['setBoxProfile'],
+              allowTypeImports: true,
+              message: PROFILE_WRITE_MESSAGE,
+            },
+            {
+              // Reco profiles: readers open, writers blocked by name — the
+              // seed-mute shape, for the seed-mute reason.
+              name: '@/lib/reco/profiles',
+              importNames: ['createProfile', 'updateProfile', 'deleteProfile'],
+              allowTypeImports: true,
+              message: PROFILE_WRITE_MESSAGE,
             },
             {
               // « Mes regroupements »: the SECOND writable surface, opened on

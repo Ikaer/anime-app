@@ -146,6 +146,25 @@ export function editBoxGroups(id: string, declare: string[] = [], undeclare: str
 }
 
 /**
+ * Attach a reco profile to a box, or detach it with `null`.
+ *
+ * Its own function rather than a field on `updateBox`, and that is load-bearing:
+ * `updateBox` is what the MCP `edit_box` tool renames and re-describes through,
+ * while attaching a profile re-weights every ranking the box produces — so it is
+ * blocked BY NAME on the MCP surface (DESIGN §9), which only works if it has a
+ * name of its own. Existence of the profile is the route's check; this module
+ * cannot import `profiles.ts`, which imports it.
+ */
+export function setBoxProfile(id: string, profileId: string | null): Box | undefined {
+  return applyToBox(id, box => {
+    const next = { ...box };
+    if (profileId) next.profileId = profileId;
+    else delete next.profileId;
+    return next;
+  });
+}
+
+/**
  * Read, apply a pure reducer, write back.
  *
  * The one seam every incremental box write goes through, so the rules in
