@@ -10,8 +10,13 @@ import { DebouncedSearchInput } from '@/components/shared';
  * feed's hard filters / ranking.
  */
 interface RecoFiltersSectionProps {
-  search: string;
-  onSearchChange: (v: string) => void;
+  /**
+   * Omit both to leave the search field out — for a caller that keeps search
+   * somewhere always visible (box quick edit's toolbar) while this section folds
+   * away.
+   */
+  search?: string;
+  onSearchChange?: (v: string) => void;
   mediaTypes: string[];
   onMediaTypesChange: (v: string[]) => void;
   minScore: number | null;
@@ -109,12 +114,14 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   const t = useT();
   return (
     <div className={styles.filtersSection}>
-      <DebouncedSearchInput
-        placeholder={t('reco.searchPlaceholder')}
-        value={search}
-        onChange={onSearchChange}
-        className={styles.searchInput}
-      />
+      {onSearchChange && (
+        <DebouncedSearchInput
+          placeholder={t('reco.searchPlaceholder')}
+          value={search ?? ''}
+          onChange={onSearchChange}
+          className={styles.searchInput}
+        />
+      )}
 
       <div className={styles.filterGroup}>
         <label className={styles.label}>{t('reco.type')}</label>

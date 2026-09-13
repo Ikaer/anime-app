@@ -9,13 +9,38 @@
   min-width: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px 12px 12px;
   /* Each pane scrolls on its own: the source holds ~600 rows and the box a few
-     dozen, so a page-level scroll would send you hunting for the other pane. */
-  max-height: 62vh;
+     dozen, so a page-level scroll would send you hunting for the other pane.
+     The height is `QuickEdit`'s, handed down as a variable so the accordion
+     column and the box beside it end on the same line. */
+  max-height: var(--qe-pane-h, 70vh);
   overflow-y: auto;
+  /* A thin dark scrollbar: several stock ones side by side, arrows and all,
+     were the brightest chrome on the page. */
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
+
+/*
+ * One fold of the source column's accordion. The open fold gives up exactly
+ * what its closed sibling takes — `--qe-fold-h`, the closed header plus the
+ * gap between them — so the column's total matches the box pane's height.
+ */
+.paneFold {
+  max-height: calc(var(--qe-pane-h, 70vh) - var(--qe-fold-h, 60px));
+}
+
+/* Closed: the header and nothing else. No scrollport, so no scrollbar gutter. */
+.paneClosed {
+  max-height: none;
+  overflow: hidden;
+  padding-bottom: 10px;
+}
+
+.paneClosed .top { position: static; margin: 0; padding: 0; }
 
 /* The drop target has to be visible while a card is in flight, or a drag is a
    guess. */
@@ -50,20 +75,46 @@
 
 .head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
 }
 
+.foldHeading { margin: 0; font: inherit; }
+
+/* A fold's header is its toggle — the whole row, not a chevron to aim at. */
+.headToggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headToggle:hover .title { color: var(--accent-primary); }
+
+.foldChev {
+  width: 12px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 .title {
-  font-size: 0.86rem;
+  font-size: 0.9rem;
   font-weight: 600;
   margin: 0;
   color: var(--text-primary);
 }
 
+/* The same count pill as the page's tab badges. */
 .count {
-  font-size: 0.74rem;
-  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  padding: 0 7px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -71,10 +122,11 @@
 
 .regionLabel {
   font-size: 0.68rem;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
-  margin: 8px 0 4px;
+  margin: 10px 0 6px;
 }
 
 /* ---- one title ---- */
@@ -82,8 +134,8 @@
 .card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 6px;
+  gap: 12px;
+  padding: 4px 8px 4px 4px;
   border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
@@ -93,40 +145,52 @@
 .card:hover { background: var(--bg-tertiary); }
 
 /* Selection is a state you act on in bulk, so it has to survive a glance across
-   a 600-row pane — a border alone reads as hover. */
-.cardOn {
-  background: var(--bg-tertiary);
+   a 600-row pane — a border alone reads as hover, so it carries a tint too. */
+.cardOn,
+.cardOn:hover {
+  background: rgba(59, 130, 246, 0.14);
   border-color: var(--accent-primary);
 }
 
+/* Big enough to recognise a show by its key art, which is how the eye scans a
+   600-row list — the title is the confirmation, not the search. */
 .poster {
   display: block;
-  width: 32px;
-  height: 45px;
-  border-radius: 3px;
+  width: 64px;
+  height: 91px;
+  border-radius: 6px;
   object-fit: cover;
   background: var(--bg-tertiary);
   flex-shrink: 0;
   pointer-events: none;
 }
 
-.text { flex: 1; min-width: 0; }
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 
+/* Up to two lines: at this row height a second line costs nothing, and a long
+   franchise title is exactly the one whose ending tells seasons apart. */
 .cardTitle {
-  display: block;
-  font-size: 0.78rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 0.92rem;
+  font-weight: 500;
   color: var(--text-primary);
-  line-height: 1.25;
+  line-height: 1.3;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .meta {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -146,27 +210,29 @@
 
 .acts {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   flex-shrink: 0;
   opacity: 0;
+  transition: opacity 0.12s ease;
 }
 
 .card:hover .acts,
 .acts:focus-within { opacity: 1; }
 
 .act {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 0.82rem;
   line-height: 1;
   cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.act:hover { border-color: var(--accent-primary); color: var(--text-primary); }
+.act:hover { border-color: var(--accent-primary); background: var(--accent-primary); color: #fff; }
 
 /* ---- a group card ---- */
 
@@ -174,19 +240,28 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   margin-bottom: 6px;
-  background: var(--bg-primary, transparent);
+  background: var(--bg-primary);
+  transition: border-color 0.15s ease;
 }
 
-/* Declared: its collapse actually applies to the ranking. The box pane's groups
-   region is a picture of how the RANKER sees the box, so the distinction has to
-   be visible without reading the button. */
-.groupOn { border-color: var(--accent-primary); }
+.group:hover { border-color: #3d3d3d; }
+
+/*
+ * Declared: its collapse actually applies to the ranking. The box pane's groups
+ * region is a picture of how the RANKER sees the box, so the distinction has to
+ * be visible without reading the button. ⚠️ A left accent BAR, not an accent
+ * border: the full accent border is what a SELECTED title wears (`.cardOn`),
+ * and a declared group drawn the same way read as selected.
+ */
+.groupOn {
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
 
 .groupHead {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 6px 10px 6px 6px;
 }
 
 .chev {
@@ -196,43 +271,67 @@
   font-size: 0.8rem;
   cursor: pointer;
   padding: 0 2px;
+  align-self: stretch;
 }
 
-/* Overlapped posters — the card must read as ONE show at a glance. */
+.chev:hover { color: var(--text-primary); }
+
+/* Overlapped posters — the card must read as ONE show at a glance. Four 40px
+   posters at `STACK_STEP` (18px) fill the 94px exactly; fewer are pushed right
+   inline. */
 .stack {
   position: relative;
   display: block;
-  height: 37px;
-  width: 68px;
+  height: 57px;
+  width: 94px;
   flex-shrink: 0;
 }
 
 .stackPoster {
   position: absolute;
   top: 0;
-  width: 26px;
-  height: 37px;
+  width: 40px;
+  height: 57px;
   border-radius: 3px;
   object-fit: cover;
-  border: 1px solid var(--bg-secondary);
+  border: 1px solid var(--bg-primary);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.45);
+}
+
+/* Name on line one, count + action on line two. */
+.groupText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .groupName {
-  flex: 1;
-  min-width: 0;
+  display: block;
+  width: 100%;
   text-align: left;
   background: none;
   border: none;
+  padding: 0;
   color: var(--text-primary);
   font-size: 0.82rem;
   font-weight: 600;
+  line-height: 1.3;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.groupName:hover { text-decoration: underline; }
+.groupName:hover { color: var(--accent-primary); }
+
+.groupActs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 
 .groupCount {
   font-size: 0.7rem;
@@ -241,25 +340,39 @@
   white-space: nowrap;
 }
 
-/* The action on its own line, right-aligned under the name. */
-.groupActs {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 8px 6px;
-}
-
+/* A text action, not a filled button: it repeats on every card down the
+   column, and a stripe of identical buttons was the loudest thing on screen. */
 .groupAct {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  background: none;
+  border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: 0.72rem;
-  padding: 3px 9px;
+  line-height: 1.4;
+  padding: 1px 8px;
+  margin-right: -8px;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.groupAct:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.groupAct:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* « Ajouter les N » — the positive one, so it carries the accent in its text. */
+.groupActAdd {
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+.groupActAdd:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
 
 /* The declaration nudge — an offer, never a default. It has to be noticeable
    enough to be taken and quiet enough to be ignored. */

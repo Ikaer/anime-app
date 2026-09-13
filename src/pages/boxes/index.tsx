@@ -12,10 +12,11 @@
  * and swapped over it in one commit (§2), so nothing here ever had to keep the
  * old O(titles × boxes) page working.
  *
- * Writes are optimistic and incremental (`add`/`remove`, never a full `members`
- * replacement) for the reason the chip rows already were: this page fires many
- * writes against many boxes, and a client-side read-modify-write would let the
- * second clobber the first.
+ * ⚠️ The only write here is creating a box. The cards are navigation — their
+ * header goes to the présentation, « Éditer » to the edition mode — and every
+ * edit lives in that mode. The cards once edited in place (name, emoji,
+ * description, a picker, a × per poster), which made the list read as a form
+ * and a stray click a write.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
@@ -52,28 +53,6 @@ export default function BoxesV2Page() {
   }, [t]);
 
   useEffect(() => { load(); }, [load]);
-
-  /**
-   * Every write reloads the list rather than patching state locally.
-   *
-   * The card renders `top` and `unitCount`, both computed SERVER-side from the
-   * collapse — so a local patch would have to re-derive the units in the browser
-   * to keep the strip and the count honest, which is the one thing that must not
-   * drift from what the ranker sees. One cheap request instead.
-   */
-  const write = useCallback(async (boxId: string, body: Record<string, unknown>, method = 'PUT') => {
-    try {
-      const res = await fetch(`/api/anime/boxes/${encodeURIComponent(boxId)}`, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error('write');
-      await load();
-    } catch {
-      setError(t('boxes.saveError'));
-    }
-  }, [load, t]);
 
   const create = useCallback(async () => {
     const trimmed = name.trim();
@@ -132,7 +111,7 @@ export default function BoxesV2Page() {
             aria-label={t('boxes.descPlaceholder')}
           />
           <button type="button" className="bx2-btn" onClick={create} disabled={!name.trim()}>
-            {t('boxes.createAction')}
+            + {t('boxes.createAction')}
           </button>
         </section>
 
@@ -148,9 +127,7 @@ export default function BoxesV2Page() {
               key={box.id}
               box={box}
               href={`/boxes/${encodeURIComponent(box.id)}`}
-              onPatch={patch => write(box.id, patch, 'PATCH')}
-              onAdd={id => write(box.id, { add: [id] })}
-              onRemove={ids => write(box.id, { remove: ids })}
+              editHref={`/boxes/${encodeURIComponent(box.id)}?e=1`}
             />
           ))
         )}
@@ -161,22 +138,27 @@ export default function BoxesV2Page() {
           through a CSS Module precisely because a rule here would NOT reach it. */}
       <style jsx>{`
         .bx2 { max-width: 1100px; margin: 0 auto; padding: 16px 20px 48px; }
-        .bx2-head h1 { font-size: 1.5rem; margin: 0 0 4px; }
-        .bx2-sub { color: var(--text-muted); font-size: 0.88rem; margin: 0 0 18px; }
+        .bx2-head { margin: 8px 0 18px; }
+        .bx2-head h1 { font-size: 1.5rem; line-height: 1.3; margin: 0 0 4px; }
+        .bx2-sub { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
 
+        /* The create row speaks the card's language — the emoji is the same
+           tile, just smaller — so a new box visibly becomes one of the cards
+           below it. Dashed, because it is a slot for a box that does not exist
+           yet rather than a box. */
         .bx2-create {
           display: flex;
           gap: 8px;
           align-items: center;
           flex-wrap: wrap;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-color);
-          border-radius: 10px;
+          border: 1px dashed var(--border-hover);
+          border-radius: 12px;
           padding: 12px 14px;
-          margin-bottom: 18px;
+          margin-bottom: 20px;
         }
-        .bx2-emoji { width: 3rem; text-align: center; }
-        .bx2-name { width: 220px; }
+        .bx2-create:focus-within { border-color: var(--accent-primary); border-style: solid; }
+        .bx2-emoji { width: 38px; height: 34px; padding: 0; text-align: center; font-size: 1.1rem; }
+        .bx2-name { width: 220px; font-weight: 600; }
         .bx2-desc { flex: 1; min-width: 240px; }
         .bx2-create input {
           background: var(--bg-tertiary);
@@ -184,8 +166,9 @@ export default function BoxesV2Page() {
           border-radius: 6px;
           padding: 6px 10px;
           color: var(--text-primary);
-          font-size: 0.88rem;
+          font-size: 0.85rem;
         }
+        .bx2-create input::placeholder { color: var(--text-muted); }
         .bx2-create input:focus { border-color: var(--accent-primary); outline: none; }
 
         .bx2-btn {
@@ -193,15 +176,17 @@ export default function BoxesV2Page() {
           border: 1px solid var(--accent-primary);
           border-radius: 6px;
           color: #fff;
-          font-size: 0.85rem;
-          padding: 6px 16px;
+          font-size: 0.78rem;
+          font-weight: 600;
+          line-height: 1.4;
+          padding: 7px 16px;
           cursor: pointer;
         }
-        .bx2-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-        .bx2-btn:hover:not(:disabled) { background: var(--accent-hover); }
+        .bx2-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .bx2-btn:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-        .bx2-note { color: var(--text-muted); font-size: 0.88rem; padding: 20px 0; }
-        .bx2-error { color: var(--accent-danger, #f87171); font-size: 0.85rem; }
+        .bx2-note { color: var(--text-muted); font-size: 0.85rem; padding: 20px 0; }
+        .bx2-error { color: var(--accent-danger); font-size: 0.85rem; }
       `}</style>
     </>
   );

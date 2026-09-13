@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import AnimePicker from '../AnimePicker';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import type { BoxSummary } from '@/pages/api/anime/boxes';
 import styles from './BoxCard.module.css';
@@ -40,24 +39,22 @@ import styles from './BoxCard.module.css';
  */
 export interface BoxCardProps {
   box: BoxSummary;
-  /** Rename / re-emoji / re-describe; blur saves. */
-  onPatch: (patch: { name?: string; emoji?: string; description?: string | null }) => void;
-  onAdd: (animeId: string) => void;
-  /**
-   * Remove a whole UNIT — every id the slot stands for.
-   *
-   * ⚠️ Not just the faced title: a slot marked « +6 » represents seven entries,
-   * so dropping one would leave six behind and simply re-face the slot, which
-   * reads as a control that did nothing.
-   */
-  onRemove: (animeIds: string[]) => void;
-  /** Where « Tout afficher » and the empty-box CTA lead. */
+  /** The box's présentation — where the header and the overflow tile lead. */
   href: string;
+  /** The box in edition mode — where « Éditer » and the empty-box CTA lead. */
+  editHref: string;
 }
 
-const BoxCard: React.FC<BoxCardProps> = ({ box, onPatch, onAdd, onRemove, href }) => {
+/**
+ * ⚠️ **Navigation only — nothing on this card edits.** It used to carry
+ * in-place name/emoji/description fields, a « + Ajouter » picker and a × on
+ * every poster, which made the landing page read as a form and made a stray
+ * click a write. Every edit now lives in the box's edition mode, one click
+ * away through « Éditer »; the card's header goes to the présentation, and each
+ * poster to its anime.
+ */
+const BoxCard: React.FC<BoxCardProps> = ({ box, href, editHref }) => {
   const t = useT();
-  const [picking, setPicking] = useState(false);
 
   // French inflects on BOTH halves independently, and a constructed key would
   // need a `TranslationKey` cast — which is exactly the cast that disables the
@@ -69,119 +66,102 @@ const BoxCard: React.FC<BoxCardProps> = ({ box, onPatch, onAdd, onRemove, href }
     : box.unitCount === 1 ? 'boxes.countOne'
     : 'boxes.count';
 
+  /**
+   * The strip is one row of ten slots. ⚠️ When units are left out, the « +N »
+   * tile TAKES the tenth slot rather than being an eleventh: an eleventh wraps
+   * onto a line of its own, a whole poster row's height spent on one tile.
+   */
+  const overflow = box.unitCount > box.top.length;
+  const shown = overflow ? box.top.slice(0, box.top.length - 1) : box.top;
+  const hidden = box.unitCount - shown.length;
+
   return (
     <section className={styles.card}>
       <div className={styles.head}>
-        <input
-          className={styles.emoji}
-          defaultValue={box.emoji}
-          onBlur={e => { const v = e.target.value.trim(); if (v && v !== box.emoji) onPatch({ emoji: v }); }}
-          aria-label={t('boxes.namePlaceholder')}
-          maxLength={4}
-        />
-        <div className={styles.identity}>
-          <input
-            className={styles.name}
-            defaultValue={box.name}
-            onBlur={e => { const v = e.target.value.trim(); if (v && v !== box.name) onPatch({ name: v }); }}
-            placeholder={t('boxes.namePlaceholder')}
-            aria-label={t('boxes.namePlaceholder')}
-          />
-          <textarea
-            className={styles.desc}
-            defaultValue={box.description ?? ''}
-            rows={1}
-            // Blank CLEARS, unlike the name which falls back: a box must always
-            // have a name and must be allowed to have no description.
-            onBlur={e => {
-              const v = e.target.value.trim();
-              if (v !== (box.description ?? '')) onPatch({ description: v || null });
-            }}
-            placeholder={t('boxes.descShort')}
-            aria-label={t('boxes.descPlaceholder')}
-          />
-          <div className={styles.meta}>
-            <span className={styles.count}>
-              {t(countKey, { units: box.unitCount, entries: box.count })}
+        {/* The whole identity block is the link, not just the name: it is the
+            biggest target on the card and the one the eye lands on. */}
+        <Link href={href} className={styles.identityLink}>
+          <span className={styles.emoji} aria-hidden="true">{box.emoji}</span>
+          <span className={styles.identity}>
+            <span className={styles.name}>{box.name}</span>
+            {box.description && <span className={styles.desc}>{box.description}</span>}
+            <span className={styles.meta}>
+              <span className={styles.count}>
+                {t(countKey, { units: box.unitCount, entries: box.count })}
+              </span>
+              {box.groups?.length ? (
+                <span className={styles.metaSep}>
+                  {box.groups.length === 1
+                    ? t('boxes.declaredOne', { count: 1 })
+                    : t('boxes.declared', { count: box.groups.length })}
+                </span>
+              ) : null}
+              {box.excludedCount ? (
+                <span className={styles.metaSep}>
+                  {box.excludedCount === 1
+                    ? t('boxes.excludedOne', { count: 1 })
+                    : t('boxes.excluded', { count: box.excludedCount })}
+                </span>
+              ) : null}
             </span>
-            {box.groups?.length ? <span>{t('boxes.declared', { count: box.groups.length })}</span> : null}
-            {box.excludedCount ? <span>{t('boxes.excluded', { count: box.excludedCount })}</span> : null}
-          </div>
-        </div>
+          </span>
+        </Link>
         <div className={styles.actions}>
-          <button type="button" className={styles.btn} onClick={() => setPicking(p => !p)}>
-            {picking ? t('boxes.addClose') : `+ ${t('boxes.add')}`}
-          </button>
-          {/* ⚠️ **Always rendered, never conditional on truncation.** This link was
-              behind `box.count > box.top.length`, so a box whose strip already
-              shows everything had NO route to its own detail page — 9 of the 13
-              non-empty boxes on the live store, since the strip holds ten units
-              and most boxes are smaller than that. The empty ones had their CTA
-              and the four big ones had this, so the whole middle was a dead end.
-              The label still says which case you are in. */}
-          <Link href={href} className={styles.btn}>
-            {box.count > box.top.length ? t('boxes.showAll') : t('boxes.open')}
+          <Link href={editHref} className={styles.btn}>
+            ✎ {t('quickEdit.open')}
           </Link>
         </div>
       </div>
 
-      {/* Revealed by the `+` rather than always mounted: 26 always-live search
-          inputs on one page is 26 debounce timers and a wall of chrome. */}
-      {picking && (
-        <div className={styles.picker}>
-          <AnimePicker
-            picked={new Set(box.members)}
-            onPick={hit => onAdd(hit.id)}
-            autoFocus
-          />
-        </div>
-      )}
-
       {box.count === 0 ? (
         <div className={styles.empty}>
           {t('boxes.emptyBox')}
-          <Link href={href} className={`${styles.btn} ${styles.emptyAction}`}>
-            {t('boxes.emptyBoxAction')}
+          <Link href={editHref} className={`${styles.btn} ${styles.btnPrimary}`}>
+            ✎ {t('quickEdit.open')}
           </Link>
         </div>
       ) : (
         <div className={styles.strip}>
-          {box.top.map(entry => (
+          {shown.map(entry => (
             <div key={entry.row.id} className={styles.slot}>
-              {/* A collapsed unit is ringed, not just badged: « +6 » is 10px of
-                  text in a corner, and "which of these ten slots is one show and
-                  which is one entry" is the question the whole revamp is about. */}
-              <div className={`${styles.thumb} ${entry.extra > 0 ? styles.thumbUnit : ''}`}>
-                <Link href={`/anime/${entry.row.id}`} title={entry.row.title}>
-                  {entry.row.picture ? (
-                    <Image
-                      src={entry.row.picture}
-                      alt=""
-                      width={74}
-                      height={105}
-                      className={styles.poster}
-                      unoptimized
-                    />
-                  ) : (
-                    <span className={styles.poster} aria-hidden="true" />
-                  )}
-                </Link>
+              {/* A collapsed unit is drawn as a stack, not just badged: « +6 » is
+                  10px of text in a corner, and "which of these ten slots is one
+                  show and which is one entry" is the question the whole revamp is
+                  about. */}
+              <Link
+                href={`/anime/${entry.row.id}`}
+                title={entry.row.title}
+                className={`${styles.thumb} ${entry.extra > 0 ? styles.thumbUnit : ''}`}
+              >
+                {entry.row.picture ? (
+                  <Image
+                    src={entry.row.picture}
+                    alt=""
+                    width={84}
+                    height={120}
+                    className={styles.poster}
+                    unoptimized
+                  />
+                ) : (
+                  <span className={styles.poster} aria-hidden="true" />
+                )}
                 {entry.extra > 0 && (
                   <span className={styles.extra}>{t('boxes.plus', { count: entry.extra })}</span>
                 )}
-                <button
-                  type="button"
-                  className={styles.remove}
-                  onClick={() => onRemove(entry.members)}
-                  aria-label={t('boxes.remove', { title: entry.row.title })}
-                  title={t('boxes.remove', { title: entry.row.title })}
-                >
-                  ×
-                </button>
-              </div>
+              </Link>
               <span className={styles.slotTitle}>{entry.row.title}</span>
             </div>
           ))}
+          {/* The strip holds ten units; the rest are one click away rather than
+              silently cut. */}
+          {overflow && (
+            <div className={styles.slot}>
+              <Link href={href} className={`${styles.thumb} ${styles.more}`}>
+                <span className={styles.moreCount}>{t('boxes.plus', { count: hidden })}</span>
+              </Link>
+              <span className={styles.slotTitle}>{t('boxes.showAll')}</span>
+            </div>
+          )}
         </div>
       )}
     </section>

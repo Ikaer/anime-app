@@ -26,7 +26,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import AnimePicker from '@/components/anime/AnimePicker';
 import BoxEntryList from '@/components/anime/boxes/BoxEntryList';
 import BoxCompositionBlock from '@/components/anime/boxes/BoxCompositionBlock';
 import QuickEdit from '@/components/anime/boxes/QuickEdit';
@@ -34,6 +33,7 @@ import BoxRecos from '@/components/anime/boxes/BoxRecos';
 import { useBoxUrlState, type BoxTab } from '@/hooks';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import { startLoadProbe } from '@/lib/clientPerf';
+import { autoGrow } from '@/components/anime/boxes/autoGrow';
 import type { BoxMembersResponse } from '../api/anime/boxes/[id]/members';
 
 /**
@@ -238,25 +238,19 @@ export default function BoxV2DetailPage() {
     : 'boxes.count';
 
   /**
-   * ⚠️ **An empty box opens straight into the fill path** — 13 of 26 boxes have
-   * no members, so a presentation-by-default rule renders half of them as
-   * nothing at all (§6.1).
+   * **Edition mode** — the one place a box is edited. Présentation is read-only
+   * on purpose: it used to carry in-place name/emoji/description fields and a
+   * `−` on every poster, which made the page read as a form and a stray click a
+   * write. Now présentation answers "what is this box" and edition answers
+   * "change it" — the header's fields, the panes, the écartés strip.
    *
-   * It opens on the PICKER rather than on quick-edit, deliberately. Quick-edit's
-   * whole shape is source-on-the-left / box-on-the-right, and against an empty
-   * box the right pane is a blank rectangle taking half the screen to say
-   * nothing — the same emptiness the rule exists to avoid, just laid out. The
-   * `✎` button is one click away for anyone who wants the panes.
-   *
-   * ⚠️ So the gate is the explicit request and NOTHING else. It used to be
-   * `state.edit && entries > 0`, which made that "one click away" false on every
-   * empty box: the button's label reads `state.edit` and flipped to « Fermer le
-   * remplissage » while the content read this and stayed on the picker. The
-   * default needs no clause — `e` is absent until the button is pressed. The
-   * same clause also threw you out of quick-edit the moment the last title was
-   * removed, mid-filing; an empty box pane is a state quick-edit renders fine.
+   * ⚠️ The gate is the explicit request and NOTHING else — no `entries > 0`
+   * clause. An empty box edits fine (an empty box pane is a state quick edit
+   * renders), and a clause here once made the button's label and the content
+   * disagree. `edit` only means something on présentation, which is also the
+   * only tab the URL ever writes it for.
    */
-  const editing = state.edit;
+  const editing = state.edit && state.tab === 'pres';
 
   const tab = (key: BoxTab, labelKey: TranslationKey, badge?: number) => (
     <button
@@ -269,55 +263,44 @@ export default function BoxV2DetailPage() {
     </button>
   );
 
+  const meta = box && (
+    <p className="bx2d-meta">
+      <span className="bx2d-count">{t(countKey, { units: units.length, entries })}</span>
+      {box.groups?.length ? (
+        <span className="bx2d-metaSep">
+          {box.groups.length === 1
+            ? t('boxes.declaredOne', { count: 1 })
+            : t('boxes.declared', { count: box.groups.length })}
+        </span>
+      ) : null}
+      {data?.missing.length ? (
+        <span className="bx2d-metaSep">{t('boxes.missing', { count: data.missing.length })}</span>
+      ) : null}
+    </p>
+  );
+
   return (
     <>
       <Head><title>{box ? `${box.emoji} ${box.name}` : t('boxes.title')} — Anime Tracker</title></Head>
 
-      {/* Fill mode gets a wider canvas — see the rule in the style block. */}
-      <div className={`bx2d ${editing ? 'bx2d-wide' : ''}`}>
+      {/* Edition and the recos grid get a wider canvas — see the rule in the
+          style block. */}
+      <div className={`bx2d ${editing || state.tab === 'recos' ? 'bx2d-wide' : ''}`}>
         <Link href="/boxes" className="bx2d-back">← {t('boxes.back')}</Link>
 
-        {box && (
+        {box && !editing && (
           <header className="bx2d-head">
-            <input
-              className="bx2d-emoji"
-              defaultValue={box.emoji}
-              key={`e-${box.emoji}`}
-              onBlur={e => { const v = e.target.value.trim(); if (v && v !== box.emoji) patch({ emoji: v }); }}
-              aria-label={t('boxes.namePlaceholder')}
-              maxLength={4}
-            />
+            <span className="bx2d-emoji" aria-hidden="true">{box.emoji}</span>
             <div className="bx2d-identity">
-              <input
-                className="bx2d-name"
-                defaultValue={box.name}
-                key={`n-${box.name}`}
-                onBlur={e => { const v = e.target.value.trim(); if (v && v !== box.name) patch({ name: v }); }}
-                aria-label={t('boxes.namePlaceholder')}
-              />
-              <textarea
-                className="bx2d-desc"
-                defaultValue={box.description ?? ''}
-                key={`d-${box.description ?? ''}`}
-                rows={1}
-                // Blank CLEARS, unlike the name which falls back: a box must
-                // always have a name and must be allowed to have no description.
-                onBlur={e => {
-                  const v = e.target.value.trim();
-                  if (v !== (box.description ?? '')) patch({ description: v || null });
-                }}
-                placeholder={t('boxes.descPlaceholder')}
-                aria-label={t('boxes.descPlaceholder')}
-              />
-              <p className="bx2d-meta">
-                <span className="bx2d-count">{t(countKey, { units: units.length, entries })}</span>
-                {box.groups?.length ? <span>{t('boxes.declared', { count: box.groups.length })}</span> : null}
-                {data?.missing.length ? <span>{t('boxes.missing', { count: data.missing.length })}</span> : null}
-              </p>
+              <h1 className="bx2d-name">{box.name}</h1>
+              {box.description && <p className="bx2d-desc">{box.description}</p>}
+              {meta}
             </div>
             {/* The group blade's footer, transposed: the destructive control
                 quiet and set apart on the leading side, the page's one real
-                action filled at the trailing edge. */}
+                action filled at the trailing edge. Delete lives HERE and not in
+                edition: edition is for changing the box, and a delete sitting
+                beside « Retour » is one slip away from the wrong click. */}
             <div className="bx2d-actions">
               <button
                 type="button"
@@ -327,17 +310,64 @@ export default function BoxV2DetailPage() {
               >
                 🗑 {t('boxes.delete')}
               </button>
-              {/* Quick edit REPLACES « Remplir » (§6.2) — it is the fill surface,
-                  so the page's one fill affordance opens it. The bare picker
-                  survives only for an empty box, which has nothing to show.
-                  Filled at rest; once open it drops to an outlined toggle, since
-                  closing is no longer the thing the page is asking for. */}
               <button
                 type="button"
-                className={`bx2d-btn ${state.edit ? 'bx2d-btnOn' : 'bx2d-btnPrimary'}`}
-                onClick={() => update({ tab: 'pres', edit: !state.edit })}
+                className="bx2d-btn bx2d-btnPrimary"
+                onClick={() => { setConfirmDelete(false); update({ tab: 'pres', edit: true }); }}
               >
-                {state.edit ? t('quickEdit.close') : `✎ ${t('quickEdit.open')}`}
+                ✎ {t('quickEdit.open')}
+              </button>
+            </div>
+          </header>
+        )}
+
+        {/* Edition's header: the same block, as fields. Visibly fields — bordered
+            at rest — because in this mode editing is the point, and the fields
+            are what say which mode you are in. Blur saves, as before. */}
+        {box && editing && (
+          <header className="bx2d-head bx2d-headEdit">
+            <input
+              className="bx2d-emoji bx2d-field"
+              defaultValue={box.emoji}
+              key={`e-${box.emoji}`}
+              onBlur={e => { const v = e.target.value.trim(); if (v && v !== box.emoji) patch({ emoji: v }); }}
+              aria-label="emoji"
+              maxLength={4}
+            />
+            <div className="bx2d-identity">
+              <input
+                className="bx2d-name bx2d-field"
+                defaultValue={box.name}
+                key={`n-${box.name}`}
+                onBlur={e => { const v = e.target.value.trim(); if (v && v !== box.name) patch({ name: v }); }}
+                placeholder={t('boxes.namePlaceholder')}
+                aria-label={t('boxes.namePlaceholder')}
+              />
+              <textarea
+                className="bx2d-desc bx2d-field"
+                defaultValue={box.description ?? ''}
+                key={`d-${box.description ?? ''}`}
+                rows={1}
+                ref={autoGrow}
+                onInput={e => autoGrow(e.currentTarget)}
+                // Blank CLEARS, unlike the name which falls back: a box must
+                // always have a name and must be allowed to have no description.
+                onBlur={e => {
+                  const v = e.target.value.trim();
+                  if (v !== (box.description ?? '')) patch({ description: v || null });
+                }}
+                placeholder={t('boxes.descPlaceholder')}
+                aria-label={t('boxes.descPlaceholder')}
+              />
+              {meta}
+            </div>
+            <div className="bx2d-actions">
+              <button
+                type="button"
+                className="bx2d-btn"
+                onClick={() => update({ tab: 'pres', edit: false })}
+              >
+                ← {t('quickEdit.close')}
               </button>
             </div>
           </header>
@@ -346,7 +376,7 @@ export default function BoxV2DetailPage() {
         {/* The confirmation sits on its own line under the header rather than in
             the actions column: it names the box and says what survives, which is
             a sentence, and the actions column is sized for two short buttons. */}
-        {box && confirmDelete && (
+        {box && confirmDelete && !editing && (
           <div className="bx2d-confirm" role="alertdialog" aria-label={t('boxes.delete')}>
             <span className="bx2d-confirmText">
               {entries === 0
@@ -364,11 +394,16 @@ export default function BoxV2DetailPage() {
           </div>
         )}
 
-        <nav className="bx2d-tabs">
-          {tab('pres', 'boxes.tabPres')}
-          {tab('recos', 'boxes.tabRecos')}
-          {tab('excluded', 'boxes.tabExcluded', excluded.length + (data?.missingExcluded.length ?? 0))}
-        </nav>
+        {/* No tabs in edition: it is a mode you enter and leave by « Retour à la
+            présentation », and a tab bar over it would claim you were still on
+            présentation. */}
+        {!editing && (
+          <nav className="bx2d-tabs">
+            {tab('pres', 'boxes.tabPres')}
+            {tab('recos', 'boxes.tabRecos')}
+            {tab('excluded', 'boxes.tabExcluded', excluded.length + (data?.missingExcluded.length ?? 0))}
+          </nav>
+        )}
 
         {error && <p className="bx2d-error">{error}</p>}
         {loading && <p className="bx2d-note">{t('common.loading')}</p>}
@@ -383,23 +418,23 @@ export default function BoxV2DetailPage() {
               onWrite={write}
               onGroupsChanged={scheduleLoad}
             />
+          ) : entries === 0 ? (
+            // Read-only présentation has nothing to show for an empty box, so it
+            // says so and points at the one place a box is filled.
+            <div className="bx2d-empty">
+              <p>{t('boxes.emptyBox')}</p>
+              <button
+                type="button"
+                className="bx2d-btn bx2d-btnPrimary"
+                onClick={() => update({ tab: 'pres', edit: true })}
+              >
+                ✎ {t('quickEdit.open')}
+              </button>
+            </div>
           ) : (
             <>
-              {entries === 0 && (
-                // An empty box has no présentation to show, so the picker is
-                // what it opens on — see `editing` for why it is not quick-edit.
-                <div className="bx2d-picker">
-                  <AnimePicker picked={new Set(box?.members ?? [])} onPick={hit => write({ add: [hit.id] })} />
-                  <p className="bx2d-note">{t('boxes.emptyBox')}</p>
-                </div>
-              )}
-              {entries > 0 && <BoxCompositionBlock composition={data.composition} />}
-              <BoxEntryList
-                entries={units}
-                actionIcon="−"
-                actionLabel={title => t('boxes.remove', { title })}
-                onAct={ids => write({ remove: ids })}
-              />
+              <BoxCompositionBlock composition={data.composition} />
+              <BoxEntryList entries={units} />
             </>
           )
         )}
@@ -463,9 +498,11 @@ export default function BoxV2DetailPage() {
         .bx2d { max-width: 1100px; margin: 0 auto; padding: 16px 20px 48px; }
 
         /*
-         * Fill mode is three parallel columns (rail + two panes), so it is the
-         * one state on this page that spends width on content rather than on
-         * line length — and at 1100 it was spending it on ellipses instead.
+         * Fill mode is parallel columns (two panes, plus the filter rail when
+         * unfolded), so it is the one state on this page that spends width on
+         * content rather than on line length — and at 1100 it was spending it
+         * on ellipses instead. The numbers below were measured with the rail
+         * always open and 32px posters; the rail now starts folded.
          * Measured on the live store at a 2000px viewport: 138 of 687 source
          * titles truncated, falling to 35 at 1300 and 7 at 1600. Past 1600 the
          * curve is flat and the remaining gain costs the whole side margin, so
@@ -482,117 +519,140 @@ export default function BoxV2DetailPage() {
          *
          * Gated on the mode rather than applied to the page, because the
          * reading view is a description over one entry list — prose, which a
-         * 1600px measure makes worse.
+         * 1600px measure makes worse. The recos tab shares it: that is a card
+         * grid, and at 1100 six cards a row are 150px wide.
          */
         .bx2d-wide { max-width: clamp(1100px, 100vw - 400px, 1600px); }
-        /*
-         * The canvas widens for the panes, not for the prose. Name and
-         * description are borderless until hover, so at 1600 the only tell was
-         * a 1342px focus box around one short sentence. Capped at a readable
-         * measure, and only in the wide mode — the reading view keeps the
-         * geometry it already had. The two caps differ in ch because the fonts
-         * do (1.35rem against 0.86rem); they are chosen to land on the same
-         * ~530px, so the two fields read as one block rather than a step.
-         */
-        .bx2d-wide .bx2d-name { max-width: 44ch; }
-        .bx2d-wide .bx2d-desc { max-width: 72ch; }
 
+        /*
+         * The header is the landing card, opened: the same emoji tile (larger),
+         * the same name, description and meta line. Read-only on présentation —
+         * a heading and a paragraph — and fields only in edition (bx2d-field
+         * below), so a box reads as one object on both pages and the page only
+         * looks like a form when it is one.
+         */
         .bx2d-head {
           display: flex;
           align-items: flex-start;
-          gap: 10px;
-          margin: 10px 0 14px;
+          gap: 18px;
+          margin: 14px 0 20px;
         }
         .bx2d-emoji {
-          font-size: 1.9rem;
-          width: 2.8rem;
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 64px;
+          height: 64px;
+          padding: 0;
+          font-size: 2.1rem;
+          line-height: 1;
           text-align: center;
-          background: none;
-          border: 1px solid transparent;
-          border-radius: 6px;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 14px;
           color: inherit;
         }
         .bx2d-identity { flex: 1; min-width: 0; }
-        /*
-         * ⚠️ These carry a background AT REST, not only on hover. The
-         * description is a textarea with resize: vertical, so the browser paints
-         * a resize grabber at its bottom-right corner — and over a transparent
-         * field that little diagonal floats in open space, attached to nothing.
-         * A faint fill is what makes it read as the corner of a box. Do NOT
-         * "clean this up" back to background: none; the grabber comes with it.
-         */
-        .bx2d-name, .bx2d-desc {
+        .bx2d-name {
           display: block;
-          width: 100%;
+          margin: 2px 0 0;
+          font-size: 1.6rem;
+          font-weight: 700;
+          line-height: 1.25;
+          color: var(--text-primary);
+        }
+        .bx2d-desc {
+          display: block;
+          max-width: 72ch;
+          margin: 6px 0 0;
+          font-size: 0.92rem;
+          line-height: 1.5;
+          color: var(--text-secondary);
+          white-space: pre-line;
+        }
+
+        /*
+         * Edition's fields: bordered at rest, because in this mode editing is the
+         * point and the borders are what say which mode you are in. The
+         * description grows with its text (autoGrow) and has no resize handle.
+         * Capped at a readable measure — the canvas widens to 1600 here for the
+         * panes, not for one sentence.
+         */
+        .bx2d-field {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
-          border-radius: 6px;
-          /* Roomier than the 2px/6px these had while transparent: padding that
-             reads as breathing room around bare text reads as a cramped field
-             once the box around it is visible. */
-          padding: 6px 9px;
+          border-radius: 8px;
           color: var(--text-primary);
-          font: inherit;
+          font-family: inherit;
+          transition: border-color 0.15s ease, background 0.15s ease;
         }
-        /* The two fields are a stack, not one control — they need a seam. */
-        .bx2d-name { font-size: 1.35rem; font-weight: 600; margin-bottom: 6px; }
-        /* min-height is a border-box floor (globals sets box-sizing globally),
-           so it has to clear one line PLUS the padding and border, or the
-           textarea is clamped under its own single row. */
-        .bx2d-desc { font-size: 0.86rem; color: var(--text-secondary); resize: vertical; min-height: 2.3rem; }
-        /* The fields already carry their edge, so hover only brightens it. */
-        .bx2d-emoji:hover { border-color: var(--border-color); }
-        .bx2d-name:hover, .bx2d-desc:hover { border-color: var(--text-muted); }
-        .bx2d-emoji:focus, .bx2d-name:focus, .bx2d-desc:focus {
-          border-color: var(--accent-primary);
-          outline: none;
-          background: var(--bg-tertiary);
+        .bx2d-field:hover { border-color: var(--border-hover); }
+        .bx2d-field:focus { border-color: var(--accent-primary); outline: none; background: var(--bg-tertiary); }
+        .bx2d-field::placeholder { color: var(--text-muted); font-style: italic; }
+        .bx2d-emoji.bx2d-field { cursor: text; }
+        .bx2d-name.bx2d-field { width: 100%; max-width: 40ch; margin: 0; padding: 4px 10px; }
+        .bx2d-desc.bx2d-field {
+          width: 100%;
+          max-width: 72ch;
+          padding: 6px 10px;
+          resize: none;
+          overflow: hidden;
+          white-space: normal;
         }
 
-        .bx2d-meta {
+        .bx2d-empty {
           display: flex;
+          flex-direction: column;
+          align-items: center;
           gap: 12px;
-          flex-wrap: wrap;
-          /* Left offset tracks the fields' border + padding, so the counts sit
-             under the name rather than under the box's edge. */
-          margin: 7px 0 0 10px;
-          font-size: 0.78rem;
+          padding: 40px 16px;
+          border: 1px dashed var(--border-hover);
+          border-radius: 12px;
           color: var(--text-muted);
+          font-size: 0.9rem;
         }
-        .bx2d-count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
-        .bx2d-actions { flex-shrink: 0; display: flex; align-items: center; gap: 24px; }
-        .bx2d-btn:disabled { opacity: 0.6; cursor: default; }
+
+        .bx2d-actions { flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding-top: 4px; }
         .bx2d-confirm {
           display: flex;
           align-items: center;
           flex-wrap: wrap;
           gap: 10px;
-          margin: -4px 0 14px;
-          padding: 8px 12px;
-          border: 1px solid var(--accent-danger, #f87171);
-          border-radius: 8px;
-          background: var(--bg-secondary);
+          margin: -6px 0 16px;
+          padding: 10px 14px;
+          border: 1px solid var(--accent-danger);
+          border-radius: 10px;
+          background: rgba(248, 113, 113, 0.06);
         }
         .bx2d-confirmText { flex: 1; min-width: 240px; font-size: 0.85rem; color: var(--text-primary); }
+        /* The box system's button spec, shared by hand with its CSS Modules. */
         .bx2d-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
           background: var(--bg-tertiary);
           border: 1px solid var(--border-color);
           border-radius: 6px;
           color: var(--text-secondary);
-          font-size: 0.8rem;
+          font-size: 0.78rem;
+          line-height: 1.4;
           padding: 5px 12px;
           cursor: pointer;
           white-space: nowrap;
+          transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
         }
         .bx2d-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+        .bx2d-btn:disabled { opacity: 0.6; cursor: default; }
         .bx2d-btnOn { border-color: var(--accent-primary); color: var(--text-primary); }
         /* After .bx2d-btn on purpose: same specificity, so source order decides. */
         .bx2d-btnPrimary {
           background: var(--accent-primary);
           border-color: var(--accent-primary);
           color: #fff;
-          padding: 6px 14px;
+          font-weight: 600;
+          padding: 6px 16px;
         }
         .bx2d-btnPrimary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
         /* Ghost at rest — no fill, no border, muted text — so the page's one
@@ -605,26 +665,27 @@ export default function BoxV2DetailPage() {
           padding: 5px 8px;
         }
         .bx2d-btnDanger:hover, .bx2d-btnDanger.bx2d-btnOn {
-          border-color: var(--accent-danger, #f87171);
-          color: var(--accent-danger, #f87171);
+          border-color: var(--accent-danger);
+          color: var(--accent-danger);
+          background: none;
         }
         .bx2d-btnDangerSolid {
-          background: var(--accent-danger, #f87171);
-          border-color: var(--accent-danger, #f87171);
+          background: var(--accent-danger-strong);
+          border-color: var(--accent-danger-strong);
           color: #fff;
+          font-weight: 600;
         }
-        .bx2d-btnDangerSolid:hover { color: #fff; filter: brightness(1.1); }
+        .bx2d-btnDangerSolid:hover { color: #fff; border-color: var(--accent-danger-strong); filter: brightness(1.1); }
 
         .bx2d-tabs {
           display: flex;
           gap: 4px;
           border-bottom: 1px solid var(--border-color);
-          margin-bottom: 14px;
+          margin-bottom: 16px;
         }
 
-        .bx2d-picker { margin-bottom: 14px; }
-        .bx2d-note { color: var(--text-muted); font-size: 0.84rem; margin: 8px 0; }
-        .bx2d-error { color: var(--accent-danger, #f87171); font-size: 0.85rem; }
+        .bx2d-note { color: var(--text-muted); font-size: 0.85rem; margin: 8px 0; }
+        .bx2d-error { color: var(--accent-danger); font-size: 0.85rem; }
       `}</style>
 
       {/* ⚠️ Global block, every selector prefixed with `.bx2d` so the prefix does
@@ -644,26 +705,44 @@ export default function BoxV2DetailPage() {
           class names were all present in the DOM. An unprefixed rule here really
           would be global. */}
       <style jsx global>{`
+        .bx2d .bx2d-meta {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin: 8px 0 0;
+          font-size: 0.78rem;
+          color: var(--text-muted);
+        }
+        .bx2d .bx2d-count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+        .bx2d .bx2d-metaSep::before { content: '·'; margin-right: 10px; color: var(--border-hover); }
+
         .bx2d .bx2d-back { color: var(--text-muted); font-size: 0.82rem; text-decoration: none; }
         .bx2d .bx2d-back:hover { color: var(--text-primary); }
 
         .bx2d .bx2d-tab {
+          display: inline-flex;
+          align-items: center;
           background: none;
           border: none;
           border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
           color: var(--text-muted);
-          font-size: 0.88rem;
+          font-size: 0.9rem;
+          font-weight: 500;
           padding: 8px 14px;
           cursor: pointer;
+          transition: color 0.15s ease, border-color 0.15s ease;
         }
         .bx2d .bx2d-tab:hover { color: var(--text-primary); }
-        .bx2d .bx2d-tabOn { color: var(--text-primary); border-bottom-color: var(--accent-primary); }
+        .bx2d .bx2d-tabOn { color: var(--text-primary); font-weight: 600; border-bottom-color: var(--accent-primary); }
         .bx2d .bx2d-badge {
-          margin-left: 6px;
+          margin-left: 7px;
           background: var(--bg-tertiary);
+          color: var(--text-secondary);
           border-radius: 999px;
-          padding: 1px 7px;
-          font-size: 0.72rem;
+          padding: 0 7px;
+          font-size: 0.7rem;
+          line-height: 1.6;
           font-variant-numeric: tabular-nums;
         }
       `}</style>

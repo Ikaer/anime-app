@@ -523,7 +523,7 @@ export default function AnimeCardView({
                                         className={`${styles.actionButton} ${styles.verdictYes}`}
                                         title={t('boxReco.yesTitle')}
                                     >
-                                        {t('boxReco.yes')}
+                                        ✓ {t('boxReco.yes')}
                                     </Button>
                                     <Button
                                         onClick={() => onBoxVerdict(anime.id, 'no')}
@@ -532,7 +532,7 @@ export default function AnimeCardView({
                                         className={`${styles.actionButton} ${styles.verdictNo}`}
                                         title={t('boxReco.noTitle')}
                                     >
-                                        {t('boxReco.no')}
+                                        ✕ {t('boxReco.no')}
                                     </Button>
                                 </div>
                             )}

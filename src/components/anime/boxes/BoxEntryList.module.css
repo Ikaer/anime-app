@@ -3,17 +3,34 @@
  * `<style jsx>` for the reason CLAUDE.md documents: styled-jsx scopes only the
  * markup a component returns ITSELF, so a page-level rule would silently match
  * nothing here.
+ *
+ * Same slot as the landing card's strip, scaled up — same badge, same stacked
+ * edges for a unit, same two reserved title lines — so a box reads the same way
+ * at both lengths.
  */
 
+/*
+ * Large (présentation): the posters ARE the page, so the grid fills the width
+ * with columns of at least 180px — five across the 1100px canvas, about 195px
+ * a poster. Column and row gaps clear a unit's stacked edges (`.thumbUnit`
+ * reaches 12px up and right).
+ */
 .grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 28px 22px;
+  margin-top: 20px;
+}
+
+/* Compact (edition's écartés strip): fixed small slots under the panes. */
+.compact {
+  grid-template-columns: repeat(auto-fill, 96px);
+  gap: 18px 16px;
+  margin-top: 14px;
 }
 
 .slot {
-  width: 92px;
+  min-width: 0;
 }
 
 /* The badge and the action anchor to the POSTER, not to the slot — `.slot`
@@ -22,81 +39,117 @@
 .thumb {
   position: relative;
   display: block;
-  width: 92px;
-  height: 131px;
-  border-radius: 6px;
+  border-radius: 8px;
+  transition: transform 0.15s ease;
 }
 
-/* A collapsed unit, ringed exactly as on the landing card. box-shadow rather
-   than a border so the grid cannot shift. */
+.thumb:hover { transform: translateY(-3px); }
+
+.posterLink { display: block; }
+
+/* A collapsed unit, drawn as a stack exactly as on the landing card, at this
+   size's scale. box-shadow rather than a border or extra elements, so the grid
+   cannot shift. */
 .thumbUnit {
-  box-shadow: 0 0 0 2px var(--accent-primary);
+  box-shadow:
+    6px -6px 0 -1px #474747,
+    12px -12px 0 -2px #2f2f2f;
+}
+
+.compact .thumbUnit {
+  box-shadow:
+    4px -4px 0 -1px #474747,
+    8px -8px 0 -2px #2f2f2f;
 }
 
 .poster {
   display: block;
-  width: 92px;
-  height: 131px;
-  border-radius: 6px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 230 / 326;
+  border-radius: 8px;
   object-fit: cover;
   background: var(--bg-tertiary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
+.compact .poster { border-radius: 6px; box-shadow: none; }
+
+/* Two lines reserved, so a row of slots keeps one baseline for its meta line. */
 .slotTitle {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 0.7rem;
-  line-height: 1.25;
-  color: var(--text-secondary);
-  margin-top: 4px;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.3;
+  min-height: 2.6em;
+  color: var(--text-primary);
+  margin-top: 8px;
 }
 
 .slotMeta {
   display: block;
-  font-size: 0.66rem;
+  margin-top: 2px;
+  font-size: 0.74rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+.compact .slotTitle { font-size: 0.7rem; font-weight: 400; color: var(--text-secondary); margin-top: 5px; }
+.compact .slotMeta { font-size: 0.66rem; margin-top: 0; }
 
 /* « +6 » — how many entries this slot stands for, and the control that shows
    them. Always visible, unlike the action: it is information first. */
 .extra {
   position: absolute;
-  left: 3px;
-  bottom: 3px;
-  background: rgba(0, 0, 0, 0.78);
+  left: 8px;
+  bottom: 8px;
+  background: var(--accent-primary);
   color: #fff;
   border: none;
-  border-radius: 4px;
-  font-size: 0.68rem;
-  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 2px 10px;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
-.extra:hover,
-.extraOpen {
-  background: var(--accent-primary);
+.compact .extra { left: 4px; bottom: 4px; font-size: 0.68rem; padding: 1px 7px; }
+
+.extra:hover {
+  background: var(--accent-hover);
+}
+
+/* Open: inverted, so the badge reads as a pressed toggle. */
+.extraOpen,
+.extraOpen:hover {
+  background: #fff;
+  color: var(--accent-hover);
 }
 
 .act {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 22px;
-  height: 22px;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.75);
   color: #fff;
-  font-size: 0.9rem;
+  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.12s ease, background 0.12s ease;
 }
+
+.compact .act { top: 4px; right: 4px; width: 24px; height: 24px; font-size: 0.9rem; }
 
 .thumb:hover .act,
 .act:focus {
@@ -110,7 +163,6 @@
 /* An expanded unit's other entries, set apart so a run of them still reads as
    belonging to the slot before it rather than as more units. */
 .child {
-  padding-left: 8px;
+  padding-left: 12px;
   border-left: 2px solid var(--accent-primary);
-  opacity: 0.9;
 }

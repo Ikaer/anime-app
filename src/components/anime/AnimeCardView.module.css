@@ -393,11 +393,23 @@
 
 /* The box recos verdict pair, on a row of its own. Solid (the Button variants)
    for an unwatched title; OUTLINED for one already watched, so the two kinds of
-   question part at first glance. Two classes deep to outrank the variant. */
+   question part at first glance. Two classes deep to outrank the variant.
+   ⚠️ Equal halves that never wrap: at six cards a row the label « Oui, c’est ça »
+   broke onto three lines beside a one-line « Non », so every card foot was
+   lopsided. The label is now the one word the tab's hint already uses, and the
+   halves are sized by the row rather than by their text. */
 .verdictRow {
     display: flex;
     gap: 0.5rem;
     width: 100%;
+}
+
+.verdictYes,
+.verdictNo {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: nowrap;
+    min-height: 2rem;
 }
 
 .verdictSeen .verdictYes,

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AnimePicker from '../AnimePicker';
 import { RecoFiltersSection } from '../sidebar';
+import { DebouncedSearchInput } from '@/components/shared';
 import QuickEditPane, { type PaneGroupRegion } from './QuickEditPane';
 import GroupBlade from './GroupBlade';
 import BoxEntryList from './BoxEntryList';
@@ -17,13 +18,16 @@ import styles from './QuickEdit.module.css';
  * Quick edit — the fill surface, and the thing that replaces « Remplir »
  * entirely (§6.2).
  *
- * Four regions: the watched list, the box, the groups column (« Mes
- * regroupements » — the source side's group cards plus every other group), and
- * « écartés » as one full-width collapsible strip below — not a quadrant,
- * because excluded is a much rarer state than the others and does not deserve
- * half the screen. The groups column was split out of the watched list, whose
- * scroll it used to share: browsing titles meant scrolling past every group,
- * and reaching a group card lost your place in the list.
+ * Four regions: the watched list, the box, « Mes regroupements » (the source
+ * side's group cards plus every other group), and « écartés » as one
+ * full-width collapsible strip below — not a quadrant, because excluded is a
+ * much rarer state than the others and does not deserve half the screen.
+ * « Mes regroupements » was split out of the watched list, whose scroll it used
+ * to share: browsing titles meant scrolling past every group, and reaching a
+ * group card lost your place in the list. The two now share one column as an
+ * ACCORDION (watched list open, groups folded), with the box in the other —
+ * a column each, plus the filter rail, left every pane too narrow for posters
+ * you could actually recognise.
  *
  * **It is a MODE on présentation, not a fourth tab.** "What is this box" stays
  * the page's answer; filling it is something you do to that answer.
@@ -41,7 +45,9 @@ import styles from './QuickEdit.module.css';
  *   sidebar. Présentation and écartés have nothing to filter, and the box's
  *   identity header and tabs have to stay above all three — promoting the whole
  *   page to `AnimePageLayout` would push them into a column beside a sidebar
- *   that is empty two thirds of the time.
+ *   that is empty two thirds of the time. The rail is FOLDED by default behind
+ *   a toolbar toggle; search and sort sit in the toolbar itself, because they
+ *   are used on every visit and the rest of the filters are not.
  */
 export interface QuickEditProps {
   boxId: string;
@@ -80,9 +86,12 @@ const NO_FILTERS: Filters = {
   search: '', mediaTypes: [], minScore: null, maxScore: null, minYear: null, maxYear: null,
 };
 
+/** `RecoFiltersSection`'s year-slider floor (the historical crawl's). */
+const YEAR_FLOOR = 1960;
+
 /**
- * The rail's sort, applied to every title list on this surface — the watched
- * list, the box and « écartés » — like the filters above it. Group cards keep
+ * The toolbar's sort, applied to every title list on this surface — the watched
+ * list, the box and « écartés » — like the filters beside it. Group cards keep
  * their own order: by name, and a card's members in the group's sequence.
  * Literal keys, never a constructed one (CLAUDE.md).
  */
@@ -146,6 +155,15 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
   const [hasClock, setHasClock] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showExcluded, setShowExcluded] = useState(false);
+  /** The filter rail, folded by default — its width goes to the posters. */
+  const [railOpen, setRailOpen] = useState(false);
+  /**
+   * Which source fold is open. Exactly one, always: the watched list by
+   * default, « Mes regroupements » folded under it. Opening either closes the
+   * other, so the open one gets the whole column height.
+   */
+  const [sourceFold, setSourceFold] = useState<'source' | 'groups'>('source');
+  const toggleFold = useCallback(() => setSourceFold(f => (f === 'source' ? 'groups' : 'source')), []);
 
   const [selection, setSelection] = useState<{ pane: PaneKind; ids: string[] } | null>(null);
   const [blade, setBlade] = useState<{ seedFrom?: string; group?: GroupSummary } | null>(null);
@@ -170,6 +188,17 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
 
   const set = <K extends keyof Filters>(key: K, value: Filters[K]) =>
     setFilters(f => ({ ...f, [key]: value }));
+
+  /**
+   * How many of the rail's filter dimensions are narrowing, for the badge on
+   * its toggle. Search is left out: it sits in the toolbar, in plain sight.
+   * ⚠️ A lower year bound at the slider's floor is not a filter — the year
+   * slider emits its floor verbatim once touched, rather than `null`.
+   */
+  const activeFilters =
+    (filters.mediaTypes.length > 0 ? 1 : 0) +
+    (filters.minScore !== null || filters.maxScore !== null ? 1 : 0) +
+    ((filters.minYear ?? YEAR_FLOOR) > YEAR_FLOOR || filters.maxYear !== null ? 1 : 0);
 
   const loadGroups = useCallback(async () => {
     try {
@@ -433,30 +462,57 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
 
   return (
     <div className={styles.wrap}>
-      <aside className={styles.rail}>
-        <div className={styles.sort}>
-          <label className={styles.sortLabel} htmlFor="quick-edit-sort">{t('quickEdit.sortBy')}</label>
-          <select id="quick-edit-sort" className={styles.sortSelect} value={sort}
-            onChange={e => setSort(e.target.value as LeanRowSort)}>
-            {SORT_OPTIONS.filter(o => o.key !== 'feed' || hasClock).map(o => (
-              <option key={o.key} value={o.key}>{t(o.labelKey)}</option>
-            ))}
-          </select>
-        </div>
-        <RecoFiltersSection
-          search={filters.search}
-          onSearchChange={v => set('search', v)}
-          mediaTypes={filters.mediaTypes}
-          onMediaTypesChange={v => set('mediaTypes', v)}
-          minScore={filters.minScore}
-          onMinScoreChange={v => set('minScore', v)}
-          maxScore={filters.maxScore}
-          onMaxScoreChange={v => set('maxScore', v)}
-          minYear={filters.minYear}
-          maxYear={filters.maxYear}
-          onYearChange={(min, max) => setFilters(f => ({ ...f, minYear: min, maxYear: max }))}
+      {/* The toolbar holds what is used on every visit — search and sort — so
+          the rest of the filters can fold away without taking those with them. */}
+      <div className={styles.toolbar}>
+        <button
+          type="button"
+          className={`${styles.filtersToggle} ${railOpen ? styles.filtersToggleOn : ''}`}
+          onClick={() => setRailOpen(v => !v)}
+          aria-expanded={railOpen}
+        >
+          <span aria-hidden="true">{railOpen ? '◂' : '▸'}</span>
+          {t('quickEdit.filters')}
+          {/* Stated while folded: a filter narrowing the panes from behind a
+              closed rail would otherwise read as titles gone missing. */}
+          {activeFilters > 0 && <span className={styles.filtersBadge}>{activeFilters}</span>}
+        </button>
+        <DebouncedSearchInput
+          className={styles.search}
+          placeholder={t('reco.searchPlaceholder')}
+          value={filters.search}
+          onChange={v => set('search', v)}
         />
-      </aside>
+        {activeFilters > 0 && (
+          <button type="button" className={styles.clearFilters} onClick={() => setFilters(NO_FILTERS)}>
+            {t('quickEdit.clearFilters')}
+          </button>
+        )}
+        <label className={styles.sortLabel} htmlFor="quick-edit-sort">{t('quickEdit.sortBy')}</label>
+        <select id="quick-edit-sort" className={styles.sortSelect} value={sort}
+          onChange={e => setSort(e.target.value as LeanRowSort)}>
+          {SORT_OPTIONS.filter(o => o.key !== 'feed' || hasClock).map(o => (
+            <option key={o.key} value={o.key}>{t(o.labelKey)}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className={`${styles.main} ${railOpen ? styles.mainRail : ''}`}>
+      {railOpen && (
+        <aside className={styles.rail}>
+          <RecoFiltersSection
+            mediaTypes={filters.mediaTypes}
+            onMediaTypesChange={v => set('mediaTypes', v)}
+            minScore={filters.minScore}
+            onMinScoreChange={v => set('minScore', v)}
+            maxScore={filters.maxScore}
+            onMaxScoreChange={v => set('maxScore', v)}
+            minYear={filters.minYear}
+            maxYear={filters.maxYear}
+            onYearChange={(min, max) => setFilters(f => ({ ...f, minYear: min, maxYear: max }))}
+          />
+        </aside>
+      )}
 
       <div className={styles.body}>
         {nudges.length > 0 && (
@@ -473,15 +529,45 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
           </div>
         )}
 
-        {/* ⚠️ Three panes on a wide screen, and the groups column wraps under
-            the watched list on a narrow one — see `.panes` for the measured
-            breakpoint. The order is the owner's: box in the middle, so BOTH
-            source panes sit next to the box they drag into. */}
+        {/* Two columns: the source side as an accordion on the left — the
+            watched list open, « Mes regroupements » folded under it — and the
+            box on the right. Both source folds sit right beside the box they
+            drag into, and each column is wide enough for real posters, which
+            a column per pane (plus the rail) never left room for. */}
         <div className={styles.panes}>
-          <div className={styles.areaGroups}>
+          <div className={styles.colSource}>
+            <QuickEditPane
+              variant="source"
+              loading={loading}
+              collapsible={{ open: sourceFold === 'source', onToggle: toggleFold }}
+              title={t('quickEdit.sourceTitle')}
+              rows={singles}
+              groupRegions={[]}
+              groupsByAnime={groupsByAnime}
+              selected={selection?.pane === 'source' ? selectedIds : new Set()}
+              onToggleSelect={(id, shift) => select('source', id, shift)}
+              onAdd={ids => act({ add: ids })}
+              onExclude={ids => act({ exclude: ids })}
+              onOpenGroup={g => setBlade({ group: g })}
+              onCreateGroup={id => setBlade({ seedFrom: id })}
+              onDropIds={ids => act({ remove: ids })}
+            >
+              {/* The picker stays (§1): adding an unwatched title deliberately is
+                  a wanted feature, and the source pane is watched-only by scope. */}
+              <div className={styles.picker}>
+                <AnimePicker
+                  picked={memberIds}
+                  onPick={hit => act({ add: [hit.id] })}
+                  placeholder={t('quickEdit.pickerPlaceholder')}
+                />
+              </div>
+            </QuickEditPane>
+
             <QuickEditPane
               variant="source"
               groupsOnly
+              loading={loading}
+              collapsible={{ open: sourceFold === 'groups', onToggle: toggleFold }}
               title={t('quickEdit.groupsIndex')}
               rows={cardedRows}
               groupRegions={sourceRegions}
@@ -532,34 +618,7 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
             </QuickEditPane>
           </div>
 
-          <div className={styles.areaSource}>
-            <QuickEditPane
-              variant="source"
-              title={t('quickEdit.sourceTitle')}
-              rows={singles}
-              groupRegions={[]}
-              groupsByAnime={groupsByAnime}
-              selected={selection?.pane === 'source' ? selectedIds : new Set()}
-              onToggleSelect={(id, shift) => select('source', id, shift)}
-              onAdd={ids => act({ add: ids })}
-              onExclude={ids => act({ exclude: ids })}
-              onOpenGroup={g => setBlade({ group: g })}
-              onCreateGroup={id => setBlade({ seedFrom: id })}
-              onDropIds={ids => act({ remove: ids })}
-            >
-              {/* The picker stays (§1): adding an unwatched title deliberately is
-                  a wanted feature, and the source pane is watched-only by scope. */}
-              <div className={styles.picker}>
-                <AnimePicker
-                  picked={memberIds}
-                  onPick={hit => act({ add: [hit.id] })}
-                  placeholder={t('quickEdit.pickerPlaceholder')}
-                />
-              </div>
-            </QuickEditPane>
-          </div>
-
-          <div className={styles.areaBox}>
+          <div className={styles.colBox}>
             <QuickEditPane
               variant="box"
               title={t('quickEdit.boxTitle')}
@@ -587,6 +646,7 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
             asideRows.length === 0
               ? <p className={styles.excludedEmpty}>{t('boxes.excludedEmpty')}</p>
               : <BoxEntryList
+                  size="compact"
                   entries={asideRows.map(row => ({ row, members: [row] }))}
                   actionIcon="↩"
                   actionLabel={title => t('boxes.restore', { title })}
@@ -594,15 +654,18 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
                 />
           )}
         </section>
-
-        {loading && <p className={styles.note}>{t('common.loading')}</p>}
+      </div>
       </div>
 
       {/* The bulk bar appears WITH a selection and states which pane it acts on;
           the actions differ by side, so a single set of verbs would be wrong. */}
       {selection && selection.ids.length > 0 && (
         <div className={styles.bulk}>
-          <span className={styles.bulkCount}>{t('quickEdit.selected', { count: selection.ids.length })}</span>
+          <span className={styles.bulkCount}>
+            {selection.ids.length === 1
+              ? t('quickEdit.selectedOne', { count: 1 })
+              : t('quickEdit.selected', { count: selection.ids.length })}
+          </span>
           {selection.pane !== 'box' ? (
             <>
               <button type="button" className={styles.bulkAdd} onClick={() => act({ add: selection.ids })}>

@@ -9,6 +9,11 @@
   --accent-hover: #2563eb;
   --border-color: #333333;
   --border-hover: #555555;
+  /* Danger: the light red reads as TEXT or a border on the dark ground; the
+     strong one is for a FILLED control carrying white text, where the light red
+     falls under readable contrast. */
+  --accent-danger: #f87171;
+  --accent-danger-strong: #dc2626;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
 

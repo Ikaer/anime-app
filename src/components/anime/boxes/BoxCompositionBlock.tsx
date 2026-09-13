@@ -88,7 +88,11 @@ const BoxCompositionBlock: React.FC<BoxCompositionBlockProps> = ({ composition }
             different when half the box carries no AniList tag at all. Same
             posture as `GraphCoverage` and `/activity`'s `available: false`. */}
         {untagged > 0 && (
-          <span className={styles.coverage}>{t('boxes.madeOfUntagged', { count: untagged, units })}</span>
+          <span className={styles.coverage}>
+            {untagged === 1
+              ? t('boxes.madeOfUntaggedOne', { count: 1, units })
+              : t('boxes.madeOfUntagged', { count: untagged, units })}
+          </span>
         )}
       </div>
     </section>

@@ -92,7 +92,10 @@ const BoxRecos: React.FC<BoxRecosProps> = ({
     <>
       <AnimeListHeader
         title={t('boxReco.title')}
-        count={t('boxReco.count', { count: visible.length })}
+        // `<= 1`: French takes the singular at zero too.
+        count={visible.length <= 1
+          ? t('boxReco.countOne', { count: visible.length })
+          : t('boxReco.count', { count: visible.length })}
         display={{ cardsPerRow, onCardsPerRowChange }}
       >
         <label className={styles.seen}>

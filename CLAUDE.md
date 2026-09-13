@@ -781,13 +781,21 @@ it; it belongs in the "costs that are real" list.
 **`/boxes` is the list of BOXES**, not of titles, and the inversion is the point. The page it
 replaced asked an O(titles × boxes) question — 473 franchise groups down the page, a 26-chip row
 under each, 12,298 cells — and the coverage said nobody answers it: **108 of 720 watched titles
-(15%) filed anywhere, 13 of 26 boxes empty** after two labeling sessions. Each card now carries
-in-place name/emoji/description editing, a picker behind `+`, an empty-box CTA, and:
+(15%) filed anywhere, 13 of 26 boxes empty** after two labeling sessions.
+
+**Navigation over edition, everywhere but one place.** The landing card is navigation only —
+its header links to the présentation, « Éditer » to edition mode (`?e=1`), each poster to its
+anime, a trailing « +N » tile to the présentation — and the présentation is read-only. Every
+edit (name, emoji, description, membership, groups, écartés) lives in **edition mode**, whose
+header swaps the heading for fields and whose only way out is « Retour à la présentation »; no
+tabs and no delete there, delete sits on the présentation. This replaced in-place fields on the
+card and the page, a `+` picker and a `×` per poster on the card, and a `−` per poster on the
+présentation: browsing read as a form, and a stray click was a write. Each card carries:
 
 - **A top ten of UNITS, not of entries.** By entry, `Shonen I dig`'s top ten is seven Demon
-  Slayer cours and three other things. ⚠️ The card's `×` removes the whole UNIT — dropping only
-  the faced title of a « +6 » slot would leave six behind and re-face the slot, which reads as a
-  control that did nothing.
+  Slayer cours and three other things. ⚠️ Any per-slot action takes the whole UNIT — acting on
+  only the faced title of a « +6 » slot would leave six behind and re-face the slot, which reads
+  as a control that did nothing (edition's écartés strip and the écartés tab follow it).
 - **An honest count: « 3 séries · 14 entrées ».** Where the inflation becomes visible per box and
   therefore fixable by judgement. ⚠️ There is deliberately **no migration** collapsing existing
   memberships — the four TYBW cours may well be filed on purpose.
@@ -805,14 +813,19 @@ the resolved units, the écartés rows and the composition block.
   block would reproduce the inflation in the one place the owner goes to check for it; the score
   and year RANGES are over entries on purpose, being immune to duplication. Pinned in
   [tests/domain/boxComposition.test.ts](tests/domain/boxComposition.test.ts).
-- **Quick edit** is three panes — watched list, box, « Mes regroupements » — with « écartés » as
-  one full-width collapsible strip below. The groups column is the SOURCE side's groups region,
-  split out of the watched list whose scroll it used to share (browsing meant scrolling past every
-  group, and reaching a card lost your place); it also carries every group without a card, so it
-  is a superset of the rail index it replaced. ⚠️ Box in the middle, and three columns only from
-  a **1900px** viewport — below that the groups column wraps under the watched list. Measured off
-  the page's canvas clamp: three panes reach the 392px the TV's two panes get at a 1904px
-  viewport, and at the TV's ~1280 they would be 257px. ⚠️ **The box pane keeps its groups region
+- **Quick edit** is three panes — watched list, box, « Mes regroupements » — in TWO columns, with
+  « écartés » as one full-width collapsible strip below. « Mes regroupements » is the SOURCE side's
+  groups region, split out of the watched list whose scroll it used to share (browsing meant
+  scrolling past every group, and reaching a card lost your place); it also carries every group
+  without a card, so it is a superset of the rail index it replaced. The two source panes share
+  the left column as an **accordion** (`QuickEditPane`'s `collapsible`; watched list open, groups
+  folded, exactly one open) and the box takes the right. That replaced a column per pane, which
+  with the filter rail beside them left 257-424px a pane and 32px posters; two columns give
+  ~524px at the TV's ~1280 and room for 64px posters. The filter rail is **folded by default**
+  behind a toolbar toggle that badges how many filters are narrowing; search and sort live in that
+  toolbar, always visible. ⚠️ A folded pane is still a drop target (the section keeps its drag
+  handlers), and the open fold's height gives up exactly the closed one's (`--qe-fold-h`, measured)
+  so both columns end on one line. ⚠️ **The box pane keeps its groups region
   inside it** — a groups region (one card per group with **≥2** members present) over a flat
   region — populated from `box.groups` only, because that region is a picture of how the ranker
   sees the box; the source groups column shows every global group, because nothing there is
@@ -824,7 +837,7 @@ the resolved units, the écartés rows and the composition block.
   passes its group id to `onAdd`; the old `ids.length > 1` stand-in for "came from a group card"
   would have filed that one title without declaring anything. All group lists here sort by name,
   once, where `QuickEdit` loads them. The **title** lists (watched, box, écartés) follow the
-  rail's « Trier par » — `sortLeanRows` in [domain/leanRow.ts](src/lib/domain/leanRow.ts): my
+  toolbar's « Trier par » — `sortLeanRows` in [domain/leanRow.ts](src/lib/domain/leanRow.ts): my
   score ↓/↑, title, or « Vu récemment » off `getLastWatchedAt` (SIMKL's clock, the one `/activity`
   reads; the option is not offered when no row carries one). Client-side over the one fetch, like
   the filters, and ⚠️ applied inside the memos rather than at render, because shift-range

@@ -4,32 +4,33 @@
 .block {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 12px 16px 14px;
-  margin-bottom: 16px;
+  border-radius: 12px;
+  padding: 14px 18px 14px;
+  margin-bottom: 18px;
 }
 
 .head {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: var(--text-primary);
 }
 
 .row {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
 .label {
   flex: 0 0 auto;
-  width: 92px;
-  font-size: 0.76rem;
+  width: 72px;
+  font-size: 0.7rem;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
 }
 
 .values {
@@ -42,13 +43,13 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 999px;
-  padding: 2px 9px;
+  padding: 2px 10px;
   font-size: 0.78rem;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 /* The share is the whole point of the chip — a bare tag name would say nothing
@@ -62,8 +63,8 @@
 .ranges {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 10px;
+  gap: 18px;
+  margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--border-color);
   font-size: 0.78rem;
@@ -71,7 +72,8 @@
 }
 
 .ranges b {
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -81,7 +83,8 @@
 }
 
 .note {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
   color: var(--text-muted);
   margin: 0;
 }

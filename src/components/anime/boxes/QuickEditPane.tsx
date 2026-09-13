@@ -47,6 +47,13 @@ import styles from './QuickEditPane.module.css';
 /** The MIME type the panes exchange. A custom type so nothing else claims the drop. */
 export const DRAG_TYPE = 'application/x-anime-ids';
 
+/**
+ * A group card's poster stack: each poster sits this far right of the last.
+ * ⚠️ Keep in step with `.stack`'s width in the module — four 40px posters at
+ * this step fill it exactly, and fewer are pushed right to hug the name.
+ */
+const STACK_STEP = 18;
+
 export interface PaneGroupRegion {
   group: GroupSummary;
   /** The group's members that are present in THIS pane. Always ≥2. */
@@ -94,12 +101,29 @@ export interface QuickEditPaneProps {
   groupsOnly?: boolean;
   /** groupsOnly: rendered after the cards — the groups with no card here. */
   after?: React.ReactNode;
+  /**
+   * The rows have not arrived yet. Without it the pane asserted « 0 » and
+   * « Rien ici » for the second or so the watched list takes to load — a
+   * statement about the owner's list rather than about the fetch.
+   */
+  loading?: boolean;
+  /**
+   * Makes the pane one fold of an accordion: the header becomes the toggle, and
+   * a closed pane renders its header and nothing else.
+   *
+   * The source side's two panes — the watched list and « Mes regroupements » —
+   * share ONE column this way instead of taking a column each, which is what
+   * leaves the width for readable posters. ⚠️ A closed pane is still a drop
+   * target: the section keeps its drag handlers, so dragging a title out of the
+   * box onto either folded header still un-files it.
+   */
+  collapsible?: { open: boolean; onToggle: () => void };
 }
 
 const QuickEditPane: React.FC<QuickEditPaneProps> = ({
   variant, title, rows, groupRegions, groupsByAnime, selected,
   onToggleSelect, onAdd, onExclude, onRemove, onUndeclare,
-  onOpenGroup, onCreateGroup, onDropIds, children, groupsOnly, after,
+  onOpenGroup, onCreateGroup, onDropIds, children, groupsOnly, after, loading, collapsible,
 }) => {
   const t = useT();
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -143,7 +167,7 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSelect(row.id, e.shiftKey); } }}
       >
         {row.picture ? (
-          <Image src={row.picture} alt="" width={32} height={45} className={styles.poster} unoptimized />
+          <Image src={row.picture} alt="" width={64} height={91} className={styles.poster} unoptimized />
         ) : (
           <span className={styles.poster} aria-hidden="true" />
         )}
@@ -190,9 +214,17 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
     );
   };
 
+  const closed = !!collapsible && !collapsible.open;
+  const count = loading ? '…' : groupsOnly ? groupRegions.length : rows.length;
+
   return (
     <section
-      className={`${styles.pane} ${dragOver ? styles.paneDrop : ''}`}
+      className={[
+        styles.pane,
+        collapsible ? styles.paneFold : '',
+        closed ? styles.paneClosed : '',
+        dragOver ? styles.paneDrop : '',
+      ].join(' ')}
       onDragOver={e => { if (e.dataTransfer.types.includes(DRAG_TYPE)) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
       onDrop={e => {
@@ -209,15 +241,31 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
           pinned title above a list with no way to add to it. Found on screen:
           the field measured at y = -151 with the header still at the top. */}
       <div className={styles.top}>
-        <header className={styles.head}>
-          <h3 className={styles.title}>{title}</h3>
-          <span className={styles.count}>{groupsOnly ? groupRegions.length : rows.length}</span>
-        </header>
+        {collapsible ? (
+          // The button sits INSIDE the heading: a heading is not allowed inside
+          // a button, and the other way round keeps the pane's title a heading.
+          <h3 className={styles.foldHeading}>
+            <button type="button" className={`${styles.head} ${styles.headToggle}`}
+              onClick={collapsible.onToggle} aria-expanded={collapsible.open}>
+              <span className={styles.foldChev} aria-hidden="true">{collapsible.open ? '▾' : '▸'}</span>
+              <span className={styles.title}>{title}</span>
+              <span className={styles.count}>{count}</span>
+            </button>
+          </h3>
+        ) : (
+          <header className={styles.head}>
+            <h3 className={styles.title}>{title}</h3>
+            <span className={styles.count}>{count}</span>
+          </header>
+        )}
 
-        {children}
+        {!closed && children}
       </div>
 
-      {groupsOnly && groupRegions.length === 0 && (
+      {closed ? null : <>
+      {loading ? (
+        <p className={styles.empty}>{t('common.loading')}</p>
+      ) : groupsOnly && groupRegions.length === 0 && (
         <p className={styles.empty}>{t('quickEdit.groupsNothingToFile')}</p>
       )}
 
@@ -235,58 +283,66 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
                     {expanded ? '▾' : '▸'}
                   </button>
                   {/* Stacked posters: the card has to read as ONE show at a
-                      glance, or the region is just a list with extra steps. */}
+                      glance, or the region is just a list with extra steps.
+                      Right-aligned in a fixed-width slot, so a short stack hugs
+                      the name instead of leaving a gap before it, while every
+                      name down the column still starts on the same line. */}
                   <span className={styles.stack}>
-                    {members.slice(0, 4).map((id, i) => {
+                    {members.slice(0, 4).map((id, i, shown) => {
                       const row = byId.get(id);
                       return row?.picture ? (
-                        <Image key={id} src={row.picture} alt="" width={26} height={37}
-                          className={styles.stackPoster} style={{ left: i * 14 }} unoptimized />
+                        <Image key={id} src={row.picture} alt="" width={40} height={57}
+                          className={styles.stackPoster} style={{ left: (4 - shown.length + i) * STACK_STEP }} unoptimized />
                       ) : null;
                     })}
                   </span>
-                  <button type="button" className={styles.groupName} onClick={() => onOpenGroup(group)}>
-                    {group.name}
-                  </button>
-                  <span className={styles.groupCount}>
-                    {variant === 'source'
-                      // « 4 restants » — in the source pane the card counts what
-                      // is NOT filed yet, which is the number the click acts on.
-                      // A singular is its own key, chosen by a ternary — never a
-                      // constructed one (CLAUDE.md). Reachable only since a
-                      // partially-filed show keeps its card with one title left.
-                      ? (members.length === 1 ? t('quickEdit.remainingOne') : t('quickEdit.remaining', { count: members.length }))
-                      : t('quickEdit.present', { count: members.length })}
+                  <span className={styles.groupText}>
+                    {/* ⚠️ The name has its OWN line, with nothing beside it. The
+                        action once sat next to it and squeezed it to « Dem… » in
+                        the box pane — a group card whose one job is to say which
+                        show this is cannot afford to truncate the name, and both
+                        action labels are long by necessity. */}
+                    <button type="button" className={styles.groupName} onClick={() => onOpenGroup(group)}
+                      title={group.name}>
+                      {group.name}
+                    </button>
+                    {/* The second line: what the card counts, and the one thing
+                        to do about it. */}
+                    <span className={styles.groupActs}>
+                      <span className={styles.groupCount}>
+                        {variant === 'source'
+                          // « 4 restants » — in the source pane the card counts what
+                          // is NOT filed yet, which is the number the click acts on.
+                          // A singular is its own key, chosen by a ternary — never a
+                          // constructed one (CLAUDE.md). Reachable only since a
+                          // partially-filed show keeps its card with one title left.
+                          ? (members.length === 1 ? t('quickEdit.remainingOne') : t('quickEdit.remaining', { count: members.length }))
+                          : t('quickEdit.present', { count: members.length })}
+                      </span>
+                      {variant === 'source' && (
+                        // ⚠️ "Add all N" writes BOTH — the ids into `members` and the
+                        // group id into `groups`. One click, both effects, so the
+                        // ordinary path still feels automatic (§4).
+                        <button type="button" className={`${styles.groupAct} ${styles.groupActAdd}`}
+                          onClick={() => onAdd?.(members, group.id)}>
+                          + {members.length === 1 ? t('quickEdit.addAllOne') : t('quickEdit.addAll', { count: members.length })}
+                        </button>
+                      )}
+
+                      {/* ⚠️ Every card in the BOX pane is a DECLARED group, so the
+                          only action here is to stop declaring it. An undeclared
+                          group whose members happen to be in the box is offered as a
+                          nudge ABOVE the pane instead — putting it in this region
+                          would break what the region means (§6.2: it is a picture of
+                          how the ranker sees the box, and an undeclared group casts
+                          no collapsed vote). */}
+                      {variant === 'box' && (
+                        <button type="button" className={styles.groupAct} onClick={() => onUndeclare?.(group.id)}>
+                          {t('quickEdit.undeclare')}
+                        </button>
+                      )}
+                    </span>
                   </span>
-                </div>
-
-                {/* The action sits on its OWN line. Beside the name it squeezed
-                    it to « Dem… » in the box pane — a group card whose one job is
-                    to say which show this is cannot afford to truncate the name,
-                    and both labels are long by necessity. */}
-                <div className={styles.groupActs}>
-                  {variant === 'source' && (
-                    // ⚠️ "Add all N" writes BOTH — the ids into `members` and the
-                    // group id into `groups`. One click, both effects, so the
-                    // ordinary path still feels automatic (§4).
-                    <button type="button" className={styles.groupAct}
-                      onClick={() => onAdd?.(members, group.id)}>
-                      {members.length === 1 ? t('quickEdit.addAllOne') : t('quickEdit.addAll', { count: members.length })}
-                    </button>
-                  )}
-
-                  {/* ⚠️ Every card in the BOX pane is a DECLARED group, so the
-                      only action here is to stop declaring it. An undeclared
-                      group whose members happen to be in the box is offered as a
-                      nudge ABOVE the pane instead — putting it in this region
-                      would break what the region means (§6.2: it is a picture of
-                      how the ranker sees the box, and an undeclared group casts
-                      no collapsed vote). */}
-                  {variant === 'box' && (
-                    <button type="button" className={styles.groupAct} onClick={() => onUndeclare?.(group.id)}>
-                      {t('quickEdit.undeclare')}
-                    </button>
-                  )}
                 </div>
 
                 {expanded && (
@@ -300,7 +356,7 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
         </div>
       )}
 
-      {groupsOnly ? after : (
+      {loading ? null : groupsOnly ? after : (
         <div className={styles.region}>
           {groupRegions.length > 0 && <p className={styles.regionLabel}>{t('quickEdit.flatRegion')}</p>}
           {flat.length === 0 ? (
@@ -310,6 +366,7 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
           )}
         </div>
       )}
+      </>}
     </section>
   );
 };

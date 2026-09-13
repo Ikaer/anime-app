@@ -88,6 +88,8 @@
   padding: 0;
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
 }
 
 .row { border-bottom: 1px solid var(--border-color); }
@@ -152,9 +154,11 @@
 .cancel,
 .save {
   border-radius: 6px;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
   padding: 6px 14px;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
 .cancel {
@@ -169,6 +173,7 @@
   background: var(--accent-primary);
   border: 1px solid var(--accent-primary);
   color: #fff;
+  font-weight: 600;
 }
 
 .save:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -182,7 +187,7 @@
 .save:hover:not(:disabled) { background: var(--accent-hover); }
 
 .note { color: var(--text-muted); font-size: 0.82rem; }
-.error { color: var(--accent-danger, #f87171); font-size: 0.8rem; margin: 4px 0; }
+.error { color: var(--accent-danger); font-size: 0.8rem; margin: 4px 0; }
 
 /*
  * Delete — quiet at rest, so it never competes with « Enregistrer »; it only
@@ -194,24 +199,25 @@
   border: 1px solid transparent;
   border-radius: 6px;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
   padding: 6px 8px;
   cursor: pointer;
   white-space: nowrap;
 }
 .delete:hover:not(:disabled),
 .deleteOn {
-  border-color: var(--accent-danger, #f87171);
-  color: var(--accent-danger, #f87171);
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
 }
 .delete:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .confirm {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--accent-danger, #f87171);
-  border-radius: 8px;
-  background: var(--bg-tertiary);
+  border: 1px solid var(--accent-danger);
+  border-radius: 10px;
+  background: rgba(248, 113, 113, 0.06);
 }
 .confirmText {
   margin: 0 0 8px;
@@ -225,11 +231,13 @@
   gap: 8px;
 }
 .deleteYes {
-  background: var(--accent-danger, #f87171);
-  border: 1px solid var(--accent-danger, #f87171);
+  background: var(--accent-danger-strong);
+  border: 1px solid var(--accent-danger-strong);
   border-radius: 6px;
   color: #fff;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
   padding: 6px 14px;
   cursor: pointer;
 }
