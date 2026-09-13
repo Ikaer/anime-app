@@ -11,9 +11,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  resolveProfile, sanitizeProfileWeights, mintProfileId, PROFILE_PRESETS,
+  resolveProfile, resolveProfileOver, sanitizeProfileWeights, mintProfileId, PROFILE_PRESETS,
 } from '@/lib/reco/profileWeights';
-import { BOX_WEIGHTS, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
+import { BOX_WEIGHTS, ANCHORED_WEIGHTS, resolveWeights } from '@/lib/reco/weights';
 import { STAFF_FAMILIES } from '@/lib/reco/staffFields';
 
 test('any non-zero family forces anilistStaff to 0, and says so', () => {
@@ -47,6 +47,32 @@ test('a profile overrides only the keys its base carries', () => {
   assert.equal(box.weights.genre, 0.6);
   assert.ok(!('crowd' in box.weights));
   assert.equal(resolveProfile(ANCHORED_WEIGHTS, profile).weights.crowd, 0.4);
+});
+
+/**
+ * `mix?box=`'s precedence: base < profile < URL. Each edge fails silently.
+ *
+ * A URL value that happens to EQUAL the anchored default must still beat the
+ * profile — resolved the other way, a slider dragged back to the default would
+ * snap to the profile's value. And a hand-typed `w=anilistStaff:1` must not
+ * slip past the zeroing just because the URL is applied last.
+ */
+test('URL overrides sit on top of a profile, and cannot un-zero anilistStaff', () => {
+  const profile = { genre: 0.9, staffDirector: 1 };
+  const r = resolveProfileOver(ANCHORED_WEIGHTS, profile, { genre: ANCHORED_WEIGHTS.genre, anilistStaff: 1 });
+  assert.equal(r.weights.genre, ANCHORED_WEIGHTS.genre, 'the URL wins, even at the base value');
+  assert.equal(r.weights.anilistStaff, 0, 'the zeroing holds after the URL');
+  assert.equal(r.families.staffDirector, 1, 'families come from the profile');
+  assert.equal(resolveProfileOver(ANCHORED_WEIGHTS, profile, {}).weights.genre, 0.9);
+});
+
+/** `/mix?ids=` has no profile, and must rank exactly as it did before profiles existed. */
+test('with no profile, URL overrides resolve exactly as resolveWeights does', () => {
+  const overrides = { crowd: 0.3, anilistStaff: 2, popularity: 0 };
+  const r = resolveProfileOver(ANCHORED_WEIGHTS, undefined, overrides);
+  assert.deepEqual(r.weights, resolveWeights(overrides, ANCHORED_WEIGHTS));
+  assert.equal(r.staffZeroed, false);
+  assert.ok(Object.values(r.families).every(v => v === 0));
 });
 
 /**

@@ -53,6 +53,9 @@ import {
 import {
   getGroups, getGroup, createGroup, updateGroup, editGroupMembers,
 } from '@/lib/reco/groups';
+// Readers only — the profile writers and `setBoxProfile` are blocked by name.
+import { getBoxProfile } from '@/lib/reco/profiles';
+import type { RecoProfile } from '@/lib/reco/profileWeights';
 import { resolveBoxUnits, faceUnits, groupsPresentIn } from '@/lib/domain/boxUnits';
 import { buildBoxComposition, type BoxComposition } from '@/lib/domain/boxComposition';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
@@ -1032,8 +1035,29 @@ export function listBoxes(titleLang: TitleLanguage): { boxes: McpBox[] } {
 }
 
 /**
+ * The reco profile a box's candidates were ranked with (docs/recoProfiles/).
+ *
+ * Stated in the result rather than applied silently: a profile re-weights the
+ * ranking — a `staffDirector` line in `matched` exists only because of it — and
+ * a model reading the order as the app's default weighting would explain it
+ * wrong. Read-only: the MCP cannot create, edit or attach one.
+ */
+export interface McpBoxProfile {
+  id: string;
+  name: string;
+  /** The SPARSE stored weights — only the sliders the owner moved. */
+  weights: RecoProfile['weights'];
+}
+
+function projectBoxProfile(profile: RecoProfile | undefined): { profile?: McpBoxProfile } {
+  return profile ? { profile: { id: profile.id, name: profile.name, weights: profile.weights } } : {};
+}
+
+/**
  * What the metadata ranker would propose for a box, with the values that earned
- * each one — the same `rankBoxCandidates` the /boxes UI runs.
+ * each one — `rankBoxCandidates`, the fill loop, weighted by the box's reco
+ * profile when one is attached. (No page reads it since the boxesV2 swap; the
+ * box's visible recos tab is `computeAnchored`.)
  *
  * Exposed so a model reasons WITH the ranker rather than instead of it: on a
  * content axis the ranking is strong and the model's job is to filter it, while
@@ -1050,6 +1074,7 @@ export function boxCandidates(
   found: true;
   boxId: string;
   seeds: number;
+  profile?: McpBoxProfile;
   candidates: { id: string; title: string; score: number; franchise: string[]; matched: { field: string; values: string[] }[] }[];
 } {
   const box = getBox(boxId);
@@ -1057,11 +1082,13 @@ export function boxCandidates(
 
   const all = getAnimeForDisplay();
   const held = new Set(box.members);
+  const profile = getBoxProfile(box);
   return {
     found: true,
     boxId,
     seeds: box.members.length,
-    candidates: rankBoxCandidates(box, all, { limit }).map(g => {
+    ...projectBoxProfile(profile),
+    candidates: rankBoxCandidates(box, all, { limit, profile: profile?.weights }).map(g => {
       const anchor = g.members.find(a => a.id === g.id) ?? g.members[0];
       return {
         id: g.id,
@@ -1228,6 +1255,8 @@ export interface McpBoxDetail {
    * making it count in this box is `edit_box`'s `declare`.
    */
   suggestedGroups: { title: string; members: { id: string; title: string }[] }[];
+  /** The reco profile `candidates` were ranked with, when the box has one. */
+  profile?: McpBoxProfile;
   /** The metadata ranker's proposals. Empty when `candidates: 0` was asked for. */
   candidates: McpBoxCandidate[];
 }
@@ -1316,6 +1345,7 @@ export function getBoxDetail(
   }
 
   const excludedIds = box.excluded ?? [];
+  const profile = getBoxProfile(box);
   return {
     found: true,
     box: listBoxes(titleLang).boxes.find(b => b.id === boxId)!,
@@ -1324,7 +1354,12 @@ export function getBoxDetail(
     excluded: excludedIds.map(id => ({ id, title: title(id) })),
     composition: buildBoxComposition(faced, byId, BOX_TAG_MIN_RANK),
     suggestedGroups,
-    candidates: candidateLimit <= 0 ? [] : rankBoxCandidates(box, all, { limit: candidateLimit }).map(g => {
+    ...projectBoxProfile(profile),
+    candidates: candidateLimit <= 0 ? [] : rankBoxCandidates(box, all, {
+      limit: candidateLimit,
+      groups,
+      profile: profile?.weights,
+    }).map(g => {
       const anchor = g.members.find(a => a.id === g.id) ?? g.members[0];
       return {
         id: g.id,

@@ -28,6 +28,11 @@
  *    per-anchor split rides along in `perAnchor` for the explain.
  *  - **Nothing is fetched to hydrate**: an edge naming a title absent from the
  *    local catalog is skipped (no metadata to rank on).
+ *  - **A box's reco profile can add staff craft families** (`options.families`,
+ *    docs/recoProfiles/). ⚠️ Those score through `denomFor` — the metadata
+ *    fields above use the unfloored `fieldMatch`, which on a near-binary family
+ *    would be the uncorrected scale `PROFILE_DENOM` exists to fix — and they
+ *    ride in the same breakdown as the sources.
  *
  * Server-only (reads the store + the feedback slice), but stateless: it never
  * touches the stored `RecommendationsData`.
@@ -44,8 +49,10 @@ import {
   buildDiscriminativeProfiles,
   fieldMatch,
   isPrematureSequel,
+  scoreWithBreakdown,
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
+import { buildFamilyTerms, matchFamilyTerms, familyCredits, type StaffFamily } from '@/lib/reco/staffFields';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
@@ -84,6 +91,14 @@ export interface AnchoredItem {
 export interface AnchoredOptions {
   /** Full weight set; defaults to `ANCHORED_WEIGHTS`. */
   weights?: SourceWeights;
+  /**
+   * Staff craft-family weights, from the box's reco profile — the `families`
+   * half of `resolveProfile`/`resolveProfileOver`, whose `weights` half is the
+   * option above (with `anilistStaff` already zeroed when any family is on).
+   * Absent or all-zero = no family is built or scored, which is every surface
+   * but a box with a profile attached.
+   */
+  families?: Partial<Record<StaffFamily, number>>;
   /**
    * Drop titles the user has already watched. The detail-page drill-down keeps
    * them (its pool is ~25 edges and a heavy watcher would see it gutted); the
@@ -210,6 +225,13 @@ export function computeAnchored(
   // positive side here means "shares a rare value with what you picked".
   const { negGenre, negStudio, negStaffT1 } = buildDiscriminativeProfiles(all, downCanonical, idf);
 
+  // The staff craft families a box's reco profile turns on (docs/recoProfiles/).
+  // One vote per anchor: on the box recos tab the anchors are already one
+  // representative per unit. Empty — no IDF pass, no profile — unless a family
+  // is non-zero, so every other caller ranks exactly as before.
+  const familyTerms = buildFamilyTerms(anchors, () => 1, options.families ?? {}, all);
+  const familyNames = new Map(familyTerms.map(term => [term.family, familyCredits(anchors, term.family)] as const));
+
   // Names/roles as the ANCHORS credit them — the explain says what the candidate
   // shares with the titles you picked. ⚠️ The studio map is keyed by
   // `catalogNameKey(name)`, NOT by studio id: that is the key space
@@ -317,18 +339,25 @@ export function computeAnchored(
       popularity: t('recoDetail.members', { count: (anime.catalog.numListUsers || 0).toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US') }),
     };
 
-    let score = 0;
-    const breakdown: RecoContribution[] = [];
-    (Object.keys(values) as RecoSource[]).forEach(src => {
-      const weight = weights[src];
-      const value = values[src];
-      const contribution = weight * value;
-      score += contribution;
-      if (weight !== 0 && value !== 0) {
-        breakdown.push({ source: src, value, weight, contribution, detail: details[src] });
-      }
-    });
-    breakdown.sort((x, y) => Math.abs(y.contribution) - Math.abs(x.contribution));
+    // ⚠️ Family rows go through the SAME pass as the sources, so a family that
+    // moves the score is always a line in « Pourquoi ? » — see
+    // `scoreWithBreakdown`. Named with the credit that puts the person in THIS
+    // family (`familyCredits`), as the anchors credit them.
+    const familyRows: RecoContribution[] = matchFamilyTerms(anime, familyTerms).map(hit => ({
+      source: hit.family,
+      value: hit.value,
+      weight: hit.weight,
+      contribution: hit.contribution,
+      detail: t('recoDetail.inCommon', {
+        parts: hit.matched
+          .map(id => {
+            const credit = familyNames.get(hit.family)?.get(id as number);
+            return credit ? `${credit.role} : ${credit.name}` : `#${id}`;
+          })
+          .join(', '),
+      }),
+    }));
+    const { score, breakdown } = scoreWithBreakdown(values, weights, details, familyRows);
 
     // Backers summed across both crowd sources, so an anchor that only AniList
     // credits still shows up as one of the reasons this card is here.

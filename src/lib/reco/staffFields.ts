@@ -29,7 +29,15 @@
 
 import type { AnimeRecord } from '@/models/anime';
 import { parseStaffRole, isLocalizationCredit } from '@/lib/domain/staffRole';
-import { computeIdf, MATCH_DENOM_FLOOR, type MetaField, type FieldValue } from '@/lib/reco/scoring';
+import {
+  computeIdf,
+  buildFieldProfile,
+  flooredFieldMatch,
+  MATCH_DENOM_FLOOR,
+  type MetaField,
+  type FieldValue,
+  type FieldProfile,
+} from '@/lib/reco/scoring';
 
 /**
  * The eight craft families. Order is display order: `staffOriginal` last in the
@@ -244,4 +252,108 @@ export function staffFamilyIdf(all: AnimeRecord[]): StaffFamilyIdf {
     familyIdfCache.set(all, idf);
   }
   return idf;
+}
+
+// ---------------------------------------------------------------------------
+// Scoring the families — the one step both profile-aware rankers share
+// ---------------------------------------------------------------------------
+
+/** One family a ranker scores: its weight, and the profile its anchor set builds. */
+export interface FamilyTerm {
+  family: StaffFamily;
+  weight: number;
+  profile: FieldProfile;
+}
+
+/**
+ * The family profiles a ranker needs — for the NON-ZERO families only.
+ *
+ * `computeAnchored` (the box's recos tab) and `rankBoxCandidates` (the MCP's
+ * fill loop) both call this, so the two cannot disagree about how a family is
+ * built. Skipping the zero families is what keeps a box with no profile — every
+ * box, until one is attached — at exactly its old cost: no family IDF pass (the
+ * memo is never touched) and no profile build. Pinned.
+ *
+ * `weightOf` is the caller's: one vote per anchor on the recos tab (its anchors
+ * are already one representative per unit), `unitWeightFn` in the fill loop.
+ */
+export function buildFamilyTerms(
+  members: AnimeRecord[],
+  weightOf: (a: AnimeRecord) => number,
+  families: Partial<Record<StaffFamily, number>>,
+  all: AnimeRecord[]
+): FamilyTerm[] {
+  const active = STAFF_FAMILIES.filter(f => (families[f] ?? 0) !== 0);
+  if (active.length === 0) return [];
+  const idf = staffFamilyIdf(all);
+  return active.map(family => ({
+    family,
+    weight: families[family]!,
+    profile: buildFieldProfile(members, weightOf, STAFF_FAMILY_EXTRACTORS[family], idf[family]),
+  }));
+}
+
+/** One family that matched a candidate — everything the score and the explain need. */
+export interface FamilyHit {
+  family: StaffFamily;
+  weight: number;
+  /** `flooredFieldMatch` through `denomFor` — the scale a slider sees. */
+  value: number;
+  /** `weight · value`, the term added to the candidate's score. */
+  contribution: number;
+  /** The shared people's AniList staff ids, for the caller to name. */
+  matched: FieldValue[];
+}
+
+/**
+ * Score a candidate on every active family.
+ *
+ * ⚠️ **Through `denomFor`, never plain `fieldMatch`.** `computeAnchored` scores
+ * its metadata fields with the unfloored `fieldMatch`, which on a family is
+ * `÷ 1` for ~97% of titles — the pre-correction 0.36-0.48 scale DESIGN §4
+ * measured, up to ~3× what the same slider value means on tags. Nothing would
+ * error: the director slider would simply outvote everything at 1.0. That is
+ * `PROFILE_DENOM`'s whole job, and why it is pinned here rather than only on
+ * `denomFor` itself.
+ *
+ * Only families that matched come back, in `STAFF_FAMILIES` order.
+ */
+export function matchFamilyTerms(anime: AnimeRecord, terms: FamilyTerm[]): FamilyHit[] {
+  const hits: FamilyHit[] = [];
+  for (const term of terms) {
+    const m = flooredFieldMatch(anime, term.profile, denomFor(term.family));
+    if (m.score <= 0) continue;
+    hits.push({
+      family: term.family,
+      weight: term.weight,
+      value: m.score,
+      contribution: term.weight * m.score,
+      matched: m.matched,
+    });
+  }
+  return hits;
+}
+
+/**
+ * Staff id → the credit that puts the person IN this family, over a set of
+ * titles — what an explain line names.
+ *
+ * Not the `id → credit` map `anchored.ts` already builds for `anilistStaff`:
+ * that one keeps an arbitrary credit per person, so a shared director who also
+ * key-animated on one anchor could be labelled `Key Animation : X` under
+ * « Réalisation ». Only a credit whose role is in the family qualifies.
+ */
+export function familyCredits(
+  titles: AnimeRecord[],
+  family: StaffFamily
+): Map<number, { name: string; role: string }> {
+  const out = new Map<number, { name: string; role: string }>();
+  for (const a of titles) {
+    for (const credit of a.sources.anilist?.staff ?? []) {
+      if (!out.has(credit.id) && staffFamilyOf(credit.role) === family) {
+        out.set(credit.id, { name: credit.name, role: credit.role });
+      }
+    }
+  }
+  return out;
 }

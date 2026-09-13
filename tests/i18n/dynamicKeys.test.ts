@@ -27,6 +27,7 @@ import assert from 'node:assert/strict';
 import fr from '@/locales/fr.json';
 import { PROVIDER_CAPABILITIES, type PersonalDimension } from '@/lib/providers/capabilities';
 import { SOURCE_META, RECO_WEIGHT_PRESETS } from '@/lib/reco/weights';
+import { STAFF_FAMILIES } from '@/lib/reco/staffFields';
 import { ALL_STATUSES, VIEW_PRESETS } from '@/lib/url/animeParams';
 import { GENRE_AXES } from '@/lib/domain/genreAxis';
 import { STAFF_ROLE_TIERS } from '@/lib/domain/staffRole';
@@ -120,6 +121,19 @@ family('personalEdit.*', DIMENSIONS, d => `personalEdit.${d}`);
 /** Both halves of every reco slider, and both halves of every weight preset. */
 family('reco.source.*.label', SOURCE_META.map(m => m.source), s => `reco.source.${s}.label`);
 family('reco.source.*.hint', SOURCE_META.map(m => m.source), s => `reco.source.${s}.hint`);
+/**
+ * The staff craft families a box's reco profile turns on. They share the
+ * `reco.source.*` family because they share its call sites: a family scored on
+ * a card is a row in the same « Pourquoi ? » breakdown, rendered by the same
+ * `` t(`reco.source.${r.source}.label` as TranslationKey) `` in `AnimeCardView`
+ * and `MoreLikeThis` — so a missing key would print the raw dotted string on
+ * exactly the line explaining why the card is there. Driven off the runtime
+ * `STAFF_FAMILIES` rather than a `satisfies Record<StaffFamily, 0>` literal,
+ * this file's own rule: the union is DERIVED from that array, so the array is
+ * the source and a literal would only be a second copy of it.
+ */
+family('reco.source.<family>.label', STAFF_FAMILIES, f => `reco.source.${f}.label`);
+family('reco.source.<family>.hint', STAFF_FAMILIES, f => `reco.source.${f}.hint`);
 family('reco.preset.*.label', RECO_WEIGHT_PRESETS.map(p => p.key), k => `reco.preset.${k}.label`);
 family('reco.preset.*.hint', RECO_WEIGHT_PRESETS.map(p => p.key), k => `reco.preset.${k}.hint`);
 

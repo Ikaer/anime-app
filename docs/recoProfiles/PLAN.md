@@ -41,9 +41,9 @@ Each phase ends with `npm run build` green.
 | 1 | ✅ **Staff families** — `reco/staffFields.ts` (client-safe): the eight whitelists, `staffFamilyOf`, extractors, `PROFILE_DENOM`, `denomFor`, the family IDF; tests; `scripts/probe-profile.js` | nothing visible — numbers | §3, §4, §5, §11 |
 | 2 | ✅ **Profile model + resolver** — `RecoProfile` / `ProfileField`, the sparse resolver that zeroes `anilistStaff` whenever a family is non-zero, the shipped presets; tests | nothing visible | §6, §8 presets |
 | 3 | ✅ **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
-| 4 | **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
+| 4 | ✅ **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
 | 5 | **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
-| 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; i18n (a `satisfies Record<StaffFamily, 0>` driver in `dynamicKeys.test.ts`); CLAUDE.md | the feature | §8 |
+| 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; the page-only i18n (the family `reco.source.*` keys and their `dynamicKeys.test.ts` driver landed in phase 4); CLAUDE.md | the feature | §8 |
 
 ## Phase 1 — what it decided beyond the design
 
@@ -171,6 +171,8 @@ Store [reco/profiles.ts](../../src/lib/reco/profiles.ts), routes `api/anime/prof
 
 ## ⚠️ Phase 4 is bigger than its table row — settle these before wiring
 
+*Settled — see "Phase 4 — what it decided" below for how each one landed.*
+
 - **The explain must carry the families, or it lies.** `computeAnchored` builds `values` as a
   `SourceWeights` and its `breakdown` from `Object.keys(values) as RecoSource[]`;
   `RecoContribution.source` is a `RecoSource`. A family scored into the sum but absent from the
@@ -194,3 +196,97 @@ Store [reco/profiles.ts](../../src/lib/reco/profiles.ts), routes `api/anime/prof
   the first exists.
 - **Regression check:** `probe-box.js --box all` must read identically before and after wherever no
   profile is attached. That is the change most likely to break silently.
+
+## Phase 4 — what it decided beyond the design
+
+Both rankers honour a box's profile: `mix?box=` (the recos tab — `computeAnchored`) and
+`rankBoxCandidates` (the MCP's `box_candidates` / `get_box`). No page shows a profile yet; the only
+visible change is on a box that has one attached, which today is none.
+
+- **One family step, shared.** `staffFields.ts` gained `buildFamilyTerms` (profiles for the
+  NON-ZERO families only — no family IDF pass, no profile build otherwise), `matchFamilyTerms`
+  (`flooredFieldMatch` through `denomFor`) and `familyCredits`. Both rankers call them, so they
+  cannot disagree about how a family is built or scaled. ⚠️ In `computeAnchored` the metadata
+  fields stay on plain `fieldMatch` and only the families go through `denomFor` — the unfloored
+  form on a near-binary family is exactly the ~3× overshoot `PROFILE_DENOM` removes.
+- **The explain carries the families, structurally.** `RecoContribution.source` is now
+  `RecoSource | StaffFamily`; `models/` takes `StaffFamily` as an `import type` from the
+  client-safe `staffFields.ts` (erased at compile time, so models still imports no values). The
+  sum and the rows come from ONE pass, `scoreWithBreakdown` in `scoring.ts` — the feed's and the
+  anchored ranker's identical inline loops, lifted, same summation order, so neither score moved by
+  a bit. ⚠️ **The widening broke no consumer**: every reader already launders `source` through a
+  `` `reco.source.${…}` as TranslationKey `` cast or into a `string`. So the compiler proved
+  nothing, and the proof was behavioural — the live card rendered `Réalisation | +0.32 | En commun
+  : Director : Tetsurou Araki`, not the raw key. On the box side the same rule applies to
+  `BoxCandidateGroup.matched` (now `MatchField`), which the MCP projects verbatim; family values
+  there are staff NAMES (`anilistStaff`'s stay ids — changing them would have broken the
+  regression diff).
+- **An explain line names the credit that puts the person IN the family.** `anchored.ts`' existing
+  `id → credit` map keeps an arbitrary credit per person, so a director who also key-animated on an
+  anchor could read `Key Animation : X` under « Réalisation ». `familyCredits` filters by family.
+  Live, it is what renders `Assistant Director : Hiroyuki Tanaka` on *Shisha no Teikoku*.
+- **Precedence on `mix?box=` is base < profile < URL, resolved ONCE** (`resolveProfileOver`): the
+  URL is merged INTO the profile and the whole thing goes through `resolveProfile`, so the
+  `anilistStaff` zeroing holds after the URL too. The advisor-flagged hole: `w` accepts
+  `anilistStaff`, and merging the URL onto an already-resolved profile would let a hand-typed
+  `?w=anilistStaff:1` reinstate the double count. Live-verified: 0 `anilistStaff` rows with it.
+  Families never come from `w` (`parseSourceWeights` knows only `RecoSource`s), so the profile is
+  their only source. The response echoes `profile.base` — the profile-resolved weights WITHOUT the
+  URL — which is what phase 6's controls must pass to `encodeSourceWeights`, or a slider dragged to
+  the anchored default drops out of the URL and snaps back. `BoxRecos` still sends no `w`.
+- **`rankBoxCandidates` takes `profile?: ProfileWeights`** and resolves it over `options.weights ??
+  BOX_WEIGHTS` itself (`profileWeights.ts` is client-safe; only `profiles.ts` would be a cycle).
+  The MCP callers look it up with `getBoxProfile` and return it as `profile`; both tool
+  descriptions now say a family hit is "more by this person", the owner's weighting, not evidence
+  of an axis. `probe-box.js` also resolves a live box's attached profile, so it reads what the MCP
+  sees. The two IDF memos stay separate (`idfFor` keyed by tag rank, `staffFamilyIdf` beside it).
+- **mix.ts's fetch half moved to `reco/mixFetch.ts`** (`boxAnchorIds`, `loadMixEdges`, the caches,
+  the two caps) so `probe-profile.js --rank --pool anchored` runs the REAL anchor selection and edge
+  resolution — `similarFetch.ts`' precedent. Added to the eslint server-only list. (`similarFetch`
+  and `seedMutes` are not on that list either; out of scope here, noted.)
+- **The i18n driver is `STAFF_FAMILIES`, not a `satisfies Record<StaffFamily, 0>` literal** — that
+  file's own rule: a runtime array exists and the union is derived from it, so a literal would be a
+  second copy. Verified by deleting `reco.source.staffSound.label`: the family case fails.
+- **Tests** ([tests/reco/profileRanking.test.ts](../../tests/reco/profileRanking.test.ts), plus two
+  in `profileWeights.test.ts`): each verified by breaking what it guards — building every family
+  regardless of weight, `denomFor` → 1, `familyCredits` without the family filter, `extra` summed
+  but not listed, the family `matched` push dropped, the profile ignored, the zeroing skipped in
+  the fill loop, the URL merged after the zeroing, the profile winning over the URL. Each break
+  failed exactly its test. The real `rankBoxCandidates` runs there on fixture rows: it takes its
+  rows and groups as arguments, and `DATA_PATH` points at a missing folder before a dynamic import.
+
+### Phase 4 — measured (2026-09-13, office store)
+
+**Regression:** `probe-box.js --box all` (1,286 lines, every non-empty box) and the fixture run are
+byte-identical before and after, timing lines masked. No box had a profile attached.
+
+`node scripts/probe-profile.js --rank --box <id> --weights <w> [--pool anchored]`, top 10-12 against
+the same box under `Défaut`:
+
+| box | pool | profile | top changed | what rose |
+|---|---|---|---|---|
+| Bancal et je l'assume | statused | `staffDirector: 1` | **7/12** | SnK S2, *Bubble*, *Death Note*, HotD, *Vampire in the Garden*, *Hellsing Ultimate* — Tetsurou Araki and Hiroyuki Tanaka (DESIGN §8, reproduced on the real fill loop) |
+| Bancal et je l'assume | anchored | `staffDirector: 1` | **2/12** | HotD (Araki), *Shisha no Teikoku* (Tanaka) |
+| Absolute cinema | statused | `staffDirector: 1` | 3/10 | *Evangelion* (Anno, Tsurumaki), *Akudama Drive* (Taguchi), *Ninja Kamui* |
+| Chara design I dig | statused | `staffCharaDesign: 1, staffAnimation: 0.5` | **7/10** | *Undead Unluck* / *D.Gray-man* (Hideyuki Morioka), *Kami no Tou*, *Yuri!!! on Ice* |
+| Laugh | statused | `staffMusic: 1` | 4/10 | *Mono*, *Lycoris Recoil*, *Hige wo Soru*, *Love Live!* — composers of the box's rom-coms |
+
+- ⚠️ **On the recos tab a family at 1.0 is a nudge, not a takeover.** `crowd` is max-normalized to
+  1.0 at the top of the pool and `anilistCrowd` sits beside it, while a near-binary family tops out
+  near 1/3 after `PROFILE_DENOM`. That is the anchored base doing its job (the crowd graph IS the
+  box's recos tab), and it is the number phase 6's slider page must set expectations with — the
+  fill loop, which has no crowd term, moves 3-4× more for the same profile.
+- **Laugh + `staffMusic` did not reproduce §8's failure on the fill loop** (Yuuki Hayashi's
+  action-shonen filmography): the statused pool holds far fewer of any one composer's credits than
+  the catalog does. The drift that DID appear (*Love Live!*, *Lycoris Recoil* under a comedy axis)
+  is the same shape, milder. §8's warning belongs to phase 5's catalog pool, where it will bite.
+- Cost: once the family IDF is memoized, a profiled fill-loop rank took 16-20 ms (the first,
+  default rank of each run paid ~165 ms building `idfFor`); the recos tab answered in ~0.5 s warm
+  on the dev server with edges cached, against ~2 s for the first request.
+- **Live check** (dev server, office store): test profile `{ staffDirector: 1 }` attached to `Bancal
+  et je l'assume` through the phase 3 routes; `mix?box=…&includeSeen=true` moved 2 of its top 12,
+  carried 5 family rows with role-correct details and 0 `anilistStaff` rows (with and without
+  `?w=anilistStaff:1`), every card's score equalled the sum of its explained contributions, and
+  `profile` came back with `staffZeroed: true`. The MCP `get_box` returned the profile and
+  `staffDirector=[…]` in `matched`. Then detached, deleted, `user/reco_profiles.json` removed, and
+  `user/boxes.json` verified byte-identical to its backup (sha1 `accee660…`).

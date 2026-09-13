@@ -23,6 +23,7 @@ const SERVER_ONLY = [
   '@/lib/reco/feed',
   '@/lib/reco/feedback',
   '@/lib/reco/groups',
+  '@/lib/reco/mixFetch',
   '@/lib/reco/profiles',
   '@/lib/reco/refresh',
   '@/lib/reco/similar',

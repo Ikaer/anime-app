@@ -38,6 +38,21 @@ const MAX_LIST_LIMIT = 100;
  */
 const STATUSES = ['watching', 'completed', 'on_hold', 'dropped', 'plan_to_watch', 'not_defined'] as const;
 
+/**
+ * Shared by `box_candidates` and `get_box`: a box's reco profile re-weights the
+ * ranking, and the craft families it turns on are a RETRIEVAL knob on a small
+ * box (docs/recoProfiles/DESIGN.md §2) — "more by these people", not a learned
+ * axis. Said here because a model would otherwise read a `staffDirector` hit as
+ * evidence the box is about direction.
+ */
+const BOX_PROFILE_NOTE =
+  'When the box has a reco profile attached, `profile` names it and the ranking is weighted ' +
+  'by it: `matched` may then carry staff craft families (staffDirector, staffWriting, ' +
+  'staffCharaDesign, staffAnimation, staffArt, staffMusic, staffSound, staffOriginal) whose ' +
+  'values are people\'s names. Such a hit means "more work by a person credited in that craft ' +
+  'on this box" — the owner\'s chosen weighting, not evidence of what the box is about. You ' +
+  'can read a profile but not create, edit or attach one.';
+
 /** MCP wants tool output as text content; compact JSON, indentation is tokens. */
 function json(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
@@ -349,7 +364,8 @@ export function buildServer(): McpServer {
         'weird titles shared only the tag `Philosophy` and one staff credit, and the ranking ' +
         'wandered off to Death Note and Monster. When the matched values look thin or ' +
         'off-topic, say so and reason from list_anime instead of ranking down this list. ' +
-        '`franchise` is what accepting a group would add, so you can state the blast radius.',
+        '`franchise` is what accepting a group would add, so you can state the blast radius. ' +
+        BOX_PROFILE_NOTE,
       inputSchema: {
         boxId: z.string().describe('Box id from list_boxes.'),
         limit: z.number().int().min(1).max(100).optional().describe('Max candidates (default 30).'),
@@ -383,7 +399,8 @@ export function buildServer(): McpServer {
         'presenting it as fact). ' +
         '(4) `suggestedGroups` are franchises with several entries filed and no regroupement ' +
         'collapsing them, i.e. exactly what is inflating the count; propose one with ' +
-        'create_group and make it count with edit_box\'s `declare`.',
+        'create_group and make it count with edit_box\'s `declare`. ' +
+        BOX_PROFILE_NOTE,
       inputSchema: {
         boxId: z.string().describe('Box id from list_boxes.'),
         candidates: z

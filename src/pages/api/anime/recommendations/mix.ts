@@ -1,22 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getValidMalToken } from '@/lib/providers/mal/client';
-import {
-  getAnimeForDisplay,
-  getMalIdForCanonical,
-  isCanonicalId,
-  buildCrosswalkIndexes,
-  getAllAnilistMeta,
-  getRegistry,
-  toNum,
-} from '@/lib/store';
-import { computeAnchored, type AnchoredEdge } from '@/lib/reco/anchored';
+import { getAnimeForDisplay, isCanonicalId } from '@/lib/store';
+import { computeAnchored } from '@/lib/reco/anchored';
 import { getBox } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
-import { resolveBoxUnits } from '@/lib/domain/boxUnits';
-import { fetchRecoEdges } from '@/lib/reco/refresh';
-import { fetchAnilistRecommendations } from '@/lib/providers/anilist/sync';
+import { boxAnchorIds, loadMixEdges, MAX_MIX_ANCHORS } from '@/lib/reco/mixFetch';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
-import { parseSourceWeights, resolveWeights, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
+import { parseSourceWeights, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
+import { getBoxProfile } from '@/lib/reco/profiles';
+import { resolveProfile, resolveProfileOver } from '@/lib/reco/profileWeights';
 import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord, RecoMeta } from '@/models/anime';
 
@@ -24,122 +15,18 @@ import type { AnimeRecord, RecoMeta } from '@/models/anime';
  * "Mon mix" — crowd recommendations anchored on a HAND-PICKED SET of anime,
  * ranked with the same weighted-source model as the "Pour toi" feed. The middle
  * ground between the detail page's single-target drill-down and the global feed:
- * the user chooses the seeds instead of their whole list deciding them.
+ * the user chooses the seeds instead of their whole list deciding them. Also a
+ * box's recos tab, through `box=`.
  *
- * The ranking is `computeAnchored` (shared with "Plus comme ça"); this route
- * owns the FETCH half, which is where the two surfaces genuinely differ:
- *
- *  - **Edges are cached per anchor for the process's lifetime.** The page
- *    refetches on every add/remove, so without this, adding a 5th anchor would
- *    re-ask MAL about the other four. Crowd edges move on a scale of months —
- *    a stale entry is not a correctness problem, and the cache is dropped on
- *    every deploy. Only successful fetches are cached, so a failed source
- *    retries on the next request.
- *  - **MAL is one request per anchor, AniList is one for all of them** (its
- *    query takes `id_in`, 50 per page), so cost scales with the ANCHORS ADDED,
- *    not with the anchor count.
- *
- * **This route is the ingest boundary** (E9): each provider is asked with its
- * own id and the edges it answers with are converted to canonical ids here.
- * Conversion is resolve-only — an edge naming a title the store doesn't know is
- * dropped, which costs nothing because the ranker drops unhydrated candidates
- * anyway (this page deliberately fetches nothing to hydrate).
+ * The ranking is `computeAnchored` (shared with "Plus comme ça"); the FETCH half
+ * — which anchors are asked about, the per-anchor edge caches, the ingest
+ * boundary (E9) — is `reco/mixFetch.ts`, lifted out so
+ * `scripts/probe-profile.js` can measure this exact pool. This route owns the
+ * request: parsing, the weights' precedence, the card projection.
  *
  * Stateless: nothing is persisted, and the stored `RecommendationsData` is
  * neither read nor written.
  */
-
-/** Hard cap on anchors — a guard on the MAL fetch cost, not a UX preference. */
-export const MAX_MIX_ANCHORS = 12;
-
-/**
- * The same guard for a `box=` request, an order of magnitude looser.
- *
- * `MAX_MIX_ANCHORS` is small because `ids=` is arbitrary URL input and MAL costs
- * one request per anchor. A box is neither arbitrary nor transient: it is a
- * curated file the owner filled by hand, 20-40 titles by design, and the
- * per-anchor edge cache means the fetch is paid ONCE for the process's life.
- * AniList costs one request for all of them either way (`id_in`).
- *
- * Over the cap, the highest-scored UNITS win — a box's best-loved entries are
- * the ones whose crowd neighbourhoods best describe what the box is, and the
- * anchors are collapsed by group before the cap is applied (see the handler).
- */
-export const MAX_BOX_ANCHORS = 40;
-
-export interface MixSourceOutcome {
-  ok: boolean;
-  error?: string;
-}
-
-/** Per-anchor edge caches, canonical-keyed. Process-lifetime, no TTL (see above). */
-const malEdgeCache = new Map<string, AnchoredEdge[]>();
-const anilistEdgeCache = new Map<string, AnchoredEdge[]>();
-
-/**
- * MAL crowd edges for the anchors missing from the cache, one request each,
- * serially — the same pacing `refresh.ts` uses. Non-fatal as a whole: a failure
- * leaves those anchors contributing no MAL edges and is reported as an outcome.
- */
-async function loadMalEdges(anchorIds: string[]): Promise<MixSourceOutcome> {
-  const missing = anchorIds.filter(id => !malEdgeCache.has(id));
-  if (missing.length === 0) return { ok: true };
-
-  const token = getValidMalToken();
-  if (!token) return { ok: false, error: 'Not authenticated with MAL' };
-
-  const { byMal } = buildCrosswalkIndexes();
-  try {
-    for (const anchorId of missing) {
-      const malId = getMalIdForCanonical(anchorId);
-      if (malId === undefined) { malEdgeCache.set(anchorId, []); continue; }
-      const raw = await fetchRecoEdges(malId, token.access_token);
-      malEdgeCache.set(anchorId, raw
-        .map(e => ({ anchorId, id: e.malId !== undefined ? byMal.get(e.malId) : undefined, num: e.num }))
-        .filter((e): e is AnchoredEdge => e.id !== undefined));
-    }
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}
-
-/**
- * AniList crowd edges for the anchors missing from the cache — a single batched
- * query for all of them. An anchor with no AniList id is simply not asked (E8).
- */
-async function loadAnilistEdges(anchorIds: string[]): Promise<MixSourceOutcome> {
-  const missing = anchorIds.filter(id => !anilistEdgeCache.has(id));
-  if (missing.length === 0) return { ok: true };
-
-  const meta = getAllAnilistMeta();
-  const registry = getRegistry();
-  const anilistIdOf = new Map<string, number>();
-  for (const id of missing) {
-    const anilistId = meta[id]?.anilist_id ?? toNum(registry[id]?.anilist);
-    if (anilistId !== undefined) anilistIdOf.set(id, anilistId);
-    else anilistEdgeCache.set(id, []); // nothing to ask AniList about
-  }
-  if (anilistIdOf.size === 0) return { ok: true };
-
-  try {
-    const recs = await fetchAnilistRecommendations([...anilistIdOf.values()]);
-    const { byMal, byAnilist } = buildCrosswalkIndexes();
-    for (const [anchorId, anilistId] of anilistIdOf) {
-      // An AniList-only rec resolves through its own id first, its MAL id second (E11).
-      anilistEdgeCache.set(anchorId, (recs.get(anilistId) || [])
-        .map(e => ({
-          anchorId,
-          id: byAnilist.get(e.anilistId) ?? (e.malId !== undefined ? byMal.get(e.malId) : undefined),
-          num: e.rating,
-        }))
-        .filter((e): e is AnchoredEdge => e.id !== undefined));
-    }
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
-  }
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -170,33 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const byId = new Map(records.map(a => [a.id, a]));
   // Unknown ids are dropped rather than 400'd: a bookmarked mix must survive an
   // anchor disappearing from the store, and the response says which were kept.
-  let anchorIds = Array.from(new Set(requested)).filter(id => byId.has(id));
-  if (box) {
-    // ⚠️ **Anchors are collapsed by group: ONE representative per unit** (§6.3),
-    // the highest-scored member.
-    //
-    // A representative here, and fractional weights in `rankBoxCandidates` —
-    // the two are not inconsistent. The profile ranker reads every member's
-    // METADATA, so splitting a unit's vote across its cours keeps a tag all four
-    // share at 1 and a tag unique to one at 1/4. This route fetches CROWD EDGES
-    // per anchor: you either ask MAL about a title or you do not, so a
-    // fractional weight has nothing to apply to. Asking about seven Demon Slayer
-    // cours would return seven near-identical neighbourhoods, eat the
-    // `MAX_BOX_ANCHORS` budget with one show, and cost six extra MAL requests.
-    const units = resolveBoxUnits(box, getGroups());
-    const byScore = (a: string, b: string) =>
-      (byId.get(b)!.personal.score || 0) - (byId.get(a)!.personal.score || 0);
-    const present = new Set(anchorIds);
-    anchorIds = units.units
-      .map(unit => unit.members.filter(id => present.has(id)).sort(byScore)[0])
-      .filter((id): id is string => !!id)
-      // Best-loved units first, because the cap bites here: a box's strongest
-      // entries are the ones whose crowd neighbourhoods best describe it.
-      .sort(byScore)
-      .slice(0, MAX_BOX_ANCHORS);
-  } else {
-    anchorIds = anchorIds.slice(0, MAX_MIX_ANCHORS);
-  }
+  const present = Array.from(new Set(requested)).filter(id => byId.has(id));
+  // A box asks about ONE representative per unit, best-loved first — see
+  // `boxAnchorIds` for why a representative here and fractions in the fill loop.
+  const anchorIds = box
+    ? boxAnchorIds(box, present, byId, getGroups())
+    : present.slice(0, MAX_MIX_ANCHORS);
   const anchors = anchorIds.map(id => {
     const a = byId.get(id)!;
     return { id, title: getPrimaryTitle(a, titleLang), poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large };
@@ -209,10 +75,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const lang = req.query.lang === 'en' ? 'en' : 'fr';
   // Overrides land on the ANCHORED base, not the feed's — the URL only carries
   // what the sliders moved off it.
-  const weights = resolveWeights(
-    parseSourceWeights(typeof req.query.w === 'string' ? req.query.w : undefined),
-    ANCHORED_WEIGHTS
+  //
+  // A box with a reco profile (docs/recoProfiles/) puts the profile BETWEEN the
+  // two: base < profile < URL. The URL still wins — a client encodes against the
+  // profile-resolved weights returned below as `profile.base`, so a slider
+  // dragged back to the anchored default stays in the URL instead of letting the
+  // profile snap it back — and the `anilistStaff` zeroing still holds after the
+  // URL (see `resolveProfileOver`). `/mix?ids=` has no profile, and resolves to
+  // exactly `ANCHORED_WEIGHTS` + overrides as before.
+  const profile = box ? getBoxProfile(box) : undefined;
+  const resolved = resolveProfileOver(
+    ANCHORED_WEIGHTS,
+    profile?.weights,
+    parseSourceWeights(typeof req.query.w === 'string' ? req.query.w : undefined)
   );
+  // The same resolution WITHOUT the URL — the base a weights control encodes against.
+  const profileBase = profile ? resolveProfile(ANCHORED_WEIGHTS, profile.weights) : undefined;
   // Seen titles are excluded by default here (unlike the drill-down): the pool
   // is N anchors wide and the question is what to watch NEXT.
   //
@@ -240,17 +118,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    // Both pipes in parallel, each non-fatal: MAL needs auth, AniList needs none.
-    const [mal, anilist] = await Promise.all([loadMalEdges(anchorIds), loadAnilistEdges(anchorIds)]);
-    if (!mal.ok && !anilist.ok) {
-      return res.status(502).json({ error: 'Both recommendation sources failed', sources: { mal, anilist } });
+    const { sources, malEdges, anilistEdges } = await loadMixEdges(anchorIds);
+    if (!sources.mal.ok && !sources.anilist.ok) {
+      return res.status(502).json({ error: 'Both recommendation sources failed', sources });
     }
 
-    const malEdges = anchorIds.flatMap(id => malEdgeCache.get(id) || []);
-    const anilistEdges = anchorIds.flatMap(id => anilistEdgeCache.get(id) || []);
-
     const ranked = computeAnchored(anchorIds, malEdges, anilistEdges, {
-      weights,
+      weights: resolved.weights,
+      families: resolved.families,
       excludeSeen: !includeSeen,
       // ⚠️ A box's « Oui » (members) and « Non » (excluded) are both answered
       // questions, and must stay answered across a reload. Members matter too,
@@ -278,7 +153,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }));
 
     const filtered = applyNarrowingFilters(animes, narrowing);
-    res.json({ animes: filtered, total: filtered.length, anchors, sources: { mal, anilist } });
+    res.json({
+      animes: filtered,
+      total: filtered.length,
+      anchors,
+      sources,
+      // Present only when a profile applied. `base` is what a weights control on
+      // this surface must encode `w` against (URL overrides NOT folded in);
+      // `staffZeroed` says the resolver switched `anilistStaff` off, which a
+      // page must announce rather than leave as a knob that moved by itself.
+      ...(profile && profileBase ? {
+        profile: {
+          id: profile.id,
+          name: profile.name,
+          ...(profile.emoji ? { emoji: profile.emoji } : {}),
+          base: profileBase.weights,
+          families: profileBase.families,
+          staffZeroed: profileBase.staffZeroed,
+        },
+      } : {}),
+    });
   } catch (error) {
     console.error('Mix recommendations error:', error);
     res.status(500).json({

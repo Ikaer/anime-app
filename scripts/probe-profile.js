@@ -6,6 +6,8 @@
  *   node scripts/probe-profile.js --stats            # the §3 / §4 tables, re-measured
  *   node scripts/probe-profile.js --box all          # the §8 diagnostic, per box
  *   node scripts/probe-profile.js --box absolute-cinema
+ *   node scripts/probe-profile.js --rank --box bancal-et-je-l-assume --weights staffDirector=1
+ *   node scripts/probe-profile.js --rank --box laugh --weights staffMusic=1 --pool anchored
  *
  * It MEASURES rather than asserts, like `probe-box.js` and `backtest-reco.js` —
  * do not convert it into pass/fail. There is no right answer for a family's
@@ -29,9 +31,19 @@
  *    knob on that box, not a learned axis; that is the sentence the profile page
  *    must be able to print.
  *
- * Ranking is deliberately NOT here yet: it arrives with the profile-aware ranker
- * (docs/recoProfiles/PLAN.md, phases 4-5), so this script calls the engine
- * rather than growing a JS copy of it that would drift.
+ *  - **`--rank` is what a profile does to a box's ranking**, through the REAL
+ *    rankers — never a JS copy of them. `--weights` builds a synthetic
+ *    `ProfileWeights` and hands it in AS THE PROFILE, so the real resolver runs
+ *    (including the `anilistStaff` zeroing) exactly as it would for an attached
+ *    one; nothing is attached. Printed beside the same box under `Défaut`.
+ *      `--pool statused` (default) — `rankBoxCandidates`, the MCP's fill loop:
+ *        the owner's own statused list, grouped by direct franchise.
+ *      `--pool anchored` — the box's recos tab: `boxAnchorIds` + `loadMixEdges`
+ *        + `computeAnchored`, i.e. `/api/anime/recommendations/mix?box=`, with
+ *        seen titles IN (the tab's default; `--unseen` drops them). ⚠️ This one
+ *        REACHES THE NETWORK — one MAL request per anchor (skipped without a
+ *        valid token) and one AniList request for all of them.
+ *    The catalog-wide preview pool is phase 5's (DESIGN §7), not this.
  *
  * Read-only: nothing is written.
  */
@@ -41,13 +53,129 @@ const fs = require('fs');
 require('./lib/ts-loader.js');
 
 function parseArgs(argv) {
-  const out = { stats: false, box: null };
+  const out = { stats: false, box: null, rank: false, weights: {}, pool: 'statused', limit: 15, unseen: false };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === '--stats') out.stats = true;
     else if (argv[i] === '--box') out.box = argv[++i];
+    else if (argv[i] === '--rank') out.rank = true;
+    else if (argv[i] === '--pool') out.pool = argv[++i];
+    else if (argv[i] === '--limit') out.limit = Number(argv[++i]);
+    else if (argv[i] === '--unseen') out.unseen = true;
+    else if (argv[i] === '--weights') {
+      // `staffDirector=1,anilistTags=0.5` — any ProfileField, family or source.
+      for (const pair of argv[++i].split(',')) {
+        const [k, v] = pair.split('=');
+        out.weights[k.trim()] = Number(v);
+      }
+    }
+  }
+  if (!['statused', 'anchored'].includes(out.pool)) {
+    console.error(`--pool must be statused or anchored, not ${out.pool}`);
+    process.exit(1);
+  }
+  if (out.rank && !out.box) {
+    console.error('--rank needs --box <id>');
+    process.exit(1);
   }
   if (!out.stats && !out.box) out.stats = true;
   return out;
+}
+
+/** Two rankings side by side, with the top-N churn — `probe-box.js --diff`'s layout. */
+function printSideBySide(beforeIds, afterIds, name, limit, labels) {
+  const shown = Math.min(limit, Math.max(beforeIds.length, afterIds.length));
+  const topBefore = beforeIds.slice(0, shown);
+  const churn = afterIds.slice(0, shown).filter(id => !topBefore.includes(id)).length;
+  console.log(`   top ${shown}: ${churn}/${shown} changed\n`);
+  const width = 46;
+  const trunc = t => (t.length > width ? t.slice(0, width - 1) + '~' : t).padEnd(width);
+  console.log(`   ${labels[0].padEnd(width)}     ${labels[1]}`);
+  for (let i = 0; i < shown; i++) {
+    const b = beforeIds[i], a = afterIds[i];
+    const mark = a && !topBefore.includes(a) ? ' NEW ' : '     ';
+    console.log(`   ${trunc(b ? name(b) : '')}${mark}${a ? name(a) : ''}`);
+  }
+  console.log();
+}
+
+/**
+ * `--rank`: the box under `Défaut`, then under the synthetic profile, through
+ * the real ranker of the chosen pool.
+ */
+async function rankMode(args, ctx) {
+  const { all, byId, box, groups } = ctx;
+  const { getPrimaryTitle } = require('@/lib/domain/animeUtils');
+  const { resolveProfile, resolveProfileOver, sanitizeProfileWeights } = require('@/lib/reco/profileWeights');
+  const { BOX_WEIGHTS, ANCHORED_WEIGHTS } = require('@/lib/reco/weights');
+  const { isStaffFamily } = require('@/lib/reco/staffFields');
+
+  // Through the store's own sanitizer, so the probe cannot rank with a value an
+  // attached profile could never hold (unknown keys dropped, bounds clamped).
+  const profile = sanitizeProfileWeights(args.weights);
+  const name = id => { const a = byId.get(id); return a ? getPrimaryTitle(a, 'romaji') : id; };
+  const base = args.pool === 'statused' ? BOX_WEIGHTS : ANCHORED_WEIGHTS;
+  const resolved = resolveProfile(base, profile);
+  const fam = Object.entries(resolved.families).filter(([, v]) => v !== 0).map(([k, v]) => `${k} ${v}`);
+
+  console.log('='.repeat(78));
+  console.log(`${box.name}  — pool ${args.pool} | profile ${JSON.stringify(profile)}`);
+  console.log(`   families: ${fam.join(', ') || 'none'}${resolved.staffZeroed ? '   (anilistStaff zeroed)' : ''}`);
+
+  if (args.pool === 'statused') {
+    const { rankBoxCandidates } = require('@/lib/reco/boxes');
+    const opts = { limit: args.limit, groups };
+    const t0 = Date.now();
+    const before = rankBoxCandidates(box, all, opts);
+    const t1 = Date.now();
+    const after = rankBoxCandidates(box, all, { ...opts, profile });
+    const t2 = Date.now();
+    console.log(`   Défaut ${t1 - t0}ms | profile ${t2 - t1}ms`);
+    printSideBySide(before.map(g => g.id), after.map(g => g.id), name, args.limit, ['DÉFAUT', 'PROFILE']);
+    console.log('   PROFILE, with what earned each row:');
+    for (const [i, g] of after.entries()) {
+      const extra = g.members.length > 1 ? `  (+${g.members.length - 1} in franchise)` : '';
+      console.log(`   ${String(i + 1).padStart(2)}. ${g.score.toFixed(3)}  ${name(g.id)}${extra}`);
+      for (const m of g.matched) {
+        console.log(`         ${(isStaffFamily(m.field) ? `*${m.field}` : m.field).padEnd(17)} ${m.values.join(' · ')}`);
+      }
+    }
+    console.log();
+    return;
+  }
+
+  const { computeAnchored } = require('@/lib/reco/anchored');
+  const { boxAnchorIds, loadMixEdges } = require('@/lib/reco/mixFetch');
+  const present = box.members.filter(id => byId.has(id));
+  const anchorIds = boxAnchorIds(box, present, byId, groups);
+  console.log(`   ${anchorIds.length} anchors (one per unit): ${anchorIds.map(name).join(' | ')}`);
+  const { sources, malEdges, anilistEdges } = await loadMixEdges(anchorIds);
+  console.log(`   edges: MAL ${sources.mal.ok ? malEdges.length : `FAILED (${sources.mal.error})`}` +
+    ` | AniList ${sources.anilist.ok ? anilistEdges.length : `FAILED (${sources.anilist.error})`}`);
+
+  const rank = p => {
+    const r = resolveProfileOver(ANCHORED_WEIGHTS, p, {});
+    return computeAnchored(anchorIds, malEdges, anilistEdges, {
+      weights: r.weights,
+      families: r.families,
+      excludeSeen: args.unseen,
+      excludeIds: new Set([...box.members, ...(box.excluded ?? [])]),
+      lang: 'fr',
+      titleLang: 'romaji',
+    });
+  };
+  const before = rank(undefined);
+  const after = rank(profile);
+  console.log(`   pool: ${after.length} candidates`);
+  printSideBySide(before.map(x => x.anime.id), after.map(x => x.anime.id), name, args.limit, ['DÉFAUT', 'PROFILE']);
+  console.log('   PROFILE, top contributions (* = a staff family):');
+  for (const [i, item] of after.slice(0, args.limit).entries()) {
+    console.log(`   ${String(i + 1).padStart(2)}. ${item.score.toFixed(3)}  ${name(item.anime.id)}${item.seen ? '  (vu)' : ''}`);
+    for (const row of item.breakdown.slice(0, 4)) {
+      const label = isStaffFamily(row.source) ? `*${row.source}` : row.source;
+      console.log(`         ${label.padEnd(17)} ${row.contribution >= 0 ? '+' : ''}${row.contribution.toFixed(3)}  ${row.detail ?? ''}`);
+    }
+  }
+  console.log();
 }
 
 const quantile = (sorted, q) =>
@@ -56,7 +184,7 @@ const median = values => quantile([...values].sort((a, b) => a - b), 0.5);
 const pct = (n, d) => (d === 0 ? '  -  ' : `${((n / d) * 100).toFixed(1)}%`.padStart(6));
 const num = v => (Number.isFinite(v) ? v.toFixed(3) : '  -  ');
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv);
 
   const dataPath = process.env.DATA_PATH;
@@ -101,6 +229,16 @@ function main() {
 
   const boxes = getBoxes();
   const groups = getGroups();
+
+  if (args.rank) {
+    const box = boxes.find(b => b.id === args.box);
+    if (!box) {
+      console.error(`no such box: ${args.box}. Known: ${boxes.map(b => b.id).join(', ')}`);
+      process.exit(1);
+    }
+    await rankMode(args, { all, byId, box, groups });
+    return;
+  }
 
   if (args.stats) {
     // The pooled match median, DESIGN §3's column: the boxes with >=5 members,
@@ -210,4 +348,4 @@ function main() {
   }
 }
 
-main();
+main().catch(error => { console.error(error); process.exit(1); });

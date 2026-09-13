@@ -18,7 +18,7 @@
  * module client-side except via `import type`.
  */
 
-import { AnimeRecord, RecoMeta, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
+import { AnimeRecord, RecoMeta, RecoSource, SourceWeights } from '@/models/anime';
 import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
 import {
@@ -33,6 +33,7 @@ import {
   isPrematureSequel,
   seedWeight,
   seedGapBonus,
+  scoreWithBreakdown,
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
@@ -446,18 +447,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       popularity: `${(anime.catalog.numListUsers || 0).toLocaleString('fr-FR')} membres`,
     };
 
-    let score = 0;
-    const breakdown: RecoContribution[] = [];
-    (Object.keys(values) as RecoSource[]).forEach(src => {
-      const weight = weights[src];
-      const value = values[src];
-      const contribution = weight * value;
-      score += contribution;
-      if (weight !== 0 && value !== 0) {
-        breakdown.push({ source: src, value, weight, contribution, detail: details[src] });
-      }
-    });
-    breakdown.sort((x, y) => Math.abs(y.contribution) - Math.abs(x.contribution));
+    const { score, breakdown } = scoreWithBreakdown(values, weights, details);
 
     items.push({
       ...anime,

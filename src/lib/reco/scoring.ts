@@ -11,7 +11,7 @@
  * The `fs`-bound halves are its consumers: `feed.ts`, `similar.ts`, `refresh.ts`.
  */
 
-import { AnimeRecord } from '@/models/anime';
+import type { AnimeRecord, RecoContribution, RecoSource, SourceWeights } from '@/models/anime';
 import { getEffectiveStatus, getEffectiveScore, catalogNameKey } from '@/lib/domain/animeUtils';
 import { resolveRelations, type RelationIndex } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
@@ -310,6 +310,47 @@ export function flooredFieldMatch(
     if (w > 0) matched.push(v);
   }
   return { score: sum / Math.max(vals.length, floor), matched };
+}
+
+/**
+ * The additive score `Σ weight · value` AND its « Pourquoi ? » rows, from ONE
+ * pass — so no term can be scored without being explained.
+ *
+ * `extra` carries contributions that are not `RecoSource`s: today the staff
+ * craft families a box's reco profile turns on. ⚠️ They are summed and listed
+ * by the same loop on purpose. A family added to the score but not to the
+ * breakdown makes the explain under-report the very term doing the work, which
+ * is the bug `projectWhy` in `mcp/tools.ts` had (it trimmed the negative half
+ * off every card) and which CLAUDE.md weighs like a scoring bug. Pinned.
+ *
+ * A row is listed only when both its weight and its value are non-zero; the
+ * rows come back sorted by absolute contribution. Summation order is the base
+ * sources in `values`' key order, then `extra` — the feed's and the anchored
+ * ranker's old inline loop exactly, so their scores did not move by a bit.
+ */
+export function scoreWithBreakdown(
+  values: SourceWeights,
+  weights: SourceWeights,
+  details: Partial<Record<RecoSource, string | undefined>>,
+  extra: RecoContribution[] = []
+): { score: number; breakdown: RecoContribution[] } {
+  let score = 0;
+  const breakdown: RecoContribution[] = [];
+  (Object.keys(values) as RecoSource[]).forEach(src => {
+    const weight = weights[src];
+    const value = values[src];
+    const contribution = weight * value;
+    score += contribution;
+    if (weight !== 0 && value !== 0) {
+      breakdown.push({ source: src, value, weight, contribution, detail: details[src] });
+    }
+  });
+  for (const row of extra) {
+    score += row.contribution;
+    if (row.weight !== 0 && row.value !== 0) breakdown.push(row);
+  }
+  breakdown.sort((x, y) => Math.abs(y.contribution) - Math.abs(x.contribution));
+  return { score, breakdown };
 }
 
 /**

@@ -3,6 +3,13 @@
  * Based on MyAnimeList API structure
  */
 
+// ⚠️ TYPE-ONLY, and that is the whole point: this module is the client-safe
+// type home and imports no values from anywhere. `import type` is erased at
+// compile time, and `staffFields.ts` is itself client-safe — the family union
+// is DERIVED from its runtime `STAFF_FAMILIES` array, so re-declaring it here
+// would be a second list to keep in step.
+import type { StaffFamily } from '@/lib/reco/staffFields';
+
 // Base MAL anime data (from API)
 export interface MALAnime {
   id: number;
@@ -954,7 +961,14 @@ export const DEFAULT_BOX_EMOJI = '📦';
 
 /** One line of the on-demand "Pourquoi ?" breakdown for a recommendation. */
 export interface RecoContribution {
-  source: RecoSource;
+  /**
+   * A weightable source, or — when a box's reco profile turns one on — a staff
+   * craft family (docs/recoProfiles/DESIGN.md §3). ⚠️ The families are scored
+   * into the same sum, so they MUST ride in the same breakdown: a term that
+   * moves the score but is absent here makes « Pourquoi ? » under-report the
+   * very thing doing the work (`projectWhy`'s bug class).
+   */
+  source: RecoSource | StaffFamily;
   /** Normalized source score in [0,1]. */
   value: number;
   /** The weight applied to this source at ranking time. */

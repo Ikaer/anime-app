@@ -32,6 +32,8 @@ import { resolveBoxUnits, unitWeightFn } from '@/lib/domain/boxUnits';
 import { nextExcluded, nextGroups, nextMembers } from '@/lib/domain/boxWrites';
 import { getGroups } from '@/lib/reco/groups';
 import { BOX_WEIGHTS } from '@/lib/reco/weights';
+import { resolveProfile, type ProfileWeights } from '@/lib/reco/profileWeights';
+import { buildFamilyTerms, matchFamilyTerms, type MatchField } from '@/lib/reco/staffFields';
 import {
   type MetaField,
   type FieldValue,
@@ -224,6 +226,16 @@ export interface RankBoxOptions {
   limit?: number;
   /** Override for tuning probes; defaults to `BOX_WEIGHTS`. */
   weights?: Record<MetaField, number>;
+  /**
+   * The box's reco profile weights (docs/recoProfiles/), resolved over
+   * `weights` ?? `BOX_WEIGHTS` by `resolveProfile` — which also zeroes
+   * `anilistStaff` whenever a family is on.
+   *
+   * Handed in rather than looked up: `profiles.ts` imports this module (for
+   * `usedBy` and the mint), so reading `getBoxProfile` here would be a cycle.
+   * The MCP box tools resolve it at the call site.
+   */
+  profile?: ProfileWeights;
   /** Override for tuning probes; defaults to `BOX_TAG_MIN_RANK`. */
   tagMinRank?: number;
   /**
@@ -247,8 +259,15 @@ export interface BoxCandidateGroup {
   score: number;
   /** Every member of the direct-relation component; adding the group adds them all. */
   members: AnimeRecord[];
-  /** Why it is here, strongest field first. This is what makes a decision cheap. */
-  matched: { field: MetaField; values: string[] }[];
+  /**
+   * Why it is here, strongest field first. This is what makes a decision cheap.
+   *
+   * ⚠️ Includes the staff craft families a profile turns on — the MCP's
+   * `box_candidates` / `get_box` project this list verbatim, so a family scored
+   * but missing here would be `projectWhy`'s under-reporting bug on the box
+   * side. Family values are staff NAMES; `anilistStaff`'s are still ids.
+   */
+  matched: { field: MatchField; values: string[] }[];
 }
 
 /**
@@ -294,7 +313,11 @@ export function rankBoxCandidates(
   options: RankBoxOptions = {}
 ): BoxCandidateGroup[] {
   const limit = options.limit ?? 60;
-  const weights = options.weights ?? BOX_WEIGHTS;
+  // A profile overrides only the keys the base carries — the fill loop is
+  // metadata-only, so a profile's `crowd` / `rejection` / … are ignored here —
+  // and zeroes `anilistStaff` whenever a family is on. With no profile this is
+  // the base, unchanged.
+  const { weights, families } = resolveProfile(options.weights ?? BOX_WEIGHTS, options.profile);
   const minRank = options.tagMinRank ?? BOX_TAG_MIN_RANK;
 
   const byId = new Map(all.map(a => [a.id, a]));
@@ -331,6 +354,12 @@ export function rankBoxCandidates(
   const profiles = Object.fromEntries(
     BOX_FIELDS.map(f => [f, buildFieldProfile(members, weightOf, extractors[f], idf[f])])
   ) as Record<MetaField, FieldProfile>;
+  // The profile's staff families, unit-weighted like every field above. ⚠️ Their
+  // IDF is `staffFamilyIdf`'s own memo, deliberately NOT folded into `idfFor`:
+  // that one is keyed by the tag rank floor, which is the reason it exists, and
+  // the families have no floor to key on. Empty unless a family is on.
+  const familyTerms = buildFamilyTerms(members, weightOf, families, all);
+  const familyProfile = new Map(familyTerms.map(term => [term.family, term.profile] as const));
 
   const franchises = getFranchiseIndex(all, 'direct');
 
@@ -342,7 +371,7 @@ export function rankBoxCandidates(
     if (!getEffectiveStatus(anime)) continue;
 
     let score = 0;
-    const matched: { field: MetaField; values: string[]; weight: number }[] = [];
+    const matched: { field: MatchField; values: string[]; weight: number }[] = [];
     for (const field of BOX_FIELDS) {
       if (weights[field] <= 0) continue;
       const profile = profiles[field];
@@ -359,6 +388,24 @@ export function rankBoxCandidates(
           .sort((a, b) => (profile.weights.get(b) || 0) - (profile.weights.get(a) || 0))
           .slice(0, MATCH_LIMIT)
           .map(String),
+      });
+    }
+    // Families after the metadata fields, so a box with no profile sums in
+    // exactly the old order. Scored through `denomFor` (see `matchFamilyTerms`)
+    // and listed in `matched` like any field — a family that moved the score
+    // must say so. Named off the candidate's own credits: the ids are
+    // meaningless to the model reading this through `box_candidates`.
+    for (const hit of matchFamilyTerms(anime, familyTerms)) {
+      score += hit.contribution;
+      const profile = familyProfile.get(hit.family)!;
+      const names = new Map((anime.sources.anilist?.staff || []).map(s => [s.id, s.name] as const));
+      matched.push({
+        field: hit.family,
+        weight: hit.contribution,
+        values: hit.matched
+          .sort((a, b) => (profile.weights.get(b) || 0) - (profile.weights.get(a) || 0))
+          .slice(0, MATCH_LIMIT)
+          .map(id => names.get(id as number) ?? String(id)),
       });
     }
     if (score <= 0) continue;

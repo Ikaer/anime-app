@@ -176,6 +176,36 @@ export function resolveProfile<K extends string>(
   return { weights, families, staffZeroed };
 }
 
+/**
+ * A profile resolved over a base, with a surface's own URL overrides ON TOP —
+ * the precedence `/api/anime/recommendations/mix?box=` ranks with.
+ *
+ * Base < profile < URL, and the two edges of that ordering are each a silent
+ * failure if got wrong:
+ *
+ *  - **URL over profile.** `encodeSourceWeights` drops a value equal to the base
+ *    it is handed, so the client must encode against the PROFILE-resolved
+ *    weights (the route returns them), and the server must let whatever the URL
+ *    does carry win. Resolved the other way, a slider dragged to exactly the
+ *    anchored default falls out of the URL and the profile silently re-applies —
+ *    the control snaps back.
+ *  - ⚠️ **The `anilistStaff` zeroing still holds AFTER the URL.** `w` accepts
+ *    `anilistStaff` (it is a `RecoSource`), so merging the URL onto an already
+ *    resolved profile would let a hand-typed `?w=anilistStaff:1` reinstate the
+ *    ~18× double count `resolveProfile` exists to make unrepresentable. So the
+ *    URL is merged INTO the profile first and the whole thing resolved once.
+ *
+ * Families never come from the URL — `parseSourceWeights` only knows
+ * `RecoSource` keys — so the profile is their only source.
+ */
+export function resolveProfileOver<K extends string>(
+  base: Record<K, number>,
+  profile: ProfileWeights | undefined,
+  overrides: Partial<Record<K, number>>
+): ResolvedProfile<K> {
+  return resolveProfile(base, { ...profile, ...overrides } as ProfileWeights);
+}
+
 /** A shipped starting point — sparse, merged like `RECO_WEIGHT_PRESETS`. */
 export interface ProfilePreset {
   /** i18n: `profiles.preset.<key>` / `profiles.presetHint.<key>`. */

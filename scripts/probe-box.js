@@ -138,6 +138,7 @@ function main() {
   const { getPrimaryTitle } = require('@/lib/domain/animeUtils');
   const { getFranchiseIndex } = require('@/lib/domain/franchise');
   const { resolveBoxUnits } = require('@/lib/domain/boxUnits');
+  const { getBoxProfile } = require('@/lib/reco/profiles');
 
   const all = getAnimeForDisplay();
   const byId = new Map(all.map(a => [a.id, a]));
@@ -170,6 +171,14 @@ function main() {
     const opts = { limit: args.limit };
     if (args.tagMinRank !== undefined) opts.tagMinRank = args.tagMinRank;
     if (args.weights) opts.weights = { ...BOX_WEIGHTS, ...args.weights };
+    // A live box ranks with its attached reco profile, exactly as the MCP box
+    // tools do (docs/recoProfiles/). Fixtures and --members have none. To sweep
+    // a profile's weights without attaching one, use probe-profile.js --rank.
+    const profile = getBoxProfile(box);
+    if (profile) {
+      opts.profile = profile.weights;
+      console.log(`   profile: ${profile.name} ${JSON.stringify(profile.weights)}`);
+    }
 
     if (args.diff) {
       // §7.1, measured: the same box ranked with every entry voting, then with
