@@ -234,6 +234,10 @@ visible change is on a box that has one attached, which today is none.
   their only source. The response echoes `profile.base` — the profile-resolved weights WITHOUT the
   URL — which is what phase 6's controls must pass to `encodeSourceWeights`, or a slider dragged to
   the anchored default drops out of the URL and snaps back. `BoxRecos` still sends no `w`.
+- ⚠️ **« Plus comme ça » and `/mix?ids=` deliberately pass no `families`.** `computeAnchored` has
+  three callers and only `mix?box=` has a box to scope a profile to; the detail page and a
+  hand-picked mix have none, so their explain is unchanged (the `?? {}` path builds nothing). Do
+  not thread a profile there "to finish the job" — a profile is per-box (DESIGN §10).
 - **`rankBoxCandidates` takes `profile?: ProfileWeights`** and resolves it over `options.weights ??
   BOX_WEIGHTS` itself (`profileWeights.ts` is client-safe; only `profiles.ts` would be a cycle).
   The MCP callers look it up with `getBoxProfile` and return it as `profile`; both tool

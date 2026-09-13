@@ -105,7 +105,11 @@ export function boxAnchorIds(
     .slice(0, MAX_BOX_ANCHORS);
 }
 
-/** Per-anchor edge caches, canonical-keyed. Process-lifetime, no TTL (see above). */
+/**
+ * Per-anchor edge caches, canonical-keyed. Process-lifetime, no TTL (see above).
+ * Module-level, so shared by every importer in the process — today the mix route
+ * and the probe script, which run in separate processes anyway.
+ */
 const malEdgeCache = new Map<string, AnchoredEdge[]>();
 const anilistEdgeCache = new Map<string, AnchoredEdge[]>();
 
