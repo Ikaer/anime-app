@@ -1390,7 +1390,9 @@ export function createGroupTool(
   const byId = new Map(getAnimeForDisplay().map(a => [a.id, a]));
   const rejected = members.filter(id => !isCanonicalId(id) || !byId.has(id));
   const valid = members.filter(id => isCanonicalId(id) && byId.has(id));
-  const created = createGroup(name, valid);
+  // `getBoxes()` so the mint never re-issues a dead id a box still declares —
+  // without it, "changes no ranking until a box declares it" would be false.
+  const created = createGroup(name, valid, getBoxes());
   return { group: projectMcpGroup(created, byId, titleLang), rejected };
 }
 

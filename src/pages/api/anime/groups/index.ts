@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getGroups, createGroup } from '@/lib/reco/groups';
+import { getBoxes } from '@/lib/reco/boxes';
 import { getAnimeForDisplay, isCanonicalId } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { projectGroup, type GroupSummary } from '@/lib/domain/groupSummary';
@@ -45,7 +46,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         // and a standalone title with no relation component is allowed to start one.
         const members = req.body?.members === undefined ? [] : idList(req.body.members);
         if (!members) return res.status(400).json({ error: 'members must be an array of canonical ids' });
-        return res.status(201).json({ group: createGroup(name, members) });
+        // `getBoxes()` so the mint never re-issues a dead id a box still declares.
+        return res.status(201).json({ group: createGroup(name, members, getBoxes()) });
       }
 
       default:

@@ -880,6 +880,9 @@ export interface Box {
    * would be invisible to the very ranking this exists to fix. Under the lens
    * rule a declared-but-unfiled group contributes nothing, a deleted group is
    * an unresolvable id to ignore, and removing a title needs no bookkeeping.
+   * That id stays unresolvable because `mintGroupId` never re-mints one a box
+   * still names — otherwise a new group of the same name would inherit this
+   * declaration silently.
    */
   groups?: string[];
   /**

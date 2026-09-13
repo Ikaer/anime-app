@@ -29,9 +29,9 @@
  * client-safety block.
  */
 
-import type { UserGroup } from '@/models/anime';
+import type { Box, UserGroup } from '@/models/anime';
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-import { mintSlugId } from '@/lib/domain/slug';
+import { mintGroupId } from '@/lib/domain/slug';
 
 const GROUPS_FILE = dataFile('user/groups.json');
 
@@ -48,11 +48,24 @@ export function getGroup(id: string): UserGroup | undefined {
  * Create a group. `members` arrives already carved — the blade is the side that
  * knows which entries of the seeded component actually belong, so this stays a
  * dumb setter like `setBoxMembers`.
+ *
+ * ⚠️ **`boxes` is required, and every caller passes `getBoxes()`.** The mint
+ * must reserve every group id a box still declares (see `mintGroupId`), but
+ * this module cannot read the boxes itself: `boxes.ts` imports `getGroups` from
+ * here, so importing `getBoxes` back would make the two mutually recursive —
+ * the shape `domain/slug.ts` exists to avoid. It is required rather than
+ * defaulted to `[]` because a forgotten argument would silently drop the
+ * reservation, which is the whole bug.
  */
-export function createGroup(name: string, members: string[] = []): UserGroup {
+export function createGroup(
+  name: string,
+  members: string[],
+  boxes: Pick<Box, 'groups'>[]
+): UserGroup {
   const groups = getGroups();
   const group: UserGroup = {
-    id: mintSlugId(name, new Set(groups.map(g => g.id)), 'groupe'),
+    // Reserves the dead ids boxes still declare — see `mintGroupId`.
+    id: mintGroupId(name, groups, boxes),
     name: name.trim() || 'Sans nom',
     members: [...new Set(members)],
     createdAt: new Date().toISOString(),
@@ -64,7 +77,8 @@ export function createGroup(name: string, members: string[] = []): UserGroup {
 
 /**
  * Rename, and/or replace the membership. The id is a URL-ish key and never
- * moves; a blank name falls back to the current one, `boxes.ts`' rule — a group
+ * moves — a rename is not a re-mint, so it cannot collide with a dead id a box
+ * still declares; a blank name falls back to the current one, `boxes.ts`' rule — a group
  * must always have a name, because the name is what the chip and the card say.
  */
 export function updateGroup(
@@ -88,6 +102,12 @@ export function updateGroup(
  * rewriting every box here would be a multi-file write to achieve nothing — and
  * `user/boxes.json` is the one file in this app that cannot be re-fetched from a
  * provider, so the fewer things that rewrite it wholesale, the better.
+ *
+ * ⚠️ **"Inert" holds only because the id is never re-minted.** A dangling `bleach`
+ * resolves to nothing today; if `createGroup` handed `bleach` to the next group
+ * named « Bleach », every box still declaring it would silently start collapsing
+ * that group's members. `mintGroupId` reserves every id a box still names, which
+ * is what closes that — so not sweeping here stays safe only while the mint does.
  */
 export function deleteGroup(id: string): boolean {
   const groups = getGroups();

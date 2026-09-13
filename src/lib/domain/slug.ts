@@ -15,6 +15,8 @@
  * bonus: a create form can preview the id it is about to mint.
  */
 
+import type { Box } from '@/models/anime';
+
 /**
  * Slug from a name, deduped against what already exists.
  *
@@ -31,4 +33,29 @@ export function mintSlugId(name: string, taken: Set<string>, fallback = 'boite')
     const candidate = `${base}-${n}`;
     if (!taken.has(candidate)) return candidate;
   }
+}
+
+/**
+ * The id a new « regroupement » gets: a slug of its name, deduped.
+ *
+ * ⚠️ **Dead ids are taken too** — `mintProfileId`'s rule, for the same hazard.
+ * `deleteGroup` leaves every box's `groups` declaration in place, inert
+ * (`resolveBoxUnits` ignores an id it cannot resolve). `mintSlugId` over the
+ * live groups alone would hand that freed slug to the next group of the same
+ * name, and every box still declaring it would silently start collapsing the new
+ * group's members — a collapse the owner never declared there, shifting
+ * `rankBoxCandidates` and `/mix?box=` with nothing on screen to say so. So every
+ * id any box still names is reserved. Pure, so the rule is pinned without a
+ * store on disk.
+ */
+export function mintGroupId(
+  name: string,
+  groups: { id: string }[],
+  boxes: Pick<Box, 'groups'>[]
+): string {
+  const taken = new Set([
+    ...groups.map(g => g.id),
+    ...boxes.flatMap(b => b.groups ?? []),
+  ]);
+  return mintSlugId(name, taken, 'groupe');
 }
