@@ -43,7 +43,7 @@ Each phase ends with `npm run build` green.
 | 3 | ✅ **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
 | 4 | ✅ **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
 | 5 | ✅ **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
-| 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; the page-only i18n (the family `reco.source.*` keys and their `dynamicKeys.test.ts` driver landed in phase 4); CLAUDE.md | the feature | §8 |
+| 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; the page-only i18n (the family `reco.source.*` keys and their `dynamicKeys.test.ts` driver landed in phase 4); CLAUDE.md. ⚠️ The preview is always shown as *a weighting being tuned* — never the zero-weights `catalog` list on its own, which is a plain `BOX_WEIGHTS` rank of the unseen catalog, i.e. the fourth recommendation surface §7 refuses. Controls encode `w` against the preview's `base` | the feature | §8 |
 
 ## Phase 1 — what it decided beyond the design
 
