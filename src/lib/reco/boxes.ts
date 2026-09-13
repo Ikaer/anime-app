@@ -31,6 +31,7 @@ import { mintSlugId } from '@/lib/domain/slug';
 import { resolveBoxUnits, unitWeightFn } from '@/lib/domain/boxUnits';
 import { nextExcluded, nextGroups, nextMembers } from '@/lib/domain/boxWrites';
 import { getGroups } from '@/lib/reco/groups';
+import { BOX_WEIGHTS } from '@/lib/reco/weights';
 import {
   type MetaField,
   type FieldValue,
@@ -170,42 +171,10 @@ export function boxesContaining(canonicalId: string, boxes = getBoxes()): string
 // The grow ranker
 // ---------------------------------------------------------------------------
 
-/**
- * How a box is ranked, and it is NOT the feed's weighting — measured.
- *
- * The feed's `ANCHORED_WEIGHTS` were the obvious starting point and produced a
- * visibly worse list than the raw tag math the feature was designed on. Probed
- * on the live store with the `exotic-adventure` fixture, the top 12 came back
- * as *Black Bullet*, *Freezing*, *Shield Hero S3* and *Sayonara Lara* — every
- * one of them a Kinema Citrus title, pulled in because Made in Abyss is a
- * Kinema Citrus title. Two compounding causes:
- *
- *  - **`studio` is a near-binary field.** `fieldMatch` divides by the
- *    candidate's value count, and a title has ONE studio, so a studio hit
- *    scores ~1.0 where a tag hit scores ~0.4. At the feed's 0.15 it therefore
- *    outweighed the entire tag profile.
- *  - **`studio` and `anilistStaff` are the same evidence counted twice** — the
- *    same studio means largely the same credited crew, so a studio match drags
- *    its staff match along with it.
- *
- * That is fine for the FEED, where "more from a studio you like" is a real
- * recommendation. It is wrong for a box, which asks "is this the same KIND of
- * thing", and a production house is not a kind of thing. So tags carry the box,
- * genre supports it coarsely, and studio/staff are advisors rather than voters.
- *
- * ⚠️ These weights are box-local on purpose. Do not "unify" them with
- * `ANCHORED_WEIGHTS` — those are backtested against held-out favourites by
- * `scripts/backtest-reco.js`, this set answers a different question and the
- * harness cannot score it (see the module header on `scripts/probe-box.js`).
- */
-export const BOX_WEIGHTS: Record<MetaField, number> = {
-  genre: 0.25,
-  studio: 0.05,
-  nsfw: 0,
-  rating: 0,
-  anilistTags: 1.0,
-  anilistStaff: 0.35,
-};
+// How a box is weighted is `BOX_WEIGHTS` in `reco/weights.ts` — measured, and
+// NOT the feed's weighting; the reasons are recorded there. It lives in the
+// client-safe module because the profile page shows what an untouched slider
+// resolves to, which is `ANCHORED_WEIGHTS`' reason for living there too.
 
 const BOX_FIELDS: MetaField[] = ['genre', 'studio', 'anilistTags', 'anilistStaff'];
 

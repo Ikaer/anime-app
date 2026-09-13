@@ -132,7 +132,8 @@ function main() {
     process.exit(1);
   }
 
-  const { rankBoxCandidates, BOX_WEIGHTS } = require('@/lib/reco/boxes');
+  const { rankBoxCandidates } = require('@/lib/reco/boxes');
+  const { BOX_WEIGHTS } = require('@/lib/reco/weights');
   const { getAnimeForDisplay } = require('@/lib/store');
   const { getPrimaryTitle } = require('@/lib/domain/animeUtils');
   const { getFranchiseIndex } = require('@/lib/domain/franchise');

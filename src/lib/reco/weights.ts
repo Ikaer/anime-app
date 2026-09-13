@@ -9,6 +9,7 @@
  */
 
 import type { RecoSource, SourceWeights } from '@/models/anime';
+import type { MetaField } from '@/lib/reco/scoring';
 
 /**
  * Default weights for `score = Σ weight · normalizedSourceValue`. MAL `crowd`
@@ -54,6 +55,48 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
  * the same base the server ranks with, and `anchored.ts` is `fs`-bound.
  */
 export const ANCHORED_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0, feedback: 0 };
+
+/**
+ * How a box's grow ranker (`rankBoxCandidates`) is weighted, and it is NOT the
+ * feed's weighting — measured.
+ *
+ * The feed's `ANCHORED_WEIGHTS` were the obvious starting point and produced a
+ * visibly worse list than the raw tag math the feature was designed on. Probed
+ * on the live store with the `exotic-adventure` fixture, the top 12 came back
+ * as *Black Bullet*, *Freezing*, *Shield Hero S3* and *Sayonara Lara* — every
+ * one of them a Kinema Citrus title, pulled in because Made in Abyss is a
+ * Kinema Citrus title. Two compounding causes:
+ *
+ *  - **`studio` is a near-binary field.** `fieldMatch` divides by the
+ *    candidate's value count, and a title has ONE studio, so a studio hit
+ *    scores ~1.0 where a tag hit scores ~0.4. At the feed's 0.15 it therefore
+ *    outweighed the entire tag profile.
+ *  - **`studio` and `anilistStaff` are the same evidence counted twice** — the
+ *    same studio means largely the same credited crew, so a studio match drags
+ *    its staff match along with it.
+ *
+ * That is fine for the FEED, where "more from a studio you like" is a real
+ * recommendation. It is wrong for a box, which asks "is this the same KIND of
+ * thing", and a production house is not a kind of thing. So tags carry the box,
+ * genre supports it coarsely, and studio/staff are advisors rather than voters.
+ *
+ * ⚠️ These weights are box-local on purpose. Do not "unify" them with
+ * `ANCHORED_WEIGHTS` — those are backtested against held-out favourites by
+ * `scripts/backtest-reco.js`, this set answers a different question and the
+ * harness cannot score it (see the module header on `scripts/probe-box.js`).
+ *
+ * Lives here rather than in the `fs`-bound `boxes.ts` for `ANCHORED_WEIGHTS`'
+ * reason: a reco profile overrides it, and the profile page has to show what an
+ * untouched slider resolves to.
+ */
+export const BOX_WEIGHTS: Record<MetaField, number> = {
+  genre: 0.25,
+  studio: 0.05,
+  nsfw: 0,
+  rating: 0,
+  anilistTags: 1.0,
+  anilistStaff: 0.35,
+};
 
 /**
  * The sources worth a slider on an anchored surface — the complement of the two

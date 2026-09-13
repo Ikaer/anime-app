@@ -38,8 +38,8 @@ Each phase ends with `npm run build` green.
 
 | # | Phase | Ships | Design |
 |---|---|---|---|
-| 1 | **Staff families** — `reco/staffFields.ts` (client-safe): the eight whitelists, `staffFamilyOf`, extractors, `PROFILE_DENOM`, `denomFor`, the family IDF; tests; `scripts/probe-profile.js` | nothing visible — numbers | §3, §4, §5, §11 |
-| 2 | **Profile model + resolver** — `RecoProfile` / `ProfileField`, the sparse resolver that zeroes `anilistStaff` whenever a family is non-zero, the shipped presets; tests | nothing visible | §6, §8 presets |
+| 1 | ✅ **Staff families** — `reco/staffFields.ts` (client-safe): the eight whitelists, `staffFamilyOf`, extractors, `PROFILE_DENOM`, `denomFor`, the family IDF; tests; `scripts/probe-profile.js` | nothing visible — numbers | §3, §4, §5, §11 |
+| 2 | ✅ **Profile model + resolver** — `RecoProfile` / `ProfileField`, the sparse resolver that zeroes `anilistStaff` whenever a family is non-zero, the shipped presets; tests | nothing visible | §6, §8 presets |
 | 3 | **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
 | 4 | **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
 | 5 | **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
@@ -111,3 +111,28 @@ declared units.** On `Je les aurais suivis n'importe où` the proxy finds 2 dire
 where the owner's groups find 0 (a group joins what the direct graph splits); on `La hype m'a pas
 eu` it is the reverse — 0 by proxy, 2 declared, because the owner split a component the graph
 joins. Reading the proxy would have mislabelled both boxes.
+
+## Phase 2 — what it decided beyond the design
+
+The pure half is [reco/profileWeights.ts](../../src/lib/reco/profileWeights.ts): `RecoProfile`,
+`ProfileField`, `sanitizeProfileWeights`, `resolveProfile`, `PROFILE_PRESETS`. It lives in the
+client-safe `reco/` module rather than `@/models/anime` because its key type is `StaffFamily`, and
+`models/` imports nothing.
+
+- **Sparse by INTENT, not by equality.** DESIGN §6 says to persist "only values differing from the
+  surface's base", following `sparseViewDefaults`. That rule assumes ONE base, and a profile has two
+  (`BOX_WEIGHTS.genre` 0.25, `ANCHORED_WEIGHTS.genre` 0.2): dropping a value because it equals one
+  base silently changes what the other ranks with. So a key is present because the owner moved that
+  slider, absent means "this surface's default", and resetting a slider deletes the key. Pinned.
+- **`BOX_WEIGHTS` moved from `boxes.ts` to the client-safe `weights.ts`**, beside
+  `ANCHORED_WEIGHTS` and for its stated reason: the profile page must show what an untouched slider
+  resolves to, and `boxes.ts` is `fs`-bound.
+- **The zeroing is unconditional** — it fires even when a profile explicitly sets `anilistStaff`
+  beside a family. A double count at an ~18× scale gap is exactly the silent failure §6 wants
+  unrepresentable, and `staffZeroed` rides on the resolution so the page can say it happened.
+- **Bounds**: families 0-1 (one shared range is the point of `PROFILE_DENOM`); every `RecoSource`
+  field keeps the bounds `SOURCE_META` already gives its slider, so a profile cannot store a value
+  no other surface can express.
+- **Presets** name a lead family at 1.0 — "counts as much as the tags" after `PROFILE_DENOM`, tags
+  being 1.0 in `BOX_WEIGHTS` — and a supporting field at ~0.5. Starting points for a slider, not
+  measured optima: nothing here has a ground truth to fit against.
