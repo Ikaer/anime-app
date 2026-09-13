@@ -136,3 +136,29 @@ client-safe `reco/` module rather than `@/models/anime` because its key type is 
 - **Presets** name a lead family at 1.0 — "counts as much as the tags" after `PROFILE_DENOM`, tags
   being 1.0 in `BOX_WEIGHTS` — and a supporting field at ~0.5. Starting points for a slider, not
   measured optima: nothing here has a ground truth to fit against.
+
+## ⚠️ Phase 4 is bigger than its table row — settle these before wiring
+
+- **The explain must carry the families, or it lies.** `computeAnchored` builds `values` as a
+  `SourceWeights` and its `breakdown` from `Object.keys(values) as RecoSource[]`;
+  `RecoContribution.source` is a `RecoSource`. A family scored into the sum but absent from the
+  breakdown makes « Pourquoi ? » silently under-report the term doing the work — `projectWhy`'s bug
+  verbatim, which CLAUDE.md weighs like a scoring bug, and `mcp/tools.ts` reads the same array.
+  So `RecoContribution.source` widens to `RecoSource | StaffFamily` (one breakdown, one trim, one
+  sort), touching `feed.ts`, `similar.ts`, `anchored.ts` and `mcp/project.ts`. The explain labels
+  are `reco.source.${source}.label` (`AnimeCardView`, `MoreLikeThis`), so the eight
+  `reco.source.staff*.label` / `.hint` keys land in BOTH locales in phase 4, not 6 — with a
+  `satisfies Record<StaffFamily, 0>` driver in `tests/i18n/dynamicKeys.test.ts`. The same keys
+  then serve the profile page's sliders, `RecoWeightsSection`'s pattern.
+- **Precedence on `mix?box=`.** The route resolves `parseSourceWeights(w)` over
+  `ANCHORED_WEIGHTS`, and `encodeSourceWeights` emits only what differs from the base it is given.
+  If the box's profile is not that base, a slider dragged back to exactly the anchored default drops
+  out of the URL and the profile re-applies — the control snaps back. The profile-resolved weights
+  must BE the base the recos tab encodes against (client and server alike), so URL overrides sit on
+  top of the profile rather than competing with it.
+- **Two IDF memos in `rankBoxCandidates`, never one.** It reads `idfFor(all, minRank)` — separate
+  from `computeIdfSet` because of the tag rank floor — and the families need `staffFamilyIdf(all)`
+  beside it. Both memoize on the row array's identity; folding one into the other loses the reason
+  the first exists.
+- **Regression check:** `probe-box.js --box all` must read identically before and after wherever no
+  profile is attached. That is the change most likely to break silently.
