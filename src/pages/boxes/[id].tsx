@@ -315,17 +315,10 @@ export default function BoxV2DetailPage() {
                 {data?.missing.length ? <span>{t('boxes.missing', { count: data.missing.length })}</span> : null}
               </p>
             </div>
+            {/* The group blade's footer, transposed: the destructive control
+                quiet and set apart on the leading side, the page's one real
+                action filled at the trailing edge. */}
             <div className="bx2d-actions">
-              {/* Quick edit REPLACES « Remplir » (§6.2) — it is the fill surface,
-                  so the page's one fill affordance opens it. The bare picker
-                  survives only for an empty box, which has nothing to show. */}
-              <button
-                type="button"
-                className={`bx2d-btn ${state.edit ? 'bx2d-btnOn' : ''}`}
-                onClick={() => update({ tab: 'pres', edit: !state.edit })}
-              >
-                {state.edit ? t('quickEdit.close') : `✎ ${t('quickEdit.open')}`}
-              </button>
               <button
                 type="button"
                 className={`bx2d-btn bx2d-btnDanger ${confirmDelete ? 'bx2d-btnOn' : ''}`}
@@ -333,6 +326,18 @@ export default function BoxV2DetailPage() {
                 disabled={deleting}
               >
                 🗑 {t('boxes.delete')}
+              </button>
+              {/* Quick edit REPLACES « Remplir » (§6.2) — it is the fill surface,
+                  so the page's one fill affordance opens it. The bare picker
+                  survives only for an empty box, which has nothing to show.
+                  Filled at rest; once open it drops to an outlined toggle, since
+                  closing is no longer the thing the page is asking for. */}
+              <button
+                type="button"
+                className={`bx2d-btn ${state.edit ? 'bx2d-btnOn' : 'bx2d-btnPrimary'}`}
+                onClick={() => update({ tab: 'pres', edit: !state.edit })}
+              >
+                {state.edit ? t('quickEdit.close') : `✎ ${t('quickEdit.open')}`}
               </button>
             </div>
           </header>
@@ -556,7 +561,7 @@ export default function BoxV2DetailPage() {
         }
         .bx2d-count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
-        .bx2d-actions { flex-shrink: 0; display: flex; gap: 8px; }
+        .bx2d-actions { flex-shrink: 0; display: flex; align-items: center; gap: 24px; }
         .bx2d-btn:disabled { opacity: 0.6; cursor: default; }
         .bx2d-confirm {
           display: flex;
@@ -583,8 +588,22 @@ export default function BoxV2DetailPage() {
         .bx2d-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
         .bx2d-btnOn { border-color: var(--accent-primary); color: var(--text-primary); }
         /* After .bx2d-btn on purpose: same specificity, so source order decides. */
-        /* Quiet at rest, so the page's one destructive control does not compete
-           with « Remplir »; it only reads as dangerous once reached for. */
+        .bx2d-btnPrimary {
+          background: var(--accent-primary);
+          border-color: var(--accent-primary);
+          color: #fff;
+          padding: 6px 14px;
+        }
+        .bx2d-btnPrimary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+        /* Ghost at rest — no fill, no border, muted text — so the page's one
+           destructive control does not compete with « Remplir »; it only reads
+           as dangerous once reached for. Same treatment as the group blade. */
+        .bx2d-btnDanger {
+          background: none;
+          border-color: transparent;
+          color: var(--text-muted);
+          padding: 5px 8px;
+        }
         .bx2d-btnDanger:hover, .bx2d-btnDanger.bx2d-btnOn {
           border-color: var(--accent-danger, #f87171);
           color: var(--accent-danger, #f87171);
