@@ -40,8 +40,13 @@ import styles from './ProfileSliders.module.css';
  * metadata pools and 0.2 on the recos tab, which is the truth on each.
  */
 
-/** What the page shows in the content group — the metadata the box rankers read. */
-const CONTENT_FIELDS: RecoSource[] = ['anilistTags', 'genre', 'studio', 'anilistStaff'];
+/**
+ * The content group — every metadata field the box rankers read (`BOX_WEIGHTS`'
+ * keys), `rating` and `nsfw` included although both ship at 0: a profile can
+ * store them, and a stored value the page cannot show or reset is the same
+ * trap as a hidden crowd row.
+ */
+const CONTENT_FIELDS: RecoSource[] = ['anilistTags', 'genre', 'studio', 'anilistStaff', 'rating', 'nsfw'];
 /** Read by `computeAnchored` alone: live on the `anchored` pool, disabled elsewhere. */
 const CROWD_FIELDS: RecoSource[] = ['crowd', 'anilistCrowd', 'rejection', 'popularity'];
 
@@ -120,6 +125,10 @@ const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, pool, di
             <button
               type="button"
               className={styles.reset}
+              // A disabled row is not this pool's to change — resetting it here
+              // would, e.g., delete the explicit `anilistStaff: 0` every preset
+              // states by house rule, from a row that says it is switched off.
+              disabled={opts.disabled}
               onClick={() => onChange(resetProfileField(weights, field))}
               title={t('profiles.resetField')}
               aria-label={t('profiles.resetFieldOf', { field: label })}

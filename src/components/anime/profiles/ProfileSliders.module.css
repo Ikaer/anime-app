@@ -89,9 +89,14 @@
   cursor: pointer;
 }
 
-.reset:hover {
+.reset:hover:not(:disabled) {
   border-color: var(--border-hover);
   color: var(--text-primary);
+}
+
+.reset:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .slider {

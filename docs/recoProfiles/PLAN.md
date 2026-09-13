@@ -400,9 +400,18 @@ entry under *Explorer*.
   releases land in order. Because a profile is referenced, the header states it: « chaque
   réglage change aussitôt le classement de « Absolute cinema » ». Applying a preset overwrites
   every slider, so it keeps one step of undo.
+- **Not the `/mix` shape — a departure from §8, deliberately.** §8 says the page composes the
+  standard sidebar sections and `AnimeListHeader`. It is instead `/boxes/[id]`'s own-page shape
+  with a two-column grid and a sticky slider column: the diagnostic is PROSE that must sit beside
+  each slider, and `AnimePageLayout`'s fixed 280px sidebar is where it stops being readable; the
+  preview is a 30-row instrument read while a slider moves, not a card grid, so the header's
+  cards-per-row control would be a knob attached to nothing. The sticky column is what keeps the
+  slider on screen while the list it moves scrolls.
 - **Every row stays rendered; the crowd group is DISABLED off the `anchored` pool** (§8's word).
   Hidden, a stored `crowd` would be unreachable from the one page that edits it while it still
-  ranks the recos tab. `anilistStaff` is disabled with a note whenever a family is on.
+  ranks the recos tab — the same reason `rating` and `nsfw` get rows although both ship at 0.
+  `anilistStaff` is disabled with a note whenever a family is on, and a disabled row's ↺ is
+  disabled too (it would otherwise delete the explicit `anilistStaff: 0` a preset states).
 - **The diagnostic is printed under every staff slider** — a verdict chip (`vide` / `recherche` /
   `axe`) and the sentence, naming the shared people with their unit counts — plus one regime line
   over the group. The regime is derived from the verdicts (which families agree on someone), not
