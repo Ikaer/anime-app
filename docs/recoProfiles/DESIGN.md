@@ -1,7 +1,8 @@
 # Reco **profiles** — per-axis weighting for a box
 
-Status: **design, not built.** Scoped out of [« Mes boîtes » v2](../boxesV2/DESIGN.md),
-which names this document as its own §10 out-of-scope entry.
+Status: **being built** — phasing, drift from this document and what each phase measured are in
+[PLAN.md](PLAN.md). Scoped out of [« Mes boîtes » v2](../boxesV2/DESIGN.md), which names this
+document as its own §10 out-of-scope entry.
 
 ⚠️ **It is sequenced after the whole `/boxesV2` swap, not merely after its §4 group collapse,
 and that is a hard dependency rather than a preference.** §4 is what makes the tuning

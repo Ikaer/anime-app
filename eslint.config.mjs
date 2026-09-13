@@ -31,7 +31,7 @@ const SERVER_ONLY_MESSAGE =
   'Server-only module (transitively reaches fs) — components and hooks must not bundle it. ' +
   'Types are fine: use `import type`. Values belong in a page, getServerSideProps or an API route; ' +
   'the client-safe helpers are @/lib/domain/**, @/lib/url/**, @/lib/i18n, ' +
-  '@/lib/reco/{weights,scoring,byCredits} and @/lib/providers/{capabilities,personalState,discrepancy}.';
+  '@/lib/reco/{weights,scoring,byCredits,staffFields} and @/lib/providers/{capabilities,personalState,discrepancy}.';
 
 // Store exports that WRITE. The MCP surface is read-only by contract, and these
 // are the names that would break it — including `resolveCanonicalId(s)`, which

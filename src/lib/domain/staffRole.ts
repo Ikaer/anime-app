@@ -179,8 +179,10 @@ export interface ParsedStaffRole {
  * Either way the failure is silent: the credit still renders, in the wrong
  * group, on a page nobody diffs — the `GENRE_ALIASES` failure mode.
  *
- * Exported (rather than module-private) only so the peel contract can be pinned
- * directly by the suite; `staffRoleTier` is its sole caller in `src/`.
+ * Exported so the peel contract can be pinned directly by the suite, and so
+ * `reco/staffFields.ts` files a credit into its craft family from the same
+ * parse the tier reads — a second parser would be a second place for the two
+ * trims above to go missing.
  */
 export function parseStaffRole(raw: string): ParsedStaffRole {
   let base = raw.trim();
@@ -193,6 +195,25 @@ export function parseStaffRole(raw: string): ParsedStaffRole {
     base = m[1].trim();
   }
   return { base, qualifiers };
+}
+
+/**
+ * True for a LOCALIZATION credit — `ADR *`, or any dub-language qualifier.
+ *
+ * Its own function because two questions depend on it: the tier (rule 1 below)
+ * and the craft family in `reco/staffFields.ts`, where `Director (English)` is
+ * a dub director and not the show's. One definition, so the two cannot disagree
+ * about which credits are localization.
+ */
+export function isLocalizationCredit({ base, qualifiers }: ParsedStaffRole): boolean {
+  if (/^ADR\b/i.test(base)) return true;
+  for (const qualifier of qualifiers) {
+    // `English; ADV` — AniList combines a language with a studio note.
+    for (const part of qualifier.split(';')) {
+      if (DUB_LANGUAGES.has(key(part))) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -209,15 +230,9 @@ export function parseStaffRole(raw: string): ParsedStaffRole {
  *    the credit matters less.
  */
 export function staffRoleTier(raw: string): StaffRoleTier {
-  const { base, qualifiers } = parseStaffRole(raw);
-
-  if (/^ADR\b/i.test(base)) return 4;
-  for (const qualifier of qualifiers) {
-    // `English; ADV` — AniList combines a language with a studio note.
-    for (const part of qualifier.split(';')) {
-      if (DUB_LANGUAGES.has(key(part))) return 4;
-    }
-  }
+  const parsed = parseStaffRole(raw);
+  if (isLocalizationCredit(parsed)) return 4;
+  const { base, qualifiers } = parsed;
 
   const k = key(base);
   let tier: StaffRoleTier =
