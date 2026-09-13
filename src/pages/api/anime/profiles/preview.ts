@@ -2,8 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { isCanonicalId } from '@/lib/store';
 import { getBox } from '@/lib/reco/boxes';
 import { getProfile } from '@/lib/reco/profiles';
-import { previewProfile, PREVIEW_POOLS, type PreviewPool, type PreviewResult } from '@/lib/reco/profilePreview';
-import { sanitizeProfileWeights } from '@/lib/reco/profileWeights';
+import { previewProfile, type PreviewResult } from '@/lib/reco/profilePreview';
+import { sanitizeProfileWeights, PREVIEW_POOLS, type PreviewPool } from '@/lib/reco/profileWeights';
 import { getTitleLanguage } from '@/lib/config/settings';
 
 /**

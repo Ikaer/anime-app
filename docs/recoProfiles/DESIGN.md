@@ -1,6 +1,6 @@
 # Reco **profiles** — per-axis weighting for a box
 
-Status: **being built** — phasing, drift from this document and what each phase measured are in
+Status: **built** (2026-09-13) — phasing, drift from this document and what each phase measured are in
 [PLAN.md](PLAN.md). Scoped out of [« Mes boîtes » v2](../boxesV2/DESIGN.md), which names this
 document as its own §10 out-of-scope entry.
 

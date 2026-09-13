@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getBox, BOX_TAG_MIN_RANK } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
+import { getBoxProfile } from '@/lib/reco/profiles';
 import { getAnimeForDisplay } from '@/lib/store';
 import { beginRequest } from '@/lib/store/perf';
 import { getTitleLanguage } from '@/lib/config/settings';
@@ -53,6 +54,14 @@ export interface BoxMembersResponse {
     members: string[];
     excluded?: string[];
     groups?: string[];
+    /** The attached reco profile's id, as stored — possibly dangling (see `profile`). */
+    profileId?: string;
+    /**
+     * That profile, resolved. Absent while `profileId` is set means the profile
+     * was deleted: the id is inert (`getBoxProfile`), and the page says so rather
+     * than showing a profile that ranks nothing.
+     */
+    profile?: { id: string; name: string; emoji?: string };
   };
   /** Air-date order, flat. The audit grid's shape; unchanged. */
   members: LeanAnimeRow[];
@@ -117,6 +126,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const declared = liveDeclared(box.groups, groups);
 
     const row = (id: string) => toLeanRow(byId.get(id)!, titleLang);
+    const profile = getBoxProfile(box);
     const excludedIds = box.excluded ?? [];
 
     const body = {
@@ -136,6 +146,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         // Live ids only: a deleted group's declaration is inert, and echoing it
         // would inflate the header's count (see `liveDeclared`).
         ...(declared.length ? { groups: declared } : {}),
+        ...(box.profileId ? { profileId: box.profileId } : {}),
+        ...(profile ? { profile: { id: profile.id, name: profile.name, ...(profile.emoji ? { emoji: profile.emoji } : {}) } } : {}),
       },
       members: resolved.sort(byAirDate(titleLang)).map(a => toLeanRow(a, titleLang)),
       units: faced.map(unit => ({ row: row(unit.face), members: unit.members.map(row) })),

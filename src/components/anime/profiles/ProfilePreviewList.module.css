@@ -1,0 +1,136 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 2em 3.4em 40px 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rank {
+  padding-top: 2px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.shift {
+  justify-self: start;
+  margin-top: 1px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.same {
+  color: var(--text-muted);
+}
+
+.up {
+  color: #10b981;
+}
+
+.down {
+  color: var(--accent-danger);
+}
+
+/* What the weighting brought in — the thing a tuning page is for. */
+.new {
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--accent-primary);
+}
+
+.posterLink {
+  display: block;
+  line-height: 0;
+}
+
+.poster {
+  display: block;
+  width: 40px;
+  height: 57px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+}
+
+.body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.titleLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.title:hover {
+  color: var(--accent-primary);
+}
+
+.franchise {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.meta {
+  display: flex;
+  gap: 4px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.score {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.why {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.why li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whyFamily {
+  color: var(--accent-primary);
+}

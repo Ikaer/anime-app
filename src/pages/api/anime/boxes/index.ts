@@ -63,6 +63,11 @@ export interface BoxSummary {
   excludedCount?: number;
   /** Groups DECLARED here — the ones whose collapse actually applies. */
   groups?: string[];
+  /**
+   * The attached reco profile's id, as stored (possibly dangling — inert then).
+   * The profile page reads it to say that attaching there REPLACES another.
+   */
+  profileId?: string;
   /** Up to ten units, best example first, each marked with how many it stands for. */
   top: BoxTopEntry[];
   /** Up to four member posters, best-scored first — the card's face. */
@@ -144,6 +149,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             ...(box.excluded?.length ? { excludedCount: box.excluded.length } : {}),
             // Live ids only — see `liveDeclared`.
             ...(liveDeclared(box.groups, groups).length ? { groups: liveDeclared(box.groups, groups) } : {}),
+            ...(box.profileId ? { profileId: box.profileId } : {}),
             top,
             covers: resolved
               .map(a => a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large)

@@ -43,7 +43,7 @@ Each phase ends with `npm run build` green.
 | 3 | ✅ **Store + API** — `user/reco_profiles.json`, `reco/profiles.ts` (eslint server-only; writers blocked by name on the MCP surface), CRUD routes, `Box.profileId` | nothing visible | §6, §9 |
 | 4 | ✅ **Rankers honour a profile** — `computeAnchored` and `rankBoxCandidates` take family weights through `denomFor`; `mix?box=` and the MCP box tools resolve the box's profile. `probe-box.js` must read identical where the profile is `Défaut` | better box recos, where a profile is attached | §6, §9 |
 | 5 | ✅ **Preview** — the unseen-catalog pool (one predicate lifted out of `affinity.ts`), `POST /api/anime/profiles/preview`, the §8 diagnostic block | nothing visible | §7, §8 |
-| 6 | **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; the page-only i18n (the family `reco.source.*` keys and their `dynamicKeys.test.ts` driver landed in phase 4); CLAUDE.md. ⚠️ The preview is always shown as *a weighting being tuned* — never the zero-weights `catalog` list on its own, which is a plain `BOX_WEIGHTS` rank of the unseen catalog, i.e. the fourth recommendation surface §7 refuses. Controls encode `w` against the preview's `base` | the feature | §8 |
+| 6 | ✅ **`/profiles` + `/profiles/[id]`** — sliders, live preview, presets, diagnostic; attach from the box page; the page-only i18n (the family `reco.source.*` keys and their `dynamicKeys.test.ts` driver landed in phase 4); CLAUDE.md. ⚠️ The preview is always shown as *a weighting being tuned* — never the zero-weights `catalog` list on its own, which is a plain `BOX_WEIGHTS` rank of the unseen catalog, i.e. the fourth recommendation surface §7 refuses. An untouched slider displays the pool's `base`; the page POSTs the sparse map whole and builds no `w` — the `w`-against-`profile.base` rule binds only if the box recos tab ever gains sliders, which it deliberately does not | the feature | §8 |
 
 ## Phase 1 — what it decided beyond the design
 
@@ -368,3 +368,81 @@ or crowd `sources`. Nothing is saved or attached; no page reads it yet.
   key dropped), statused, ad-hoc anchors (three Miyazaki-era titles → his filmography, 29 of 30
   rows with a family line), and anchored on « Bancal » (both crowd sources ok, the diagnostic
   naming Araki and Tanaka as the axis). Eight invalid requests each answered their 4xx.
+
+## Phase 6 — what it decided beyond the design
+
+`/profiles` (list + create from a preset) and `/profiles/[id]` (sliders, the §8 diagnostic, the
+preview), [ProfileSliders](../../src/components/anime/profiles/ProfileSliders.tsx) and
+[ProfilePreviewList](../../src/components/anime/profiles/ProfilePreviewList.tsx), the attach
+control in box edition ([BoxProfileControl](../../src/components/anime/boxes/BoxProfileControl.tsx)),
+the recos tab naming the profile it ranked with, a « Tester un profil » button on `/mix`, and a nav
+entry under *Explorer*.
+
+- **The ranking is only ever read against `Défaut`** ([reco/profileBaseline.ts](../../src/lib/reco/profileBaseline.ts)).
+  The page fetches the same context twice — once unweighted, once per slider release — and every
+  row carries its shift (`nouveau`, `▲n`, `▼n`, `=`), under a header counting what came in. A
+  weighting that ranks exactly like `Défaut` on the current pool gets a sentence and NO list.
+  That gate is decided on the RESOLVED weights of the pool (`tunesNothing`), not the stored keys:
+  a crowd-only profile is "nothing" on the metadata pools, whose base has no `crowd`. This is how
+  the phase 5 warning is honoured — the zero-weights catalog list is unreachable, and a tuned one
+  is always framed as a difference. The `Défaut` fetch is per context, not per release.
+- ⚠️ **Shifts match on ANY shared entry id, never face to face.** A franchise group is faced by
+  its best-SCORING member, so a weighting can re-face it; comparing `row.id` with `row.id` would
+  call a re-faced group `nouveau`. `PreviewRow` gained `ids` (every entry, face first) for this.
+  Pinned, and verified by breaking it BOTH ways — a face-only match on one side still passes,
+  because the other side carries every id; the bug needs both, which is exactly `row.id`.
+- **The sliders are sparse-aware, not `RecoWeightsSection`** — each row is inherited (shows the
+  pool's base, muted, « défaut »), set (accent, with ↺) or reset (↺ DELETES the key:
+  `resetProfileField`). A panel initialised from the displayed base and saved whole would make
+  every profile dense and freeze `BOX_WEIGHTS.genre` into a map the recos tab then ranks with.
+  Only a row that actually MOVED commits on release, so clicking a thumb in place stores nothing.
+- **Saved on every release, no Save button.** One PATCH per release, chained so two quick
+  releases land in order. Because a profile is referenced, the header states it: « chaque
+  réglage change aussitôt le classement de « Absolute cinema » ». Applying a preset overwrites
+  every slider, so it keeps one step of undo.
+- **Every row stays rendered; the crowd group is DISABLED off the `anchored` pool** (§8's word).
+  Hidden, a stored `crowd` would be unreachable from the one page that edits it while it still
+  ranks the recos tab. `anilistStaff` is disabled with a note whenever a family is on.
+- **The diagnostic is printed under every staff slider** — a verdict chip (`vide` / `recherche` /
+  `axe`) and the sentence, naming the shared people with their unit counts — plus one regime line
+  over the group. The regime is derived from the verdicts (which families agree on someone), not
+  from invented unit thresholds.
+- **Attach lives in box EDITION** (phase 3's reason: it changes how the box ranks); présentation
+  states it read-only, and a dangling id reads « Profil supprimé (inactif) ». `members` now echoes
+  `profileId` and the resolved `profile`; the box list echoes `profileId`, so the profile page can
+  say that attaching REPLACES another. The profile page also attaches to the box it is tested on —
+  tune, then attach, in one place.
+- **The URL carries the test context only** (`box` XOR `a`, `pool`) — never the weights, which are
+  the profile. `a=` is `/mix`'s key, and `/profiles` carries it onto every profile link, so
+  « Tester un profil » on `/mix` needs no retyping. Ad-hoc chips are named from a new
+  `anchors.rows` on the preview response (a bookmarked `?a=` has nothing else to name them).
+- `PREVIEW_POOLS` moved to the client-safe `profileWeights.ts` (the page renders a tab per pool);
+  `FAMILY_VERDICTS` is exported beside the verdict type. Both drive new `dynamicKeys.test.ts`
+  families, with the presets: `profiles.preset.*`, `.presetHint.*`, `.verdict.*`, `.pool.*`,
+  `.poolHint.*`.
+- **Not built, deliberately:** sliders on the box recos tab. The profile page is the one tuning
+  surface; two for one weighting is the drift this feature exists to remove.
+
+### Phase 6 — measured and checked (2026-09-13, office store)
+
+**Regression:** `probe-box.js --box all` byte-identical to phase 5's capture (1,286 lines, timings
+masked) — no ranking code moved this phase. Build green: 204 tests (two new in
+`profileBaseline.test.ts`, five new i18n families), 0 lint errors.
+
+**Live** (dev server): a profile created from the page with an accented name and the
+`realisation` preset; tested on `Absolute cinema` — catalog **15/30 new** against `Défaut` in
+~400 ms (Anno's *Death & Rebirth*, Oshii's *GITS 2.0* and *Innocence*, Haoling Li, Taguchi,
+Hiroshi Seko — the diagnostic names Seko ×3 as the box's writing axis), statused 14/30 in 24 ms,
+recos 3/30 in ~2.9 s with 11 anchors asked (the phase 4 "nudge", seen from the page). A slider
+release saved only the moved key and re-ranked (16/30, Shirou Sagisu surfacing — the box's
+music axis); ↺ deleted it again; the `defaut` preset produced the sentence and no list, and undo
+restored the map. Attached from the page → `members`, the box list and `mix?box=` all carried it
+(17 of 125 recos cards with a family row); DELETE answered 409 naming the box, then 200 with
+`?confirm=1`, leaving the inert dangling id `members` reports as such. On the box page:
+présentation's « 🎥 Profil « … » » link (styled — it rides on a `next/link`, so its rule is in the
+prefixed global block), edition's select showing the attached profile, the recos tab's « Classé
+avec le profil … » line, and detaching through that select (the key left `boxes.json`). Then
+`user/boxes.json` restored and `user/reco_profiles.json` removed — every `user/*.json` sha1
+identical to before. (The Desktop preview pane was hidden for most of this run; a fresh load of a
+DYNAMIC route never becomes `router.isReady` there, so the box page was reached by client-side
+navigation from a static page — worth knowing before blaming a page that sits on « Chargement… ».)

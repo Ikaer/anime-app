@@ -9,8 +9,9 @@
  * not "the box is about direction". Measured: on the three boxes the owner named
  * as the motivating cases, no person recurred across two shows in any family —
  * the apparent recurrence was one show's cours. Without this block the failure
- * is invisible and confident, so the profile page must print it beside the
- * sliders. This module computes it; the sentence is the page's (phase 6).
+ * is invisible and confident, so the profile page prints it under every staff
+ * slider. This module computes it; the sentence is the page's
+ * (`ProfileSliders`, keyed `profiles.diag.*` / `profiles.verdict.*`).
  *
  * ⚠️ **Across UNITS, never entries.** Four cours of one show credit the same
  * director four times; counted by entry that reads as a recurring director and
@@ -32,7 +33,8 @@ import { STAFF_FAMILIES, STAFF_FAMILY_EXTRACTORS, familyCredits, type StaffFamil
  * - `retrieval` — people, but none shared by two units: "more by these people".
  * - `axis` — at least one person recurs across units: the box agrees on someone.
  */
-export type FamilyVerdict = 'empty' | 'retrieval' | 'axis';
+export const FAMILY_VERDICTS = ['empty', 'retrieval', 'axis'] as const;
+export type FamilyVerdict = typeof FAMILY_VERDICTS[number];
 
 /** Recurring people listed per family — enough to name the axis, not a roster. */
 const SHARED_LIMIT = 5;

@@ -42,7 +42,7 @@ import { computeAnchored } from '@/lib/reco/anchored';
 import { boxAnchorIds, boxAnsweredIds, loadMixEdges, MAX_MIX_ANCHORS, type MixSourceOutcome } from '@/lib/reco/mixFetch';
 import { buildUnseenPool } from '@/lib/reco/affinity';
 import { diagnoseFamilies, type ProfileDiagnostic } from '@/lib/reco/profileDiagnostic';
-import { resolveProfile, type ProfileWeights } from '@/lib/reco/profileWeights';
+import { resolveProfile, PREVIEW_POOLS, type PreviewPool, type ProfileWeights } from '@/lib/reco/profileWeights';
 import { BOX_WEIGHTS, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import type { MatchField, StaffFamily } from '@/lib/reco/staffFields';
 import { resolveBoxUnits } from '@/lib/domain/boxUnits';
@@ -50,8 +50,8 @@ import { toLeanRow, type LeanAnimeRow } from '@/lib/domain/leanRow';
 import type { Lang } from '@/lib/i18n';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
-export const PREVIEW_POOLS = ['catalog', 'statused', 'anchored'] as const;
-export type PreviewPool = typeof PREVIEW_POOLS[number];
+// Declared in the client-safe `profileWeights.ts` — the page renders a tab per pool.
+export { PREVIEW_POOLS, type PreviewPool };
 
 export interface PreviewInput {
   /** The weighting to preview — sparse, already sanitized by the caller. */
@@ -70,6 +70,13 @@ export interface PreviewInput {
 
 export interface PreviewRow {
   row: LeanAnimeRow;
+  /**
+   * Every entry the row stands for, the face first. ⚠️ A franchise group's face
+   * is its best-SCORING member, so it can change with the weights — comparing
+   * two previews by `row.id` would call a group that merely re-faced "new".
+   * `shiftsAgainst` matches on any shared id instead.
+   */
+  ids: string[];
   score: number;
   /** Metadata pools: how many OTHER entries of the row's direct franchise it stands for. */
   franchise?: number;
@@ -81,8 +88,12 @@ export interface PreviewRow {
 
 export interface PreviewResult {
   pool: PreviewPool;
-  /** Anchors that exist in the store — and, on `anchored`, the representatives actually asked about. */
-  anchors: { present: number; asked?: string[] };
+  /**
+   * Anchors that exist in the store — and, on `anchored`, the representatives
+   * actually asked about. `rows` only for an ad-hoc set: the page renders its
+   * picked titles as chips, and a bookmarked `?a=` has nothing else to name them.
+   */
+  anchors: { present: number; asked?: string[]; rows?: LeanAnimeRow[] };
   /** The pool's base with the profile applied — what an untouched slider resolves to. */
   base: Record<string, number>;
   families: Record<StaffFamily, number>;
@@ -113,13 +124,14 @@ export async function previewProfile(input: PreviewInput): Promise<PreviewResult
   const units = resolveBoxUnits(anchorBox, groups).units
     .map(unit => unit.members.map(id => byId.get(id)).filter((a): a is AnimeRecord => !!a));
   const diagnostic = diagnoseFamilies(units);
+  const anchorRows = input.box ? undefined : present.map(id => toLeanRow(byId.get(id)!, input.titleLang));
 
   if (input.pool === 'anchored') {
     const resolved = resolveProfile(ANCHORED_WEIGHTS, input.weights);
     const asked = input.box ? boxAnchorIds(input.box, present, byId, groups) : present.slice(0, MAX_MIX_ANCHORS);
     const head = {
       pool: input.pool,
-      anchors: { present: present.length, asked },
+      anchors: { present: present.length, asked, ...(anchorRows ? { rows: anchorRows } : {}) },
       base: resolved.weights,
       families: resolved.families,
       staffZeroed: resolved.staffZeroed,
@@ -142,6 +154,7 @@ export async function previewProfile(input: PreviewInput): Promise<PreviewResult
       sources,
       items: ranked.slice(0, input.limit).map(item => ({
         row: toLeanRow(item.anime, input.titleLang),
+        ids: [item.anime.id],
         score: item.score,
         breakdown: item.breakdown,
       })),
@@ -161,7 +174,7 @@ export async function previewProfile(input: PreviewInput): Promise<PreviewResult
 
   return {
     pool: input.pool,
-    anchors: { present: present.length },
+    anchors: { present: present.length, ...(anchorRows ? { rows: anchorRows } : {}) },
     base: resolved.weights,
     families: resolved.families,
     staffZeroed: resolved.staffZeroed,
@@ -171,6 +184,7 @@ export async function previewProfile(input: PreviewInput): Promise<PreviewResult
       const anchor = g.members.find(a => a.id === g.id) ?? g.members[0];
       return {
         row: toLeanRow(anchor, input.titleLang),
+        ids: [anchor.id, ...g.members.filter(a => a !== anchor).map(a => a.id)],
         score: g.score,
         ...(g.members.length > 1 ? { franchise: g.members.length - 1 } : {}),
         matched: g.matched,

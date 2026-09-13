@@ -28,6 +28,8 @@ import fr from '@/locales/fr.json';
 import { PROVIDER_CAPABILITIES, type PersonalDimension } from '@/lib/providers/capabilities';
 import { SOURCE_META, RECO_WEIGHT_PRESETS } from '@/lib/reco/weights';
 import { STAFF_FAMILIES } from '@/lib/reco/staffFields';
+import { PROFILE_PRESETS, PREVIEW_POOLS } from '@/lib/reco/profileWeights';
+import { FAMILY_VERDICTS } from '@/lib/reco/profileDiagnostic';
 import { ALL_STATUSES, VIEW_PRESETS } from '@/lib/url/animeParams';
 import { GENRE_AXES } from '@/lib/domain/genreAxis';
 import { STAFF_ROLE_TIERS } from '@/lib/domain/staffRole';
@@ -136,6 +138,19 @@ family('reco.source.<family>.label', STAFF_FAMILIES, f => `reco.source.${f}.labe
 family('reco.source.<family>.hint', STAFF_FAMILIES, f => `reco.source.${f}.hint`);
 family('reco.preset.*.label', RECO_WEIGHT_PRESETS.map(p => p.key), k => `reco.preset.${k}.label`);
 family('reco.preset.*.hint', RECO_WEIGHT_PRESETS.map(p => p.key), k => `reco.preset.${k}.hint`);
+
+/**
+ * The reco-profile page. The verdict chip sits on the §8 diagnostic line under
+ * every staff slider — "the cheapest defence in the design" — so a missing key
+ * would print a raw dotted string on exactly the sentence that says whether a
+ * slider learned anything. All three families come from runtime arrays the
+ * page itself maps over.
+ */
+family('profiles.preset.*', PROFILE_PRESETS.map(p => p.key), k => `profiles.preset.${k}`);
+family('profiles.presetHint.*', PROFILE_PRESETS.map(p => p.key), k => `profiles.presetHint.${k}`);
+family('profiles.verdict.*', FAMILY_VERDICTS, v => `profiles.verdict.${v}`);
+family('profiles.pool.*', PREVIEW_POOLS, p => `profiles.pool.${p}`);
+family('profiles.poolHint.*', PREVIEW_POOLS, p => `profiles.poolHint.${p}`);
 
 /** `VIEW_PRESETS` is deliberately untranslated data; the keys derive from it. */
 family('views.*.label', VIEW_PRESETS.map(p => p.key), k => `views.${k}.label`);

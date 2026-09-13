@@ -17,6 +17,8 @@ export { useCatchUpUrlState, CATCH_UP_DEFAULTS, toCatchUpQuery } from './useCatc
 export type { CatchUpUrlState, UseCatchUpUrlStateReturn } from './useCatchUpUrlState';
 export { useBoxUrlState, BOX_DEFAULTS } from './useBoxUrlState';
 export type { BoxUrlState, BoxTab, UseBoxUrlStateReturn } from './useBoxUrlState';
+export { useProfileUrlState, PROFILE_URL_DEFAULTS, toProfileQuery, decodeProfileQuery } from './useProfileUrlState';
+export type { ProfileUrlState, UseProfileUrlStateReturn } from './useProfileUrlState';
 export { useActivityUrlState, ACTIVITY_DEFAULTS, toActivityQuery } from './useActivityUrlState';
 export type { ActivityUrlState, UseActivityUrlStateReturn } from './useActivityUrlState';
 

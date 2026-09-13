@@ -30,6 +30,7 @@ import BoxEntryList from '@/components/anime/boxes/BoxEntryList';
 import BoxCompositionBlock from '@/components/anime/boxes/BoxCompositionBlock';
 import QuickEdit from '@/components/anime/boxes/QuickEdit';
 import BoxRecos from '@/components/anime/boxes/BoxRecos';
+import BoxProfileControl from '@/components/anime/boxes/BoxProfileControl';
 import { useBoxUrlState, type BoxTab } from '@/hooks';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import { startLoadProbe } from '@/lib/clientPerf';
@@ -276,12 +277,24 @@ export default function BoxV2DetailPage() {
       {data?.missing.length ? (
         <span className="bx2d-metaSep">{t('boxes.missing', { count: data.missing.length })}</span>
       ) : null}
+      {/* Read-only here — the attach control is edition's, because a profile
+          changes how the box RANKS (phase 3 put it on the PUT for that reason). */}
+      {box?.profile ? (
+        <span className="bx2d-metaSep">
+          <Link href={`/profiles/${encodeURIComponent(box.profile.id)}?box=${encodeURIComponent(box.id)}`} className="bx2d-profile">
+            {box.profile.emoji ?? '🎚'} {t('boxes.profileAttached', { name: box.profile.name })}
+          </Link>
+        </span>
+      ) : box?.profileId ? (
+        <span className="bx2d-metaSep" title={t('boxes.profileDanglingHint')}>{t('boxes.profileDangling')}</span>
+      ) : null}
     </p>
   );
 
   return (
     <>
-      <Head><title>{box ? `${box.emoji} ${box.name}` : t('boxes.title')} — Anime Tracker</title></Head>
+      {/* One string: React warns on (and drops) a <title> with several children. */}
+      <Head><title>{`${box ? `${box.emoji} ${box.name}` : t('boxes.title')} — Anime Tracker`}</title></Head>
 
       {/* Edition and the recos grid get a wider canvas — see the rule in the
           style block. */}
@@ -360,6 +373,11 @@ export default function BoxV2DetailPage() {
                 aria-label={t('boxes.descPlaceholder')}
               />
               {meta}
+              <BoxProfileControl
+                boxId={box.id}
+                profileId={box.profile ? box.profile.id : null}
+                onAttach={profileId => write({ profileId })}
+              />
             </div>
             <div className="bx2d-actions">
               <button
@@ -716,6 +734,8 @@ export default function BoxV2DetailPage() {
         .bx2d .bx2d-count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
         .bx2d .bx2d-metaSep::before { content: '·'; margin-right: 10px; color: var(--border-hover); }
 
+        .bx2d .bx2d-profile { color: var(--text-secondary); text-decoration: none; }
+        .bx2d .bx2d-profile:hover { color: var(--accent-primary); }
         .bx2d .bx2d-back { color: var(--text-muted); font-size: 0.82rem; text-decoration: none; }
         .bx2d .bx2d-back:hover { color: var(--text-primary); }
 

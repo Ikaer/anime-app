@@ -215,6 +215,35 @@ export function resolveProfileOver<K extends string>(
   return resolveProfile(base, { ...profile, ...overrides } as ProfileWeights);
 }
 
+/**
+ * The preview's pools (`reco/profilePreview.ts` has the why of each). Here
+ * rather than beside the engine because the profile page renders a tab per pool
+ * and that module is server-only — the `BOX_WEIGHTS` move's reason.
+ */
+export const PREVIEW_POOLS = ['catalog', 'statused', 'anchored'] as const;
+export type PreviewPool = typeof PREVIEW_POOLS[number];
+
+/**
+ * Set one slider — the key becomes PRESENT, whatever the value, because the
+ * owner moved it (sparse by intent: dragging back to exactly the base is still
+ * a statement). Returns a new map; the caller's is never mutated.
+ */
+export function setProfileField(weights: ProfileWeights, field: ProfileField, value: number): ProfileWeights {
+  return { ...weights, [field]: value };
+}
+
+/**
+ * Reset one slider — the key is DELETED, so the field goes back to inheriting
+ * each ranker's own base. ⚠️ Writing the displayed base value instead would
+ * freeze ONE base into the map (`BOX_WEIGHTS.genre` 0.25) and the other ranker
+ * (`ANCHORED_WEIGHTS.genre` 0.2) would silently rank with it.
+ */
+export function resetProfileField(weights: ProfileWeights, field: ProfileField): ProfileWeights {
+  const next = { ...weights };
+  delete next[field];
+  return next;
+}
+
 /** A shipped starting point — sparse, merged like `RECO_WEIGHT_PRESETS`. */
 export interface ProfilePreset {
   /** i18n: `profiles.preset.<key>` / `profiles.presetHint.<key>`. */

@@ -17,6 +17,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { AnimePageLayout, AnimeListHeader, AnimeCardView } from '@/components/anime';
 import {
   MixAnchorsSection,
@@ -41,6 +42,7 @@ interface MixSources {
 
 export default function MixPage() {
   const { t, lang } = useI18n();
+  const router = useRouter();
   const { state, update, addAnchor, removeAnchor, setCardsPerRow, isReady } = useMixUrlState();
 
   const [animes, setAnimes] = useState<RecoCard[]>([]);
@@ -187,6 +189,19 @@ export default function MixPage() {
             <Button variant="secondary" size="xs" onClick={() => setShowAllExplains(v => !v)}>
               {showAllExplains ? t('reco.hideExplains') : t('reco.showExplains')}
             </Button>
+            {/* A mix is an ad-hoc anchor set, which is exactly what a reco
+                profile can be tested on — `a=` is the profile page's key too,
+                so the picks carry over without retyping (DESIGN §8). */}
+            {state.anchors.length > 0 && (
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={() => router.push(`/profiles?a=${state.anchors.join(',')}`)}
+                title={t('mix.testProfileHint')}
+              >
+                🎚 {t('mix.testProfile')}
+              </Button>
+            )}
           </AnimeListHeader>
 
           <div className="cards-container">

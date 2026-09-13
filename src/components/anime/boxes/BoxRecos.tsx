@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import AnimeCardView from '../AnimeCardView';
 import AnimeListHeader from '../AnimeListHeader';
 import { useT } from '@/lib/i18n';
@@ -49,11 +50,25 @@ export interface BoxRecosProps {
 
 type FeedCard = AnimeRecord & { recoMeta: RecoMeta };
 
+/** `mix?box=`'s echo of the box's reco profile — present only when one applied. */
+interface AppliedProfile {
+  id: string;
+  name: string;
+  emoji?: string;
+  staffZeroed: boolean;
+}
+
 const BoxRecos: React.FC<BoxRecosProps> = ({
   boxId, includeSeen, onIncludeSeenChange, cardsPerRow, onCardsPerRowChange, onVerdict, reloadToken,
 }) => {
   const t = useT();
   const [feed, setFeed] = useState<FeedCard[]>([]);
+  /**
+   * The profile the route ranked with. Stated on the tab because it is the one
+   * surface where a profile visibly acts — a ranking re-weighted by a setting
+   * the tab does not name would read as the engine's own verdict.
+   */
+  const [profile, setProfile] = useState<AppliedProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   /**
@@ -72,7 +87,9 @@ const BoxRecos: React.FC<BoxRecosProps> = ({
     fetch(`/api/anime/recommendations/mix?box=${encodeURIComponent(boxId)}` +
           (includeSeen ? '&includeSeen=true' : ''))
       .then(res => { if (!res.ok) throw new Error('mix'); return res.json(); })
-      .then((data: { animes?: FeedCard[] }) => { if (!cancelled) { setFeed(data.animes ?? []); setError(''); } })
+      .then((data: { animes?: FeedCard[]; profile?: AppliedProfile }) => {
+        if (!cancelled) { setFeed(data.animes ?? []); setProfile(data.profile ?? null); setError(''); }
+      })
       .catch(() => { if (!cancelled) setError(t('boxes.loadError')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -107,6 +124,19 @@ const BoxRecos: React.FC<BoxRecosProps> = ({
       <p className={styles.hint}>
         {includeSeen ? t('boxReco.labelHint') : t('boxReco.watchHint')}
       </p>
+      {profile && (
+        <p className={styles.profile}>
+          {profile.emoji ?? '🎚'} {t('boxReco.profile', { name: profile.name })}
+          {profile.staffZeroed && <span className={styles.profileNote}> · {t('boxReco.profileStaffZeroed')}</span>}
+          {' '}
+          <Link
+            href={`/profiles/${encodeURIComponent(profile.id)}?box=${encodeURIComponent(boxId)}&pool=anchored`}
+            className={styles.profileLink}
+          >
+            {t('boxes.profileTune')} →
+          </Link>
+        </p>
+      )}
 
       {error && <p className={styles.error}>{error}</p>}
       {loading ? (

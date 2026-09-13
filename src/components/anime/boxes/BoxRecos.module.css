@@ -29,5 +29,26 @@
   max-width: 110ch;
 }
 
+/* Which reco profile ranked this tab — right under the tab's instructions,
+   because it changes what the cards below mean. */
+.profile {
+  margin: -8px 0 16px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.profileNote {
+  color: #f59e0b;
+}
+
+.profileLink {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.profileLink:hover {
+  color: var(--accent-primary);
+}
+
 .note { color: var(--text-muted); font-size: 0.85rem; padding: 16px 0; }
 .error { color: var(--accent-danger); font-size: 0.85rem; }
