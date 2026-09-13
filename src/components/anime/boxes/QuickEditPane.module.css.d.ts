@@ -13,8 +13,10 @@ declare const styles: {
   readonly "group": string;
   readonly "groupAct": string;
   readonly "groupActAdd": string;
+  readonly "groupActRemove": string;
   readonly "groupActs": string;
   readonly "groupBody": string;
+  readonly "groupBtns": string;
   readonly "groupCount": string;
   readonly "groupHead": string;
   readonly "groupName": string;

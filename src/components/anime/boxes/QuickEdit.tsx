@@ -629,6 +629,15 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
               onToggleSelect={(id, shift) => select('box', id, shift)}
               onRemove={ids => act({ remove: ids })}
               onUndeclare={id => act({ undeclare: [id] })}
+              // ⚠️ Every member FILED here, not just the card's: the card lists
+              // only what the rail's filters let through, and taking half a show
+              // out while dropping its declaration would leave the rest filed and
+              // counted one by one. One write, so the two halves cannot diverge.
+              onRemoveGroup={id => {
+                const group = groups.find(g => g.id === id);
+                const filed = group ? group.members.filter(m => memberIds.has(m)) : [];
+                return act(filed.length > 0 ? { remove: filed, undeclare: [id] } : { undeclare: [id] });
+              }}
               onOpenGroup={g => setBlade({ group: g })}
               onCreateGroup={id => setBlade({ seedFrom: id })}
               onDropIds={ids => act({ add: ids })}

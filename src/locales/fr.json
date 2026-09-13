@@ -902,6 +902,7 @@
   "quickEdit.remainingOne": "1 restant",
   "quickEdit.present": "{count} ici",
   "quickEdit.undeclare": "Compter séparément",
+  "quickEdit.removeGroup": "Retirer de la boîte",
   "quickEdit.nudge": "Ces {count} entrées appartiennent au regroupement « {name} ».",
   "quickEdit.nudgeYes": "Les compter comme une seule",
   "quickEdit.groupsIndex": "Mes regroupements",

@@ -83,6 +83,8 @@ export interface QuickEditPaneProps {
   onRemove?: (ids: string[]) => void;
   /** box: stop counting a declared group as one unit. */
   onUndeclare?: (groupId: string) => void;
+  /** box: take a declared group's titles out of the box AND stop declaring it. */
+  onRemoveGroup?: (groupId: string) => void;
   onOpenGroup: (group: GroupSummary) => void;
   onCreateGroup: (seedFrom: string) => void;
   /** Ids dropped onto this pane. */
@@ -122,7 +124,7 @@ export interface QuickEditPaneProps {
 
 const QuickEditPane: React.FC<QuickEditPaneProps> = ({
   variant, title, rows, groupRegions, groupsByAnime, selected,
-  onToggleSelect, onAdd, onExclude, onRemove, onUndeclare,
+  onToggleSelect, onAdd, onExclude, onRemove, onUndeclare, onRemoveGroup,
   onOpenGroup, onCreateGroup, onDropIds, children, groupsOnly, after, loading, collapsible,
 }) => {
   const t = useT();
@@ -329,17 +331,28 @@ const QuickEditPane: React.FC<QuickEditPaneProps> = ({
                         </button>
                       )}
 
-                      {/* ⚠️ Every card in the BOX pane is a DECLARED group, so the
-                          only action here is to stop declaring it. An undeclared
+                      {/* ⚠️ Every card in the BOX pane is a DECLARED group, so its
+                          two actions are to stop declaring it (titles stay) or to
+                          take the whole show out (titles AND declaration go). An undeclared
                           group whose members happen to be in the box is offered as a
                           nudge ABOVE the pane instead — putting it in this region
                           would break what the region means (§6.2: it is a picture of
                           how the ranker sees the box, and an undeclared group casts
                           no collapsed vote). */}
                       {variant === 'box' && (
-                        <button type="button" className={styles.groupAct} onClick={() => onUndeclare?.(group.id)}>
-                          {t('quickEdit.undeclare')}
-                        </button>
+                        <span className={styles.groupBtns}>
+                          <button type="button" className={styles.groupAct} onClick={() => onUndeclare?.(group.id)}>
+                            {t('quickEdit.undeclare')}
+                          </button>
+                          {/* The whole show out in one click. Without it, taking a
+                              group out meant expanding the card and pressing − on
+                              every entry — and the declaration stayed behind,
+                              still counted in the header's « N regroupements ». */}
+                          <button type="button" className={`${styles.groupAct} ${styles.groupActRemove}`}
+                            onClick={() => onRemoveGroup?.(group.id)}>
+                            − {t('quickEdit.removeGroup')}
+                          </button>
+                        </span>
                       )}
                     </span>
                   </span>

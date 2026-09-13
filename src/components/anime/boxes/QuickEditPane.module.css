@@ -362,6 +362,24 @@
   color: var(--text-primary);
 }
 
+/* The box card's two actions side by side. The pull to the edge moves to the
+   pair, or the first button's own negative margin would overlap the second. */
+.groupBtns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: -8px;
+}
+
+.groupBtns .groupAct {
+  margin-right: 0;
+}
+
+.groupActRemove:hover {
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
+}
+
 /* « Ajouter les N » — the positive one, so it carries the accent in its text. */
 .groupActAdd {
   color: var(--accent-primary);

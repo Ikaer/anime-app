@@ -902,6 +902,7 @@
   "quickEdit.remainingOne": "1 left",
   "quickEdit.present": "{count} here",
   "quickEdit.undeclare": "Count separately",
+  "quickEdit.removeGroup": "Remove from the box",
   "quickEdit.nudge": "These {count} entries belong to the group “{name}”.",
   "quickEdit.nudgeYes": "Count them as one",
   "quickEdit.groupsIndex": "My groups",
