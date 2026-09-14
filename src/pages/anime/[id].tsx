@@ -235,7 +235,15 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         </div>
       )}
 
-      <div className="page">
+      {/* Keyed on the title: a client-side hop from /anime/A to /anime/B (the
+          global search, a related card) is the same page component with new
+          props, so React keeps every child's state. CastSection then showed A's
+          cast on B forever — its sync effect ignores a null `initialCast` and
+          its fetch skips when it already holds a cast — and MoreLikeThis /
+          PersonalStateEditor carried A's results and write outcomes the same
+          way. A refresh (`router.replace` on the same id) keeps the key, so it
+          still re-renders in place rather than remounting. */}
+      <div className="page" key={anime.id}>
         <div className="topbar">
           <Link href="/" className="back">{t('detail.back')}</Link>
           <div className="ext-links">
