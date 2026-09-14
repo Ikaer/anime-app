@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
@@ -230,9 +231,11 @@ export default function QuickRatePage() {
         </div>
         <div className="member-body">
           <div className="member-head">
-            <a className="member-title" href={`/anime/${m.id}`} target="_blank" rel="noopener noreferrer">
+            {/* Same tab like every in-app link, so back returns here; a
+                middle-click still opens a new one. */}
+            <Link className="member-title" href={`/anime/${m.id}`}>
               {m.title}
-            </a>
+            </Link>
             <span className="member-meta">
               {m.year ? `${m.year} · ` : ''}
               {m.mediaType ? m.mediaType.toUpperCase() : ''}

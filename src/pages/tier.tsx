@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { AnimePageLayout, AnimeListHeader } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import SeasonFilter from '@/components/anime/SeasonFilter';
@@ -541,15 +542,15 @@ export default function TierPage() {
             title={t('tier.gapChipHint', { provider: vsProvider === 'anilist' ? 'AniList' : 'MAL' })}
           >{gap === 0 ? '=' : gap > 0 ? `+${gap}` : `−${-gap}`}</span>
         )}
-        <a
+        {/* Same tab like every in-app link, so back returns to the board; a
+            middle-click still opens a new one. */}
+        <Link
           className="detail-link"
           href={`/anime/${a.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
           draggable={false}
           onClick={(e) => e.stopPropagation()}
           title={t('table.localInfo')}
-        >↗</a>
+        >↗</Link>
         {isSaving && <span className="badge saving">…</span>}
         {!isSaving && fail && <span className="badge fail" title={fail}>!</span>}
       </div>
