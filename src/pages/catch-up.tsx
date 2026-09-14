@@ -12,6 +12,7 @@
  */
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
@@ -73,12 +74,12 @@ export default function CatchUpPage() {
 
   /** One hole. The card IS the answer, so it gets the poster and the metadata. */
   const renderMissing = (e: CatchUpEntry) => (
-    <a
+    // Same tab, like every other in-app link to a detail page, so the back
+    // button returns here; a middle-click still opens a new tab.
+    <Link
       key={e.id}
       className="miss"
       href={`/anime/${e.id}`}
-      target="_blank"
-      rel="noopener noreferrer"
       // The card clamps the title to two lines, and a franchise's entries are
       // exactly the titles that differ only in their tail ("… -The First Kiss
       // That Never Ends-"), so the full string has to stay reachable.
@@ -101,24 +102,22 @@ export default function CatchUpPage() {
         {e.numEpisodes ? ` · ${t('catchUp.epCount', { count: e.numEpisodes })}` : ''}
       </div>
       {e.mean ? <div className="miss-mean">★ {e.mean.toFixed(2)}</div> : null}
-    </a>
+    </Link>
   );
 
   /** One entry you already have a status on — context, not the answer. */
   const renderSeen = (e: CatchUpEntry) => (
-    <a
+    <Link
       key={e.id}
       className="seen"
       href={`/anime/${e.id}`}
-      target="_blank"
-      rel="noopener noreferrer"
       title={`${e.title} — ${t(`statusShort.${e.status}` as TranslationKey)}${e.score ? ` · ${e.score}/10` : ''}`}
     >
       {e.picture
         ? <img src={e.picture} alt="" loading="lazy" />
         : <span className="noimg">{e.title.slice(0, 2)}</span>}
       {e.score ? <span className="seen-score">{e.score}</span> : null}
-    </a>
+    </Link>
   );
 
   const sidebar = (

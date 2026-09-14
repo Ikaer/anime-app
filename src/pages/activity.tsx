@@ -17,6 +17,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { AnimePageLayout } from '@/components/anime';
 import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
@@ -159,13 +160,14 @@ export default function ActivityPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Same tab, like every other in-app link to a detail page: the row used to
+  // open a new tab, which has no history, so the browser's back button could
+  // never return to the feed.
   const renderRow = (e: ActivityEntry) => (
-    <a
+    <Link
       key={`${e.id}-${e.watchedAt}`}
       className="row"
       href={`/anime/${e.id}`}
-      target="_blank"
-      rel="noopener noreferrer"
       title={e.title}
     >
       <span className="time">{timeLabel(e.watchedAt)}</span>
@@ -195,7 +197,7 @@ export default function ActivityPage() {
         )}
         {e.score ? <span className="score">{e.score}</span> : null}
       </span>
-    </a>
+    </Link>
   );
 
   const sidebar = (
