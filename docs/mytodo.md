@@ -5,6 +5,8 @@ deliberately not done) live in [DECISIONS.md](DECISIONS.md), not here.
 
 ## Features
 
+- **SIMKL** - oauthV2 à implementer https://api.simkl.org/guides/migrating-v1-to-v2 (EOS AuthV1 april 2027)
+- **SIMKL** - check if https://api.simkl.org/guides/custom-lists can give us some box infos/recos
 - **Youtube** - I watch some anime on youtube (specially mini, ova, etc) and I would like to have a way to add them to my list. I know that
   there is a way to add them manually, but it is not very practical. I would like
   to have a way to add them automatically, like the other providers.
