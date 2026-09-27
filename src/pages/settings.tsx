@@ -7,6 +7,7 @@ import type { CatalogSource } from '@/models/anime';
 import { MEDIA_TYPES, VIEW_PRESETS } from '@/lib/url/animeParams';
 import { TITLE_LANGUAGES, type TitleLanguage, type ViewDefaults } from '@/lib/url/viewDefaults';
 import useViewDefaults from '@/hooks/useViewDefaults';
+import { copyText } from '@/lib/clipboard';
 
 /**
  * Runtime settings page. Enters the data/log folders (Tier 0, → config.json),
@@ -250,24 +251,11 @@ export default function SettingsPage() {
   }, []);
 
   const copy = useCallback((text: string, key: string) => {
-    const done = () => {
+    copyText(text).then(ok => {
+      if (!ok) return;
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 1500);
-    };
-    // HTTP (NAS) has no navigator.clipboard — fall back to execCommand.
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text).then(done, () => {});
-    } else {
-      const el = document.createElement('textarea');
-      el.value = text;
-      el.style.position = 'fixed';
-      el.style.opacity = '0';
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      document.body.removeChild(el);
-      done();
-    }
+    });
   }, []);
 
   // The redirect URI is derived from the request host, not stored: it is shown

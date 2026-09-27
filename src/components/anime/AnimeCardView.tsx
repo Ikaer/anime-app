@@ -8,6 +8,7 @@ import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/sear
 import { useT, TFunction, TranslationKey } from '@/lib/i18n';
 import { Button } from '@/components/shared';
 import DiscrepancyBadge from './DiscrepancyBadge';
+import { copyText } from '@/lib/clipboard';
 import styles from './AnimeCardView.module.css';
 
 type RecoCard = AnimeRecord & {
@@ -135,23 +136,11 @@ export default function AnimeCardView({
     }, []);
 
     const copyToClipboard = useCallback((text: string, key: string) => {
-        const done = () => {
+        copyText(text).then(ok => {
+            if (!ok) return;
             setCopiedKey(key);
             setTimeout(() => setCopiedKey(null), 1500);
-        };
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(done);
-        } else {
-            const el = document.createElement('textarea');
-            el.value = text;
-            el.style.position = 'fixed';
-            el.style.opacity = '0';
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-            done();
-        }
+        });
     }, []);
 
     if (animes.length === 0) {
