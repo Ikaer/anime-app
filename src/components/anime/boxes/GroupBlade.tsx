@@ -60,12 +60,15 @@ export interface GroupBladeProps {
    */
   onSaved: (group: GroupSummary, created: boolean, file: boolean) => void;
   /**
-   * Offer « Créer et ajouter à la boîte » when drafting a NEW group. Quick edit
-   * sets it: a group created while filling a box is, nearly every time, a group
-   * the owner means to file there, and without the shortcut that took scrolling
-   * to the new card, « Ajouter les N », and scrolling back to find their place.
-   * Never offered when editing — changing an existing definition is not a
-   * statement about this box.
+   * Offer « Créer / Enregistrer et ajouter à la boîte ». Quick edit sets it: a
+   * group created while filling a box is, nearly every time, a group the owner
+   * means to file there, and without the shortcut that took scrolling to the new
+   * card, « Ajouter les N », and scrolling back to find their place.
+   * ⚠️ Offered for an EXISTING group too, but only when the caller says there is
+   * something to do (entries left to file, or the group undeclared here). The
+   * box-side chip on a lone filed title — one season accepted from the recos
+   * tab — opens exactly this blade, and a plain « Enregistrer » there saved an
+   * unchanged definition and did nothing the owner could see.
    */
   canFile?: boolean;
   /**
@@ -189,7 +192,7 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
   }, []);
 
   const checked = rows.filter(r => r.checked);
-  const offerFile = !!canFile && !group;
+  const offerFile = !!canFile;
 
   const save = useCallback(async (file: boolean) => {
     const trimmed = name.trim();
@@ -220,7 +223,7 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
           body: JSON.stringify({ name: trimmed }),
         });
       }
-      onSaved({ ...saved, name: trimmed, members }, !group, file && !group);
+      onSaved({ ...saved, name: trimmed, members }, !group, file);
     } catch {
       setError(t('groups.saveError'));
     } finally {
@@ -383,7 +386,7 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
             onClick={() => save(true)}
             disabled={saving || !name.trim() || checked.length === 0}
           >
-            {saving ? t('groups.saving') : t('groups.saveAndFile')}
+            {saving ? t('groups.saving') : group ? t('groups.saveAndFileExisting') : t('groups.saveAndFile')}
           </button>
         )}
       </aside>

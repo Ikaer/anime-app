@@ -700,16 +700,20 @@ const QuickEdit: React.FC<QuickEditProps> = ({ boxId, members, declared, exclude
           seedFrom={blade.seedFrom}
           group={blade.group}
           allGroups={groups}
-          canFile
+          // A new group can always be filed. An existing one only when filing
+          // would change something: entries still to add, or not declared here.
+          canFile={!blade.group
+            || groupMembersToFile(blade.group.members, watchedIds, memberIds, excludedIds).length > 0
+            || !declared.includes(blade.group.id)}
           onClose={() => setBlade(null)}
-          onSaved={async (saved, created, file) => {
+          onSaved={async (saved, _created, file) => {
             setBlade(null);
-            // « Créer et ajouter à la boîte »: the same `{ add, declare }` pair a
+            // « Créer / Enregistrer et ajouter à la boîte »: the same `{ add, declare }` pair a
             // group card's « Ajouter les N » sends, so the rows move at once and
             // the box-side card appears on the reload (`declare` is not
             // optimistic — see `act`). The declare still goes when nothing is
             // left to add: everything filed is exactly when collapsing matters.
-            const filing = created && file
+            const filing = file
               ? (() => {
                   const add = groupMembersToFile(saved.members, watchedIds, memberIds, excludedIds);
                   return act(add.length > 0 ? { add, declare: [saved.id] } : { declare: [saved.id] });

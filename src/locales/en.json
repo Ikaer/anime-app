@@ -952,6 +952,7 @@
   "groups.selected": "{count} entries",
   "groups.save": "Save",
   "groups.saveAndFile": "Create and add to the box",
+  "groups.saveAndFileExisting": "Save and add to the box",
   "groups.saving": "Saving…",
   "groups.cancel": "Cancel",
   "groups.loadError": "Could not load.",
