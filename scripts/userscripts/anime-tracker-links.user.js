@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Anime Tracker — liens depuis SIMKL / MAL
 // @namespace    anime-tracker
-// @version      1.0
+// @version      1.1
 // @description  Ajoute un lien vers l'Anime Tracker sur les pages anime de SIMKL et MyAnimeList.
 // @match        https://simkl.com/anime/*
 // @match        https://myanimelist.net/anime/*
@@ -29,8 +29,13 @@
   function injectSimkl() {
     if (document.querySelector(`[${MARK}]`)) return;
     const simklId = idFrom(location.pathname, /^\/anime\/(\d+)/);
-    const malCell = document.querySelector('td.SimklTVAboutRatingsBlockTD.mal-rating');
-    if (!simklId || !malCell) return;
+    // No MAL block on titles MAL has no score for yet (a new season); fall back
+    // to SIMKL's own block, which every page carries.
+    const anchor =
+      document.querySelector('td.SimklTVAboutRatingsBlockTD.mal-rating') ??
+      document.querySelector('td.SimklTVAboutRatingsBlockTD.simkl-rating') ??
+      document.querySelector('td.SimklTVAboutRatingsBlockTD');
+    if (!simklId || !anchor) return;
 
     const params = new URLSearchParams();
     const mal = idFrom(document.querySelector('a[href*="myanimelist.net/anime/"]')?.href, /myanimelist\.net\/anime\/(\d+)/);
@@ -53,7 +58,7 @@
           </tbody>
         </table>
       </a>`;
-    malCell.after(cell);
+    anchor.after(cell);
   }
 
   // MAL: a small pill beside the title.
