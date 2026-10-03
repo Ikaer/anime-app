@@ -193,6 +193,7 @@
   "card.goodPickTitle": "Good pick — reinforces this kind of suggestion",
   "card.goodPick": "👍 Good pick",
   "card.notForMeTitle": "Not for me — hides and penalizes this kind of suggestion",
+  "card.notForMeSecondChanceTitle": "Not for me — removes it from second chance (it already counts as a rejection, so no ranking changes)",
   "card.notForMe": "👎 Not for me",
 
   "mlt.title": "More like this",
@@ -607,6 +608,8 @@
   "reco.neverRefreshed": "Never refreshed",
   "reco.goodPicks": "👍 Good picks",
   "reco.notForMe": "👎 Not for me",
+  "reco.secondChance": "🔁 Second chance",
+  "reco.secondChanceHint": "Your dropped anime, ranked by the same engine: the ones your favourites point to most may deserve another try",
   "reco.type": "Type:",
   "reco.malMean": "MAL score (mean):",
   "reco.year": "Year:",

@@ -45,6 +45,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const divRaw = typeof req.query.diversity === 'string' ? parseFloat(req.query.diversity) : NaN;
     const diversity = Number.isFinite(divRaw) ? divRaw : null;
     const lang = req.query.lang === 'en' ? 'en' : 'fr';
+    // « Seconde chance »: same ranking, over the dropped titles (see FeedOptions.pool).
+    const pool = req.query.pool === 'dropped' ? 'dropped' : 'unseen';
 
     const data = getRecommendationsData();
     const titleLang = getTitleLanguage();
@@ -55,6 +57,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       diversity,
       lang,
       titleLang,
+      pool,
     });
     const animes = applyNarrowingFilters(ranked, narrowing);
 
@@ -64,6 +67,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       lastRefresh: data.lastRefresh,
       seedThreshold: data.seedThreshold,
       nicheMode: niche,
+      pool,
       /**
        * The muted seeds' review-and-undo list, resolved to titles here rather
        * than behind its own endpoint: the page already makes this request on

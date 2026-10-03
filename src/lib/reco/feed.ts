@@ -28,7 +28,7 @@ import {
   popularityScale,
   buildFieldProfile,
   buildFieldProfileSet,
-  buildDiscriminativeProfiles,
+  discriminativeProfilesBuilder,
   fieldMatch,
   isPrematureSequel,
   seedWeight,
@@ -64,7 +64,16 @@ export interface FeedOptions {
   lang?: Lang;
   /** Which of a title's three names seed/candidate titles are built from. */
   titleLang: TitleLanguage;
+  /**
+   * Which population is ranked. `unseen` (default) is the feed. `dropped` is
+   * « Seconde chance »: the SAME engine — seeds, crowd edges, taste profiles,
+   * weights — pointed at the titles the owner abandoned, so the question
+   * becomes "which of my drops do the things I love say I should retry".
+   */
+  pool?: FeedPool;
 }
+
+export type FeedPool = 'unseen' | 'dropped';
 
 // ============================================================================
 // Seeds
@@ -278,6 +287,19 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     }
   }
 
+  /**
+   * « Seconde chance »: every drop is a candidate, not only the ones a crowd
+   * edge reaches (66 of 120 on the live store). An unreached drop simply scores
+   * 0 on `crowd` and is ranked on its metadata — hiding it would make the view
+   * claim the crowd had judged titles it never mentioned.
+   */
+  const droppedPool = options.pool === 'dropped';
+  if (droppedPool) {
+    for (const a of all) {
+      if (getEffectiveStatus(a) === 'dropped' && !acc.has(a.id)) acc.set(a.id, { affinity: 0, perSeed: new Map() });
+    }
+  }
+
   // Effective weights = defaults overridden by the caller's knobs.
   const weights: SourceWeights = { ...DEFAULT_WEIGHTS, ...(options.weights || {}) };
 
@@ -293,7 +315,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // dislikes) rather than the plain tally: a genre you complete and drop at the
   // same rate now scores on neither side instead of on both. The other four
   // fields have no negative counterpart and keep the plain profile.
-  const disc = buildDiscriminativeProfiles(all, downIds, idf, { animes: seeds, weight: seedW });
+  const discFor = discriminativeProfilesBuilder(all, downIds, idf, { animes: seeds, weight: seedW });
+  const disc = discFor();
   const pos = { ...buildFieldProfileSet(seeds, seedW, idf), genre: disc.posGenre, studio: disc.posStudio };
   // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
   // numeric score). Its own weighted source, separate from the MAL-seed genre /
@@ -303,8 +326,6 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     genre: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.genre, idf.genre),
     studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
   };
-
-  const { negGenre, negStudio, negStaffT1 } = disc;
 
   // Pass 1: apply hard filters and gather the maxima used to normalize the
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
@@ -319,7 +340,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
 
     // Hard filters (spec §5.3)
     const st = getEffectiveStatus(anime);
-    if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
+    if (droppedPool) {
+      if (st !== 'dropped') continue;
+    } else if (st && SEEN_STATUSES.has(st)) continue; // already seen (plan_to_watch allowed)
     // « À revoir » / « Sans avis » — the owner has said outright they are not
     // scoring this one. Stated separately rather than left to the SEEN check
     // above: it holds for the same reason `hidden` does (an explicit "stop
@@ -348,8 +371,15 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // retain the per-source breakdown for the on-demand "Pourquoi ?" explain.
   const items: RecommendationItem[] = [];
   for (const { anime, a, candId } of eligible) {
-    const genreM = fieldMatch(anime, pos.genre);
-    const studioM = fieldMatch(anime, pos.studio);
+    // Every « Seconde chance » candidate sits in the dislike set itself, so its
+    // netted pair is rebuilt without it (see `discriminativeProfilesBuilder`). The feed's candidates are
+    // unseen and never in that set, so it keeps the one shared pass.
+    const own = droppedPool
+      ? discFor(anime.id)
+      : disc;
+    const { negGenre, negStudio, negStaffT1 } = own;
+    const genreM = fieldMatch(anime, own.posGenre);
+    const studioM = fieldMatch(anime, own.posStudio);
     const nsfwM = fieldMatch(anime, pos.nsfw);
     const ratingM = fieldMatch(anime, pos.rating);
     const anilistTagsM = fieldMatch(anime, pos.anilistTags);

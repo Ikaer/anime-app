@@ -71,6 +71,7 @@ export default function RecommendationsPage() {
       if (state.review) {
         params.set('review', state.review);
       } else {
+        if (state.secondChance) params.set('pool', 'dropped');
         if (state.nicheMode) params.set('nicheMode', 'true');
         if (state.threshold !== null) params.set('threshold', String(state.threshold));
         if (state.diversity !== null && state.diversity > 0) params.set('diversity', String(state.diversity));
@@ -214,8 +215,9 @@ export default function RecommendationsPage() {
           onNicheModeChange={(v) => update({ nicheMode: v })}
           onThresholdChange={(v) => update({ threshold: v })}
           onDiversityChange={(v) => update({ diversity: v })}
-          onShowLiked={() => update({ review: 'up' })}
-          onShowDisliked={() => update({ review: 'down' })}
+          onShowLiked={() => update({ review: 'up', secondChance: false })}
+          onShowDisliked={() => update({ review: 'down', secondChance: false })}
+          onShowSecondChance={() => update({ secondChance: true, review: null })}
         />
       </CollapsibleSection>
 
@@ -296,7 +298,8 @@ export default function RecommendationsPage() {
             title={
               state.review === 'up' ? t('reco.goodPicks')
                 : state.review === 'down' ? t('reco.notForMe')
-                  : t('nav.forYou')
+                  : state.secondChance ? t('reco.secondChance')
+                    : t('nav.forYou')
             }
             count={state.review
               ? (
@@ -304,7 +307,16 @@ export default function RecommendationsPage() {
                   {t('reco.backToRecos')}
                 </Button>
               )
-              : t('reco.countTitles', { count: animes.length })}
+              : state.secondChance
+                ? (
+                  <>
+                    {t('reco.countTitles', { count: animes.length })}{' '}
+                    <Button variant="secondary" size="xs" onClick={() => update({ secondChance: false })}>
+                      {t('reco.backToRecos')}
+                    </Button>
+                  </>
+                )
+                : t('reco.countTitles', { count: animes.length })}
             display={{
               cardsPerRow: state.cardsPerRow,
               onCardsPerRowChange: setCardsPerRow,
@@ -324,7 +336,7 @@ export default function RecommendationsPage() {
                 cardsPerRow={state.cardsPerRow}
                 onFeedback={handleFeedback}
                 onRemoveFeedback={handleRemoveFeedback}
-                feedbackMode={state.review ?? 'feed'}
+                feedbackMode={state.review ?? (state.secondChance ? 'secondChance' : 'feed')}
                 allExplainsOpen={showAllExplains}
                 onMuteSeed={state.review ? undefined : (seedId) => setSeedMute(seedId, true)}
               />

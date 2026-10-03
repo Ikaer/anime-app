@@ -24,6 +24,12 @@ export interface RecoUrlState {
   diversity: number | null;
   /** Sub-view: show a feedback review list ('up' = bonnes pioches, 'down' = pas pour moi) instead of the feed. */
   review: RecoVerdict | null;
+  /**
+   * « Seconde chance »: rank the owner's DROPPED titles instead of the unseen
+   * ones. Same engine and knobs; only the population changes. A review list
+   * (`review`) wins over it — both are ways out of the feed.
+   */
+  secondChance: boolean;
   /** Narrowing filters (shared semantics with the main list). */
   mediaTypes: string[];
   search: string;
@@ -47,6 +53,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   weights: DEFAULT_WEIGHTS,
   diversity: null,
   review: null,
+  secondChance: false,
   mediaTypes: [],
   search: '',
   minScore: null,
@@ -63,6 +70,7 @@ const KEYS = {
   weights: 'w',
   diversity: 'div',
   review: 'rev',
+  secondChance: 'sc',
   mediaType: 'mt',
   search: 'q',
   minScore: 'min',
@@ -84,6 +92,7 @@ function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlSta
     weights: resolveWeights(parseSourceWeights(params.get(KEYS.weights))),
     diversity: num(params.get(KEYS.diversity)),
     review: params.get(KEYS.review) === 'up' ? 'up' : params.get(KEYS.review) === 'down' ? 'down' : null,
+    secondChance: params.get(KEYS.secondChance) === '1',
     mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
     search: params.get(KEYS.search) || '',
     minScore: num(params.get(KEYS.minScore)),
@@ -103,6 +112,7 @@ function encode(state: RecoUrlState): string {
   if (wStr) params.set(KEYS.weights, wStr);
   if (state.diversity !== null && state.diversity > 0) params.set(KEYS.diversity, String(state.diversity));
   if (state.review) params.set(KEYS.review, state.review);
+  if (state.secondChance) params.set(KEYS.secondChance, '1');
   if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
   if (state.search) params.set(KEYS.search, state.search);
   if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));

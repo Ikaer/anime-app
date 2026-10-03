@@ -193,6 +193,7 @@
   "card.goodPickTitle": "Bonne pioche — renforce ce type de suggestion",
   "card.goodPick": "👍 Bonne pioche",
   "card.notForMeTitle": "Pas pour moi — masque et pénalise ce type de suggestion",
+  "card.notForMeSecondChanceTitle": "Pas pour moi — le retire de la seconde chance (il compte déjà dans tes rejets, le classement ne change pas)",
   "card.notForMe": "👎 Pas pour moi",
 
   "mlt.title": "Plus comme ça",
@@ -607,6 +608,8 @@
   "reco.neverRefreshed": "Jamais rafraîchi",
   "reco.goodPicks": "👍 Bonnes pioches",
   "reco.notForMe": "👎 Pas pour moi",
+  "reco.secondChance": "🔁 Seconde chance",
+  "reco.secondChanceHint": "Tes animes abandonnés, classés par le même moteur : ceux que tes favoris recommandent le plus méritent peut-être une reprise",
   "reco.type": "Type :",
   "reco.malMean": "Note MAL (mean) :",
   "reco.year": "Année :",

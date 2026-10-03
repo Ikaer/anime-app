@@ -18,6 +18,8 @@ interface RecommendationsSectionProps {
   onDiversityChange: (v: number | null) => void;
   onShowLiked: () => void;
   onShowDisliked: () => void;
+  /** « Seconde chance » — the same ranking over the titles you dropped. */
+  onShowSecondChance: () => void;
 }
 
 const DEFAULT_THRESHOLD = 8;
@@ -36,6 +38,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   onDiversityChange,
   onShowLiked,
   onShowDisliked,
+  onShowSecondChance,
 }) => {
   const t = useT();
   // Slider position tracked locally; committed to the URL only on release so a
@@ -117,6 +120,9 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
         </Button>
         <Button onClick={onShowDisliked} variant="secondary" size="xs">
           {t('reco.notForMe')}
+        </Button>
+        <Button onClick={onShowSecondChance} variant="secondary" size="xs" title={t('reco.secondChanceHint')}>
+          {t('reco.secondChance')}
         </Button>
       </div>
 

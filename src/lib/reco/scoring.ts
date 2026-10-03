@@ -461,7 +461,27 @@ export function buildDiscriminativeProfiles(
   idf: IdfSet,
   liked?: { animes: AnimeRecord[]; weight: (a: AnimeRecord) => number }
 ): DiscriminativeProfiles {
-  const disliked = getDislikedAnime(all, downIds);
+  return discriminativeProfilesBuilder(all, downIds, idf, liked)();
+}
+
+/**
+ * `buildDiscriminativeProfiles`, split so the dislike side can be rebuilt
+ * WITHOUT one title at a time.
+ *
+ * « Seconde chance » ranks titles that are themselves in the dislike set, and
+ * judged against a profile it built, each one would partly penalize itself: a
+ * director credited on that one drop alone fires `rejection` at full strength
+ * on the very title that put them there. Leaving the candidate out removes
+ * that echo. The liked rates and the dislike list do not depend on which title
+ * is omitted, so they are computed once rather than once per candidate.
+ */
+export function discriminativeProfilesBuilder(
+  all: AnimeRecord[],
+  downIds: Set<string>,
+  idf: IdfSet,
+  liked?: { animes: AnimeRecord[]; weight: (a: AnimeRecord) => number }
+): (omit?: string) => DiscriminativeProfiles {
+  const dislikedAll = getDislikedAnime(all, downIds);
 
   const likedAnimes = liked?.animes ?? all.filter(a => {
     if (getEffectiveStatus(a) !== 'completed') return false;
@@ -472,25 +492,29 @@ export function buildDiscriminativeProfiles(
     ?? ((a: AnimeRecord) => seedWeight(getEffectiveScore(a) ?? TUNING.DEFAULT_SEED_THRESHOLD, TUNING.DEFAULT_SEED_THRESHOLD));
 
   const posG = valueRates(likedAnimes, likedWeight, FIELD_EXTRACTORS.genre);
-  const negG = valueRates(disliked, () => 1, FIELD_EXTRACTORS.genre);
   const posS = valueRates(likedAnimes, likedWeight, FIELD_EXTRACTORS.studio);
-  const negS = valueRates(disliked, () => 1, FIELD_EXTRACTORS.studio);
   // Both sides use the SAME extractor — netting a T1-only rate against a
   // full-credit rate would compare a fraction of ~3 slots to a fraction of ~40
   // and penalize every auteur who has ever been credited as a key animator.
   const posT1 = valueRates(likedAnimes, likedWeight, staffT1Extractor);
-  const negT1 = valueRates(disliked, () => 1, staffT1Extractor);
 
-  return {
-    posGenre: netProfile(posG, negG, FIELD_EXTRACTORS.genre, idf.genre),
-    posStudio: netProfile(posS, negS, FIELD_EXTRACTORS.studio, idf.studio),
-    negGenre: netProfile(negG, posG, FIELD_EXTRACTORS.genre, idf.genre),
-    negStudio: netProfile(negS, posS, FIELD_EXTRACTORS.studio, idf.studio),
-    // IDF is the full-credit staff map on purpose: it measures how rare the
-    // PERSON is across the corpus, which is the same question whatever role
-    // this particular credit was. A T1-only IDF would also cost a seventh pass
-    // over ~25k records for a near-identical ranking.
-    negStaffT1: netProfile(negT1, posT1, staffT1Extractor, idf.anilistStaff),
+  return (omit?: string) => {
+    const disliked = omit ? dislikedAll.filter(a => a.id !== omit) : dislikedAll;
+    const negG = valueRates(disliked, () => 1, FIELD_EXTRACTORS.genre);
+    const negS = valueRates(disliked, () => 1, FIELD_EXTRACTORS.studio);
+    const negT1 = valueRates(disliked, () => 1, staffT1Extractor);
+
+    return {
+      posGenre: netProfile(posG, negG, FIELD_EXTRACTORS.genre, idf.genre),
+      posStudio: netProfile(posS, negS, FIELD_EXTRACTORS.studio, idf.studio),
+      negGenre: netProfile(negG, posG, FIELD_EXTRACTORS.genre, idf.genre),
+      negStudio: netProfile(negS, posS, FIELD_EXTRACTORS.studio, idf.studio),
+      // IDF is the full-credit staff map on purpose: it measures how rare the
+      // PERSON is across the corpus, which is the same question whatever role
+      // this particular credit was. A T1-only IDF would also cost a seventh pass
+      // over ~25k records for a near-identical ranking.
+      negStaffT1: netProfile(negT1, posT1, staffT1Extractor, idf.anilistStaff),
+    };
   };
 }
 

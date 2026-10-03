@@ -282,6 +282,40 @@ changes; a mute is not one — it is the owner overriding the ranking on purpose
 category as the `num_episodes` commitment knob that was rejected, but inverted: that one
 was a guess dressed as a model change, this one is the owner speaking directly.
 
+### « Seconde chance » — the feed's engine pointed at the DROPPED titles
+
+A sub-view of `/recommendations` (URL key `sc=1`, button beside « Bonnes pioches » /
+« Pas pour moi »), not a page: `computeFeed({ pool: 'dropped' })` runs the SAME seeds,
+crowd edges, taste profiles, weights and seed mutes, and only swaps the eligible
+population from "unseen" to "effective status `dropped`". So every sidebar knob keeps
+its meaning, and the question becomes "which of my drops do the things I love point
+at". `rev` wins over `sc` in the API; the page clears one when it sets the other.
+
+- **Every drop is a candidate**, not only the crowd-edge targets (66 of 120 on the live
+  store when this shipped). An unreached drop scores 0 on `crowd` and ranks on its
+  metadata; hiding it would claim the crowd had judged titles it never mentioned.
+  `isPrematureSequel`, hidden and 👎 still exclude, as in the feed.
+- ⚠️ **Leave-one-out on the netted pair is mandatory, not polish.** A drop is itself in
+  the dislike set, so judged against the shared profile it partly penalizes ITSELF — a
+  director credited on that one drop alone fires `rejection` at full strength on the
+  very title that put them there, and the most distinctive drops sink for being
+  distinctive. `discriminativeProfilesBuilder` (in `scoring.ts`;
+  `buildDiscriminativeProfiles` is its no-omit call) computes the liked rates and the
+  dislike list once and rebuilds only the dislike rates per omitted id: ~340 ms warm vs
+  ~170 ms for the feed. Pinned in [tests/reco/scoring.test.ts](tests/reco/scoring.test.ts).
+- **The cards carry 👎 only** (`feedbackMode: 'secondChance'`). A 👍 makes a title a
+  crowd SEED, so it would pull the drop's neighbours into « Pour toi » — a verdict
+  nobody gave. The 👎 changes no ranking (a drop is already a rejection) and only
+  removes the card; undo is in « Pas pour moi ».
+- **Two signals deliberately NOT used.** The owner's score on a drop (117 of 120 are
+  scored, almost all 4-5, so it separates nothing) and time since the drop: 94 of 120
+  carry a 2025-2026 SIMKL `watched_at`, which reads as import dates, not drop dates.
+  Where a drop stopped IS shown — the « Abandonné » badge reads `· 3/12` on every
+  surface, since 1/12 and 10/12 are different verdicts.
+- **Unfalsifiable by design**: the titles the owner did resume and enjoy are now
+  `completed`, so the store keeps no history to backtest against. Read the ranking,
+  don't tune it against the harness.
+
 ### MAL sync
 
 - `/api/anime/mal/sync` — lightweight personal list sync (updates `my_list_status` on existing anime only, never inserts)

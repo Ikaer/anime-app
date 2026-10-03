@@ -26,8 +26,17 @@ interface AnimeCardViewProps {
     onHideToggle?: (animeId: string, hide: boolean) => void;
     onFeedback?: (animeId: string, verdict: RecoVerdict) => void;
     onRemoveFeedback?: (animeId: string) => void;
-    /** 'feed' = show 👍/👎; 'up'/'down' = review list (show ↩ Remettre); null = hide toggle. */
-    feedbackMode?: 'feed' | RecoVerdict | null;
+    /**
+     * 'feed' = show 👍/👎; 'up'/'down' = review list (show ↩ Remettre);
+     * 'secondChance' = 👎 only; null = hide toggle.
+     *
+     * « Seconde chance » drops the 👍 on purpose: a thumbed-up title becomes a
+     * crowd SEED, so a 👍 on a drop would start pulling that show's neighbours
+     * into « Pour toi » — a verdict nobody gave. The 👎 is safe there: a drop is
+     * already in the dislike set, so it changes no ranking and only takes the
+     * card out of the view (undone from « Pas pour moi »).
+     */
+    feedbackMode?: 'feed' | 'secondChance' | RecoVerdict | null;
     /** When true, every card's "Pourquoi ?" breakdown is expanded (global override). */
     allExplainsOpen?: boolean;
     /**
@@ -410,7 +419,14 @@ export default function AnimeCardView({
                             {getDisplayStatus(anime) && (
                                 <span className={`${styles.personalStatusLabel} ${getStatusClass(getDisplayStatus(anime))}`}>
                                     <span className={styles.personalStatusIcon}>{getStatusIcon(getDisplayStatus(anime))}</span>
-                                    <span className={styles.personalStatusText}>{t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}</span>
+                                    <span className={styles.personalStatusText}>
+                                        {t(`statusShort.${getDisplayStatus(anime)}` as TranslationKey)}
+                                        {/* Where a drop stopped is the one thing its badge
+                                            cannot otherwise say: 1/12 and 10/12 are very
+                                            different verdicts. */}
+                                        {getDisplayStatus(anime) === 'dropped' && (anime.personal.progress ?? 0) > 0
+                                            && ` · ${anime.personal.progress}/${anime.catalog.numEpisodes || '?'}`}
+                                    </span>
                                 </span>
                             )}
                             {/* Anticipation REPLACES the score rather than joining it:
@@ -471,6 +487,16 @@ export default function AnimeCardView({
                                     className={styles.actionButton}
                                 >
                                     {t('card.putBack')}
+                                </Button>
+                            ) : feedbackMode === 'secondChance' ? (
+                                <Button
+                                    onClick={() => onFeedback?.(anime.id, 'down')}
+                                    variant="primary-negative"
+                                    size="xs"
+                                    className={styles.actionButton}
+                                    title={t('card.notForMeSecondChanceTitle')}
+                                >
+                                    {t('card.notForMe')}
                                 </Button>
                             ) : feedbackMode === 'feed' ? (
                                 <>

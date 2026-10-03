@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   popularityScale, fieldMatch, computeIdf, computeIdfSet,
-  buildDiscriminativeProfiles, TUNING, FIELD_EXTRACTORS,
+  buildDiscriminativeProfiles, discriminativeProfilesBuilder, TUNING, FIELD_EXTRACTORS,
   type FieldProfile,
 } from '@/lib/reco/scoring';
 import type { AnimeRecord } from '@/models/anime';
@@ -219,4 +219,24 @@ test('a completed-but-low-scored title is a rejection; an unrated one is not', (
     false,
     'score 0 means unrated, not a rating of zero',
   );
+});
+
+/**
+ * « Seconde chance » ranks titles that are themselves in the dislike set. Each
+ * one is judged against the profile rebuilt WITHOUT it — otherwise a value only
+ * that drop carries fires `rejection` on the very title that put it there, and
+ * the most distinctive drops sink to the bottom for being distinctive. Nothing
+ * on screen would say so; the view would just rank them low.
+ */
+test('omitting a dropped title removes what only it contributed to the rejection side', () => {
+  const liked = ['l1', 'l2'].map(id => anime(id, { status: 'completed', score: 9, genres: ['Mecha'] }));
+  const shared = ['d1', 'd2'].map(id => anime(id, { status: 'dropped', genres: ['Ecchi'] }));
+  const lone = anime('x', { status: 'dropped', genres: ['Ecchi', 'Horror'] });
+  const all = [...liked, ...shared, lone];
+
+  const discFor = discriminativeProfilesBuilder(all, new Set(), computeIdfSet(all));
+
+  assert.equal(discFor().negGenre.weights.has('Horror'), true, 'the plain pass still counts it');
+  assert.equal(discFor('x').negGenre.weights.has('Horror'), false, 'its own contribution is gone');
+  assert.equal(discFor('x').negGenre.weights.has('Ecchi'), true, 'what the OTHER drops share stays');
 });
