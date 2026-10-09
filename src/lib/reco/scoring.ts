@@ -195,18 +195,25 @@ export function normalize<K>(m: Map<K, number>): void {
   if (max > 0) m.forEach((v, k) => m.set(k, v / max));
 }
 
-/** Build an IDF-scaled taste profile for one field from weighted seed animes. */
+/**
+ * Build an IDF-scaled taste profile for one field from weighted seed animes.
+ *
+ * `strengthOf` scales one value's vote on one title, default 1. Only the staff
+ * craft families pass it — a composer credited on 1 of 175 episodes is not the
+ * show's composer (`familyCoverage` in `staffFields.ts`).
+ */
 export function buildFieldProfile(
   animes: AnimeRecord[],
   weightFn: (a: AnimeRecord) => number,
   extract: (a: AnimeRecord) => FieldValue[],
-  idf: Map<FieldValue, number>
+  idf: Map<FieldValue, number>,
+  strengthOf?: (a: AnimeRecord, v: FieldValue) => number
 ): FieldProfile {
   const acc = new Map<FieldValue, number>();
   for (const a of animes) {
     const w = weightFn(a);
     if (w <= 0) continue;
-    for (const v of new Set(extract(a))) acc.set(v, (acc.get(v) || 0) + w);
+    for (const v of new Set(extract(a))) acc.set(v, (acc.get(v) || 0) + w * (strengthOf ? strengthOf(a, v) : 1));
   }
   acc.forEach((v, k) => acc.set(k, v * (idf.get(k) ?? 0)));
   normalize(acc);

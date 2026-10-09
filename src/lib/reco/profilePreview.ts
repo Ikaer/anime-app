@@ -16,12 +16,14 @@
  *    slider reaches 2 statused titles against 119 catalog ones (DESIGN §7).
  *  - `statused` — `rankBoxCandidates` unchanged: the fill loop the MCP proposes
  *    members through. A profile still applies there; it just moves little.
- *  - `anchored` — `computeAnchored` over the box's crowd edges: the box's recos
- *    tab (`/api/anime/recommendations/mix?box=`), the one surface the owner sees
- *    a profile on. ⚠️ The only pool that REACHES THE NETWORK (MAL per anchor,
- *    AniList once, both cached per anchor for the process's life), which is why
- *    it is opt-in rather than the default. Measured in PLAN.md phase 4: a family
- *    at 1.0 is a nudge there, because `crowd` tops out at 1.0.
+ *  - `anchored` — the box's recos tab exactly (`/api/anime/recommendations/mix?box=`
+ *    with a profile attached): `computeAnchored` over the crowd edges WITH the
+ *    catalog let in (`options.catalog`), so a profile that zeroes `crowd` ranks
+ *    the catalog by its own fields instead of re-ordering the crowd's leftovers.
+ *    ⚠️ The only pool that REACHES THE NETWORK (MAL per anchor, AniList once,
+ *    both cached per anchor for the process's life). It is the ONLY pool the
+ *    profile page offers since the pool tabs were removed; `catalog` and
+ *    `statused` stay for `scripts/probe-profile.js`.
  *
  * **The two metadata pools resolve over `BOX_WEIGHTS`, the anchored one over
  * `ANCHORED_WEIGHTS`** — the base each ranker really uses, so a preview
@@ -146,6 +148,7 @@ export async function previewProfile(input: PreviewInput): Promise<PreviewResult
       families: resolved.families,
       excludeSeen: !includeSeen,
       excludeIds: input.box ? boxAnsweredIds(input.box) : undefined,
+      catalog: true,
       lang: input.lang,
       titleLang: input.titleLang,
     });

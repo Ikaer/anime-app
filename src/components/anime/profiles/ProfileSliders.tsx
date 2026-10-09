@@ -6,11 +6,9 @@ import {
   resolveProfile,
   setProfileField,
   resetProfileField,
-  type PreviewPool,
   type ProfileField,
   type ProfileWeights,
 } from '@/lib/reco/profileWeights';
-import { ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import type { FamilyDiagnostic, FamilyVerdict, ProfileDiagnostic } from '@/lib/reco/profileDiagnostic';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import styles from './ProfileSliders.module.css';
@@ -25,19 +23,19 @@ import styles from './ProfileSliders.module.css';
  * base". So every row here has three states — inherited, set, and the reset
  * that deletes the key again — and a panel that initialized every row from the
  * displayed base and saved the lot would make every profile dense. ⚠️ That is
- * silent AND it breaks the other surface: tuned on the catalog pool, it would
- * freeze `BOX_WEIGHTS.genre` (0.25) into the map and the recos tab would rank
- * with it where `ANCHORED_WEIGHTS` says 0.2. The only thing shared with that
- * panel is the `reco.source.*` keys.
+ * silent AND it breaks the other reader: the MCP's fill loop resolves the same
+ * profile over `BOX_WEIGHTS`, so a page that saved `ANCHORED_WEIGHTS.genre`
+ * (0.2) whole would freeze it over that ranker's 0.25. The only thing shared
+ * with that panel is the `reco.source.*` keys.
  *
  * Commits on release, not per tick — its rule, for its reason (one save and one
  * preview per gesture, not twenty). And only a row that actually MOVED commits:
  * a click on a thumb that did not travel must not turn an inherited field into a
  * stored one.
  *
- * `base` is the pool's raw base (`BOX_WEIGHTS` or `ANCHORED_WEIGHTS`), which is
- * what an inherited row displays — so an untouched `genre` reads 0.25 on the
- * metadata pools and 0.2 on the recos tab, which is the truth on each.
+ * `base` is the recos tab's raw base (`ANCHORED_WEIGHTS`), which is what an
+ * inherited row displays. Every row is live: the page previews exactly the box
+ * recos tab, which reads every field here.
  */
 
 /**
@@ -47,7 +45,7 @@ import styles from './ProfileSliders.module.css';
  * trap as a hidden crowd row.
  */
 const CONTENT_FIELDS: RecoSource[] = ['anilistTags', 'genre', 'studio', 'anilistStaff', 'rating', 'nsfw'];
-/** Read by `computeAnchored` alone: live on the `anchored` pool, disabled elsewhere. */
+/** The crowd half, and the two penalties that ride with it on the recos tab. */
 const CROWD_FIELDS: RecoSource[] = ['crowd', 'anilistCrowd', 'rejection', 'popularity'];
 
 const VERDICT_CLASS: Record<FamilyVerdict, string> = {
@@ -59,13 +57,12 @@ const VERDICT_CLASS: Record<FamilyVerdict, string> = {
 export interface ProfileSlidersProps {
   weights: ProfileWeights;
   base: Record<string, number>;
-  pool: PreviewPool;
   /** Over the anchor set's declared units; null while no anchor is chosen. */
   diagnostic: ProfileDiagnostic | null;
   onChange: (next: ProfileWeights) => void;
 }
 
-const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, pool, diagnostic, onChange }) => {
+const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, diagnostic, onChange }) => {
   const t = useT();
   const [draft, setDraft] = useState<ProfileWeights>(weights);
   /** Fields moved since the last commit — only these may become stored keys. */
@@ -74,15 +71,10 @@ const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, pool, di
 
   const resolved = resolveProfile(base, draft);
   const anyFamily = STAFF_FAMILIES.some(f => resolved.families[f] !== 0);
-  const crowdLive = pool === 'anchored';
 
   const displayed = (field: ProfileField): number => {
     if (isStaffFamily(field)) return resolved.families[field];
-    const stored = draft[field];
-    if (field in base) return resolved.weights[field];
-    // A crowd field on a metadata pool: not read here, so show what the recos
-    // tab would rank with — the stored value, or the anchored default.
-    return stored ?? (ANCHORED_WEIGHTS as Record<string, number>)[field] ?? 0;
+    return resolved.weights[field] ?? 0;
   };
 
   const commit = (field: ProfileField) => {
@@ -125,7 +117,7 @@ const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, pool, di
             <button
               type="button"
               className={styles.reset}
-              // A disabled row is not this pool's to change — resetting it here
+              // A disabled row is switched off by the resolver — resetting it here
               // would, e.g., delete the explicit `anilistStaff: 0` every preset
               // states by house rule, from a row that says it is switched off.
               disabled={opts.disabled}
@@ -196,8 +188,7 @@ const ProfileSliders: React.FC<ProfileSlidersProps> = ({ weights, base, pool, di
 
       <section className={styles.group}>
         <h3 className={styles.groupTitle}>{t('profiles.group.crowd')}</h3>
-        {!crowdLive && <p className={styles.regime}>{t('profiles.crowdOff')}</p>}
-        {CROWD_FIELDS.map(f => row(f, { disabled: !crowdLive }))}
+        {CROWD_FIELDS.map(f => row(f))}
       </section>
     </div>
   );

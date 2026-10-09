@@ -4,15 +4,17 @@
  *
  * **Left, the weighting; right, its effect on a chosen anchor set.** The anchor
  * is a box (`?box=`, defaulting to the first box using the profile) or an ad-hoc
- * set (`?a=`, `/mix`'s key and its picker). The pool is one of the three the
- * preview route knows — each the ranker a profile really drives.
+ * set (`?a=`, `/mix`'s key and its picker). The right side IS that box's recos
+ * tab — the same `computeAnchored` call with the catalog let in
+ * (`options.catalog`), so every slider on the left acts on the one list the box
+ * shows. There used to be three pool tabs here (unseen catalog, statused list,
+ * community recos); the owner read them as previews when two of them were also
+ * where some sliders could be set, and none matched the box. Removed.
  *
  * ⚠️ **The ranking is only ever shown AGAINST `Défaut`.** Every row carries its
  * shift against the same pool unweighted, the header counts what came in, and a
- * weighting that changes nothing on this pool gets a sentence instead of a list
- * (`reco/profileBaseline.ts`). An untouched catalog preview on its own would be a
- * plain metadata rank of the unseen catalog — the fourth recommendation surface
- * DESIGN §7 refuses beside « Recommandé ». This page is a tuning instrument.
+ * weighting that changes nothing gets a sentence instead of a list
+ * (`reco/profileBaseline.ts`). This page is a tuning instrument.
  *
  * ⚠️ **The §8 diagnostic sits under every staff slider, and it is not optional.**
  * On a three-show box a craft slider is a RETRIEVAL knob — "more by these eight
@@ -36,14 +38,12 @@ import { useProfileUrlState, MAX_ANCHORS } from '@/hooks';
 import { useI18n, type TranslationKey } from '@/lib/i18n';
 import {
   DEFAULT_PROFILE_EMOJI,
-  PREVIEW_POOLS,
   PROFILE_PRESETS,
-  type PreviewPool,
   type ProfilePreset,
   type ProfileSummary,
   type ProfileWeights,
 } from '@/lib/reco/profileWeights';
-import { BOX_WEIGHTS, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
+import { ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import { shiftsAgainst, tunesNothing } from '@/lib/reco/profileBaseline';
 import type { LeanAnimeRow } from '@/lib/domain/leanRow';
 import type { PreviewResponse } from '../api/anime/profiles/preview';
@@ -157,14 +157,14 @@ export default function ProfilePage() {
   // ── The preview's context ──────────────────────────────────────────────────
   const effectiveBox = adHoc ? null : (state.box ?? profile?.usedBy[0]?.id ?? null);
   const hasAnchor = effectiveBox !== null || (adHoc && state.anchors.length > 0);
-  const base: Record<string, number> = state.pool === 'anchored' ? ANCHORED_WEIGHTS : BOX_WEIGHTS;
+  const base: Record<string, number> = ANCHORED_WEIGHTS;
   const nothing = tunesNothing(base, weights);
-  const contextKey = `${effectiveBox ?? ''}|${adHoc ? state.anchors.join(',') : ''}|${state.pool}|${lang}`;
+  const contextKey = `${effectiveBox ?? ''}|${adHoc ? state.anchors.join(',') : ''}|${lang}`;
 
   const previewBody = useCallback((w: ProfileWeights) => ({
     weights: w,
     ...(effectiveBox ? { box: effectiveBox } : { anchors: state.anchors }),
-    pool: state.pool,
+    pool: 'anchored',
     limit: PREVIEW_LIMIT,
     lang,
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +185,7 @@ export default function ProfilePage() {
   const weightsKey = `${contextKey}|${JSON.stringify(weights)}`;
 
   /**
-   * `Défaut` on this context — fetched once per anchor set and pool, never per
+   * `Défaut` on this context — fetched once per anchor set, never per
    * slider release, since it does not depend on the weights. It also carries
    * the diagnostic, which does not either. Kept WITH the context it answers.
    */
@@ -308,7 +308,6 @@ export default function ProfilePage() {
 
   const usedBy = profile?.usedBy ?? [];
   const selectValue = adHoc ? '(adhoc)' : (effectiveBox ?? '');
-  const poolHint = t(`profiles.poolHint.${state.pool}` as TranslationKey);
   const selectedPreset = PROFILE_PRESETS.find(p => p.key === presetKey);
 
   const status = (() => {
@@ -317,7 +316,6 @@ export default function ProfilePage() {
     const parts: string[] = [];
     // The UI language's grouping, not the browser's: « 15 271 », not « 15,271 ».
     const n = (v: number) => v.toLocaleString(lang === 'fr' ? 'fr-FR' : 'en-US');
-    if (r.coverage) parts.push(t('profiles.coverage', { eligible: n(r.coverage.eligible), unseen: n(r.coverage.unseen) }));
     if (r.sources) {
       for (const [name, outcome] of [['MAL', r.sources.mal], ['AniList', r.sources.anilist]] as const) {
         if (!outcome.ok) parts.push(t('mix.sourceDown', { source: name, error: outcome.error || '' }));
@@ -469,7 +467,6 @@ export default function ProfilePage() {
               <ProfileSliders
                 weights={weights}
                 base={base}
-                pool={state.pool}
                 diagnostic={diagnostic}
                 onChange={next => { setPresetUndo(null); saveWeights(next); }}
               />
@@ -530,19 +527,7 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <nav className="pf-pools" aria-label={t('profiles.poolLabel')}>
-                {PREVIEW_POOLS.map((pool: PreviewPool) => (
-                  <button
-                    key={pool}
-                    type="button"
-                    className={`pf-pool ${state.pool === pool ? 'pf-poolOn' : ''}`}
-                    onClick={() => update({ pool })}
-                  >
-                    {t(`profiles.pool.${pool}` as TranslationKey)}
-                  </button>
-                ))}
-              </nav>
-              <p className="pf-hint">{poolHint}</p>
+              <p className="pf-hint">{t('profiles.previewHint')}</p>
 
               {!hasAnchor ? (
                 <p className="pf-empty">{adHoc ? t('profiles.pickTitles') : t('profiles.pickAnchor')}</p>
@@ -555,8 +540,6 @@ export default function ProfilePage() {
                 // sentence, never a list — see the module comment.
                 <p className="pf-empty">
                   {t('profiles.tunesNothing')}
-                  {state.pool !== 'anchored' && (['crowd', 'anilistCrowd', 'rejection', 'popularity'] as const).some(k => weights[k] !== undefined)
-                    ? ` ${t('profiles.tunesNothingCrowd')}` : ''}
                 </p>
               ) : !current ? (
                 <p className="pf-note">{t('common.loading')}</p>
@@ -677,8 +660,6 @@ export default function ProfilePage() {
         .pf-selectWide { min-width: 260px; max-width: 100%; }
         .pf-attached { font-size: 0.8rem; color: #10b981; }
 
-        .pf-pools { display: flex; gap: 4px; border-bottom: 1px solid var(--border-color); margin-top: 6px; }
-
         .pf-hint { margin: 0; font-size: 0.76rem; line-height: 1.45; color: var(--text-muted); }
         .pf-changed { margin: 4px 0 0; font-size: 0.85rem; color: var(--text-secondary); }
         .pf-stale { opacity: 0.55; transition: opacity 0.15s ease; }
@@ -699,7 +680,7 @@ export default function ProfilePage() {
 
       {/* ⚠️ Global block, every selector prefixed with .pf — it reaches what the
           scoped one cannot: classNames handed to next/link (the back link, the
-          box chips) and the pool tabs and buttons, which are produced inside
+          box chips) and the buttons, which are produced inside
           a map in a helper position. The /boxes/[id] note has the full story. */}
       <style jsx global>{`
         .pf .pf-back { color: var(--text-muted); font-size: 0.82rem; text-decoration: none; }
@@ -716,20 +697,6 @@ export default function ProfilePage() {
         .pf .pf-save { margin-left: auto; }
         .pf .pf-save-saved { color: #10b981; }
         .pf .pf-save-error { color: var(--accent-danger); }
-
-        .pf .pf-pool {
-          background: none;
-          border: none;
-          border-bottom: 2px solid transparent;
-          margin-bottom: -1px;
-          color: var(--text-muted);
-          font-size: 0.88rem;
-          font-weight: 500;
-          padding: 7px 12px;
-          cursor: pointer;
-        }
-        .pf .pf-pool:hover { color: var(--text-primary); }
-        .pf .pf-poolOn { color: var(--text-primary); font-weight: 600; border-bottom-color: var(--accent-primary); }
 
         .pf .pf-btn {
           display: inline-flex;

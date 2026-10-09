@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import {
   STAFF_FAMILIES, STAFF_FAMILY_ROLES, STAFF_FAMILY_EXTRACTORS, PROFILE_DENOM,
   staffFamilyOf, denomFor, computeStaffFamilyIdf,
+  creditedEpisodes, creditCoverage, buildFamilyTerms, matchFamilyTerms,
 } from '@/lib/reco/staffFields';
 import { MATCH_DENOM_FLOOR, FIELD_EXTRACTORS, computeIdf, type MetaField } from '@/lib/reco/scoring';
 import type { AnimeRecord } from '@/models/anime';
@@ -147,4 +148,58 @@ test('the family IDF measures rarity within the family, not across all credits',
   assert.equal(family, Math.log(5 / 2));
   assert.equal(shared, Math.log(5 / 5));
   assert.ok(family! > shared!, 'rarer as a director than as a credit-holder');
+});
+
+/**
+ * A per-episode credit counts by the share of the title it covers — a RATIO,
+ * not an exclusion. Live case: Bizet credited on episode 2 of Fairy Tail's 175
+ * (a *Carmen* cue) weighed exactly as much as its composer, and pulled
+ * *Chiisana Konomi*, which cues the same aria, into a « Sound » box's top 3.
+ */
+test('creditedEpisodes reads the episode qualifier, and only the numbers after it', () => {
+  assert.equal(creditedEpisodes('Music'), null);
+  assert.equal(creditedEpisodes('Music (OP)'), null, 'OP/ED says which song, not which episodes');
+  assert.equal(creditedEpisodes("Music (ep 2, L'amour est un oiseau rebelle, Carmen)"), 1);
+  assert.equal(creditedEpisodes('Music Director (eps 14-25)'), 12);
+  assert.equal(creditedEpisodes('Music (eps 1, 3, 5)'), 3);
+  assert.equal(creditedEpisodes('Music (Symphony No. 9 in ep. 5)'), 1, "the symphony's own number is not an episode");
+  assert.equal(creditedEpisodes('Music (ep: 3)'), 1);
+});
+
+const withEps = (id: string, numEpisodes: number | undefined, staff: { id: number; role: string }[]): AnimeRecord => {
+  const a = anime(id, staff);
+  return { ...a, catalog: { ...a.catalog, numEpisodes } } as AnimeRecord;
+};
+
+test('creditCoverage is episodes over the episode count, and a full credit when either is unknown', () => {
+  assert.equal(creditCoverage(withEps('a', 12, []), 'Music (eps 1-9)'), 0.75, '9 of 12 is a ratio, not a drop');
+  assert.equal(creditCoverage(withEps('a', 175, []), 'Music (ep 2)'), 1 / 175);
+  assert.equal(creditCoverage(withEps('a', 12, []), 'Music'), 1);
+  assert.equal(creditCoverage(withEps('a', undefined, []), 'Music (ep 2)'), 1, 'an airing show has no count to divide by');
+  assert.equal(creditCoverage(withEps('a', 0, []), 'Music (ep 2)'), 1);
+  assert.equal(creditCoverage(withEps('a', 12, []), 'Music (eps 1-30)'), 1, 'clamped');
+});
+
+test('a partial credit counts by its share on BOTH sides of a family match', () => {
+  const others = [1, 2, 3, 4].map(n => withEps(`x${n}`, 12, [{ id: 100 + n, role: 'Music' }]));
+  // The member credits 50 on one episode of 100, and 60 on all of it.
+  const member = withEps('m', 100, [{ id: 50, role: 'Music (ep 2)' }, { id: 60, role: 'Music' }]);
+  const full50 = withEps('c50', 12, [{ id: 50, role: 'Music' }]);
+  const full60 = withEps('c60', 12, [{ id: 60, role: 'Music' }]);
+  const corpus = [member, full50, full60, ...others];
+  const [term] = buildFamilyTerms([member], () => 1, { staffMusic: 1 }, corpus);
+  assert.ok(term.profile.weights.get(50)! < term.profile.weights.get(60)! / 50,
+    'profile side: a one-episode cue votes for its person by 1/100');
+  const hit50 = matchFamilyTerms(full50, [term])[0];
+  const hit60 = matchFamilyTerms(full60, [term])[0];
+  assert.ok(hit50.value < hit60.value / 50);
+  assert.deepEqual(hit50.matched, [50], 'still matched and named — weakened, not dropped');
+
+  // Candidate side: the same person, full on the member, partial on the candidate.
+  const partial60 = withEps('p60', 10, [{ id: 60, role: 'Music (eps 1-5)' }]);
+  const [p] = matchFamilyTerms(partial60, [term]);
+  assert.ok(Math.abs(p.value - hit60.value / 2) < 1e-12, 'a composer on 5 of 10 episodes matches at half');
+  // A person who is BOTH a full and a partial credit keeps the full one.
+  const both = withEps('b60', 10, [{ id: 60, role: 'Music (ep 1)' }, { id: 60, role: 'Music' }]);
+  assert.equal(matchFamilyTerms(both, [term])[0].value, hit60.value);
 });

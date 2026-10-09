@@ -135,6 +135,70 @@ export function staffFamilyOf(raw: string): StaffFamily | null {
   return family;
 }
 
+const episodeMemo = new Map<string, number | null>();
+
+/**
+ * How many episodes a raw role's `ep`/`eps` qualifier names — `null` when it
+ * names none, or names them in a shape this cannot read.
+ *
+ * Shapes on the live store (166 of 12,259 music credits carry one): `ep 2`,
+ * `eps 14-25`, `eps 1, 3, 5`, `ep: 3`, and free text around them —
+ * `ep 2, L'amour est un oiseau rebelle, Carmen`, `Symphony No. 9 in ep. 5`.
+ * The numbers are read only right after the `ep` token, so a title's own digits
+ * (`Symphony No. 9`) are never counted. Unreadable means `null`, which
+ * `creditCoverage` reads as a full credit: the old behaviour, never a guess.
+ */
+export function creditedEpisodes(raw: string): number | null {
+  const hit = episodeMemo.get(raw);
+  if (hit !== undefined) return hit;
+  let count: number | null = null;
+  for (const qualifier of parseStaffRole(raw).qualifiers) {
+    const m = qualifier.match(/\beps?\b\.?:?\s*((?:\d+\s*(?:[-–~]\s*\d+)?\s*(?:,|&|\band\b)?\s*)+)/i);
+    if (!m) continue;
+    let n = 0;
+    for (const r of m[1].matchAll(/(\d+)\s*(?:[-–~]\s*(\d+))?/g)) {
+      const from = Number(r[1]);
+      const to = r[2] !== undefined ? Number(r[2]) : from;
+      n += to >= from ? to - from + 1 : 1;
+    }
+    if (n > 0) { count = n; break; }
+  }
+  episodeMemo.set(raw, count);
+  return count;
+}
+
+/**
+ * The share of a title one credit covers, in (0, 1]: episodes credited over
+ * the title's episode count, or 1 when either is unknown.
+ *
+ * ⚠️ A ratio, not an exclusion. A composer on 9 of 12 episodes IS the show's
+ * composer; Bizet on episode 2 of Fairy Tail's 175 (a *Carmen* cue) is not, and
+ * before this he weighed exactly as much as Yasuharu Takanashi — enough to put
+ * *Chiisana Konomi*, which cues the same aria, near the top of a « Sound »
+ * profile. An unknown episode count (an airing show, a 0 from the provider)
+ * cannot be divided by, so it keeps the full credit.
+ */
+export function creditCoverage(a: AnimeRecord, raw: string): number {
+  const eps = creditedEpisodes(raw);
+  const total = a.catalog.numEpisodes;
+  if (eps === null || !total || total <= 0) return 1;
+  return Math.min(1, eps / total);
+}
+
+/**
+ * One family's people on a title, each with the share of the title they cover
+ * — the BEST of their credits in the family, so `Music` alongside
+ * `Music (ep 3)` stays a full credit.
+ */
+export function familyCoverage(a: AnimeRecord, family: StaffFamily): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const credit of a.sources.anilist?.staff ?? []) {
+    if (staffFamilyOf(credit.role) !== family) continue;
+    out.set(credit.id, Math.max(out.get(credit.id) ?? 0, creditCoverage(a, credit.role)));
+  }
+  return out;
+}
+
 /**
  * One family's staff ids on a title — each person ONCE.
  *
@@ -289,7 +353,9 @@ export function buildFamilyTerms(
   return active.map(family => ({
     family,
     weight: families[family]!,
-    profile: buildFieldProfile(members, weightOf, STAFF_FAMILY_EXTRACTORS[family], idf[family]),
+    // A member votes for a person by the share of it they cover (`creditCoverage`).
+    profile: buildFieldProfile(members, weightOf, STAFF_FAMILY_EXTRACTORS[family], idf[family],
+      (a, id) => familyCoverage(a, family).get(id as number) ?? 1),
   }));
 }
 
@@ -316,19 +382,34 @@ export interface FamilyHit {
  * `PROFILE_DENOM`'s whole job, and why it is pinned here rather than only on
  * `denomFor` itself.
  *
+ * The candidate's side carries `creditCoverage` too: a shared person counts by
+ * the share of the CANDIDATE they cover, so a one-episode cue on a long show
+ * reaches it only by that share. The denominator still counts PEOPLE, exactly
+ * `flooredFieldMatch`'s, so a title with no partial credit scores as before.
+ *
  * Only families that matched come back, in `STAFF_FAMILIES` order.
  */
 export function matchFamilyTerms(anime: AnimeRecord, terms: FamilyTerm[]): FamilyHit[] {
   const hits: FamilyHit[] = [];
   for (const term of terms) {
-    const m = flooredFieldMatch(anime, term.profile, denomFor(term.family));
-    if (m.score <= 0) continue;
+    const people = familyCoverage(anime, term.family);
+    if (people.size === 0) continue;
+    let sum = 0;
+    const matched: FieldValue[] = [];
+    for (const [id, share] of people) {
+      const w = term.profile.weights.get(id) || 0;
+      if (w <= 0) continue;
+      sum += w * share;
+      matched.push(id);
+    }
+    const value = sum / Math.max(people.size, denomFor(term.family));
+    if (value <= 0) continue;
     hits.push({
       family: term.family,
       weight: term.weight,
-      value: m.score,
-      contribution: term.weight * m.score,
-      matched: m.matched,
+      value,
+      contribution: term.weight * value,
+      matched,
     });
   }
   return hits;

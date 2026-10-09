@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving. **A function in an `fs` module that takes its data as arguments is still pure** — importing the module reads nothing (perf logging only runs under `NEXT_RUNTIME`; `DATA_PATH` is resolved, not opened). [tests/reco/profileRanking.test.ts](tests/reco/profileRanking.test.ts) runs the real `rankBoxCandidates` that way, handing it fixture rows and `groups: []`, and points `DATA_PATH` at a missing folder before a dynamic `import()` so a future edit that makes it read the store sees an empty one rather than the owner's.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/staffFields` (the reco-profile craft families: every boundary docs/recoProfiles/DESIGN.md §3 rejected, dub credits out, one person once per family, `denomFor` routing a family to `PROFILE_DENOM` and a metadata field to `MATCH_DENOM_FLOOR`, the family-scoped IDF), `reco/profileWeights` (`anilistStaff` forced to 0 whenever a family is on — even when set explicitly — each ranker overriding only its own base's keys, sparse-by-intent sanitizing, presets stating their zero, `mintProfileId` never re-minting a dead id a box still names, and `resolveProfileOver`'s base < profile < URL order with the zeroing holding AFTER the URL), `reco/profileRanking` (a box's profile reaching the rankers: families built only when non-zero, scored through `denomFor` never plain `fieldMatch`, an explain line naming the credit that puts the person IN the family, `scoreWithBreakdown` explaining every term it sums, and the real `rankBoxCandidates` on fixture rows — lifting a shared director, listing the family in `matched`, zeroing `anilistStaff`), `reco/profilePreview` (the preview pool IS the « Recommandé » mark's population, a 👎 reaches it with the same row array — so it must not be memoized on it — the unseen pool still skips members and écartés, the §8 diagnostic counting recurrence across UNITS, and every static route under `api/anime/profiles/` being a reserved profile id), `reco/profileBaseline` (the profile page's "against Défaut" framing: a re-faced franchise group found again rather than counted `nouveau`, and "tunes nothing" decided on the pool's RESOLVED weights, not the stored keys), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/slug`'s `mintGroupId` (a dead group id a box still declares is never re-minted — `mintProfileId`'s rule for regroupements), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), `domain/leanRow`'s `sortLeanRows` (unrated last in BOTH score directions, undated last in `feed`, ties keep the input order), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/staffFields` (the reco-profile craft families: every boundary docs/recoProfiles/DESIGN.md §3 rejected, dub credits out, one person once per family, `denomFor` routing a family to `PROFILE_DENOM` and a metadata field to `MATCH_DENOM_FLOOR`, the family-scoped IDF, and a per-episode credit counting by its SHARE of the title on both the profile and the candidate side), `reco/profileWeights` (`anilistStaff` forced to 0 whenever a family is on — even when set explicitly — each ranker overriding only its own base's keys, sparse-by-intent sanitizing, presets stating their zero, `mintProfileId` never re-minting a dead id a box still names, and `resolveProfileOver`'s base < profile < URL order with the zeroing holding AFTER the URL), `reco/profileRanking` (a box's profile reaching the rankers: families built only when non-zero, scored through `denomFor` never plain `fieldMatch`, an explain line naming the credit that puts the person IN the family, `scoreWithBreakdown` explaining every term it sums, and the real `rankBoxCandidates` on fixture rows — lifting a shared director, listing the family in `matched`, zeroing `anilistStaff`), `reco/profilePreview` (the preview pool IS the « Recommandé » mark's population, a 👎 reaches it with the same row array — so it must not be memoized on it — the unseen pool still skips members and écartés, the §8 diagnostic counting recurrence across UNITS, and every static route under `api/anime/profiles/` being a reserved profile id), `reco/profileBaseline` (the profile page's "against Défaut" framing: a re-faced franchise group found again rather than counted `nouveau`, and "tunes nothing" decided on the pool's RESOLVED weights, not the stored keys), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/slug`'s `mintGroupId` (a dead group id a box still declares is never re-minted — `mintProfileId`'s rule for regroupements), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), `domain/leanRow`'s `sortLeanRows` (unrated last in BOTH score directions, undated last in `feed`, ties keep the input order), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -837,9 +837,32 @@ it; it belongs in the "costs that are real" list.
   Tetsurou Araki's filmography (DESIGN §8, reproduced), but moves only 2 of 12 on the recos tab,
   where `crowd` is max-normalized to 1.0 and a family tops out near 1/3 — a nudge there, not a
   takeover.
+- ⚠️ **A per-episode credit counts by its share, in every craft family** (`creditCoverage` in
+  `staffFields.ts`): `Music (eps 1-9)` on a 12-episode show weighs 0.75, `Music (ep 2, … Carmen)`
+  on Fairy Tail's 175 weighs 1/175, on the box's side AND the candidate's. A ratio, never an
+  exclusion — the owner's call: a composer on 9 of 12 episodes is the show's composer. Before it,
+  Bizet weighed as much as Takanashi and pulled *Chiisana Konomi* into a « Sound » top 3. An
+  unknown episode count, or a qualifier it cannot read, keeps the full credit (only 166 of 12,259
+  music credits carry one at all).
+- ⚠️ **With a profile attached, the recos tab lets the CATALOG into its pool**
+  (`computeAnchored`'s `catalog` option, set by `mix?box=` iff the box has a profile). Before, the
+  tab could only re-order the ~80 titles its anchors' crowd edges named, so a « Sound » profile with
+  every crowd slider at 0 ranked those 80 by leftover noise (`rating` +0.05, `rejection`,
+  `popularity`) while the owner's composers' other work never entered — and the profile page's
+  « Catalogue non vu » tab showed a list the box could never produce. Now one ranking answers to
+  every slider: crowd at its default keeps the crowd head unchanged (top 5 identical on
+  `love-the-sound`), crowd at 0 ranks the catalog by the profile's own fields. Two rules make that
+  safe, both silent if dropped: a title off the crowd edges is admitted only on a weighted CONTENT
+  hit (genre / studio / tags / staff / a family — `rating` and `nsfw` match nearly everything and
+  would admit the catalog on noise), and every metadata field scores through `MATCH_DENOM_FLOOR`
+  in that mode (no crowd anchor, so the box ranker's *LONA* one-tag case applies). The pool runs to
+  thousands (1,397 for « Sound », 18k under the anchored defaults), so the route caps it at
+  `MAX_PROFILE_CARDS`; ~0.3-0.5 s per rank. A profile-less box, `/mix?ids=` and « Plus comme ça »
+  are untouched.
 - **`POST /api/anime/profiles/preview` is the tuning instrument** ([reco/profilePreview.ts](src/lib/reco/profilePreview.ts),
   PLAN.md phase 5) — what a weighting retrieves for a box or an ad-hoc anchor set, before anything
-  is saved. Three pools, each the ranker a profile really drives: `catalog` (default, local) is
+  is saved. The page asks for `anchored` only — the recos tab exactly, catalog let in; the other
+  two pools stay for `probe-profile.js`. Three pools, each the ranker a profile really drives: `catalog` (default, local) is
   `rankBoxCandidates` with `pool` set to the « Recommandé » mark's unseen population — ⚠️ the fill
   loop's own ranker, so it predicts what the profile does, and it still skips members and écartés
   inside the loop (écartés hold UNWATCHED ids, so this pool can reach them); `statused` is the fill
@@ -989,15 +1012,18 @@ a store on disk.
 [/profiles/[id]](src/pages/profiles/[id].tsx) — the sliders on the left
 ([ProfileSliders](src/components/anime/profiles/ProfileSliders.tsx)), and on the right what they
 change for a chosen box (`?box=`, defaulting to the first box using the profile) or an ad-hoc set
-(`?a=`, `/mix`'s key — « Tester un profil » on `/mix` carries its picks over), on one of the three
-preview pools (`?pool=`). docs/recoProfiles/PLAN.md phase 6 has the decisions.
+(`?a=`, `/mix`'s key — « Tester un profil » on `/mix` carries its picks over). The right side IS
+the box's recos tab as it will rank. docs/recoProfiles/PLAN.md phase 6 has the decisions.
+
+- ⚠️ **No pool tabs, deliberately.** The page used to offer three (« Catalogue non vu », « Ma
+  liste », « Recos communautaires »), and the crowd sliders were live on only one of them. The owner
+  read the tabs as previews, could not find where the crowd sliders unlocked, and found that none of
+  them matched what the box showed. One preview, every slider live, and it is the box's own list.
 
 - ⚠️ **The ranking is only ever shown AGAINST `Défaut`** ([reco/profileBaseline.ts](src/lib/reco/profileBaseline.ts)):
   every row carries its shift against the same pool unweighted, and a weighting that ranks exactly
-  like `Défaut` there gets a sentence and no list. An untouched catalog preview on its own would be
-  a plain `BOX_WEIGHTS` rank of the unseen catalog — a fourth recommendation surface beside
-  « Recommandé », which DESIGN §7 refuses. "Tunes nothing" is decided on the pool's RESOLVED
-  weights (a crowd-only profile is nothing on the metadata pools), and shifts match on ANY shared
+  like `Défaut` there gets a sentence and no list. "Tunes nothing" is decided on the RESOLVED
+  weights, not the stored keys, and shifts match on ANY shared
   entry id, because a franchise group's face is its best-scoring member and re-weighting re-faces
   it. Both pinned.
 - ⚠️ **The sliders are sparse-aware, NOT `RecoWeightsSection`.** A profile is sparse by intent: a
@@ -1006,9 +1032,8 @@ preview pools (`?pool=`). docs/recoProfiles/PLAN.md phase 6 has the decisions.
   every profile dense and freeze `BOX_WEIGHTS.genre` (0.25) into a map the recos tab then ranks
   with where `ANCHORED_WEIGHTS` says 0.2. Only a row that actually moved commits on release.
 - **Saved on every release** (one PATCH, chained so they land in order), and the header names the
-  boxes each release re-ranks — a profile is referenced, not copied. The crowd group stays rendered
-  but DISABLED off the `anchored` pool (hidden, a stored `crowd` would be unreachable while it
-  still ranks the recos tab); `anilistStaff` is disabled with a note whenever a family is on.
+  boxes each release re-ranks — a profile is referenced, not copied. `anilistStaff` is disabled
+  with a note whenever a family is on.
 - **The §8 diagnostic is under every staff slider** (`vide` / `recherche` / `axe`, and who is
   shared across how many units): on a small box a craft slider is "more by these people", and
   without the sentence that is invisible and confident.

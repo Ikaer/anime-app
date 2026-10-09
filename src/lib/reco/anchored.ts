@@ -18,10 +18,12 @@
  *    are user-global and have no per-anchor meaning, so `ANCHORED_WEIGHTS`
  *    forces them to 0; `rejection` and `popularity` stay on (they hold for any
  *    candidate).
- *  - **The candidate set is strictly the anchors' crowd edges** (MAL ∪ AniList,
- *    fetched by the caller). Metadata only RE-RANKS within it, never injects —
- *    that is what keeps this distinct from `byCredits.ts`, a catalog-wide credit
- *    similarity.
+ *  - **The candidate set is the anchors' crowd edges** (MAL ∪ AniList,
+ *    fetched by the caller), and metadata only RE-RANKS within it — that is
+ *    what keeps "Plus comme ça" and `/mix` distinct from `byCredits.ts`, a
+ *    catalog-wide credit similarity. ⚠️ **Except under `options.catalog`** (a
+ *    box with a reco profile attached): there the whole catalog joins the pool,
+ *    so one ranking answers to every slider — see that option.
  *  - **Overlap is not a source of its own.** A candidate several anchors point
  *    at simply sums their backers into `crowd`, and matches a profile pooled
  *    from all of them, so it rises without a knob attached to nothing. The
@@ -39,6 +41,7 @@
  */
 
 import { AnimeRecord, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
+import type { FieldValue } from '@/lib/reco/scoring';
 import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import {
@@ -48,11 +51,13 @@ import {
   popularityScale,
   buildDiscriminativeProfiles,
   fieldMatch,
+  flooredFieldMatch,
+  MATCH_DENOM_FLOOR,
   isPrematureSequel,
   scoreWithBreakdown,
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
-import { buildFamilyTerms, matchFamilyTerms, familyCredits, type StaffFamily } from '@/lib/reco/staffFields';
+import { buildFamilyTerms, matchFamilyTerms, familyCredits, type StaffFamily, type FamilyHit } from '@/lib/reco/staffFields';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getEffectiveStatus, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
@@ -114,6 +119,24 @@ export interface AnchoredOptions {
    * result so they do not set the maxima that normalize everyone else.
    */
   excludeIds?: ReadonlySet<string>;
+  /**
+   * Let the CATALOG into the candidate set, not only the crowd edges — the box
+   * recos tab when the box has a reco profile attached, and that profile's
+   * preview. Without it a profile can only re-order the ~80 titles the crowd
+   * already named: a « Sound » profile with every crowd slider at 0 still
+   * ranked those 80 by leftover noise (`rating` +0.05, `popularity`, `rejection`)
+   * while the catalog's real hits for the box's composers never entered.
+   * With it, the weights alone decide: crowd at 1 keeps the crowd on top, crowd
+   * at 0 leaves the profile's fields ranking the catalog.
+   *
+   * A title off the crowd edges enters only on a CONTENT hit — genre, studio,
+   * tags, staff or a craft family, with a non-zero weight. `rating` and `nsfw`
+   * match nearly every title and would admit the whole catalog on noise.
+   * ⚠️ Every metadata field then scores through `MATCH_DENOM_FLOOR`, for the
+   * whole pool: the floor's own reason — without a crowd anchor, a one-tag
+   * title would ride a perfect 1.0 to the top (the box ranker's *LONA* case).
+   */
+  catalog?: boolean;
   /** Language for the server-built "Pourquoi ?" detail strings. */
   lang?: Lang;
   /** Which of a title's three names `anchorTitle`/card titles are built from. */
@@ -173,13 +196,44 @@ export function computeAnchored(
   const crowd = accumulate(malEdges);
   const anilistCrowd = accumulate(anilistEdges);
 
+  // IDF over the full corpus (as in the feed), but the positive profiles are
+  // built from the anchors alone: "shares a RARE genre/tag/studio/creator with
+  // what you picked" scores far above "shares a ubiquitous one". Pooling the
+  // anchors is also what makes a candidate matching SEVERAL of them rank high
+  // without a dedicated overlap source. Built before pass 1, because under
+  // `options.catalog` a content hit is what admits a title at all.
+  const idf = computeIdfSet(all);
+  const self = buildFieldProfileSet(anchors, () => 1, idf);
+  // No `liked` argument: the netting reference must be the user's global likes,
+  // not the anchors. Subtracting a one-title profile from the dislike rates
+  // would say "this anchor's genres aren't rejections", which is not a claim
+  // about the user at all. `self` above is therefore left un-netted — the
+  // positive side here means "shares a rare value with what you picked".
+  const { negGenre, negStudio, negStaffT1 } = buildDiscriminativeProfiles(all, downCanonical, idf);
+
+  // The staff craft families a box's reco profile turns on (docs/recoProfiles/).
+  // One vote per anchor: on the box recos tab the anchors are already one
+  // representative per unit. Empty — no IDF pass, no profile — unless a family
+  // is non-zero, so every other caller ranks exactly as before.
+  const familyTerms = buildFamilyTerms(anchors, () => 1, options.families ?? {}, all);
+  const familyNames = new Map(familyTerms.map(term => [term.family, familyCredits(anchors, term.family)] as const));
+
+  // Floored only when the catalog is in the pool — see `options.catalog`.
+  const catalog = !!options.catalog;
+  const match = (anime: AnimeRecord, field: keyof typeof MATCH_DENOM_FLOOR) =>
+    catalog ? flooredFieldMatch(anime, self[field], MATCH_DENOM_FLOOR[field]) : fieldMatch(anime, self[field]);
+  type Matches = Record<keyof typeof MATCH_DENOM_FLOOR, { score: number; matched: FieldValue[] }> & { families: FamilyHit[] };
+  const CONTENT_FIELDS = ['genre', 'studio', 'anilistTags', 'anilistStaff'] as const;
+
   // Pass 1: hard filters + the maxima that normalize the unbounded sources.
-  const eligible: { anime: AnimeRecord; candId: string }[] = [];
+  const eligible: { anime: AnimeRecord; candId: string; m: Matches }[] = [];
   let maxCrowd = 0;
   let maxAnilist = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   let minUsers: number = Infinity;
-  for (const candId of new Set([...crowd.keys(), ...anilistCrowd.keys()])) {
+  const candIds = new Set([...crowd.keys(), ...anilistCrowd.keys()]);
+  const pool = catalog ? new Set([...candIds, ...byId.keys()]) : candIds;
+  for (const candId of pool) {
     if (excluded.has(candId) || options.excludeIds?.has(candId)) continue;
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
@@ -197,7 +251,23 @@ export function computeAnchored(
       if (st && SEEN_STATUSES.has(st)) continue; // plan_to_watch stays — it isn't seen
     }
 
-    eligible.push({ anime, candId });
+    const m: Matches = {
+      genre: match(anime, 'genre'),
+      studio: match(anime, 'studio'),
+      nsfw: match(anime, 'nsfw'),
+      rating: match(anime, 'rating'),
+      anilistTags: match(anime, 'anilistTags'),
+      anilistStaff: match(anime, 'anilistStaff'),
+      families: matchFamilyTerms(anime, familyTerms),
+    };
+    // Off the crowd edges, only a weighted CONTENT hit earns a place.
+    if (!candIds.has(candId)) {
+      const hit = CONTENT_FIELDS.some(f => (weights[f] ?? 0) > 0 && m[f].score > 0)
+        || m.families.some(h => h.contribution > 0);
+      if (!hit) continue;
+    }
+
+    eligible.push({ anime, candId, m });
     maxCrowd = Math.max(maxCrowd, crowd.get(candId)?.total || 0);
     maxAnilist = Math.max(maxAnilist, anilistCrowd.get(candId)?.total || 0);
     const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
@@ -210,27 +280,6 @@ export function computeAnchored(
   const anilistDenom = Math.log(1 + maxAnilist) || 1;
   // Min-max, NOT a bare ratio — see `popularityScale`.
   const popValue = popularityScale(minUsers, maxUsers);
-
-  // IDF over the full corpus (as in the feed), but the positive profiles are
-  // built from the anchors alone: "shares a RARE genre/tag/studio/creator with
-  // what you picked" scores far above "shares a ubiquitous one". Pooling the
-  // anchors is also what makes a candidate matching SEVERAL of them rank high
-  // without a dedicated overlap source.
-  const idf = computeIdfSet(all);
-  const self = buildFieldProfileSet(anchors, () => 1, idf);
-  // No `liked` argument: the netting reference must be the user's global likes,
-  // not the anchors. Subtracting a one-title profile from the dislike rates
-  // would say "this anchor's genres aren't rejections", which is not a claim
-  // about the user at all. `self` above is therefore left un-netted — the
-  // positive side here means "shares a rare value with what you picked".
-  const { negGenre, negStudio, negStaffT1 } = buildDiscriminativeProfiles(all, downCanonical, idf);
-
-  // The staff craft families a box's reco profile turns on (docs/recoProfiles/).
-  // One vote per anchor: on the box recos tab the anchors are already one
-  // representative per unit. Empty — no IDF pass, no profile — unless a family
-  // is non-zero, so every other caller ranks exactly as before.
-  const familyTerms = buildFamilyTerms(anchors, () => 1, options.families ?? {}, all);
-  const familyNames = new Map(familyTerms.map(term => [term.family, familyCredits(anchors, term.family)] as const));
 
   // Names/roles as the ANCHORS credit them — the explain says what the candidate
   // shares with the titles you picked. ⚠️ The studio map is keyed by
@@ -252,18 +301,13 @@ export function computeAnchored(
 
   // Pass 2: score with the same additive weighted sum as the feed.
   const items: AnchoredItem[] = [];
-  for (const { anime, candId } of eligible) {
+  for (const { anime, candId, m } of eligible) {
     const crowdAcc = crowd.get(candId);
     const anilistAcc = anilistCrowd.get(candId);
     const crowdNum = crowdAcc?.total || 0;
     const anilistNum = anilistAcc?.total || 0;
 
-    const genreM = fieldMatch(anime, self.genre);
-    const studioM = fieldMatch(anime, self.studio);
-    const nsfwM = fieldMatch(anime, self.nsfw);
-    const ratingM = fieldMatch(anime, self.rating);
-    const tagsM = fieldMatch(anime, self.anilistTags);
-    const staffM = fieldMatch(anime, self.anilistStaff);
+    const { genre: genreM, studio: studioM, nsfw: nsfwM, rating: ratingM, anilistTags: tagsM, anilistStaff: staffM } = m;
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
     const negStaffM = fieldMatch(anime, negStaffT1);
@@ -343,7 +387,7 @@ export function computeAnchored(
     // moves the score is always a line in « Pourquoi ? » — see
     // `scoreWithBreakdown`. Named with the credit that puts the person in THIS
     // family (`familyCredits`), as the anchors credit them.
-    const familyRows: RecoContribution[] = matchFamilyTerms(anime, familyTerms).map(hit => ({
+    const familyRows: RecoContribution[] = m.families.map(hit => ({
       source: hit.family,
       value: hit.value,
       weight: hit.weight,

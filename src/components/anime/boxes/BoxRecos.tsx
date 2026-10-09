@@ -131,7 +131,7 @@ const BoxRecos: React.FC<BoxRecosProps> = ({
           {profile.staffZeroed && <span className={styles.profileNote}> · {t('boxReco.profileStaffZeroed')}</span>}
           {' '}
           <Link
-            href={`/profiles/${encodeURIComponent(profile.id)}?box=${encodeURIComponent(boxId)}&pool=anchored`}
+            href={`/profiles/${encodeURIComponent(profile.id)}?box=${encodeURIComponent(boxId)}`}
             className={styles.profileLink}
           >
             {t('boxes.profileTune')} →

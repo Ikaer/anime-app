@@ -4,8 +4,9 @@
  * ⚠️ **Only the preview's context, never the weights.** The weights are the
  * profile itself — stored state, saved on every slider release (`updateProfile`
  * replaces the map) — so carrying them in the URL would give one weighting two
- * homes that can disagree. What the URL says is "tested against this box, on
- * this pool", which is view state and bookmarkable like any other.
+ * homes that can disagree. What the URL says is "tested against this box",
+ * which is view state and bookmarkable like any other. (A `pool` key existed
+ * while the page had three pool tabs; an old bookmark carrying it just ignores it.)
  *
  * The anchor is a box (`box`) XOR an ad-hoc set (`a` — `/mix`'s key, so a mix
  * becomes a profile test by carrying its own query string over). Setting one
@@ -13,28 +14,23 @@
  */
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PREVIEW_POOLS, type PreviewPool } from '@/lib/reco/profileWeights';
 
 export interface ProfileUrlState {
   /** The box the preview anchors on, or null. */
   box: string | null;
   /** …or a hand-picked set, in pick order. Empty unless `box` is null. */
   anchors: string[];
-  /** `catalog` (default), `statused`, or `anchored` — the one reaching MAL / AniList. */
-  pool: PreviewPool;
 }
 
-export const PROFILE_URL_DEFAULTS: ProfileUrlState = { box: null, anchors: [], pool: 'catalog' };
+export const PROFILE_URL_DEFAULTS: ProfileUrlState = { box: null, anchors: [] };
 
-const KEYS = { box: 'box', anchors: 'a', pool: 'pool' } as const;
+const KEYS = { box: 'box', anchors: 'a' } as const;
 
 function decode(params: URLSearchParams): ProfileUrlState {
   const box = params.get(KEYS.box)?.trim() || null;
-  const pool = params.get(KEYS.pool);
   return {
     box,
     anchors: box ? [] : (params.get(KEYS.anchors) || '').split(',').map(s => s.trim()).filter(Boolean),
-    pool: PREVIEW_POOLS.includes(pool as PreviewPool) ? (pool as PreviewPool) : PROFILE_URL_DEFAULTS.pool,
   };
 }
 
@@ -43,7 +39,6 @@ export function toProfileQuery(state: ProfileUrlState): string {
   const params = new URLSearchParams();
   if (state.box) params.set(KEYS.box, state.box);
   else if (state.anchors.length > 0) params.set(KEYS.anchors, state.anchors.join(','));
-  if (state.pool !== PROFILE_URL_DEFAULTS.pool) params.set(KEYS.pool, state.pool);
   return params.toString().replace(/%2C/g, ',');
 }
 

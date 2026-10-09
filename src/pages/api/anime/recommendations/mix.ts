@@ -28,6 +28,9 @@ import type { AnimeRecord, RecoMeta } from '@/models/anime';
  * neither read nor written.
  */
 
+/** Cards returned for a box whose profile let the catalog in. */
+const MAX_PROFILE_CARDS = 200;
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
@@ -130,6 +133,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // ⚠️ A box's « Oui » and « Non » stay answered across a reload — see
       // `boxAnsweredIds`.
       excludeIds: box ? boxAnsweredIds(box) : undefined,
+      // A box with a reco profile ranks the CATALOG too, so its sliders act on
+      // this list rather than only re-ordering the crowd's ~80 titles — see
+      // `AnchoredOptions.catalog`. `/mix?ids=` and a profile-less box are
+      // unchanged.
+      catalog: !!profile,
       lang,
       titleLang,
     });
@@ -149,7 +157,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     }));
 
-    const filtered = applyNarrowingFilters(animes, narrowing);
+    // ⚠️ Capped only when the catalog is in: that pool runs to thousands of
+    // full records (1,397 for a « Sound » profile, 18k under the anchored
+    // defaults' genre weight), and nobody reads past the head of it.
+    const narrowed = applyNarrowingFilters(animes, narrowing);
+    const filtered = profile ? narrowed.slice(0, MAX_PROFILE_CARDS) : narrowed;
     res.json({
       animes: filtered,
       total: filtered.length,
