@@ -1,5 +1,5 @@
 /**
- * The scheduled-work orchestration — nine steps spanning every provider.
+ * The scheduled-work orchestration — nine provider steps, plus the mark snapshot.
  *
  * **This is a lib module, not a route, because it has TWO entry points**: the
  * NAS cron job (`POST /api/anime/cron-sync`, secret-authenticated) and the
@@ -46,6 +46,7 @@ import {
 import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
 import { getRecommendationsData } from '@/lib/reco/data';
+import { captureAffinityMarks } from '@/lib/reco/markHistoryStore';
 import { appendLog } from '@/lib/config/connectionLog';
 import { recordCronRun } from '@/lib/providers/cronHealth';
 
@@ -71,7 +72,8 @@ export type CronStepName =
   | 'anilistHistorical'
   | 'anilistCatalog'
   | 'anilistCatalogFields'
-  | 'recommendations';
+  | 'recommendations'
+  | 'affinityMarks';
 
 export type CronSteps = Record<CronStepName, CronStepOutcome>;
 
@@ -425,6 +427,24 @@ async function refreshRecommendations(accessToken: string | null): Promise<CronS
 }
 
 /**
+ * Snapshot the « Recommandé » mark per title — before air, and at J+21 — into
+ * `history/affinity_marks.json` (see `reco/markHistory.ts`). Local and cheap
+ * (one affinity index, ~0.5 s). Placed after every data pull, so the snapshot
+ * scores the metadata this tick just landed; the two fire-and-forget sweeps
+ * still to come land theirs for tomorrow's.
+ *
+ * Runs on the manual button too: a capture is "what the mark said today",
+ * whoever asked, and every point is written once or overwritten idempotently.
+ */
+async function captureMarks(): Promise<CronStepOutcome> {
+  const result = captureAffinityMarks();
+  if (result.seedCount === 0) {
+    return { ok: true, skipped: true, reason: 'No seeds — the mark is not computed' };
+  }
+  return { ok: true, detail: { ...result.written, tracked: result.tracked } };
+}
+
+/**
  * Run lock. It exists because there are now TWO callers — the 02:00 cron and the
  * `/connections` button — and without it a button press during the scheduled run
  * would double every step. It is checked **inside** `runCronSync`, not in the
@@ -483,6 +503,7 @@ export async function runCronSync(trigger: CronTrigger): Promise<CronSyncResult>
     steps.recommendations = await step('recommendations', () =>
       refreshRecommendations(malToken ? malToken.access_token : null)
     );
+    steps.affinityMarks = await step('affinity-marks', captureMarks);
 
     // Started LAST, after the reco refresh has finished with AniList: both throttle
     // against the same per-IP rate limit, and the metadata sweep is the one that

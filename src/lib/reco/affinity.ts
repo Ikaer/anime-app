@@ -150,6 +150,16 @@ export interface AffinityIndex {
   coverage: { scoreable: number; unseen: number };
   /** Seeds the profile was built from. Zero means the mark is meaningless. */
   seedCount: number;
+  /**
+   * The same score for ANY record, eligible or not — `null` when it cannot be
+   * scored (no AniList metadata, or no seeds). Exists for the mark history
+   * (`reco/markHistory.ts`), whose J+21 point has to score a title the owner is
+   * already WATCHING, which the index itself skips. Never feeds the thresholds:
+   * those stay a percentile of the eligible population.
+   */
+  scoreOf: (anime: AnimeRecord) => number | null;
+  /** Share of the eligible population scoring strictly below `score`, in [0,1]. */
+  percentileOf: (score: number) => number;
 }
 
 export interface AffinityOptions {
@@ -285,6 +295,8 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
     thresholds: { strong: Infinity, notable: Infinity },
     coverage: { scoreable: 0, unseen: 0 },
     seedCount: seeds.length,
+    scoreOf: () => null,
+    percentileOf: () => 0,
   };
   // No seeds, no taste profile: a fresh install would otherwise badge whatever
   // the IDF happened to favour, which is worse than badging nothing.
@@ -311,6 +323,20 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
     anilistTags: buildFieldProfile(seeds, seedW, extractors.anilistTags, tagIdf),
   };
 
+  const scoreOf = (anime: AnimeRecord): number | null => {
+    if (!isScoreable(anime)) return null;
+    let score = 0;
+    for (const field of AFFINITY_FIELDS) {
+      if (weights[field] <= 0) continue;
+      score += weights[field] * flooredFieldMatch(anime, profiles[field], MATCH_DENOM_FLOOR[field]).score;
+    }
+    const rejection =
+      TUNING.REJECTION_MIX.genre * flooredFieldMatch(anime, disc.negGenre, MATCH_DENOM_FLOOR.genre).score +
+      TUNING.REJECTION_MIX.studio * flooredFieldMatch(anime, disc.negStudio, MATCH_DENOM_FLOOR.studio).score +
+      TUNING.REJECTION_MIX.staffT1 * flooredFieldMatch(anime, disc.negStaffT1, MATCH_DENOM_FLOOR.anilistStaff).score;
+    return score + AFFINITY_REJECTION_WEIGHT * rejection;
+  };
+
   const relations = buildRelationIndex(all);
   const scores = new Map<string, number>();
   const eligible: AnimeRecord[] = [];
@@ -327,24 +353,23 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
     if (!isScoreable(anime)) continue;
     if (isPrematureSequel(anime, relations)) continue;
 
-    let score = 0;
-    for (const field of AFFINITY_FIELDS) {
-      if (weights[field] <= 0) continue;
-      score += weights[field] * flooredFieldMatch(anime, profiles[field], MATCH_DENOM_FLOOR[field]).score;
-    }
-    const rejection =
-      TUNING.REJECTION_MIX.genre * flooredFieldMatch(anime, disc.negGenre, MATCH_DENOM_FLOOR.genre).score +
-      TUNING.REJECTION_MIX.studio * flooredFieldMatch(anime, disc.negStudio, MATCH_DENOM_FLOOR.studio).score +
-      TUNING.REJECTION_MIX.staffT1 * flooredFieldMatch(anime, disc.negStaffT1, MATCH_DENOM_FLOOR.anilistStaff).score;
-    score += AFFINITY_REJECTION_WEIGHT * rejection;
-
+    const score = scoreOf(anime)!;
     scores.set(anime.id, score);
     eligible.push(anime);
   }
 
-  if (eligible.length === 0) return { ...empty, coverage: { scoreable: 0, unseen } };
+  if (eligible.length === 0) return { ...empty, coverage: { scoreable: 0, unseen }, scoreOf };
 
   const sorted = [...scores.values()].sort((a, b) => b - a);
+  const ascending = [...sorted].reverse();
+  const percentileOf = (score: number): number => {
+    let lo = 0, hi = ascending.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (ascending[mid] < score) lo = mid + 1; else hi = mid;
+    }
+    return lo / ascending.length;
+  };
   const cutAt = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * (1 - p)))];
   const thresholds: Record<AffinityTier, number> = {
     strong: cutAt(AFFINITY_TIER_PERCENTILE.strong),
@@ -381,7 +406,15 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
     });
   }
 
-  return { scores, marks, thresholds, coverage: { scoreable: eligible.length, unseen }, seedCount: seeds.length };
+  return {
+    scores,
+    marks,
+    thresholds,
+    coverage: { scoreable: eligible.length, unseen },
+    seedCount: seeds.length,
+    scoreOf,
+    percentileOf,
+  };
 }
 
 // ---------------------------------------------------------------------------

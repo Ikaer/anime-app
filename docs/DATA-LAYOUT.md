@@ -36,6 +36,8 @@ and code comments cite this file.
     simkl_checkpoint.json        # all-items watermark + lastRatedAt
     anilist_import.json          # last-import count/date
     anilist_years.json           # AniList back-catalog checkpoint, { syncedYears }
+  history/
+    affinity_marks.json          # what the « Recommandé » mark said per title, pre-air and at J+21
   cache/
     recommendations.json         # rebuildable: crowd/AniList seeds + hydrated candidates
   logs/
@@ -75,6 +77,11 @@ under `catalog/` and `personal/` is the point, not a collision.
 `{provider: state}` map was proposed and rejected: three modules read-modify-write
 their state independently, so one shared file makes concurrent logins a clobber
 race — for no gain on data that expires in ten minutes.
+
+**`history/` is what the app recorded at a moment that has passed.** It is
+derived (nothing in it was typed by the owner, unlike `user/`) and still
+**durable**: no provider and no rebuild can say what the « Recommandé » mark showed
+last spring. So it is backed up like `user/`, and it is the opposite of `cache/`.
 
 **`connection_log.json` is app data, not diagnostics.** It is the progress feed
 the Connections panel and the onboarding bar *poll* (there is no SSE for
