@@ -44,6 +44,8 @@ export interface AnimeFiltersState {
   genres: string[];
   hiddenOnly: boolean;
   discrepanciesOnly: boolean;
+  /** A favourite seiyuu holds a MAIN role (reco/favSeiyuu.ts). */
+  favSeiyuuOnly: boolean;
   unratedOnly: boolean;
   minScore: number | null;
   maxScore: number | null;
@@ -159,6 +161,7 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   genres: [],
   hiddenOnly: false,
   discrepanciesOnly: false,
+  favSeiyuuOnly: false,
   unratedOnly: false,
   minScore: null,
   maxScore: null,
@@ -225,6 +228,7 @@ const PARAM_KEYS = {
   genres: 'g',
   hidden: 'h',
   discrepancies: 'disc',
+  favSeiyuu: 'fv',
   unrated: 'ur',
   minScore: 'min',
   maxScore: 'max',
@@ -303,6 +307,10 @@ function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchPa
 
   if (filters.discrepanciesOnly) {
     params.set(PARAM_KEYS.discrepancies, '1');
+  }
+
+  if (filters.favSeiyuuOnly) {
+    params.set(PARAM_KEYS.favSeiyuu, '1');
   }
 
   if (filters.unratedOnly) {
@@ -387,6 +395,7 @@ function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     genres: decodeGenres(params.get(PARAM_KEYS.genres)),
     hiddenOnly: params.get(PARAM_KEYS.hidden) === '1',
     discrepanciesOnly: params.get(PARAM_KEYS.discrepancies) === '1',
+    favSeiyuuOnly: params.get(PARAM_KEYS.favSeiyuu) === '1',
     unratedOnly: params.get(PARAM_KEYS.unrated) === '1',
     minScore: params.has(PARAM_KEYS.minScore) ? parseFloat(params.get(PARAM_KEYS.minScore)!) : null,
     maxScore: params.has(PARAM_KEYS.maxScore) ? parseFloat(params.get(PARAM_KEYS.maxScore)!) : null,

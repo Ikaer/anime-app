@@ -769,6 +769,7 @@ export type RecoSource =
   | 'rating'       // taste-profile affinity on the age rating (IDF-weighted)
   | 'anilistTags'  // taste-profile affinity on AniList catalog tags (IDF-weighted)
   | 'anilistStaff' // taste-profile affinity on AniList staff/creators (IDF-weighted)
+  | 'favSeiyuu'    // a favourite seiyuu voices this title (noisy-OR by role — see reco/favSeiyuu.ts)
   | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored / 👎)
   | 'popularity';  // MAL popularity — negative weight makes the feed nichier
 
@@ -1025,6 +1026,7 @@ export interface AnimeListResponse {
     mediaType: string | null;
     hidden: string | null;
     discrepancies: string | null;
+    favSeiyuu: string | null;
     unrated: string | null;
     genres: string | null;
     status: string | null;

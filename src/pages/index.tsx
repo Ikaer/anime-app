@@ -64,6 +64,9 @@ export default function AnimePage() {
       // Discrepancies only (MAL vs SIMKL mismatch)
       if (filters.discrepanciesOnly) params.set('discrepancies', 'true');
 
+      // A favourite seiyuu in a MAIN role
+      if (filters.favSeiyuuOnly) params.set('favSeiyuu', 'true');
+
       // Unrated only (completed but not yet scored)
       if (filters.unratedOnly) params.set('unrated', 'true');
 
@@ -129,6 +132,10 @@ export default function AnimePage() {
     updateFilters({ discrepanciesOnly });
   };
 
+  const handleFavSeiyuuOnlyChange = (favSeiyuuOnly: boolean) => {
+    updateFilters({ favSeiyuuOnly });
+  };
+
   const handleMinScoreChange = (minScore: number | null) => {
     updateFilters({ minScore });
   };
@@ -185,6 +192,8 @@ export default function AnimePage() {
       onHiddenOnlyChange={handleHiddenOnlyChange}
       discrepanciesOnly={filters.discrepanciesOnly}
       onDiscrepanciesOnlyChange={handleDiscrepanciesOnlyChange}
+      favSeiyuuOnly={filters.favSeiyuuOnly}
+      onFavSeiyuuOnlyChange={handleFavSeiyuuOnlyChange}
       minScore={filters.minScore}
       onMinScoreChange={handleMinScoreChange}
       maxScore={filters.maxScore}

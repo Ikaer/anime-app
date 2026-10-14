@@ -71,6 +71,7 @@ import {
   seedWeight,
   seedGapBonus,
 } from '@/lib/reco/scoring';
+import { favSeiyuuValue, FAV_SEIYUU_ROLE_WEIGHT, type FavSeiyuuIndex } from '@/lib/reco/favSeiyuu';
 
 /**
  * How the mark is weighted — the box ranker's shape, not the feed's, and for
@@ -108,6 +109,18 @@ export const AFFINITY_REJECTION_WEIGHT = -0.35;
  * `Primarily Teen Cast`) enters the profile beside `Lost Civilization`.
  */
 export const AFFINITY_TAG_MIN_RANK = 60;
+
+/**
+ * Weight of the favourite-seiyuu term in the mark. A stated preference, NOT a
+ * measurement — `probe-affinity.js` cannot judge it, for `favSeiyuu.ts`'
+ * hindsight reason (favourites are picked from shows already loved). Sized so a
+ * favourite in a lead role (0.7 × 0.3 ≈ 0.21) is about one strong tag match:
+ * enough to lift a title over the `notable` cut when its metadata is already
+ * close, not enough to badge a title on the cast alone. Cast is announced early,
+ * so this is the one term that is often present on an unaired title whose tags
+ * have not arrived yet — which is where the owner asked for it.
+ */
+export const AFFINITY_FAV_SEIYUU_WEIGHT = 0.3;
 
 const AFFINITY_FIELDS: MetaField[] = ['genre', 'studio', 'anilistTags', 'anilistStaff'];
 
@@ -169,6 +182,13 @@ export interface AffinityOptions {
   weights?: Record<MetaField, number>;
   /** Override for tuning probes; defaults to `AFFINITY_TAG_MIN_RANK`. */
   tagMinRank?: number;
+  /**
+   * Favourite seiyuu, from `getFavSeiyuuIndex()`. Absent (probes, tests, the
+   * mark history) = no term, so those keep ranking exactly as before. It never
+   * makes an unscoreable title scoreable: `isScoreable` still decides the
+   * population, or a cast-only title would sit in a pool its peers were cut from.
+   */
+  favSeiyuu?: FavSeiyuuIndex;
 }
 
 /** Tags above the rank floor; every other field is the shared extractor. */
@@ -283,6 +303,7 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
   const downIds = options.downIds ?? new Set<string>();
   const weights = options.weights ?? AFFINITY_WEIGHTS;
   const minRank = options.tagMinRank ?? AFFINITY_TAG_MIN_RANK;
+  const favHits = (anime: AnimeRecord) => options.favSeiyuu?.byAnime.get(anime.id);
 
   const seeds = all.filter(a => {
     if (getEffectiveStatus(a) !== 'completed') return false;
@@ -334,7 +355,7 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
       TUNING.REJECTION_MIX.genre * flooredFieldMatch(anime, disc.negGenre, MATCH_DENOM_FLOOR.genre).score +
       TUNING.REJECTION_MIX.studio * flooredFieldMatch(anime, disc.negStudio, MATCH_DENOM_FLOOR.studio).score +
       TUNING.REJECTION_MIX.staffT1 * flooredFieldMatch(anime, disc.negStaffT1, MATCH_DENOM_FLOOR.anilistStaff).score;
-    return score + AFFINITY_REJECTION_WEIGHT * rejection;
+    return score + AFFINITY_FAV_SEIYUU_WEIGHT * favSeiyuuValue(favHits(anime)) + AFFINITY_REJECTION_WEIGHT * rejection;
   };
 
   const relations = buildRelationIndex(all);
@@ -384,7 +405,7 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
     const score = scores.get(anime.id)!;
     if (score < thresholds.notable) continue;
     const tier: AffinityTier = score >= thresholds.strong ? 'strong' : 'notable';
-    const why: { field: MetaField; values: string[]; weight: number }[] = [];
+    const why: { field: MetaField | 'favSeiyuu'; values: string[]; weight: number }[] = [];
     for (const field of AFFINITY_FIELDS) {
       if (weights[field] <= 0) continue;
       const profile = profiles[field];
@@ -398,6 +419,10 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
           .slice(0, WHY_VALUE_LIMIT)
           .map(value => labelFor(field, value, anime)),
       });
+    }
+    const fav = (favHits(anime) ?? []).filter(h => FAV_SEIYUU_ROLE_WEIGHT[h.role] > 0);
+    if (fav.length > 0) {
+      why.push({ field: 'favSeiyuu', weight: AFFINITY_FAV_SEIYUU_WEIGHT * favSeiyuuValue(fav), values: fav.map(h => h.name) });
     }
     marks.set(anime.id, {
       tier,

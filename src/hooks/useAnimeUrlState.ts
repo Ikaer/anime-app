@@ -162,6 +162,7 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
     genres: currentState.genres,
     hiddenOnly: currentState.hiddenOnly,
     discrepanciesOnly: currentState.discrepanciesOnly,
+    favSeiyuuOnly: currentState.favSeiyuuOnly,
     unratedOnly: currentState.unratedOnly,
     minScore: currentState.minScore,
     maxScore: currentState.maxScore,

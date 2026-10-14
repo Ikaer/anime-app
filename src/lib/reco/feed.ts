@@ -39,6 +39,8 @@ import {
 import { getRecommendationsData } from '@/lib/reco/data';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
 import { getSeedMuteSet } from '@/lib/reco/seedMutes';
+import { getFavSeiyuuIndex } from '@/lib/reco/seiyuuFavorites';
+import { favSeiyuuValue, describeFavSeiyuu } from '@/lib/reco/favSeiyuu';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
@@ -219,6 +221,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
    * here or a mute would do nothing until the next refresh.
    */
   const mutedSeeds = getSeedMuteSet();
+  /**
+   * Favourite seiyuu. RE-RANKS only, like the metadata sources: it never puts a
+   * title in the pool, so a favourite's filmography cannot flood the feed with
+   * titles nothing else points at. Built from the filmography slice, not the
+   * cast slice (which only covers the owner's own list — see favSeiyuu.ts).
+   */
+  const favSeiyuu = getFavSeiyuuIndex();
 
   // Accumulate affinity from edges, grouped by originating seed.
   const acc = new Map<string, Accumulator>();
@@ -404,6 +413,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       rating: ratingM.score,
       anilistTags: anilistTagsM.score,
       anilistStaff: anilistStaffM.score,
+      favSeiyuu: favSeiyuuValue(favSeiyuu.byAnime.get(anime.id)),
       rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
         + TUNING.REJECTION_MIX.studio * negStudioM.score
         + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
@@ -453,6 +463,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
             })
             .join(', ')
         : undefined,
+      favSeiyuu: describeFavSeiyuu(favSeiyuu.byAnime.get(anime.id)),
       rejection: (() => {
         // Staff names resolve against the candidate's T1 credits specifically:
         // `staffById` keeps whichever credit came last for a person with several

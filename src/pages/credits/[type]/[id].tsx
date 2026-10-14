@@ -34,6 +34,7 @@ import { buildCrosswalkIndexes, getAllAnilistCast, getAnilistSeiyuu, getAnimeFor
 import { applyNarrowingFilters, getStatusFilterKey, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { listAnimeByStudio, listAnimeByStaff, listAnimeBySeiyuu, listAnimeBySeiyuuFilmography, toCredited, type CreditedAnime } from '@/lib/domain/creditsCatalog';
 import { decodeCreditsState, useCreditsUrlState } from '@/hooks';
+import { useSeiyuuFavorites } from '@/hooks/useSeiyuuFavorites';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import type { SortColumn, SortDirection } from '@/models/anime';
@@ -104,6 +105,8 @@ export default function CreditsPage({
   const t = useT();
   const router = useRouter();
   const { state, update } = useCreditsUrlState(`/credits/${type}/${id}`);
+  const seiyuuFavs = useSeiyuuFavorites();
+  const isFav = type === 'seiyuu' && seiyuuFavs.isFavorite(id);
   // An empty name only happens on a pending seiyuu nothing local knows yet —
   // the person's identity arrives with the filmography, so name them generically
   // rather than rendering "Roles voiced by " with a hole in it.
@@ -275,7 +278,7 @@ export default function CreditsPage({
               `<style jsx>` block, so a hoisted node would render unstyled — and
               an unsized portrait is a full-height poster. */}
           <AnimeListHeader
-            title={type === 'seiyuu' && (image || nameNative) ? (
+            title={type === 'seiyuu' && (image || nameNative || name) ? (
               <span className="who">
                 {image
                   // eslint-disable-next-line @next/next/no-img-element
@@ -288,6 +291,21 @@ export default function CreditsPage({
                       something only a seiyuu page has. Hidden outright when no
                       character on the page carries a portrait — a toggle with
                       nothing to toggle is worse than no toggle. */}
+                  {/* The favourite toggle — the one place a seiyuu is starred,
+                      since this is where their filmography is read. Starring
+                      also starts the AniList filmography fetch server-side,
+                      which is what lets the favourite reach the rankers. */}
+                  {name && seiyuuFavs.loaded && (
+                    <button
+                      type="button"
+                      className={`fav-toggle${isFav ? ' on' : ''}`}
+                      aria-pressed={isFav}
+                      title={t('credits.favoriteHint')}
+                      onClick={() => void seiyuuFavs.toggle(id, name)}
+                    >
+                      {t(isFav ? 'credits.unfavorite' : 'credits.favorite')}
+                    </button>
+                  )}
                   {anyFace && (
                     <button
                       type="button"
@@ -443,6 +461,11 @@ export default function CreditsPage({
         .faces-toggle { margin-top: 4px; align-self: flex-start; cursor: pointer; font: inherit;
           font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
           color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .fav-toggle { margin-top: 4px; align-self: flex-start; cursor: pointer; font: inherit;
+          font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+          color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .fav-toggle:hover { color: var(--text-primary); border-color: var(--border-hover); }
+        .fav-toggle.on { color: #f5c518; border-color: #f5c518; }
         .faces-toggle:hover { color: var(--text-primary); border-color: var(--border-hover); }
         .who .portrait { width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
           border: 1px solid var(--border-color); }

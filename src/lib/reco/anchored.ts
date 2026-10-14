@@ -59,6 +59,8 @@ import {
 } from '@/lib/reco/scoring';
 import { buildFamilyTerms, matchFamilyTerms, familyCredits, type StaffFamily, type FamilyHit } from '@/lib/reco/staffFields';
 import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
+import { getFavSeiyuuIndex } from '@/lib/reco/seiyuuFavorites';
+import { favSeiyuuValue, describeFavSeiyuu } from '@/lib/reco/favSeiyuu';
 import { getEffectiveStatus, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { staffRoleTier } from '@/lib/domain/staffRole';
@@ -179,6 +181,10 @@ export function computeAnchored(
   const hiddenCanonical = new Set(getHiddenAnimeIds());
   const downCanonical = feedbackIds(getFeedback(), 'down');
   const anchorIdSet = new Set(anchors.map(a => a.id));
+  // Favourite seiyuu: user-global like `rejection`, so it holds for any anchor
+  // set. Re-ranks within the crowd pool; under `options.catalog` a weighted hit
+  // also admits a title, like a content field (see the pass-1 gate).
+  const favSeiyuu = getFavSeiyuuIndex();
 
   /** candidate id -> { total backers, per-anchor split } for one crowd source. */
   type CrowdAcc = { total: number; perAnchor: Map<string, number> };
@@ -263,7 +269,8 @@ export function computeAnchored(
     // Off the crowd edges, only a weighted CONTENT hit earns a place.
     if (!candIds.has(candId)) {
       const hit = CONTENT_FIELDS.some(f => (weights[f] ?? 0) > 0 && m[f].score > 0)
-        || m.families.some(h => h.contribution > 0);
+        || m.families.some(h => h.contribution > 0)
+        || ((weights.favSeiyuu ?? 0) > 0 && favSeiyuuValue(favSeiyuu.byAnime.get(candId)) > 0);
       if (!hit) continue;
     }
 
@@ -324,6 +331,7 @@ export function computeAnchored(
       rating: ratingM.score,
       anilistTags: tagsM.score,
       anilistStaff: staffM.score,
+      favSeiyuu: favSeiyuuValue(favSeiyuu.byAnime.get(candId)),
       rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
         + TUNING.REJECTION_MIX.studio * negStudioM.score
         + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
@@ -359,6 +367,7 @@ export function computeAnchored(
             })
             .join(', ') })
         : undefined,
+      favSeiyuu: describeFavSeiyuu(favSeiyuu.byAnime.get(candId)),
       rejection: (() => {
         // Candidate-side names throughout: `fieldMatch` extracts from the
         // candidate, so `anchorStudioNames` / `anchorStaffById` would miss every

@@ -59,6 +59,7 @@ const FULL: AnimeFiltersState = {
   genres: ['Action', 'Slice of Life', 'Sci-Fi'],
   hiddenOnly: true,
   discrepanciesOnly: true,
+  favSeiyuuOnly: true,
   unratedOnly: true,
   minScore: 6.5,
   maxScore: 9,

@@ -42,9 +42,11 @@ import styles from './ProfileSliders.module.css';
  * The content group — every metadata field the box rankers read (`BOX_WEIGHTS`'
  * keys), `rating` and `nsfw` included although both ship at 0: a profile can
  * store them, and a stored value the page cannot show or reset is the same
- * trap as a hidden crowd row.
+ * trap as a hidden crowd row. `favSeiyuu` is not a `BOX_WEIGHTS` key — the fill
+ * loop ignores it — but the recos tab this page previews reads it, so it is a
+ * live row here like every other.
  */
-const CONTENT_FIELDS: RecoSource[] = ['anilistTags', 'genre', 'studio', 'anilistStaff', 'rating', 'nsfw'];
+const CONTENT_FIELDS: RecoSource[] = ['anilistTags', 'genre', 'studio', 'anilistStaff', 'favSeiyuu', 'rating', 'nsfw'];
 /** The crowd half, and the two penalties that ride with it on the recos tab. */
 const CROWD_FIELDS: RecoSource[] = ['crowd', 'anilistCrowd', 'rejection', 'popularity'];
 

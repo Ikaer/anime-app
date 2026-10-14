@@ -41,6 +41,10 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
   rating: 0.05,
   anilistTags: 0.3,
   anilistStaff: 1.0,
+  // A stated preference, not a measured weight: the backtest cannot judge it
+  // (favourites are chosen BECAUSE of shows already loved — see favSeiyuu.ts),
+  // so it ships off and the owner turns it up.
+  favSeiyuu: 0,
   rejection: -0.35,
   popularity: -0.15,
 };
@@ -137,6 +141,7 @@ export const SOURCE_META: SourceMeta[] = [
   { source: 'nsfw', label: 'NSFW', hint: 'Signal faible (2 valeurs) — off par défaut', min: 0, max: 1, step: 0.05 },
   { source: 'anilistTags', label: 'Tags AniList', hint: 'Affinité de tags fins (pondérée par rareté) — nécessite une sync', min: 0, max: 1, step: 0.05 },
   { source: 'anilistStaff', label: 'Staff AniList', hint: 'Affinité de créateurs : réalisateur, chara-design, musique… — échelle plus large (dilué par ~15 crédits ; nécessite une sync)', min: 0, max: 3, step: 0.1 },
+  { source: 'favSeiyuu', label: 'Seiyuu favoris', hint: 'Un de tes seiyuu favoris y a un rôle (principal > secondaire)', min: 0, max: 2, step: 0.05 },
   { source: 'rejection', label: 'Rejet', hint: 'Pénalise ce qui ressemble à tes abandons / notes basses', min: -1, max: 0, step: 0.05 },
   { source: 'popularity', label: 'Popularité', hint: 'Négatif = feed plus niche', min: -1, max: 1, step: 0.05 },
 ];

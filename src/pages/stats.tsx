@@ -15,6 +15,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Button } from '@/components/shared';
 import { useStatsUrlState, type StatsUrlState } from '@/hooks';
+import { useSeiyuuFavorites } from '@/hooks/useSeiyuuFavorites';
 import { useT, TranslationKey } from '@/lib/i18n';
 import { STATS_DIMENSIONS, type StatEntry, type StatsDimension } from '@/lib/domain/stats';
 import type { StatsApiResponse } from '@/pages/api/anime/stats';
@@ -45,6 +46,10 @@ function initials(name: string): string {
 export default function StatsPage() {
   const t = useT();
   const { state, update, isReady } = useStatsUrlState();
+  // Read-only here: the ★ marks who is already a favourite, so this ranking can
+  // be used to pick them — the toggle itself lives on /credits/seiyuu/[id], one
+  // click away through the row's link.
+  const seiyuuFavs = useSeiyuuFavorites();
 
   const [data, setData] = useState<StatsApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -278,6 +283,7 @@ export default function StatsPage() {
                   rank={index + 1}
                   max={max}
                   showPhoto={state.dimension === 'seiyuu'}
+                  favorite={state.dimension === 'seiyuu' && seiyuuFavs.isFavorite(Number(entry.id))}
                   link={linkFor(state.dimension, entry)}
                 />
               ))}
@@ -383,6 +389,8 @@ interface RowProps {
   rank: number;
   max: number;
   showPhoto: boolean;
+  /** A favourite seiyuu — the ★ marker. */
+  favorite?: boolean;
   link: EntryLink | null;
 }
 
@@ -391,7 +399,7 @@ interface RowProps {
  * the title total — at 50 rows the leader is often well under 50%, and scaling
  * to the total would render every bar as an unreadable sliver.
  */
-function Row({ entry, rank, max, showPhoto, link }: RowProps) {
+function Row({ entry, rank, max, showPhoto, favorite, link }: RowProps) {
   const t = useT();
   const width = max > 0 ? Math.max(2, (entry.count / max) * 100) : 0;
 
@@ -423,7 +431,10 @@ function Row({ entry, rank, max, showPhoto, link }: RowProps) {
 
       <span className="body">
         <span className="line">
-          {label}
+          <span className="name">
+            {favorite && <span className="fav" title={t('stats.favoriteSeiyuu')}>★</span>}
+            {label}
+          </span>
           <span className="numbers">
             <strong>{entry.pct}%</strong>
             <span className="count">
@@ -464,6 +475,8 @@ function Row({ entry, rank, max, showPhoto, link }: RowProps) {
           color: var(--text-primary); font-size: 0.95rem;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        .name { display: inline-flex; align-items: baseline; gap: 0.35rem; min-width: 0; }
+        .fav { color: #f5c518; flex-shrink: 0; }
         .line :global(.name-link) { text-decoration: none; }
         .line :global(.name-link):hover { color: var(--accent-primary); text-decoration: underline; }
         .line :global(.ext) { color: var(--text-muted); font-size: 0.75em; }

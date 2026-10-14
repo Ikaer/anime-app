@@ -17,6 +17,8 @@ interface FiltersSectionProps {
   onHiddenOnlyChange: (hiddenOnly: boolean) => void;
   discrepanciesOnly: boolean;
   onDiscrepanciesOnlyChange: (v: boolean) => void;
+  favSeiyuuOnly: boolean;
+  onFavSeiyuuOnlyChange: (v: boolean) => void;
   minScore: number | null;
   onMinScoreChange: (score: number | null) => void;
   maxScore: number | null;
@@ -34,6 +36,8 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
   onHiddenOnlyChange,
   discrepanciesOnly,
   onDiscrepanciesOnlyChange,
+  favSeiyuuOnly,
+  onFavSeiyuuOnlyChange,
   minScore,
   onMinScoreChange,
   maxScore,
@@ -92,6 +96,13 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
             checked={discrepanciesOnly}
             onChange={(e) => onDiscrepanciesOnlyChange(e.target.checked)}
           /> {t('filters.discrepanciesOnly')}
+        </label>
+        <label className={styles.checkboxLabel} title={t('filters.favSeiyuuOnlyHint')}>
+          <input
+            type="checkbox"
+            checked={favSeiyuuOnly}
+            onChange={(e) => onFavSeiyuuOnlyChange(e.target.checked)}
+          /> {t('filters.favSeiyuuOnly')}
         </label>
       </div>
 

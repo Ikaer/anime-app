@@ -4,6 +4,8 @@ import { getTitleLanguage } from '@/lib/config/settings';
 import { applyNarrowingFilters, getStatusFilterKey, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { buildAffinityIndex, buildAnticipationIndex, type AffinityIndex } from '@/lib/reco/affinity';
 import { getFeedback, feedbackIds } from '@/lib/reco/feedback';
+import { getFavSeiyuuIndex } from '@/lib/reco/seiyuuFavorites';
+import { hasMainFavSeiyuu, type FavSeiyuuIndex } from '@/lib/reco/favSeiyuu';
 import { AnimeRecord, AnticipationMark, SortColumn, SortDirection, AnimeListResponse, AnimeListRow } from '@/models/anime';
 
 /**
@@ -20,14 +22,20 @@ import { AnimeRecord, AnticipationMark, SortColumn, SortDirection, AnimeListResp
 const affinityCache = new WeakMap<AnimeRecord[], {
   affinity: AffinityIndex;
   anticipation: Map<string, AnticipationMark>;
+  /** The favourites index the marks were scored with. It is NOT derived from
+   *  the row array (favourites are off the join), so it is part of the key:
+   *  starring a seiyuu must re-score the marks without waiting for a slice write. */
+  favSeiyuu: FavSeiyuuIndex;
 }>();
 
 function getMarks(all: AnimeRecord[]) {
+  const favSeiyuu = getFavSeiyuuIndex();
   const hit = affinityCache.get(all);
-  if (hit) return hit;
+  if (hit && hit.favSeiyuu === favSeiyuu) return hit;
   const built = {
-    affinity: buildAffinityIndex(all, { downIds: feedbackIds(getFeedback(), 'down') }),
+    affinity: buildAffinityIndex(all, { downIds: feedbackIds(getFeedback(), 'down'), favSeiyuu }),
     anticipation: buildAnticipationIndex(all),
+    favSeiyuu,
   };
   affinityCache.set(all, built);
   return built;
@@ -51,6 +59,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       mediaType,
       hidden,
       discrepancies,
+      favSeiyuu: favSeiyuuParam,
       unrated,
       sortBy = 'mean',
       sortDir = 'desc',
@@ -142,6 +151,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       animeList = animeList.filter(anime => anime.discrepancy != null);
     }
 
+    // « Avec un seiyuu favori » — a favourite in a MAIN role. Off the record
+    // (favourites are not on the join), so it reads the memoized index rather
+    // than going through `applyNarrowingFilters`.
+    if (typeof favSeiyuuParam === 'string' && favSeiyuuParam.toLowerCase() === 'true') {
+      animeList = animeList.filter(anime => hasMainFavSeiyuu(marks.favSeiyuu.byAnime.get(anime.id)));
+    }
+
     // Apply genre filter
     if (genres && typeof genres === 'string') {
       const genreList = genres.split(',').map(g => g.trim().toLowerCase());
@@ -229,6 +245,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         mediaType: (typeof mediaType === 'string' ? mediaType : null),
         hidden: (typeof hidden === 'string' ? hidden : null),
         discrepancies: (typeof discrepancies === 'string' ? discrepancies : null),
+        favSeiyuu: (typeof favSeiyuuParam === 'string' ? favSeiyuuParam : null),
         unrated: (typeof unrated === 'string' ? unrated : null),
         genres: (typeof genres === 'string' ? genres : null),
         status: (typeof status === 'string' ? status : null),

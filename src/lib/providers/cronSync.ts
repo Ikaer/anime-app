@@ -47,6 +47,8 @@ import { isPersonalProviderEnabled } from '@/lib/providers/registry';
 import { isRecommendationsRefreshRunning, performRecommendationsRefresh } from '@/lib/reco/refresh';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { captureAffinityMarks } from '@/lib/reco/markHistoryStore';
+import { getSeiyuuFavorites } from '@/lib/reco/seiyuuFavorites';
+import { topUpSeiyuuFilmography } from '@/lib/providers/anilist/seiyuu';
 import { appendLog } from '@/lib/config/connectionLog';
 import { recordCronRun } from '@/lib/providers/cronHealth';
 
@@ -73,6 +75,7 @@ export type CronStepName =
   | 'anilistCatalog'
   | 'anilistCatalogFields'
   | 'recommendations'
+  | 'seiyuuFavorites'
   | 'affinityMarks';
 
 export type CronSteps = Record<CronStepName, CronStepOutcome>;
@@ -436,6 +439,27 @@ async function refreshRecommendations(accessToken: string | null): Promise<CronS
  * Runs on the manual button too: a capture is "what the mark said today",
  * whoever asked, and every point is written once or overwritten idempotently.
  */
+/**
+ * Keep the favourite seiyuu's filmographies current: one AniList request per
+ * favourite (page 1, newest first — see `topUpSeiyuuFilmography`), or the full
+ * fetch for a favourite whose filmography never landed (a failed fetch when it
+ * was starred is retried here). Anonymous, like AniList's catalog role, so
+ * ungated. Before `affinityMarks`, so the snapshot sees tonight's casts.
+ */
+async function topUpSeiyuuFavorites(): Promise<CronStepOutcome> {
+  const favorites = getSeiyuuFavorites();
+  if (favorites.length === 0) return { ok: true, skipped: true, reason: 'No favourite seiyuu' };
+  let failed = 0;
+  for (const fav of favorites) {
+    const result = await topUpSeiyuuFilmography(fav.id);
+    if (!result.ok) failed++;
+  }
+  if (failed > 0) {
+    appendLog('cron-sync', 'error', `Cron sync: ${failed} of ${favorites.length} favourite seiyuu filmographies failed to refresh`);
+  }
+  return { ok: failed === 0, detail: { favorites: favorites.length, failed } };
+}
+
 async function captureMarks(): Promise<CronStepOutcome> {
   const result = captureAffinityMarks();
   if (result.seedCount === 0) {
@@ -503,6 +527,7 @@ export async function runCronSync(trigger: CronTrigger): Promise<CronSyncResult>
     steps.recommendations = await step('recommendations', () =>
       refreshRecommendations(malToken ? malToken.access_token : null)
     );
+    steps.seiyuuFavorites = await step('seiyuu-favorites', topUpSeiyuuFavorites);
     steps.affinityMarks = await step('affinity-marks', captureMarks);
 
     // Started LAST, after the reco refresh has finished with AniList: both throttle

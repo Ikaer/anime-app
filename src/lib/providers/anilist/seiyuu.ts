@@ -168,6 +168,50 @@ export function getOrFetchSeiyuuFilmography(staffId: number, force = false): Pro
   return task;
 }
 
+/**
+ * Refresh a STORED filmography from its first page only — the cron's
+ * `seiyuuFavorites` step. The connection is sorted `START_DATE_DESC`, so page 1
+ * is exactly where newly announced titles land; one request per favourite per
+ * tick keeps their filmographies current without re-paging 500 credits nightly.
+ * Credits on page 1 replace their stored versions (a role can change as a
+ * cast is announced); everything older is kept as stored.
+ *
+ * A missing entry falls through to the full fetch. Like `runFetch`, a failure
+ * leaves the slice untouched.
+ */
+export async function topUpSeiyuuFilmography(staffId: number): Promise<SeiyuuFilmographyResult> {
+  const stored = getAnilistSeiyuu(staffId);
+  if (!stored) return getOrFetchSeiyuuFilmography(staffId);
+  try {
+    const staff = await fetchPage(staffId, 1);
+    if (!staff) return { ok: true, entry: stored, cached: true };
+    const fresh = new Map<number, AniListSeiyuuCredit>();
+    for (const edge of staff.characterMedia?.edges ?? []) {
+      const node = edge.node;
+      if (!node || typeof node.id !== 'number' || node.type !== 'ANIME') continue;
+      const credit = fresh.get(node.id) ?? {
+        anilist_id: node.id,
+        mal_id: typeof node.idMal === 'number' ? node.idMal : undefined,
+        characters: [],
+      };
+      for (const raw of edge.characters ?? []) {
+        const character = toCharacter(raw, edge.characterRole ?? '');
+        if (character && !credit.characters.some(c => c.id === character.id)) credit.characters.push(character);
+      }
+      fresh.set(node.id, credit);
+    }
+    const entry: AniListSeiyuuEntry = {
+      ...stored,
+      credits: [...fresh.values(), ...stored.credits.filter(c => !fresh.has(c.anilist_id))],
+      fetched_at: new Date().toISOString(),
+    };
+    upsertAnilistSeiyuu(staffId, entry);
+    return { ok: true, entry, cached: false };
+  } catch (error) {
+    return { ok: false, cached: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 async function runFetch(staffId: number): Promise<SeiyuuFilmographyResult> {
   try {
     // Merged by AniList media id: one edge per character, so a recast or a twin

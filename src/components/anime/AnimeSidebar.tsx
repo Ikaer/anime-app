@@ -31,6 +31,8 @@ interface AnimeSidebarProps {
   onHiddenOnlyChange: (v: boolean) => void;
   discrepanciesOnly: boolean;
   onDiscrepanciesOnlyChange: (v: boolean) => void;
+  favSeiyuuOnly: boolean;
+  onFavSeiyuuOnlyChange: (v: boolean) => void;
   minScore: number | null;
   onMinScoreChange: (v: number | null) => void;
   maxScore: number | null;
@@ -49,6 +51,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   genres, onGenresChange,
   hiddenOnly, onHiddenOnlyChange,
   discrepanciesOnly, onDiscrepanciesOnlyChange,
+  favSeiyuuOnly, onFavSeiyuuOnlyChange,
   minScore, onMinScoreChange,
   maxScore, onMaxScoreChange,
   sidebarExpanded, onSidebarExpandedChange,
@@ -94,6 +97,8 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           onHiddenOnlyChange={onHiddenOnlyChange}
           discrepanciesOnly={discrepanciesOnly}
           onDiscrepanciesOnlyChange={onDiscrepanciesOnlyChange}
+          favSeiyuuOnly={favSeiyuuOnly}
+          onFavSeiyuuOnlyChange={onFavSeiyuuOnlyChange}
           minScore={minScore}
           onMinScoreChange={onMinScoreChange}
           maxScore={maxScore}
