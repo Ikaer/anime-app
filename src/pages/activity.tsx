@@ -14,6 +14,12 @@
  * Greenwich, which is every user of this app. The API therefore returns a flat,
  * already-sorted list and this page cuts it into days. A day can straddle a page
  * boundary; that just repeats its header on the next page, which is correct.
+ *
+ * « Par franchise » (`grp=franchise`) is SIMKL's list instead: one row per
+ * franchise — the entry watched most recently stands for it, with a count of
+ * the others — as a flat list with no day headers, so an old show you are
+ * rewatching sits at the top like anything else. The collapse is the SERVER's
+ * (see the API): a franchise's older seasons live on later pages.
  */
 import { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
@@ -23,6 +29,7 @@ import { RecoFiltersSection } from '@/components/anime/sidebar';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { CollapsibleSection } from '@/components/shared';
 import { useActivityUrlState, toActivityQuery } from '@/hooks';
+import type { ActivityGroupBy } from '@/hooks/useActivityUrlState';
 import { useProviderStatuses } from '@/hooks/useProviderStatuses';
 import { useT, useI18n, TranslationKey } from '@/lib/i18n';
 import type { ActivityEntry, ActivityResponse } from './api/anime/activity';
@@ -37,6 +44,8 @@ function localDayKey(iso: string): string {
   const day = `${d.getDate()}`.padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
 }
+
+const GROUP_MODES: ActivityGroupBy[] = ['day', 'franchise'];
 
 export default function ActivityPage() {
   const t = useT();
@@ -118,6 +127,8 @@ export default function ActivityPage() {
     }
   };
 
+  const flat = state.groupBy === 'franchise';
+
   // Cut the flat list into local days. Order is preserved from the server, so
   // this never re-sorts — it only inserts the boundaries.
   const days = useMemo(() => {
@@ -145,8 +156,13 @@ export default function ActivityPage() {
     });
   };
 
-  const timeLabel = (iso: string): string =>
-    new Date(iso).toLocaleTimeString(lang === 'en' ? 'en-GB' : 'fr-FR', {
+  // Under a day header the hour is the only thing left to say; the flat list
+  // has no day header, so the row carries the date itself.
+  const timeLabel = (iso: string): string => flat
+    ? new Date(iso).toLocaleDateString(lang === 'en' ? 'en-GB' : 'fr-FR', {
+      day: 'numeric', month: 'short',
+    })
+    : new Date(iso).toLocaleTimeString(lang === 'en' ? 'en-GB' : 'fr-FR', {
       hour: '2-digit', minute: '2-digit',
     });
 
@@ -170,7 +186,7 @@ export default function ActivityPage() {
       href={`/anime/${e.id}`}
       title={e.title}
     >
-      <span className="time">{timeLabel(e.watchedAt)}</span>
+      <span className={flat ? 'time date' : 'time'}>{timeLabel(e.watchedAt)}</span>
       <span className="thumb">
         {e.picture
           ? <img src={e.picture} alt="" loading="lazy" />
@@ -182,6 +198,7 @@ export default function ActivityPage() {
           {e.year ? `${e.year}` : ''}
           {e.mediaType ? `${e.year ? ' · ' : ''}${e.mediaType.toUpperCase()}` : ''}
           {e.mean ? ` · ★ ${e.mean.toFixed(2)}` : ''}
+          {e.alsoWatched ? ` · ${t(e.alsoWatched === 1 ? 'activity.alsoWatchedOne' : 'activity.alsoWatched', { count: e.alsoWatched })}` : ''}
         </span>
       </span>
       <span className="tail">
@@ -261,6 +278,20 @@ export default function ActivityPage() {
                 ? ` — ${t('activity.pageOf', { page: state.page + 1, total: totalPages })}`
                 : ''}
             </span>
+            <span className="af-group" role="group" aria-label={t('activity.groupBy')}>
+              <span className="af-group-label">{t('activity.groupBy')}</span>
+              {GROUP_MODES.map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={state.groupBy === mode ? 'active' : ''}
+                  aria-pressed={state.groupBy === mode}
+                  onClick={() => update({ groupBy: mode })}
+                >
+                  {t(mode === 'day' ? 'activity.groupDay' : 'activity.groupFranchise')}
+                </button>
+              ))}
+            </span>
             {simklEnabled && (
               <span className="af-sync">
                 <button type="button" onClick={handleSimklSync} disabled={isSyncing}>
@@ -284,7 +315,7 @@ export default function ActivityPage() {
             <div className="loading-state">{t('activity.empty')}</div>
           ) : (
             <>
-              {days.map(d => (
+              {flat ? <div className="rows">{entries.map(renderRow)}</div> : days.map(d => (
                 <section key={d.key} className="day">
                   <h2 className="day-head">
                     {dayLabel(d.key)}
@@ -336,6 +367,17 @@ export default function ActivityPage() {
         .af-sync button:hover:not(:disabled) { border-color: var(--accent-primary); }
         .af-sync button:disabled { opacity: 0.5; cursor: default; }
         .af-sync-msg { color: var(--text-secondary); font-size: 0.8rem; }
+        .af-group { display: inline-flex; align-items: center; gap: 0.3rem; }
+        .af-group-label { color: var(--text-secondary); font-size: 0.85rem; margin-right: 0.2rem; }
+        .af-group button {
+          background: var(--bg-secondary, #2a2e34); color: var(--text-secondary);
+          border: 1px solid var(--border-color, #33373d);
+          border-radius: 6px; padding: 0.25rem 0.6rem; cursor: pointer; font-size: 0.85rem;
+        }
+        .af-group button:hover { border-color: var(--accent-primary); }
+        .af-group button.active {
+          color: var(--text-primary); border-color: var(--accent-primary);
+        }
 
         .day { margin-bottom: 1.75rem; }
         .day-head {
@@ -387,6 +429,7 @@ export default function ActivityPage() {
           flex: 0 0 3.2rem; font-variant-numeric: tabular-nums;
           font-size: 0.85rem; color: var(--text-secondary);
         }
+        .af-main .row .time.date { flex-basis: 4.2rem; }
         .af-main .row .thumb { flex: 0 0 auto; display: block; width: 40px; height: 57px; }
         .af-main .row .thumb img {
           width: 100%; height: 100%; object-fit: cover; border-radius: 4px; display: block;

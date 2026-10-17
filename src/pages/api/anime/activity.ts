@@ -41,6 +41,7 @@ import {
   getPrimaryTitle,
 } from '@/lib/domain/animeUtils';
 import { getTitleLanguage } from '@/lib/config/settings';
+import { getFranchiseIndex } from '@/lib/domain/franchise';
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -59,6 +60,11 @@ export interface ActivityEntry {
   totalEpisodes?: number;
   mean?: number;
   year?: number;
+  /**
+   * `group=franchise` only: how many OTHER entries of this title's franchise are
+   * in the feed too, collapsed under this — their most recently watched — one.
+   */
+  alsoWatched?: number;
   mediaType?: string;
 }
 
@@ -154,14 +160,38 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     dated.sort((x, y) => y.watchedAt.localeCompare(x.watchedAt));
 
-    const total = dated.length;
+    // « Par franchise »: one row per franchise, the entry watched most recently
+    // standing for it — SIMKL's "show, latest season" list. Collapsed HERE, not
+    // in the browser, because the feed is paged: a franchise's older seasons sit
+    // on later pages, and only the server sees them all. `total` then counts
+    // franchises, which is what the pager is paging over.
+    const alsoWatched = new Map<string, number>();
+    let rows = dated;
+    if (str(q.group) === 'franchise') {
+      const index = getFranchiseIndex(all);
+      const leadOf = new Map<string, string>();
+      rows = [];
+      for (const d of dated) {
+        const key = index.get(d.record.id)?.[0].id ?? d.record.id;
+        const lead = leadOf.get(key);
+        if (lead) { alsoWatched.set(lead, (alsoWatched.get(lead) ?? 0) + 1); continue; }
+        leadOf.set(key, d.record.id);
+        rows.push(d);
+      }
+    }
+
+    const total = rows.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const page = Math.min(Math.max(0, Math.floor(num(q.page) ?? 0)), totalPages - 1);
-    const slice = dated.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+    const slice = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
     const titleLang = getTitleLanguage();
     const body: ActivityResponse = {
-      entries: slice.map(d => toEntry(d.record, d.watchedAt, titleLang)),
+      entries: slice.map(d => {
+        const entry = toEntry(d.record, d.watchedAt, titleLang);
+        const others = alsoWatched.get(d.record.id);
+        return others ? { ...entry, alsoWatched: others } : entry;
+      }),
       total,
       page,
       totalPages,

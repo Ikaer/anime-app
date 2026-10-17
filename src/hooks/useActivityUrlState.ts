@@ -29,7 +29,14 @@ export interface ActivityUrlState {
   statuses: string[];
   /** 0-based page. Server-side, like the filters. */
   page: number;
+  /**
+   * `day` (default): every title, under local-day headers. `franchise`: one row
+   * per franchise — its most recently watched entry — as a flat list.
+   */
+  groupBy: ActivityGroupBy;
 }
+
+export type ActivityGroupBy = 'day' | 'franchise';
 
 export const ACTIVITY_DEFAULTS: ActivityUrlState = {
   search: '',
@@ -40,6 +47,7 @@ export const ACTIVITY_DEFAULTS: ActivityUrlState = {
   maxYear: null,
   statuses: [],
   page: 0,
+  groupBy: 'day',
 };
 
 const KEYS = {
@@ -51,11 +59,12 @@ const KEYS = {
   maxYear: 'maxy',
   statuses: 'st',
   page: 'p',
+  groupBy: 'grp',
 } as const;
 
 /** Every key that changes which rows exist — a move on any of them resets paging. */
 const FILTER_KEYS = [
-  'search', 'mediaTypes', 'minScore', 'maxScore', 'minYear', 'maxYear', 'statuses',
+  'search', 'mediaTypes', 'minScore', 'maxScore', 'minYear', 'maxYear', 'statuses', 'groupBy',
 ] as const satisfies readonly (keyof ActivityUrlState)[];
 
 function decode(params: URLSearchParams): ActivityUrlState {
@@ -75,6 +84,7 @@ function decode(params: URLSearchParams): ActivityUrlState {
     maxYear: num(params.get(KEYS.maxYear)),
     statuses: csv(params.get(KEYS.statuses)),
     page: Math.max(0, Math.floor(num(params.get(KEYS.page)) ?? 0)),
+    groupBy: params.get(KEYS.groupBy) === 'franchise' ? 'franchise' : 'day',
   };
 }
 
@@ -88,11 +98,16 @@ function encode(state: ActivityUrlState): string {
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
   if (state.page > 0) params.set(KEYS.page, String(state.page));
+  if (state.groupBy !== 'day') params.set(KEYS.groupBy, state.groupBy);
   const qs = params.toString().replace(/%2C/g, ',');
   return qs ? `/activity?${qs}` : '/activity';
 }
 
-/** The query string the API cares about — here, all of it. */
+/**
+ * The query string the API cares about — here, all of it. `groupBy` included:
+ * day headers are cut client-side, but the franchise collapse changes which
+ * rows exist and how they page, so it is the server's.
+ */
 export function toActivityQuery(state: ActivityUrlState): string {
   const params = new URLSearchParams();
   if (state.search) params.set('search', state.search);
@@ -103,6 +118,7 @@ export function toActivityQuery(state: ActivityUrlState): string {
   if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
   if (state.statuses.length > 0) params.set('status', state.statuses.join(','));
   if (state.page > 0) params.set('page', String(state.page));
+  if (state.groupBy === 'franchise') params.set('group', 'franchise');
   return params.toString();
 }
 

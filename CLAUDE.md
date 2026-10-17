@@ -1267,6 +1267,12 @@ day" is not a filter combination.
   session under the wrong day for anyone east of Greenwich. The API returns a
   flat sorted list and the page cuts it into local days — so a day may straddle
   a page boundary, which merely repeats its header.
+- **« Grouper par : Franchise » (`grp=franchise`) is SIMKL's list instead** — one
+  row per franchise (wide `getFranchiseIndex` scope), its most recently watched
+  entry standing for it with a `+N` count, flat with no day headers, so an old
+  show being rewatched sits at the top. ⚠️ Collapsed **server-side** (`group=
+  franchise`), unlike the day cut: the feed is paged, and a franchise's older
+  entries live on later pages only the server sees. `total` then counts franchises.
 - **No sort key**, deliberately: the feed's order IS the clock, so a sort control
   would contradict the page — the same reasoning that keeps `sort` off
   `/recommendations`. `statuses` (`st`) is the one filter outside the shared
