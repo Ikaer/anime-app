@@ -18,7 +18,15 @@ import { AniListCastEntry, AniListCastStudioEntry, AniListCharacterEntry, AniLis
 // MAIN plus the most relevant supporting cast" — a long tail of BACKGROUND
 // one-liners adds payload without adding meaning (Attack on Titan alone
 // reports 500 character edges).
-const CHARACTERS_PER_ANIME = 25;
+//
+// 100, reached as up to four pages of 25: AniList silently caps the connection
+// at 25 per page (the same hard cap sync.ts documents for `staff`), so depth
+// only comes from more pages. It was ONE page of 25 until 2026-10-20, which on a
+// long-runner cut real recurring characters — Bleach reports 273, and Nelliel
+// (68th, SUPPORTING) never reached the store, so neither did her seiyuu. Paged
+// on `hasNextPage` alone: a short cast still costs one request.
+const CHARACTERS_PAGE_SIZE = 25;
+const MAX_CHARACTER_PAGES = 4;
 
 // A single-title query, so unlike the batched syncs in anilistSync.ts there is
 // no query-complexity pressure here and `Media(...)` may be used directly.
@@ -29,12 +37,16 @@ const CHARACTERS_PER_ANIME = 25;
 // path the id-space inventory never listed. A title with no AniList id is
 // one AniList-native discovery has not reached; the season crawl fixes that, a
 // foreign-key lookup does not.
+//
+// `studios` rides on page 1 only (`@include`): the later pages exist for their
+// character edges, and repeating the producers there would be dead weight.
 const CAST_QUERY = `
-query ($anilistId: Int) {
+query ($anilistId: Int, $page: Int, $withStudios: Boolean!) {
   Media(id: $anilistId, type: ANIME) {
     id
     idMal
-    characters(sort: [ROLE, RELEVANCE], perPage: ${CHARACTERS_PER_ANIME}) {
+    characters(sort: [ROLE, RELEVANCE], page: $page, perPage: ${CHARACTERS_PAGE_SIZE}) {
+      pageInfo { hasNextPage }
       edges {
         role
         node {
@@ -49,7 +61,7 @@ query ($anilistId: Int) {
         }
       }
     }
-    studios {
+    studios @include(if: $withStudios) {
       edges {
         isMain
         node { id name }
@@ -77,7 +89,10 @@ interface RawStudioEdge {
 interface RawCastMedia {
   id?: number;
   idMal?: number | null;
-  characters?: { edges?: RawCharacterEdge[] | null } | null;
+  characters?: {
+    pageInfo?: { hasNextPage?: boolean | null } | null;
+    edges?: RawCharacterEdge[] | null;
+  } | null;
   studios?: { edges?: RawStudioEdge[] | null } | null;
 }
 
@@ -144,7 +159,28 @@ async function fetchCast(anilistId: number): Promise<RawCastMedia | null> {
   //
   // Deliberately `anilistFetch` rather than the strict `anilistQuery`: a 404 is
   // a legitimate answer here, so this caller has to see the status itself.
-  const res = await anilistFetch<{ Media: RawCastMedia | null }>(CAST_QUERY, { anilistId });
+  const first = await fetchCastPage(anilistId, 1);
+  if (!first) return null;
+
+  // Later pages append their edges onto page 1's media. A failure there throws
+  // like page 1's would: persisting a cast cut at a page boundary would
+  // short-circuit forever, the same reason a transient failure is never stored.
+  const edges = [...(first.characters?.edges ?? [])];
+  let hasNext = first.characters?.pageInfo?.hasNextPage === true;
+  for (let page = 2; hasNext && page <= MAX_CHARACTER_PAGES; page++) {
+    const next = await fetchCastPage(anilistId, page);
+    edges.push(...(next?.characters?.edges ?? []));
+    hasNext = next?.characters?.pageInfo?.hasNextPage === true;
+  }
+  return { ...first, characters: { edges } };
+}
+
+async function fetchCastPage(anilistId: number, page: number): Promise<RawCastMedia | null> {
+  const res = await anilistFetch<{ Media: RawCastMedia | null }>(CAST_QUERY, {
+    anilistId,
+    page,
+    withStudios: page === 1,
+  });
 
   if (!res.ok && res.status !== 404) {
     throw new AniListCastError(httpErrorMessage(res));

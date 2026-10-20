@@ -457,7 +457,7 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
 
 - **Why not on `AniListMetaEntry`.** Cast is display-only (it feeds no reco
   source, unlike `tags`/`staff`), and it's the bulkiest AniList payload there is
-  (~25 characters × 2 portraits + 2 names per title — tens of MB catalog-wide,
+  (up to 100 characters × 2 portraits + 2 names per title — tens of MB catalog-wide,
   bigger than `catalog/mal.json`). `catalog/anilist.json` is parsed on every
   cold row build and the row cache keys on those seven slices' identity, so putting
   cast there would tax every row build for data one page reads. **That is a
@@ -507,6 +507,15 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
   step, not a last resort** — "this needs a full cast sweep afterwards" is a note
   in the plan, never a reason to avoid a change. Fire-and-forget + `appendLog(
   'anilist-cast-sweep', …)`, same idiom as meta-sync/catalog-crawl.
+- **Up to 100 characters, as four pages of 25** — AniList caps the connection at
+  25 per page, so depth is pages, paged on `hasNextPage` (a short cast is still
+  one request). It was one page of 25 until 2026-10-20, which truncated 425 of
+  751 entries: Bleach reports 273 characters and Nelliel, 68th, never reached the
+  store, nor did her seiyuu. A page failing after page 1 throws rather than
+  persisting a cut cast, since a stored entry short-circuits forever. Raising the
+  cap does not refill an existing store — `node scripts/refill-anilist-cast.js
+  <dataPath>` drops the entries sitting at the old cap, then the lazy fetch or
+  the /stats sweep refills them.
 - **Japanese VAs only** (`voiceActors(language: JAPANESE)`) — these are seiyuu, not
   dub actors. **All** of a character's VAs render, not just the first: dual casting
   (a child self + an adult inner monologue) and mid-series recasts are common.
