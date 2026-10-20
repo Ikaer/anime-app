@@ -517,9 +517,12 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
   <dataPath>` drops the entries sitting at the old cap, then the lazy fetch or
   the /stats sweep refills them. A TEMPORARY button on /connections' AniList
   catalog card (`CastRefillButton` → `api/anime/anilist/cast-refill` →
-  `performAnilistCastRefill`) does the same in place, force-refetching each
-  entry at 25 so the old cast stays shown until replaced — delete all three once
-  the NAS store reports « Aucun cast tronqué ».
+  `performAnilistCastRefill`) does better, in place: it force-refetches every
+  entry fetched BEFORE the change, so the old cast stays shown until replaced.
+  ⚠️ Not "every entry at 25", which the first version used and the script still
+  uses: a title fetched while airing holds fewer than 25 and is stale anyway
+  (Kashin-tan: 15 stored in July, 35 on AniList now). Delete all three once the
+  NAS store reports « Tous les casts sont à jour ».
 - **Japanese VAs only** (`voiceActors(language: JAPANESE)`) — these are seiyuu, not
   dub actors. **All** of a character's VAs render, not just the first: dual casting
   (a child self + an adult inner monologue) and mid-series recasts are common.

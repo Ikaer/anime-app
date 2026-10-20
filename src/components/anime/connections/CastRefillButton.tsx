@@ -4,8 +4,8 @@ import { Button } from '@/components/shared';
 import { useT } from '@/lib/i18n';
 
 /**
- * TEMPORARY — one press refills every cast entry still cut at the old
- * 25-character cap. Self-contained (its own fetch, no props) so removing it is
+ * TEMPORARY — one press refills every cast entry fetched before the
+ * 25 → 100 character cap change. Self-contained (its own fetch, no props) so removing it is
  * deleting this file, its one mount, the route and the four locale keys.
  */
 export const CastRefillButton: React.FC = () => {

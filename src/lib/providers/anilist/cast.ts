@@ -411,17 +411,20 @@ export async function performAnilistCastSweep(): Promise<AniListCastSweepResult>
 // instead of dropping the truncated entries and waiting for a sweep, it force-
 // refetches each one in place, so a title keeps its old 25 until the new cast
 // lands. Queued off the CAST SLICE rather than the statused list, so it also
-// reaches unstatused titles filled lazily by a detail-page view. An entry is
-// "truncated" iff it holds exactly the old cap — a title whose real cast is 25
-// re-queues on every press, which costs one request and is harmless. Shares the
+// reaches unstatused titles filled lazily by a detail-page view. Shares the
 // sweep's lock and log channel. Remove both (and the route, the button) once
 // the NAS store has been refilled.
-
-const OLD_CHARACTER_CAP = 25;
+//
+// ⚠️ An entry is stale iff it was fetched BEFORE the cap change, not iff it
+// holds exactly 25. The first version keyed on the count and missed every title
+// fetched while still airing: Bleach's Kashin-tan was stored in July with the 15
+// characters AniList had then, and AniList now has 35 — Nelliel among them. A
+// cut-off date also makes the run converge: everything it writes is newer.
+const CAST_CAP_CHANGED_AT = Date.parse('2026-10-20T18:00:00Z');
 
 function truncatedCastIds(): Array<[string, number]> {
   return Object.entries(getAllAnilistCast())
-    .filter(([, e]) => e.characters.length === OLD_CHARACTER_CAP && typeof e.anilist_id === 'number')
+    .filter(([, e]) => !(Date.parse(e.fetched_at) >= CAST_CAP_CHANGED_AT) && typeof e.anilist_id === 'number')
     .map(([id, e]) => [id, e.anilist_id as number]);
 }
 
