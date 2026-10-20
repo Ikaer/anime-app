@@ -515,7 +515,11 @@ join** in `getAnimeForDisplay()`, and the one AniList data set that works this w
   persisting a cut cast, since a stored entry short-circuits forever. Raising the
   cap does not refill an existing store — `node scripts/refill-anilist-cast.js
   <dataPath>` drops the entries sitting at the old cap, then the lazy fetch or
-  the /stats sweep refills them.
+  the /stats sweep refills them. A TEMPORARY button on /connections' AniList
+  catalog card (`CastRefillButton` → `api/anime/anilist/cast-refill` →
+  `performAnilistCastRefill`) does the same in place, force-refetching each
+  entry at 25 so the old cast stays shown until replaced — delete all three once
+  the NAS store reports « Aucun cast tronqué ».
 - **Japanese VAs only** (`voiceActors(language: JAPANESE)`) — these are seiyuu, not
   dub actors. **All** of a character's VAs render, not just the first: dual casting
   (a child self + an adult inner monologue) and mid-series recasts are common.

@@ -9,7 +9,7 @@
  * file). A title is fetched the first time someone opens its detail page, and
  * then never again unless explicitly refreshed.
  */
-import { getAnilistCast, upsertAnilistCast } from '@/lib/store';
+import { getAllAnilistCast, getAnilistCast, upsertAnilistCast } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
 import { anilistFetch, graphqlErrorMessage, httpErrorMessage } from '@/lib/providers/anilist/client';
 import { AniListCastEntry, AniListCastStudioEntry, AniListCharacterEntry, AniListVoiceActorEntry, AnimeRecord } from '@/models/anime';
@@ -398,6 +398,63 @@ export async function performAnilistCastSweep(): Promise<AniListCastSweepResult>
     console.error('AniList cast sweep error:', error);
     appendLog('anilist-cast-sweep', 'error', 'AniList cast sweep failed', { error: message });
     return { ok: false, alreadyRunning: false, queued: 0, fetched: 0, failed: 0, error: message };
+  } finally {
+    isCastSweepRunning = false;
+  }
+}
+
+// ============================================================================
+// TEMPORARY — the one-time refill after the 25 → 100 character cap change.
+// ============================================================================
+//
+// The /connections button form of scripts/refill-anilist-cast.js, but gentler:
+// instead of dropping the truncated entries and waiting for a sweep, it force-
+// refetches each one in place, so a title keeps its old 25 until the new cast
+// lands. Queued off the CAST SLICE rather than the statused list, so it also
+// reaches unstatused titles filled lazily by a detail-page view. An entry is
+// "truncated" iff it holds exactly the old cap — a title whose real cast is 25
+// re-queues on every press, which costs one request and is harmless. Shares the
+// sweep's lock and log channel. Remove both (and the route, the button) once
+// the NAS store has been refilled.
+
+const OLD_CHARACTER_CAP = 25;
+
+function truncatedCastIds(): Array<[string, number]> {
+  return Object.entries(getAllAnilistCast())
+    .filter(([, e]) => e.characters.length === OLD_CHARACTER_CAP && typeof e.anilist_id === 'number')
+    .map(([id, e]) => [id, e.anilist_id as number]);
+}
+
+export function getTruncatedCastCount(): { truncated: number; running: boolean } {
+  return { truncated: truncatedCastIds().length, running: isCastSweepRunning };
+}
+
+export async function performAnilistCastRefill(): Promise<void> {
+  if (isCastSweepRunning) {
+    appendLog('anilist-cast-sweep', 'info', 'AniList cast refill skipped: a cast sweep is already running');
+    return;
+  }
+  isCastSweepRunning = true;
+  try {
+    const queue = truncatedCastIds();
+    appendLog('anilist-cast-sweep', 'info', `AniList cast refill started: ${queue.length} truncated entries`, { queued: queue.length });
+    let fetched = 0;
+    let failed = 0;
+    for (let i = 0; i < queue.length; i++) {
+      const [canonicalId, anilistId] = queue[i];
+      const result = await getOrFetchAnilistCast(canonicalId, { anilistId }, true);
+      if (result.ok) fetched++;
+      else failed++;
+      if ((i + 1) % 25 === 0 || i === queue.length - 1) {
+        appendLog('anilist-cast-sweep', 'info', `AniList cast refill: ${i + 1}/${queue.length} titles processed`,
+          { index: i + 1, total: queue.length, fetched, failed });
+      }
+    }
+    appendLog('anilist-cast-sweep', 'success', `AniList cast refill complete: ${fetched} refilled, ${failed} failed`,
+      { queued: queue.length, fetched, failed });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    appendLog('anilist-cast-sweep', 'error', 'AniList cast refill failed', { error: message });
   } finally {
     isCastSweepRunning = false;
   }

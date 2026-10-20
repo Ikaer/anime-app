@@ -11,6 +11,7 @@ import {
   AnilistListActions,
   LocalListActions,
 } from '@/components/anime/connections';
+import { CastRefillButton } from '@/components/anime/connections/CastRefillButton';
 import { useConnections } from '@/hooks';
 import {
   providersWithRole,
@@ -71,6 +72,7 @@ export default function ConnectionsPage() {
       />
     ),
     anilist: (
+      <>
       <AnilistCatalogActions
         isMetaSyncing={anilist.isMetaSyncing}
         metaSyncMessage={anilist.metaSyncMessage}
@@ -89,6 +91,9 @@ export default function ConnectionsPage() {
         onHistoricalCrawl={anilist.onHistoricalCrawl}
         onCatalogSweep={anilist.onCatalogSweep}
       />
+      {/* TEMPORARY: the 25 → 100 character cast refill. */}
+      <CastRefillButton />
+      </>
     ),
   };
 
