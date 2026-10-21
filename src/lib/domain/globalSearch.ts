@@ -1,7 +1,7 @@
 /**
  * Catalog-wide global search — powers the header search box. Matches anime by
- * title (English + original), plus studios and AniList staff by name, so the
- * box can jump straight to a detail page OR to a studio/staff credits page.
+ * title (English + original), plus studios, AniList staff and seiyuu by name, so
+ * the box can jump straight to a detail page OR to a studio/staff/seiyuu page.
  *
  * Pure and client-safe (no `fs`); the catalog is passed in, same convention as
  * creditsCatalog.ts / similarByCredits.ts. The API route feeds it `getAnimeRecords()`.
@@ -12,7 +12,7 @@
  * that way.
  */
 
-import type { AnimeRecord } from '@/models/anime';
+import type { AniListCastEntry, AniListSeiyuuEntry, AnimeRecord } from '@/models/anime';
 import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -40,6 +40,23 @@ export interface GlobalSearchResults {
   animes: AnimeSearchHit[];
   studios: CreditSearchHit[];
   staff: CreditSearchHit[];
+  seiyuu: CreditSearchHit[];
+}
+
+/**
+ * Where the seiyuu come from. Neither slice is on the record — the cast slice is
+ * deliberately off `getAnimeForDisplay()`'s join, and a filmography belongs to a
+ * person — so the caller hands both in, keeping this module pure.
+ *
+ * ⚠️ BOTH, never the cast slice alone. The cast slice only covers titles that
+ * were opened or swept (~the owner's own list), so a seiyuu met only through a
+ * filmography — a favourite, or a page visited from a credit — would be
+ * unfindable; and a filmography's credit count is the true one, where the cast
+ * slice's counts only the titles it happens to hold.
+ */
+export interface SeiyuuSearchSource {
+  cast: Record<string, AniListCastEntry>;
+  filmographies: Record<string, AniListSeiyuuEntry>;
 }
 
 export const MIN_QUERY_LENGTH = 2;
@@ -47,7 +64,7 @@ export const MIN_QUERY_LENGTH = 2;
 const ANIME_LIMIT = 8;
 const CREDIT_LIMIT = 6;
 
-const EMPTY: GlobalSearchResults = { animes: [], studios: [], staff: [] };
+const EMPTY: GlobalSearchResults = { animes: [], studios: [], staff: [], seiyuu: [] };
 
 /**
  * Rank of a substring match: 0 = exact, 1 = prefix, 2 = word-boundary, 3 = any
@@ -264,11 +281,85 @@ function getNormalizedTitles(catalog: AnimeRecord[]): string[][] {
   return index;
 }
 
+// ============================================================================
+// Seiyuu — one person per AniList staff id, off the cast + filmography slices
+// ============================================================================
+
+interface SeiyuuPerson { id: number; name: string; count: number; matchable: string[] }
+
 /**
- * Search the catalog for anime / studios / staff matching `query`. Returns
- * empty for queries shorter than {@link MIN_QUERY_LENGTH}.
+ * Every string a seiyuu answers to: AniList's given-family romanization, the
+ * same two words family-first (the order Japanese sources and half the web use —
+ * `Kiyoto Arisa` must find Arisa Kiyoto), and the native name.
  */
-export function searchCatalog(query: string, catalog: AnimeRecord[], titleLang: TitleLanguage): GlobalSearchResults {
+function seiyuuNames(name: string, nameNative?: string): string[] {
+  const out = [name];
+  const words = name.trim().split(/\s+/);
+  if (words.length === 2) out.push(`${words[1]} ${words[0]}`);
+  if (nameNative) out.push(nameNative);
+  return out;
+}
+
+/**
+ * Memoized on the cast slice's identity, then the filmography slice's — the
+ * parse cache hands out the same object until the file changes on disk, so this
+ * is rebuilt per data change, not per keystroke.
+ */
+const seiyuuIndexCache = new WeakMap<object, WeakMap<object, SeiyuuPerson[]>>();
+
+function getSeiyuuIndex(source: SeiyuuSearchSource): SeiyuuPerson[] {
+  let inner = seiyuuIndexCache.get(source.cast);
+  if (!inner) {
+    inner = new WeakMap();
+    seiyuuIndexCache.set(source.cast, inner);
+  }
+  let index = inner.get(source.filmographies);
+  if (index) return index;
+
+  const people = new Map<number, { id: number; name: string; nameNative?: string; titles: Set<string>; credits?: number }>();
+  for (const [titleId, entry] of Object.entries(source.cast)) {
+    for (const character of entry.characters) {
+      for (const va of character.voiceActors) {
+        if (!va.name) continue;
+        let p = people.get(va.id);
+        if (!p) {
+          p = { id: va.id, name: va.name, nameNative: va.nameNative, titles: new Set() };
+          people.set(va.id, p);
+        }
+        // A Set, not a counter: a seiyuu voicing twins, or a character and its
+        // child self, is one title.
+        p.titles.add(titleId);
+      }
+    }
+  }
+  for (const f of Object.values(source.filmographies)) {
+    if (!f.name) continue;
+    const p = people.get(f.staff_id);
+    if (p) p.credits = f.credits.length;
+    else people.set(f.staff_id, { id: f.staff_id, name: f.name, nameNative: f.nameNative, titles: new Set(), credits: f.credits.length });
+  }
+
+  index = Array.from(people.values()).map(p => ({
+    id: p.id,
+    name: p.name,
+    count: Math.max(p.credits ?? 0, p.titles.size),
+    matchable: seiyuuNames(p.name, p.nameNative),
+  }));
+  inner.set(source.filmographies, index);
+  return index;
+}
+
+/**
+ * Search the catalog for anime / studios / staff / seiyuu matching `query`.
+ * Returns empty for queries shorter than {@link MIN_QUERY_LENGTH}. Without
+ * `people` the seiyuu group is simply empty.
+ */
+export function searchCatalog(
+  query: string,
+  catalog: AnimeRecord[],
+  titleLang: TitleLanguage,
+  people?: SeiyuuSearchSource,
+): GlobalSearchResults {
   const needle = query.trim().toLowerCase();
   if (needle.length < MIN_QUERY_LENGTH) return EMPTY;
 
@@ -348,6 +439,17 @@ export function searchCatalog(query: string, catalog: AnimeRecord[], titleLang: 
     }
   }
 
+  // --- Seiyuu ------------------------------------------------------------
+  // Exact path only, like studios and staff, over `seiyuuNames`.
+  const seiyuuMap = new Map<number, CreditSearchHit & { rank: number }>();
+  if (people) {
+    for (const p of getSeiyuuIndex(people)) {
+      let rank = Infinity;
+      for (const n of p.matchable) rank = Math.min(rank, matchRank(n, needle));
+      if (rank !== Infinity) seiyuuMap.set(p.id, { id: p.id, name: p.name, count: p.count, rank });
+    }
+  }
+
   animeScored.sort((x, y) => x.rank - y.rank || y.mean - x.mean || x.hit.title.localeCompare(y.hit.title));
 
   const sortCredits = (m: Map<number, CreditSearchHit & { rank: number }>): CreditSearchHit[] =>
@@ -360,5 +462,6 @@ export function searchCatalog(query: string, catalog: AnimeRecord[], titleLang: 
     animes: animeScored.slice(0, ANIME_LIMIT).map(s => s.hit),
     studios: sortCredits(studioMap),
     staff: sortCredits(staffMap),
+    seiyuu: sortCredits(seiyuuMap),
   };
 }

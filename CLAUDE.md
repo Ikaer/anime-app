@@ -576,6 +576,14 @@ fetches it from AniList by staff id into `catalog/anilist_seiyuu.json`.
   when the cast slice has never covered them — which is exactly the case this
   feature exists for — so `getServerSideProps` renders a placeholder and lets the
   fetch run. 404 is still correct for a seiyuu already fetched and unknown.
+- **The header search finds seiyuu** (`searchCatalog`'s `seiyuu` group, linking
+  to this page). ⚠️ Off the cast slice AND the filmography slice, which
+  `api/anime/search` reads and passes in — the cast slice alone is this
+  section's trap again, unable to find a seiyuu met only through a filmography.
+  Counted per title (twins are one anime), the filmography's count winning when
+  known; family-first order matches too (`Kiyoto Arisa`). Pinned in
+  [tests/domain/globalSearchSeiyuu.test.ts](tests/domain/globalSearchSeiyuu.test.ts).
+  The MCP `search_anime` tool does not pass the slices, so returns no seiyuu.
 - A transient AniList failure is **never persisted**: an empty entry
   short-circuits forever, same discipline as the cast slice's stored empties, so
   only a real "AniList has no such person" answer is written.

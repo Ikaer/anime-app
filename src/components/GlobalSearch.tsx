@@ -5,7 +5,7 @@ import type { GlobalSearchResults, AnimeSearchHit, CreditSearchHit } from '@/lib
 import { MIN_QUERY_LENGTH } from '@/lib/domain/globalSearch';
 import styles from './GlobalSearch.module.css';
 
-const EMPTY: GlobalSearchResults = { animes: [], studios: [], staff: [] };
+const EMPTY: GlobalSearchResults = { animes: [], studios: [], staff: [], seiyuu: [] };
 
 // A single navigable row in the flattened dropdown (for keyboard arrows).
 interface FlatItem {
@@ -15,8 +15,8 @@ interface FlatItem {
 
 /**
  * Header global search: type a title to jump to a detail page, or a studio /
- * staff name to jump to its credits page. Debounced fetch against
- * `/api/anime/search`; results grouped into Anime / Studios / Staff.
+ * staff / seiyuu name to jump to its credits page. Debounced fetch against
+ * `/api/anime/search`; results grouped into Anime / Studios / Staff / Seiyuu.
  */
 export default function GlobalSearch() {
   const router = useRouter();
@@ -36,6 +36,9 @@ export default function GlobalSearch() {
     for (const a of results.animes) items.push({ href: `/anime/${a.id}`, key: `a${a.id}` });
     for (const s of results.studios) items.push({ href: `/credits/studio/${s.id}`, key: `st${s.id}` });
     for (const s of results.staff) items.push({ href: `/credits/staff/${s.id}`, key: `sf${s.id}` });
+    // A seiyuu goes to the seiyuu page, never /credits/staff — same id space,
+    // but that page scans production credits, which never hold voice actors.
+    for (const s of results.seiyuu) items.push({ href: `/credits/seiyuu/${s.id}`, key: `sy${s.id}` });
     return items;
   }, [results]);
 
@@ -113,6 +116,7 @@ export default function GlobalSearch() {
   const animeBase = 0;
   const studioBase = results.animes.length;
   const staffBase = results.animes.length + results.studios.length;
+  const seiyuuBase = staffBase + results.staff.length;
 
   return (
     <div className={styles.root} ref={rootRef}>
@@ -175,6 +179,22 @@ export default function GlobalSearch() {
                   countLabel={s.role || t('search.animeCount', { count: s.count })}
                   onHover={() => setActive(staffBase + i)}
                   onClick={() => go(`/credits/staff/${s.id}`)}
+                />
+              ))}
+            </div>
+          )}
+
+          {results.seiyuu.length > 0 && (
+            <div className={styles.group}>
+              <div className={styles.groupTitle}>{t('search.group.seiyuu')}</div>
+              {results.seiyuu.map((s, i) => (
+                <CreditRow
+                  key={`sy${s.id}`}
+                  hit={s}
+                  activeRow={active === seiyuuBase + i}
+                  countLabel={t('search.animeCount', { count: s.count })}
+                  onHover={() => setActive(seiyuuBase + i)}
+                  onClick={() => go(`/credits/seiyuu/${s.id}`)}
                 />
               ))}
             </div>
