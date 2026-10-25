@@ -125,6 +125,17 @@
     color: var(--text-secondary);
 }
 
+/* A favourite seiyuu (user/seiyuu_favorites.json): the /stats ★ gold, on the
+   name and as a ring on the portrait so it reads from across the room. */
+.favStar {
+    color: #f5c518;
+}
+
+.fav .avatar,
+.fav .avatarFallback {
+    box-shadow: 0 0 0 2px #f5c518;
+}
+
 /* A character with no JP voice actor still renders its half, so the two
    columns stay aligned across the grid. */
 .noVa {

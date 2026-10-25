@@ -2,6 +2,8 @@ declare const styles: {
   readonly "avatar": string;
   readonly "avatarFallback": string;
   readonly "error": string;
+  readonly "fav": string;
+  readonly "favStar": string;
   readonly "grid": string;
   readonly "more": string;
   readonly "name": string;

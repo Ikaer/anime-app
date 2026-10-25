@@ -1107,5 +1107,18 @@
   "boxReco.profile": "Classé avec le profil « {name} »",
   "boxReco.profileStaffZeroed": "« Staff AniList » remplacé par ses familles staff",
   "mix.testProfile": "Tester un profil",
-  "mix.testProfileHint": "Essayer un profil de recos sur cette sélection"
+  "mix.testProfileHint": "Essayer un profil de recos sur cette sélection",
+
+  "nav.favorites": "⭐ Seiyuu favoris",
+  "favorites.pageTitle": "Seiyuu favoris",
+  "favorites.heading": "Mes seiyuu favoris",
+  "favorites.sub": "Ce que tu as vu d’eux, et les rôles principaux qu’il te reste. On ajoute un favori depuis la page d’un seiyuu.",
+  "favorites.allTitles": "Tous les anime avec un seiyuu favori →",
+  "favorites.empty": "Aucun seiyuu favori pour l’instant — ajoute-en depuis la page d’un seiyuu (bouton « ☆ Ajouter aux favoris »).",
+  "favorites.counts": "{total} titres · {seen} vus · {completed} terminés",
+  "favorites.mean": "ta moyenne {mean}",
+  "favorites.pending": "Filmographie en cours de récupération sur AniList — chiffres limités à ta liste pour l’instant.",
+  "favorites.incomplete": "Filmographie tronquée aux rôles les plus récents.",
+  "favorites.todoHeading": "Rôles principaux pas encore vus ({count})",
+  "favorites.todoNone": "Tu as vu tous ses rôles principaux connus."
 }

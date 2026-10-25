@@ -1107,5 +1107,18 @@
   "boxReco.profile": "Ranked with the “{name}” profile",
   "boxReco.profileStaffZeroed": "“AniList staff” replaced by its staff families",
   "mix.testProfile": "Test a profile",
-  "mix.testProfileHint": "Try a reco profile on this set"
+  "mix.testProfileHint": "Try a reco profile on this set",
+
+  "nav.favorites": "⭐ Favourite seiyuu",
+  "favorites.pageTitle": "Favourite seiyuu",
+  "favorites.heading": "My favourite seiyuu",
+  "favorites.sub": "What you have seen of them, and the lead roles you have left. Add a favourite from a seiyuu’s page.",
+  "favorites.allTitles": "Every anime with a favourite seiyuu →",
+  "favorites.empty": "No favourite seiyuu yet — add some from a seiyuu’s page (the « ☆ Favourite » button).",
+  "favorites.counts": "{total} titles · {seen} seen · {completed} completed",
+  "favorites.mean": "your mean {mean}",
+  "favorites.pending": "Filmography still being fetched from AniList — numbers cover your own list for now.",
+  "favorites.incomplete": "Filmography cut to the most recent roles.",
+  "favorites.todoHeading": "Lead roles not seen yet ({count})",
+  "favorites.todoNone": "You have seen every known lead role."
 }

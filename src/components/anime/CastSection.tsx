@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { AniListCharacterEntry } from '@/models/anime';
 import { useT } from '@/lib/i18n';
+import { useSeiyuuFavorites } from '@/hooks/useSeiyuuFavorites';
 import styles from './CastSection.module.css';
 
 interface CastResponse {
@@ -56,6 +57,9 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Read-only here: starring stays on /credits/seiyuu/[id], where the
+  // filmography the favourite feeds on is read.
+  const { isFavorite } = useSeiyuuFavorites();
 
   // The detail page's RefreshButton force-refetches cast, then re-runs
   // getServerSideProps via router.replace — which hands us a NEW `initialCast`
@@ -134,22 +138,29 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
                 the other. */}
             {c.voiceActors.length > 0 ? (
               <span className={styles.vaStack}>
-                {c.voiceActors.map(va => (
-                  <Link
-                    key={va.id}
-                    className={`${styles.side} ${styles.sideRight}`}
-                    href={`/credits/seiyuu/${va.id}`}
-                  >
-                    <span className={`${styles.who} ${styles.whoRight}`}>
-                      <span className={styles.name}>{va.name}</span>
-                      {va.nameNative && <span className={styles.role}>{va.nameNative}</span>}
-                    </span>
-                    {va.image
-                      // eslint-disable-next-line @next/next/no-img-element
-                      ? <img className={styles.avatar} src={va.image} alt={va.name} loading="lazy" />
-                      : <span className={styles.avatarFallback}>{initials(va.name)}</span>}
-                  </Link>
-                ))}
+                {c.voiceActors.map(va => {
+                  const fav = isFavorite(va.id);
+                  return (
+                    <Link
+                      key={va.id}
+                      className={`${styles.side} ${styles.sideRight} ${fav ? styles.fav : ''}`}
+                      href={`/credits/seiyuu/${va.id}`}
+                      title={fav ? t('stats.favoriteSeiyuu') : undefined}
+                    >
+                      <span className={`${styles.who} ${styles.whoRight}`}>
+                        <span className={styles.name}>
+                          {fav && <span className={styles.favStar} aria-label={t('stats.favoriteSeiyuu')}>★ </span>}
+                          {va.name}
+                        </span>
+                        {va.nameNative && <span className={styles.role}>{va.nameNative}</span>}
+                      </span>
+                      {va.image
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img className={styles.avatar} src={va.image} alt={va.name} loading="lazy" />
+                        : <span className={styles.avatarFallback}>{initials(va.name)}</span>}
+                    </Link>
+                  );
+                })}
               </span>
             ) : (
               <span className={`${styles.side} ${styles.sideRight} ${styles.noVa}`}>
