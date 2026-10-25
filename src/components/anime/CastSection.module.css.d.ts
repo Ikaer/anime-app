@@ -1,6 +1,7 @@
 declare const styles: {
   readonly "avatar": string;
   readonly "avatarFallback": string;
+  readonly "charCell": string;
   readonly "error": string;
   readonly "fav": string;
   readonly "favStar": string;
@@ -15,6 +16,8 @@ declare const styles: {
   readonly "section": string;
   readonly "side": string;
   readonly "sideRight": string;
+  readonly "starBtn": string;
+  readonly "starBtnOn": string;
   readonly "vaStack": string;
   readonly "who": string;
   readonly "whoRight": string;

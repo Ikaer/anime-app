@@ -463,6 +463,8 @@
   "cast.roleSupporting": "Secondaire",
   "cast.noVoiceActor": "Voix inconnue",
   "cast.showAll": "Afficher {count} de plus",
+  "cast.favorite": "Ajouter aux personnages favoris",
+  "cast.unfavorite": "Retirer des personnages favoris",
   "detail.tagRank": "rang {rank}",
   "detail.tagRankCategory": "{category} · rang {rank}",
   "detail.crosswalk": "Identifiants (crosswalk)",
@@ -863,6 +865,7 @@
   "graph.resetView": "Recadrer",
 
   "nav.boxes": "📦 Mes boîtes",
+  "nav.characters": "🎭 Mes personnages",
   "boxes.title": "Mes boîtes",
   "boxes.subtitle": "Tes axes de goût, dessinés à la main. Une boîte dit ce que tu as aimé, pas seulement combien.",
   "boxes.create": "Nouvelle boîte",
@@ -1120,5 +1123,21 @@
   "favorites.pending": "Filmographie en cours de récupération sur AniList — chiffres limités à ta liste pour l’instant.",
   "favorites.incomplete": "Filmographie tronquée aux rôles les plus récents.",
   "favorites.todoHeading": "Rôles principaux pas encore vus ({count})",
-  "favorites.todoNone": "Tu as vu tous ses rôles principaux connus."
+  "favorites.todoNone": "Tu as vu tous ses rôles principaux connus.",
+
+  "characters.title": "Mes personnages favoris",
+  "characters.heading": "Mes personnages favoris",
+  "characters.count": "{count} personnages",
+  "characters.countOne": "{count} personnage",
+  "characters.loading": "Chargement du registre…",
+  "characters.empty": "Aucun personnage favori pour l’instant.",
+  "characters.emptyHint": "Ouvre la fiche d’un anime et clique l’étoile à côté d’un personnage, dans la section « Personnages & voix ».",
+  "characters.search": "Rechercher un personnage, un anime, une voix…",
+  "characters.noResults": "Aucun personnage ne correspond à cette recherche.",
+  "characters.sort": "Trier par",
+  "characters.sortAdded": "Ajout récent",
+  "characters.sortName": "Nom",
+  "characters.sortAnime": "Anime",
+  "characters.unfavorite": "Retirer des favoris",
+  "characters.voicedBy": "Voix :"
 }

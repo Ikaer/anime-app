@@ -30,6 +30,7 @@ const SERVER_ONLY = [
   '@/lib/reco/refresh',
   '@/lib/reco/seiyuuFavorites',
   '@/lib/reco/similar',
+  '@/lib/user/**',
 ].flatMap((p) => [p, p.replace(/^@\//, '**/')]);
 
 const SERVER_ONLY_MESSAGE =
@@ -99,6 +100,14 @@ const SEIYUU_FAVORITE_WRITE_MESSAGE =
   "feeds the favSeiyuu source and the « Recommandé » mark, so a model able to set one would be " +
   "tuning the answer it is about to give: addSeedMute's objection, unchanged. The owner stars a " +
   "seiyuu on /credits/seiyuu/[id].";
+
+const CHARACTER_FAVORITE_WRITE_MESSAGE =
+  "Favourite characters are the OWNER's registry. Reading them is fine " +
+  "(getCharacterFavorites / listCharacterFavorites) — they rank nothing, so there is no answer " +
+  "to tune here — but the list is durable user data no provider can re-supply, and a model " +
+  "adding or dropping an entry would be editing a collection it was never asked about: " +
+  "deleteBox's objection rather than addSeedMute's. The owner stars a character on an anime's " +
+  "cast section and reviews the registry on /characters.";
 
 const PROFILE_WRITE_MESSAGE =
   "Reco profiles are READABLE here, never writable (docs/recoProfiles/DESIGN.md §9). The boxes " +
@@ -254,6 +263,15 @@ export default defineConfig([
               importNames: ['addSeiyuuFavorite', 'removeSeiyuuFavorite'],
               allowTypeImports: true,
               message: SEIYUU_FAVORITE_WRITE_MESSAGE,
+            },
+            {
+              // Favourite characters: the same shape again. Nothing ranks on
+              // them, so the readers are harmless and stay open; the writers
+              // touch a hand-made collection, which is deleteBox's category.
+              name: '@/lib/user/characterFavorites',
+              importNames: ['addCharacterFavorite', 'removeCharacterFavorite'],
+              allowTypeImports: true,
+              message: CHARACTER_FAVORITE_WRITE_MESSAGE,
             },
           ],
           patterns: [

@@ -463,6 +463,8 @@
   "cast.roleSupporting": "Supporting",
   "cast.noVoiceActor": "Unknown voice",
   "cast.showAll": "Show {count} more",
+  "cast.favorite": "Add to favourite characters",
+  "cast.unfavorite": "Remove from favourite characters",
   "detail.tagRank": "rank {rank}",
   "detail.tagRankCategory": "{category} · rank {rank}",
   "detail.crosswalk": "Identifiers (crosswalk)",
@@ -863,6 +865,7 @@
   "graph.resetView": "Reset view",
 
   "nav.boxes": "📦 Boxes",
+  "nav.characters": "🎭 My characters",
   "boxes.title": "My boxes",
   "boxes.subtitle": "Your taste axes, drawn by hand. A box says what you liked, not just how much.",
   "boxes.create": "New box",
@@ -1120,5 +1123,21 @@
   "favorites.pending": "Filmography still being fetched from AniList — numbers cover your own list for now.",
   "favorites.incomplete": "Filmography cut to the most recent roles.",
   "favorites.todoHeading": "Lead roles not seen yet ({count})",
-  "favorites.todoNone": "You have seen every known lead role."
+  "favorites.todoNone": "You have seen every known lead role.",
+
+  "characters.title": "My favourite characters",
+  "characters.heading": "My favourite characters",
+  "characters.count": "{count} characters",
+  "characters.countOne": "{count} character",
+  "characters.loading": "Loading the register…",
+  "characters.empty": "No favourite characters yet.",
+  "characters.emptyHint": "Open an anime page and click the star beside a character, in the “Characters & voice actors” section.",
+  "characters.search": "Search a character, an anime, a voice actor…",
+  "characters.noResults": "No character matches this search.",
+  "characters.sort": "Sort by",
+  "characters.sortAdded": "Recently added",
+  "characters.sortName": "Name",
+  "characters.sortAnime": "Anime",
+  "characters.unfavorite": "Remove from favourites",
+  "characters.voicedBy": "Voice:"
 }

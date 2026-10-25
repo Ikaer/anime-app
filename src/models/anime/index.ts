@@ -1047,3 +1047,46 @@ export interface AnimeListResponse {
     seedCount: number;
   };
 }
+
+/**
+ * One favourite character — `user/character_favorites.json`, keyed by the
+ * stable AniList character id carried on `AniListCharacterEntry.id`.
+ *
+ * ⚠️ **A registry, NOT a reco signal, and the asymmetry with the favourite
+ * seiyuu is measured rather than assumed.** Starring a seiyuu pays off because
+ * `catalog/anilist_seiyuu.json` inverts the person over the whole catalog: 7
+ * favourites reached 1,142 UNSEEN titles. A character does not invert that way
+ * — measured on the live store's 751 cast-swept titles (15,057 credits, 11,394
+ * distinct characters): **80.6% appear in exactly one title**, and of the 2,207
+ * that recur only **40 (1.8%) cross a franchise boundary** — 15 of the 637
+ * recurring MAIN characters. Those 40 are overwhelmingly gaps in the relation
+ * graph (the Kimi no Na wa film and its recap, Yuru Camp entries, Fate
+ * crossovers), not real cross-franchise appearances. So inverting a favourite
+ * character returns the franchise the owner has already watched: a
+ * `favCharacter` source would score ~0 on every unseen candidate, which is why
+ * there is none, no list filter, no cron step and no AniList fetch on star.
+ * Do NOT "complete" this by wiring it into `scoring.ts`.
+ *
+ * That is also why it lives in `lib/user/`, not `lib/reco/` beside
+ * `seiyuuFavorites.ts`: `reco/` means an engine annotation, and this one
+ * deliberately annotates nothing.
+ *
+ * Identity, name, portrait and origin title are denormalized at star time so
+ * the gallery renders with no join at all — the cast slice is still preferred
+ * when it holds the character (it is fresher, and a refill may have improved
+ * the portrait), exactly as `SeiyuuFavorite.name` renders before a filmography.
+ */
+export interface CharacterFavorite {
+  /** AniList character id — the id space of `AniListCharacterEntry.id`. */
+  id: number;
+  name: string;
+  nameNative?: string;
+  image?: string;
+  /** AniList's `MAIN` | `SUPPORTING` | `BACKGROUND` on the title it was starred
+   *  from. A character's role differs per title, so this is not an identity. */
+  role?: string;
+  /** Canonical id of the title it was starred from — where the gallery links,
+   *  and the cast entry it re-reads for fresher data. */
+  animeId: string;
+  addedAt: string;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { AniListCharacterEntry } from '@/models/anime';
+import { useCharacterFavorites } from '@/hooks/useCharacterFavorites';
 import { useT } from '@/lib/i18n';
 import { useSeiyuuFavorites } from '@/hooks/useSeiyuuFavorites';
 import styles from './CastSection.module.css';
@@ -50,9 +51,22 @@ function initials(name: string): string {
  * the cast slice. A character still leaves for AniList: the app stores
  * characters only as rows inside a title's cast entry, with no page to send
  * them to.
+ *
+ * ⚠️ **There are TWO gold stars in this row and they are not the same control.**
+ * On the RIGHT, beside a seiyuu's name, a ★ plus a ring on the portrait is a
+ * read-only MARK saying that voice actor is a favourite — starring one stays on
+ * `/credits/seiyuu/[id]`, where the filmography it feeds on is read. On the
+ * LEFT, beside the character, a ☆/★ is a BUTTON, and it is the only place the
+ * favourite-character registry is filled: this is where the owner meets a
+ * character, and the cast slice holds everything the registry denormalizes.
+ * Unlike the seiyuu one it starts no fetch and feeds no ranker — see
+ * `CharacterFavorite` in `@/models/anime` for the measurement that says why a
+ * character cannot carry the signal a voice actor does. The CSS keeps them
+ * apart as `fav`/`favStar` (the mark) and `starBtn`/`starBtnOn` (the button).
  */
 export default function CastSection({ animeId, initialCast }: CastSectionProps) {
   const t = useT();
+  const favs = useCharacterFavorites();
   const [cast, setCast] = useState<AniListCharacterEntry[] | null>(initialCast);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,25 +126,51 @@ export default function CastSection({ animeId, initialCast }: CastSectionProps) 
       <div className={styles.grid}>
         {shown.map(c => (
           <div key={c.id} className={styles.row}>
-            <a
-              className={styles.side}
-              href={`https://anilist.co/character/${c.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {c.image
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img className={styles.avatar} src={c.image} alt={c.name} loading="lazy" />
-                : <span className={styles.avatarFallback}>{initials(c.name)}</span>}
-              <span className={styles.who}>
-                <span className={styles.name}>{c.name}</span>
-                {c.role && (
-                  <span className={`${styles.role} ${c.role === 'MAIN' ? styles.roleMain : ''}`}>
-                    {c.role === 'MAIN' ? t('cast.roleMain') : c.role === 'SUPPORTING' ? t('cast.roleSupporting') : c.role}
-                  </span>
-                )}
-              </span>
-            </a>
+            {/* The ★ is a sibling of the link, not inside it: a button nested
+                in an <a> is invalid, and the whole left half being a link is
+                what makes the character name clickable. */}
+            <span className={styles.charCell}>
+              <a
+                className={styles.side}
+                href={`https://anilist.co/character/${c.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {c.image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img className={styles.avatar} src={c.image} alt={c.name} loading="lazy" />
+                  : <span className={styles.avatarFallback}>{initials(c.name)}</span>}
+                <span className={styles.who}>
+                  <span className={styles.name}>{c.name}</span>
+                  {c.role && (
+                    <span className={`${styles.role} ${c.role === 'MAIN' ? styles.roleMain : ''}`}>
+                      {c.role === 'MAIN' ? t('cast.roleMain') : c.role === 'SUPPORTING' ? t('cast.roleSupporting') : c.role}
+                    </span>
+                  )}
+                </span>
+              </a>
+              {/* Rendered only once the registry has loaded, so the glyph never
+                  starts hollow on a character that is already filed. */}
+              {favs.loaded && (
+                <button
+                  type="button"
+                  className={`${styles.starBtn} ${favs.isFavorite(c.id) ? styles.starBtnOn : ''}`}
+                  aria-pressed={favs.isFavorite(c.id)}
+                  title={t(favs.isFavorite(c.id) ? 'cast.unfavorite' : 'cast.favorite')}
+                  aria-label={t(favs.isFavorite(c.id) ? 'cast.unfavorite' : 'cast.favorite')}
+                  onClick={() => void favs.toggle({
+                    id: c.id,
+                    name: c.name,
+                    nameNative: c.nameNative,
+                    image: c.image,
+                    role: c.role,
+                    animeId,
+                  })}
+                >
+                  {favs.isFavorite(c.id) ? '★' : '☆'}
+                </button>
+              )}
+            </span>
 
             {/* Every seiyuu, not just the first: a character voiced by two
                 people is common and meaningful (a child self and an adult inner
