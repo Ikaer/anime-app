@@ -26,6 +26,7 @@ import {
   FIELD_EXTRACTORS,
   computeIdfSet,
   popularityScale,
+  meanScale,
   buildFieldProfile,
   buildFieldProfileSet,
   discriminativeProfilesBuilder,
@@ -343,6 +344,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   let maxAnilistRaw = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   let minUsers: number = Infinity;
+  const poolMeans: number[] = [];
   for (const [candId, a] of acc) {
     const anime = byId.get(candId);
     if (!anime) continue; // not hydrated yet — skip
@@ -370,11 +372,14 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
     if (users > maxUsers) maxUsers = users;
     if (users < minUsers) minUsers = users;
+    // Only rated candidates enter the scale; an unrated one lands on the floor.
+    if (anime.catalog.mean != null) poolMeans.push(anime.catalog.mean);
   }
   const crowdDenom = Math.log(1 + maxRaw) || 1;
   const anilistCrowdDenom = Math.log(1 + maxAnilistRaw) || 1;
   // Min-max, NOT a bare ratio — see `popularityScale`.
   const popValue = popularityScale(minUsers, maxUsers);
+  const meanValue = meanScale(poolMeans);
 
   // Pass 2: score each candidate as `Σ weight · normalizedSourceValue`, and
   // retain the per-source breakdown for the on-demand "Pourquoi ?" explain.
@@ -417,6 +422,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
         + TUNING.REJECTION_MIX.studio * negStudioM.score
         + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
+      communityScore: meanValue(anime.catalog.mean),
       popularity: popValue(users),
     };
 
@@ -464,6 +470,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
             .join(', ')
         : undefined,
       favSeiyuu: describeFavSeiyuu(favSeiyuu.byAnime.get(anime.id)),
+      communityScore: anime.catalog.mean != null
+        ? t('recoDetail.communityScore', { mean: anime.catalog.mean.toFixed(2) })
+        : undefined,
       rejection: (() => {
         // Staff names resolve against the candidate's T1 credits specifically:
         // `staffById` keeps whichever credit came last for a person with several

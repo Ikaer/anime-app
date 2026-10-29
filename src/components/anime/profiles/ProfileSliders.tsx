@@ -48,7 +48,7 @@ import styles from './ProfileSliders.module.css';
  */
 const CONTENT_FIELDS: RecoSource[] = ['anilistTags', 'genre', 'studio', 'anilistStaff', 'favSeiyuu', 'rating', 'nsfw'];
 /** The crowd half, and the two penalties that ride with it on the recos tab. */
-const CROWD_FIELDS: RecoSource[] = ['crowd', 'anilistCrowd', 'rejection', 'popularity'];
+const CROWD_FIELDS: RecoSource[] = ['crowd', 'anilistCrowd', 'communityScore', 'rejection', 'popularity'];
 
 const VERDICT_CLASS: Record<FamilyVerdict, string> = {
   empty: styles.diagEmpty,

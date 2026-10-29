@@ -151,6 +151,39 @@ export function popularityScale(minUsers: number, maxUsers: number): (users: num
 }
 
 /**
+ * The community mean as a [0,1] value: the candidate's PERCENTILE RANK among
+ * the pool's means.
+ *
+ * ⚠️ **Min-max was tried first and measured dead.** A bare ratio (`mean / 10`)
+ * is the mistake `popularityScale` exists to correct, but min-max is barely
+ * better here: the pool spans 1.89-9.07 because of a handful of unwatchable
+ * outliers, while every candidate anyone would actually rank sits in 7.5-8.5 —
+ * so min-max mapped the whole decision region into 0.78-0.90 and the slider did
+ * nothing (live-measured, the motivating card held rank #5 at EVERY weight from
+ * 0 to 1). Percentile spends the full range on the dense region, which is the
+ * opposite of `popularityScale`'s ruling and for the opposite reason: a 2M-member
+ * title really is far from a 300k one, whereas 7.7 and 8.4 are a whole verdict
+ * apart and 0.07 apart on the raw scale.
+ *
+ * ⚠️ **A null mean scores 0 — the pool's FLOOR, not its middle.** On the feed's
+ * back-catalogue pool that reads correctly (a title nobody has rated is one
+ * nobody has vouched for). It is also why this source must never reach the
+ * « Recommandé » mark: that mark's whole population is pre-air, where `mean` is
+ * null by construction, so every candidate would score the floor at once.
+ */
+export function meanScale(means: number[]): (mean: number | null | undefined) => number {
+  const sorted = [...means].sort((a, b) => a - b);
+  if (sorted.length < 2) return () => 0;
+  const last = sorted.length - 1;
+  return (mean?: number | null) => {
+    if (mean == null) return 0;
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < mean) lo = mid + 1; else hi = mid; }
+    return lo / last;
+  };
+}
+
+/**
  * Inverse document frequency per value of a discrete field, over the whole
  * corpus: `log(N / (1 + df))`. Rare studios / ratings get a high weight, so a
  * shared `rx` rating or an obscure studio counts far more than a ubiquitous

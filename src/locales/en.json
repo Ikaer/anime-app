@@ -703,6 +703,7 @@
   "reco.source.staffOriginal.hint": "Author of the adapted work (the mangaka, the novelist…) — same source, not same writer",
   "recoDetail.crowd": "Fans of {titles}",
   "recoDetail.anilistCrowd": "AniList fans of {titles}",
+  "recoDetail.communityScore": "Community score: {mean}",
   "recoDetail.suggestions": "In your MAL suggestions",
   "recoDetail.feedback": "Like your good picks: {parts}",
   "recoDetail.members": "{count} members",
@@ -733,6 +734,8 @@
   "mix.loadFailed": "Failed to compute the mix",
   "mix.sourceDown": "{source} returned nothing: {error}",
 
+  "reco.source.communityScore.label": "Community score",
+  "reco.source.communityScore.hint": "The crowd's verdict: the MAL community mean, as a percentile of the pool — not its adjacency",
   "reco.source.rejection.label": "Rejection",
   "reco.source.rejection.hint": "Penalizes what resembles your drops / low scores",
   "reco.source.popularity.label": "Popularity",

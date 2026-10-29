@@ -45,6 +45,10 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
   // (favourites are chosen BECAUSE of shows already loved — see favSeiyuu.ts),
   // so it ships off and the owner turns it up.
   favSeiyuu: 0,
+  // The crowd's VERDICT, as opposed to `crowd`'s adjacency — see `meanScale`.
+  // Ships at 0 like every source whose weight has not been argued from a
+  // measurement; turn it up on the sidebar.
+  communityScore: 0,
   rejection: -0.35,
   popularity: -0.15,
 };
@@ -142,6 +146,7 @@ export const SOURCE_META: SourceMeta[] = [
   { source: 'anilistTags', label: 'Tags AniList', hint: 'Affinité de tags fins (pondérée par rareté) — nécessite une sync', min: 0, max: 1, step: 0.05 },
   { source: 'anilistStaff', label: 'Staff AniList', hint: 'Affinité de créateurs : réalisateur, chara-design, musique… — échelle plus large (dilué par ~15 crédits ; nécessite une sync)', min: 0, max: 3, step: 0.1 },
   { source: 'favSeiyuu', label: 'Seiyuu favoris', hint: 'Un de tes seiyuu favoris y a un rôle (principal > secondaire)', min: 0, max: 2, step: 0.05 },
+  { source: 'communityScore', label: 'Note communautaire', hint: 'Le verdict de la foule : la note moyenne MAL, en percentile du pool — pas son adjacence', min: 0, max: 1, step: 0.05 },
   { source: 'rejection', label: 'Rejet', hint: 'Pénalise ce qui ressemble à tes abandons / notes basses', min: -1, max: 0, step: 0.05 },
   { source: 'popularity', label: 'Popularité', hint: 'Négatif = feed plus niche', min: -1, max: 1, step: 0.05 },
 ];

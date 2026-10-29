@@ -770,6 +770,7 @@ export type RecoSource =
   | 'anilistTags'  // taste-profile affinity on AniList catalog tags (IDF-weighted)
   | 'anilistStaff' // taste-profile affinity on AniList staff/creators (IDF-weighted)
   | 'favSeiyuu'    // a favourite seiyuu voices this title (noisy-OR by role — see reco/favSeiyuu.ts)
+  | 'communityScore' // the crowd's VERDICT (catalog.mean), as a percentile of the pool
   | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored / 👎)
   | 'popularity';  // MAL popularity — negative weight makes the feed nichier
 

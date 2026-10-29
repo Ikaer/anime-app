@@ -49,6 +49,7 @@ import {
   computeIdfSet,
   buildFieldProfileSet,
   popularityScale,
+  meanScale,
   buildDiscriminativeProfiles,
   fieldMatch,
   flooredFieldMatch,
@@ -237,6 +238,7 @@ export function computeAnchored(
   let maxAnilist = 0;
   let maxUsers: number = TUNING.POPULARITY_FLOOR;
   let minUsers: number = Infinity;
+  const poolMeans: number[] = [];
   const candIds = new Set([...crowd.keys(), ...anilistCrowd.keys()]);
   const pool = catalog ? new Set([...candIds, ...byId.keys()]) : candIds;
   for (const candId of pool) {
@@ -280,6 +282,8 @@ export function computeAnchored(
     const users = Math.max(anime.catalog.numListUsers || 0, TUNING.POPULARITY_FLOOR);
     maxUsers = Math.max(maxUsers, users);
     minUsers = Math.min(minUsers, users);
+    // Only rated candidates enter the scale — see `meanScale`.
+    if (anime.catalog.mean != null) poolMeans.push(anime.catalog.mean);
   }
   if (eligible.length === 0) return [];
 
@@ -287,6 +291,7 @@ export function computeAnchored(
   const anilistDenom = Math.log(1 + maxAnilist) || 1;
   // Min-max, NOT a bare ratio — see `popularityScale`.
   const popValue = popularityScale(minUsers, maxUsers);
+  const meanValue = meanScale(poolMeans);
 
   // Names/roles as the ANCHORS credit them — the explain says what the candidate
   // shares with the titles you picked. ⚠️ The studio map is keyed by
@@ -335,6 +340,7 @@ export function computeAnchored(
       rejection: TUNING.REJECTION_MIX.genre * negGenreM.score
         + TUNING.REJECTION_MIX.studio * negStudioM.score
         + TUNING.REJECTION_MIX.staffT1 * negStaffM.score,
+      communityScore: meanValue(anime.catalog.mean),
       popularity: popValue(users),
     };
 
@@ -368,6 +374,9 @@ export function computeAnchored(
             .join(', ') })
         : undefined,
       favSeiyuu: describeFavSeiyuu(favSeiyuu.byAnime.get(candId)),
+      communityScore: anime.catalog.mean != null
+        ? t('recoDetail.communityScore', { mean: anime.catalog.mean.toFixed(2) })
+        : undefined,
       rejection: (() => {
         // Candidate-side names throughout: `fieldMatch` extracts from the
         // candidate, so `anchorStudioNames` / `anchorStaffById` would miss every

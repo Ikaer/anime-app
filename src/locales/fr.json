@@ -703,6 +703,7 @@
   "reco.source.staffOriginal.hint": "Auteur de l'œuvre adaptée (le mangaka, le romancier…) — même source, pas même scénariste",
   "recoDetail.crowd": "Fans de {titles}",
   "recoDetail.anilistCrowd": "Fans AniList de {titles}",
+  "recoDetail.communityScore": "Note de la communauté : {mean}",
   "recoDetail.suggestions": "Dans tes suggestions MAL",
   "recoDetail.feedback": "Comme tes bonnes pioches : {parts}",
   "recoDetail.members": "{count} membres",
@@ -733,6 +734,8 @@
   "mix.loadFailed": "Échec du calcul du mix",
   "mix.sourceDown": "{source} n'a rien renvoyé : {error}",
 
+  "reco.source.communityScore.label": "Note communautaire",
+  "reco.source.communityScore.hint": "Le verdict de la foule : la note moyenne MAL, en percentile du pool — pas son adjacence",
   "reco.source.rejection.label": "Rejet",
   "reco.source.rejection.hint": "Pénalise ce qui ressemble à tes abandons / notes basses",
   "reco.source.popularity.label": "Popularité",
