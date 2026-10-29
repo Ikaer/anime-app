@@ -40,7 +40,7 @@
  * touches the stored `RecommendationsData`.
  */
 
-import { AnimeRecord, RecoSource, RecoContribution, SourceWeights } from '@/models/anime';
+import { AnimeRecord, RecoSource, RecoContribution, SourceWeights, AniListStaffEntry } from '@/models/anime';
 import type { FieldValue } from '@/lib/reco/scoring';
 import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { ANCHORED_WEIGHTS } from '@/lib/reco/weights';
@@ -301,7 +301,15 @@ export function computeAnchored(
   // raw key (`#manglobe`) — live-caught on `/mix`, and inherited from the
   // one-anchor version this generalizes.
   const anchorStudioNames = new Map(anchors.flatMap(a => (a.catalog.studios || []).map(s => [catalogNameKey(s.name), s.name] as const)));
-  const anchorStaffById = new Map(anchors.flatMap(a => (a.sources.anilist?.staff || []).map(s => [s.id, s] as const)));
+  // ⚠️ Best credit per person, not the last one `new Map(…)` happens to keep:
+  // one person routinely holds several credits on one title (and here, across
+  // several anchors), which rendered an auteur as « Storyboard : X » and never
+  // as their director credit. Same fix as `feed.ts`' `staffById`.
+  const anchorStaffById = new Map<number, AniListStaffEntry>();
+  for (const s of anchors.flatMap(a => a.sources.anilist?.staff || [])) {
+    const prev = anchorStaffById.get(s.id);
+    if (!prev || staffRoleTier(s.role) < staffRoleTier(prev.role)) anchorStaffById.set(s.id, s);
+  }
   const anchorTitle = (id: string) => { const a = byId.get(id); return a ? getPrimaryTitle(a, titleLang) : id; };
   const multi = anchors.length > 1;
 

@@ -284,8 +284,22 @@ export function buildFieldProfileSet(
 }
 
 /** Candidate's overlap with a field profile in [0,1], plus the matched values. */
+/**
+ * ⚠️ **The candidate's values are DEDUPED, and the profile side always was.**
+ * `valueRates` / `buildFieldProfile` wrap each title's values in a `Set`;
+ * this did not, which made the two halves answer different questions. It bites
+ * on `anilistStaff`, where one person routinely holds several credits on one
+ * title — Makoto Shinkai is Original Creator, Director, Script, Storyboard,
+ * Color Design, Photography and Editing on *The Garden of Words*, so he counted
+ * SEVEN times in both the numerator and the 50-credit denominator. Measured on
+ * the backtest at three cutoffs, deduping moves the held-out 8+ MRR 0.0406 →
+ * 0.0423, 0.0499 → 0.0513 and 0.0741 → 0.0750 with the 6-7s flat, and leaves
+ * the « Recommandé » mark identical at every cut over three seasons. Note it
+ * LOWERS the auteur case it was found on (that card's staff value 0.071 →
+ * 0.051): the repetition was inflating him, which is exactly why it had to go.
+ */
 export function fieldMatch(candidate: AnimeRecord, profile: FieldProfile): { score: number; matched: FieldValue[] } {
-  const vals = profile.extract(candidate);
+  const vals = [...new Set(profile.extract(candidate))];
   if (vals.length === 0) return { score: 0, matched: [] };
   let sum = 0;
   const matched: FieldValue[] = [];
@@ -340,7 +354,8 @@ export function flooredFieldMatch(
   profile: FieldProfile,
   floor: number
 ): { score: number; matched: FieldValue[] } {
-  const vals = profile.extract(candidate);
+  // Deduped like `fieldMatch` — same normalization, same reason.
+  const vals = [...new Set(profile.extract(candidate))];
   if (vals.length === 0) return { score: 0, matched: [] };
   let sum = 0;
   const matched: FieldValue[] = [];

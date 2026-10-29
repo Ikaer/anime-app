@@ -18,7 +18,7 @@
  * module client-side except via `import type`.
  */
 
-import { AnimeRecord, RecoMeta, RecoSource, SourceWeights } from '@/models/anime';
+import { AnimeRecord, AniListStaffEntry, RecoMeta, RecoSource, SourceWeights } from '@/models/anime';
 import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
 import {
@@ -441,7 +441,16 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     // Keyed like the studio profile (normalized name) so the explain can turn a
     // matched key back into the studio's display name.
     const studioNames = new Map((anime.catalog.studios || []).map(s => [catalogNameKey(s.name), s.name]));
-    const staffById = new Map((anime.sources.anilist?.staff || []).map(s => [s.id, s]));
+    // ⚠️ A person often holds several credits on one title, and `new Map(…)`
+    // keeps whichever came LAST — live-measured, that rendered *The Garden of
+    // Words* as « Storyboard : Makoto Shinkai » and never named him director.
+    // Keep the most important credit instead; same hazard the rejection branch
+    // below documents for its own T1 map.
+    const staffById = new Map<number, AniListStaffEntry>();
+    for (const s of anime.sources.anilist?.staff || []) {
+      const prev = staffById.get(s.id);
+      if (!prev || staffRoleTier(s.role) < staffRoleTier(prev.role)) staffById.set(s.id, s);
+    }
     const details: Partial<Record<RecoSource, string | undefined>> = {
       crowd: allSeedTitles.length ? t('recoDetail.crowd', { titles: allSeedTitles.join(', ') }) : undefined,
       anilistCrowd: anilistAllTitles.length ? t('recoDetail.anilistCrowd', { titles: anilistAllTitles.join(', ') }) : undefined,
