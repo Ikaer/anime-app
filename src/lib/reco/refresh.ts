@@ -12,7 +12,6 @@ import { MALAnime } from '@/models/anime';
 import { getAnimeForDisplay, upsertAnime, buildCrosswalkIndexes, toNum } from '@/lib/store';
 import { TUNING } from '@/lib/reco/scoring';
 import { RecoEdge, RecommendationsData, saveRecommendationsData } from '@/lib/reco/data';
-import { getFeedbackAnime } from '@/lib/reco/feedback';
 import { getSeeds, type FeedOptions } from '@/lib/reco/feed';
 import { fetchAnilistRecommendations, fetchAnilistCatalog } from '@/lib/providers/anilist/sync';
 import {
@@ -152,18 +151,16 @@ export async function performRecommendationsRefresh(
 
   try {
     const threshold = options.threshold ?? TUNING.DEFAULT_SEED_THRESHOLD;
-    // Seeds = high-scored MAL completions ∪ 👍 "bonnes pioches". The latter let
-    // an explicit endorsement pull in fresh crowd candidates (they're already
-    // hydrated — they came from the feed — so no extra detail fetch is needed).
-    const malSeeds = getSeeds(threshold);
-    const seenSeed = new Set(malSeeds.map(s => s.id));
-    const upSeeds = getFeedbackAnime('up').filter(a => !seenSeed.has(a.id));
+    // Seeds = high-scored completions, minus the owner's seed mutes. The 👍
+    // "bonne pioche" set used to union in here; the thumbs were removed (see
+    // `reco/ignored.ts`) and, measured over fifteen months, that set was empty
+    // every single refresh — so nothing is lost but the second code path.
     // Seeds are RECORDS, and each provider call takes that record's own id out
     // of the crosswalk (E9). A seed with no MAL id simply isn't asked of MAL;
     // one with no AniList id isn't asked of AniList. Neither disqualifies it
     // from the other source, which the old "reduce every seed to a MAL id"
     // step quietly did.
-    const seedRecords = [...malSeeds, ...upSeeds];
+    const seedRecords = getSeeds(threshold);
 
     // Raw, provider-keyed accumulation. It is deliberately NOT what gets
     // persisted: `cache/recommendations.json` is canonical-keyed (E10), and the

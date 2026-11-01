@@ -14,7 +14,7 @@
  *
  *  - **The positive taste profiles are built from the anchors alone**, so a
  *    source scores "shares a *rare* genre/tag/studio/creator with what you
- *    picked" rather than "fits your whole list". `suggestions` and `feedback`
+ *    picked" rather than "fits your whole list". `suggestions`
  *    are user-global and have no per-anchor meaning, so `ANCHORED_WEIGHTS`
  *    forces them to 0; `rejection` and `popularity` stay on (they hold for any
  *    candidate).
@@ -36,7 +36,7 @@
  *    would be the uncorrected scale `PROFILE_DENOM` exists to fix — and they
  *    ride in the same breakdown as the sources.
  *
- * Server-only (reads the store + the feedback slice), but stateless: it never
+ * Server-only (reads the store + the ignored slice), but stateless: it never
  * touches the stored `RecommendationsData`.
  */
 
@@ -59,7 +59,7 @@ import {
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
 import { buildFamilyTerms, matchFamilyTerms, familyCredits, type StaffFamily, type FamilyHit } from '@/lib/reco/staffFields';
-import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
+import { getIgnoredIdSet } from '@/lib/reco/ignored';
 import { getFavSeiyuuIndex } from '@/lib/reco/seiyuuFavorites';
 import { favSeiyuuValue, describeFavSeiyuu } from '@/lib/reco/favSeiyuu';
 import { getEffectiveStatus, getPrimaryTitle, getRatingIntent, catalogNameKey } from '@/lib/domain/animeUtils';
@@ -180,7 +180,7 @@ export function computeAnchored(
     for (const rel of resolveRelations(anchor, relations)) excluded.add(rel.record.id);
   }
   const hiddenCanonical = new Set(getHiddenAnimeIds());
-  const downCanonical = feedbackIds(getFeedback(), 'down');
+  const ignoredCanonical = getIgnoredIdSet();
   const anchorIdSet = new Set(anchors.map(a => a.id));
   // Favourite seiyuu: user-global like `rejection`, so it holds for any anchor
   // set. Re-ranks within the crowd pool; under `options.catalog` a weighted hit
@@ -216,7 +216,7 @@ export function computeAnchored(
   // would say "this anchor's genres aren't rejections", which is not a claim
   // about the user at all. `self` above is therefore left un-netted — the
   // positive side here means "shares a rare value with what you picked".
-  const { negGenre, negStudio, negStaffT1 } = buildDiscriminativeProfiles(all, downCanonical, idf);
+  const { negGenre, negStudio, negStaffT1 } = buildDiscriminativeProfiles(all, idf);
 
   // The staff craft families a box's reco profile turns on (docs/recoProfiles/).
   // One vote per anchor: on the box recos tab the anchors are already one
@@ -245,13 +245,13 @@ export function computeAnchored(
     if (excluded.has(candId) || options.excludeIds?.has(candId)) continue;
     const anime = byId.get(candId);
     if (!anime) continue; // absent from the local catalog — nothing to rank on
-    if (hiddenCanonical.has(anime.id) || downCanonical.has(anime.id)) continue;
+    if (hiddenCanonical.has(anime.id) || ignoredCanonical.has(anime.id)) continue;
     // ⚠️ NOT behind `excludeSeen`. "Plus comme ça" deliberately keeps seen
     // titles (marked « Déjà vu ») because its pool is ~25 edges wide and
     // dropping them would gut the block — but a rating intent is not the same
     // claim as a watch status: it is the owner saying "stop putting this in
     // front of me", which holds however small the pool is. Same tier as
-    // `hidden` and 👎, and unconditional for the same reason.
+    // `hidden` and the ignored set, and unconditional for the same reason.
     if (getRatingIntent(anime)) continue;
     if (isPrematureSequel(anime, relations)) continue;
     if (options.excludeSeen) {
@@ -337,7 +337,6 @@ export function computeAnchored(
       crowd: maxCrowd > 0 ? Math.log(1 + crowdNum) / crowdDenom : 0,
       anilistCrowd: maxAnilist > 0 ? Math.log(1 + anilistNum) / anilistDenom : 0,
       suggestions: 0,
-      feedback: 0,
       genre: genreM.score,
       studio: studioM.score,
       nsfw: nsfwM.score,

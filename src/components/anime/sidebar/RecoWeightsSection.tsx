@@ -20,8 +20,8 @@ interface RecoWeightsSectionProps {
   onWeightsChange: (w: SourceWeights) => void;
   /**
    * Restrict the sliders to these sources, in `SOURCE_META`'s order. Anchored
-   * surfaces ("/mix") pass `ANCHORED_SOURCES`: they force `suggestions` and
-   * `feedback` to 0, and a slider on a source the ranking ignores is a knob
+   * surfaces ("/mix") pass `ANCHORED_SOURCES`: they force `suggestions` to 0,
+   * and a slider on a source the ranking ignores is a knob
    * attached to nothing. Omitted = every source (the "Pour toi" feed).
    */
   sources?: RecoSource[];

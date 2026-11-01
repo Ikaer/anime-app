@@ -350,7 +350,7 @@ interface RecoProfile {
 ```
 
 A bare array beside `boxes.json` / `hidden.json` / `seed_mutes.json`. Store in
-`src/lib/reco/profiles.ts`, for `boxes.ts`' and `feedback.ts`' reason: an engine annotation,
+`src/lib/reco/profiles.ts`, for `boxes.ts`' and `seedMutes.ts`' reason: an engine annotation,
 off the seven-slice join, so a write here cannot change an assembled row and must not
 invalidate the row cache.
 

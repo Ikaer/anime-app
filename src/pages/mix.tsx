@@ -144,8 +144,8 @@ export default function MixPage() {
         <GenresSection genres={state.genres} onGenresChange={(v) => update({ genres: v })} />
       </CollapsibleSection>
 
-      {/* Only the sources an anchored ranking actually uses — `suggestions` and
-          `feedback` are user-global and forced to 0 here. */}
+      {/* Only the sources an anchored ranking actually uses — `suggestions` is
+          user-global and forced to 0 here. */}
       <CollapsibleSection title={t('reco.sourceWeights')} isExpanded={expanded.weights} onToggle={() => toggle('weights')}>
         <RecoWeightsSection
           weights={state.weights}

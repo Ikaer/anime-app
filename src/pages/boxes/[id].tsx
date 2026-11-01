@@ -471,7 +471,7 @@ export default function BoxV2DetailPage() {
               onIncludeSeenChange={v => update({ includeSeen: v })}
               cardsPerRow={state.cardsPerRow}
               onCardsPerRowChange={setCardsPerRow}
-              // ⚠️ « Non » writes `exclude`, which is BOX-LOCAL. It is not a 👎,
+              // ⚠️ « Non » writes `exclude`, which is BOX-LOCAL. It is not an ignore,
               // not a hide and not a seed mute: a title set aside here says
               // nothing about `/recommendations` (§3).
               onVerdict={async (id, v) => { await write(v === 'yes' ? { add: [id] } : { exclude: [id] }); }}

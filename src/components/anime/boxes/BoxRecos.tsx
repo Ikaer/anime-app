@@ -29,9 +29,9 @@ import styles from './BoxRecos.module.css';
  * is a different, later question rather than a worse one.
  *
  * ⚠️ **« Non » is box-local and never reaches the global feed** (§3). It is not
- * a 👎, not a hide and not a seed mute: a title set aside from `Absolute cinema`
+ * an « Ignorer », not a hide and not a seed mute: a title set aside from `Absolute cinema`
  * says nothing about `/recommendations`. `AnimeCardView` takes these through
- * `onBoxVerdict` for exactly that reason, never through `onFeedback`.
+ * `onBoxVerdict` for exactly that reason, never through `onIgnore`.
  *
  * It renders `AnimeListHeader`, which is also the fix for §1's last live bug:
  * the v1 tab had no cards-per-row control, so its feed rendered two cards wide
@@ -146,10 +146,10 @@ const BoxRecos: React.FC<BoxRecosProps> = ({
         <AnimeCardView
           animes={visible}
           cardsPerRow={cardsPerRow}
-          // ⚠️ `feedbackMode` stays null: the 👍/👎 write the GLOBAL feedback
-          // store, and a verdict about one taste axis must not re-rank « Pour
-          // toi ». These buttons are the box's own.
-          feedbackMode={null}
+          // ⚠️ `ignoreMode` stays null: « Ignorer » writes the GLOBAL ignored
+          // store, which silences a title on EVERY reco surface. A « non » here
+          // only sets it aside in THIS box. These buttons are the box's own.
+          ignoreMode={null}
           onBoxVerdict={verdict}
         />
       )}

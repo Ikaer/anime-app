@@ -29,9 +29,6 @@ export const TUNING = {
   POPULARITY_FLOOR: 10,
   /** A personal score <= this marks an anime as "rejected" (negative profile). */
   NEGATIVE_SCORE_THRESHOLD: 5,
-  /** Relative weight of genre vs studio overlap in the 👍 feedback profile match. */
-  GENRE_WEIGHT: 0.6,
-  STUDIO_WEIGHT: 0.4,
   /**
    * How much of the OTHER side's rate is subtracted when netting the taste
    * profiles (see `buildDiscriminativeProfiles`). `1` = full netting: a value
@@ -59,9 +56,6 @@ export const TUNING = {
   SEED_GAP_BONUS: 0.5,
   /** How many top seeds to surface per candidate for the match hint. */
   TOP_SEEDS_PER_CANDIDATE: 2,
-  /** Synthetic edge weight for a 👍 "bonne pioche" acting as a crowd seed
-   *  (it has no MAL personal score to derive a weight from). ~ a score-9 seed. */
-  FEEDBACK_SEED_WEIGHT: 2,
   /** MAL caps recommendations at 10 per anime. */
   MAX_RECS_PER_ANIME: 10,
   /** Delay between MAL detail calls during a refresh (ms). */
@@ -470,28 +464,28 @@ export interface DiscriminativeProfiles {
 }
 
 /**
- * The dislike set: dropped, or scored <= `NEGATIVE_SCORE_THRESHOLD`, ∪ the 👎
- * "pas pour moi" thumbs.
+ * The dislike set: dropped, or scored <= `NEGATIVE_SCORE_THRESHOLD`. A verdict
+ * reached after watching, and nothing else — see the ⚠️ below.
  *
  * Named rather than inlined so the definition has one home — the rejection
  * profiles below are its only caller today.
  */
-function getDislikedAnime(all: AnimeRecord[], downIds: Set<string>): AnimeRecord[] {
-  const base = all.filter(a => {
+function getDislikedAnime(all: AnimeRecord[]): AnimeRecord[] {
+  return all.filter(a => {
     const st = getEffectiveStatus(a);
     const sc = getEffectiveScore(a) ?? 0;
     return st === 'dropped' || (sc > 0 && sc <= TUNING.NEGATIVE_SCORE_THRESHOLD);
   });
-  const seen = new Set(base.map(a => a.id));
-  return [...base, ...all.filter(a => downIds.has(a.id) && !seen.has(a.id))];
 }
 
 /**
  * Taste profiles built as a DISCRIMINATIVE pair: what separates the titles you
  * liked from the ones you dropped, rather than two independent tallies.
  *
- * The dislike set is unchanged — dropped, or scored <= `NEGATIVE_SCORE_THRESHOLD`,
- * ∪ 👎 "pas pour moi". What changed is that the two sides now cancel. Before,
+ * The dislike set is dropped, or scored <= `NEGATIVE_SCORE_THRESHOLD` — a
+ * VERDICT the owner reached after watching, never a pre-watch guess (the 👎
+ * thumb used to union into it and was removed: see `reco/ignored.ts`, where the
+ * measurement is). What the netting changed is that the two sides cancel. Before,
  * a value could sit at 0.8 in the positive profile and 0.7 in the negative and
  * BOTH fired: a shonen watcher who drops the occasional shonen was scored
  * `+genre` and `-rejection` on every shonen candidate at once. The value that
@@ -512,11 +506,10 @@ function getDislikedAnime(all: AnimeRecord[], downIds: Set<string>): AnimeRecord
  */
 export function buildDiscriminativeProfiles(
   all: AnimeRecord[],
-  downIds: Set<string>,
   idf: IdfSet,
   liked?: { animes: AnimeRecord[]; weight: (a: AnimeRecord) => number }
 ): DiscriminativeProfiles {
-  return discriminativeProfilesBuilder(all, downIds, idf, liked)();
+  return discriminativeProfilesBuilder(all, idf, liked)();
 }
 
 /**
@@ -532,11 +525,10 @@ export function buildDiscriminativeProfiles(
  */
 export function discriminativeProfilesBuilder(
   all: AnimeRecord[],
-  downIds: Set<string>,
   idf: IdfSet,
   liked?: { animes: AnimeRecord[]; weight: (a: AnimeRecord) => number }
 ): (omit?: string) => DiscriminativeProfiles {
-  const dislikedAll = getDislikedAnime(all, downIds);
+  const dislikedAll = getDislikedAnime(all);
 
   const likedAnimes = liked?.animes ?? all.filter(a => {
     if (getEffectiveStatus(a) !== 'completed') return false;

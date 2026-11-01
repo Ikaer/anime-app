@@ -144,7 +144,7 @@ interface UserGroup {
 }
 ```
 
-A bare array, beside `boxes.json` / `hidden.json` / `reco_feedback.json`. Store lives in
+A bare array, beside `boxes.json` / `hidden.json` / `reco_ignored.json`. Store lives in
 `src/lib/reco/groups.ts` for `boxes.ts`' reason: it is an engine annotation, off the
 seven-slice join, so a write here cannot change an assembled row and must not invalidate the
 row cache.

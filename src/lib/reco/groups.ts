@@ -13,7 +13,7 @@
  * what those titles are, not a per-box copy to keep in sync.
  *
  * **Why it lives in `reco/` rather than `store/`**, exactly `boxes.ts`' and
- * `feedback.ts`' reason: durable `user/` data deliberately NOT joined into
+ * `seedMutes.ts`' reason: durable `user/` data deliberately NOT joined into
  * `AnimeRecord`. A write here cannot change an assembled row, so it must not
  * invalidate the row cache and does not pay the seven-slice join's tax.
  *
@@ -35,7 +35,7 @@ import { mintGroupId } from '@/lib/domain/slug';
 
 const GROUPS_FILE = dataFile('user/groups.json');
 
-/** A bare array, beside `boxes.json` / `hidden.json` / `reco_feedback.json`. */
+/** A bare array, beside `boxes.json` / `hidden.json` / `reco_ignored.json`. */
 export function getGroups(): UserGroup[] {
   return readJsonFile<UserGroup[]>(GROUPS_FILE, []);
 }

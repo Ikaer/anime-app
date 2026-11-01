@@ -98,7 +98,7 @@ export const AFFINITY_WEIGHTS: Record<MetaField, number> = {
   anilistStaff: 0.5,
 };
 
-/** Weight of the rejection profile (dropped / low-scored / 👎). Negative. */
+/** Weight of the rejection profile (dropped / low-scored). Negative. */
 export const AFFINITY_REJECTION_WEIGHT = -0.35;
 
 /**
@@ -176,8 +176,8 @@ export interface AffinityIndex {
 }
 
 export interface AffinityOptions {
-  /** 👎 ids: excluded from the mark and folded into the rejection profile. */
-  downIds?: Set<string>;
+  /** « Ignorer » ids: excluded from the mark (see `reco/ignored.ts`). */
+  ignoredIds?: Set<string>;
   /** Override for tuning probes; defaults to `AFFINITY_WEIGHTS`. */
   weights?: Record<MetaField, number>;
   /** Override for tuning probes; defaults to `AFFINITY_TAG_MIN_RANK`. */
@@ -237,11 +237,11 @@ export function isScoreable(a: AnimeRecord): boolean {
  * `computeFeed` and `/mix` share. A rating intent fails even without a seen
  * status: « À revoir » / « Sans avis » mean the owner watched it and decided.
  */
-export function isUnseenCandidate(anime: AnimeRecord, downIds: ReadonlySet<string>): boolean {
+export function isUnseenCandidate(anime: AnimeRecord, ignoredIds: ReadonlySet<string>): boolean {
   const status = getEffectiveStatus(anime);
   if (status && SEEN_STATUSES.has(status)) return false;
   if (getRatingIntent(anime)) return false;
-  return !anime.hidden && !downIds.has(anime.id);
+  return !anime.hidden && !ignoredIds.has(anime.id);
 }
 
 /** The unseen catalog a ranker may propose from, and how much of it could be scored. */
@@ -259,18 +259,18 @@ export interface UnseenPool {
  * functions, so the preview pool and the mark's population cannot drift apart
  * — pinned by comparing the two on one fixture.
  *
- * ⚠️ **Not memoized, on purpose.** It depends on `downIds`, and the 👎 store is
- * off the seven-slice join: a 👎 does not produce a new row array, so a WeakMap
+ * ⚠️ **Not memoized, on purpose.** It depends on `ignoredIds`, and that store is
+ * off the seven-slice join: an ignore does not produce a new row array, so a WeakMap
  * keyed on `all` would serve a stale pool. One pass is cheap next to the rank it
  * feeds (measured in docs/recoProfiles/PLAN.md); the relation index it reads IS
  * memoized.
  */
-export function buildUnseenPool(all: AnimeRecord[], downIds: ReadonlySet<string>): UnseenPool {
+export function buildUnseenPool(all: AnimeRecord[], ignoredIds: ReadonlySet<string>): UnseenPool {
   const relations = buildRelationIndex(all);
   const eligible = new Set<string>();
   let unseen = 0;
   for (const anime of all) {
-    if (!isUnseenCandidate(anime, downIds)) continue;
+    if (!isUnseenCandidate(anime, ignoredIds)) continue;
     unseen++;
     if (!isScoreable(anime)) continue;
     if (isPrematureSequel(anime, relations)) continue;
@@ -295,12 +295,12 @@ export function buildUnseenPool(all: AnimeRecord[], downIds: ReadonlySet<string>
  * `plan_to_watch` is a title you flagged, not one you judged, and both
  * `computeFeed` and `/mix` count it as unseen — a mark that disagreed would put
  * the badge on the main list at odds with the two surfaces it sits beside.
- * Also excluded: hidden, 👎'd, and premature sequels — a season is mostly
+ * Also excluded: hidden, ignored, and premature sequels — a season is mostly
  * sequels, and "recommended" on part 3 of a show never started is the one
  * failure mode that would discredit the mark on sight.
  */
 export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions = {}): AffinityIndex {
-  const downIds = options.downIds ?? new Set<string>();
+  const ignoredIds = options.ignoredIds ?? new Set<string>();
   const weights = options.weights ?? AFFINITY_WEIGHTS;
   const minRank = options.tagMinRank ?? AFFINITY_TAG_MIN_RANK;
   const favHits = (anime: AnimeRecord) => options.favSeiyuu?.byAnime.get(anime.id);
@@ -329,7 +329,7 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
   };
 
   const idf = computeIdfSet(all);
-  const disc = buildDiscriminativeProfiles(all, downIds, idf, { animes: seeds, weight: seedW });
+  const disc = buildDiscriminativeProfiles(all, idf, { animes: seeds, weight: seedW });
   const extractors = affinityExtractors(minRank);
   // Tags get their own IDF: the rank floor changes their document frequencies,
   // so `idf.anilistTags` (built over every tag) would misweight them.
@@ -369,7 +369,7 @@ export function buildAffinityIndex(all: AnimeRecord[], options: AffinityOptions 
     // decided — rather than inheriting it from those riding on `completed`:
     // recommending a show the owner watched and declined to score is the
     // premature-sequel failure in another costume.
-    if (!isUnseenCandidate(anime, downIds)) continue;
+    if (!isUnseenCandidate(anime, ignoredIds)) continue;
     unseen++;
     if (!isScoreable(anime)) continue;
     if (isPrematureSequel(anime, relations)) continue;

@@ -9,7 +9,7 @@
 
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { SourceWeights, RecoVerdict } from '@/models/anime';
+import { SourceWeights } from '@/models/anime';
 import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/reco/weights';
 import useViewDefaults from '@/hooks/useViewDefaults';
 
@@ -22,8 +22,8 @@ export interface RecoUrlState {
   weights: SourceWeights;
   /** Engine: MMR diversity λ (0 = pure affinity order; null = default 0). */
   diversity: number | null;
-  /** Sub-view: show a feedback review list ('up' = bonnes pioches, 'down' = pas pour moi) instead of the feed. */
-  review: RecoVerdict | null;
+  /** Sub-view: show the « Ignorés » review-and-undo list instead of the feed. */
+  review: boolean;
   /**
    * « Seconde chance »: rank the owner's DROPPED titles instead of the unseen
    * ones. Same engine and knobs; only the population changes. A review list
@@ -52,7 +52,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   threshold: null,
   weights: DEFAULT_WEIGHTS,
   diversity: null,
-  review: null,
+  review: false,
   secondChance: false,
   mediaTypes: [],
   search: '',
@@ -91,7 +91,7 @@ function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlSta
     threshold: num(params.get(KEYS.threshold)),
     weights: resolveWeights(parseSourceWeights(params.get(KEYS.weights))),
     diversity: num(params.get(KEYS.diversity)),
-    review: params.get(KEYS.review) === 'up' ? 'up' : params.get(KEYS.review) === 'down' ? 'down' : null,
+    review: params.get(KEYS.review) === '1',
     secondChance: params.get(KEYS.secondChance) === '1',
     mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
     search: params.get(KEYS.search) || '',
@@ -111,7 +111,7 @@ function encode(state: RecoUrlState): string {
   const wStr = encodeSourceWeights(state.weights);
   if (wStr) params.set(KEYS.weights, wStr);
   if (state.diversity !== null && state.diversity > 0) params.set(KEYS.diversity, String(state.diversity));
-  if (state.review) params.set(KEYS.review, state.review);
+  if (state.review) params.set(KEYS.review, '1');
   if (state.secondChance) params.set(KEYS.secondChance, '1');
   if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
   if (state.search) params.set(KEYS.search, state.search);

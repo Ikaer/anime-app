@@ -25,7 +25,8 @@ and code comments cite this file.
     local.json
   user/
     hidden.json
-    reco_feedback.json
+    reco_credit.json
+    reco_ignored.json
   auth/
     mal.json  simkl.json  anilist.json
     oauth_state_mal.json         # transient CSRF state, one file per provider

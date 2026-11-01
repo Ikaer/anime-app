@@ -31,7 +31,7 @@
  * the weights an untouched slider resolves to (what a control encodes against),
  * with `staffZeroed` so the page can say `anilistStaff` moved on its own.
  *
- * Server-only: reads the store, the groups, the 👎 store, and (anchored) calls
+ * Server-only: reads the store, the groups, the ignored store, and (anchored) calls
  * MAL / AniList through `mixFetch`.
  */
 
@@ -39,7 +39,7 @@ import type { AnimeRecord, Box, RecoContribution } from '@/models/anime';
 import { getAnimeForDisplay } from '@/lib/store';
 import { rankBoxCandidates } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
-import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
+import { getIgnoredIdSet } from '@/lib/reco/ignored';
 import { computeAnchored } from '@/lib/reco/anchored';
 import { boxAnchorIds, boxAnsweredIds, loadMixEdges, MAX_MIX_ANCHORS, type MixSourceOutcome } from '@/lib/reco/mixFetch';
 import { buildUnseenPool } from '@/lib/reco/affinity';
@@ -165,7 +165,7 @@ export async function previewProfile(input: PreviewInput): Promise<PreviewResult
   }
 
   const resolved = resolveProfile(BOX_WEIGHTS, input.weights);
-  const unseen = input.pool === 'catalog' ? buildUnseenPool(all, feedbackIds(getFeedback(), 'down')) : undefined;
+  const unseen = input.pool === 'catalog' ? buildUnseenPool(all, getIgnoredIdSet()) : undefined;
   const ranked = present.length === 0 ? [] : rankBoxCandidates(anchorBox, all, {
     limit: input.limit,
     groups,

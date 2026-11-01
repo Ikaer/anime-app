@@ -272,7 +272,7 @@
 
 /* « Ne plus partir de ce titre », inline after the seed's name. Deliberately
    quiet until hovered: the hint is read on every card in the feed and a bright
-   control on each one would compete with the 👍/👎 row for the same attention. */
+   control on each one would compete with the action row for the same attention. */
 .muteSeedButton {
     margin-left: 0.35rem;
     padding: 0 0.25rem;

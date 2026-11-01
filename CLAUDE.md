@@ -21,7 +21,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **A test earns its place by pinning something that fails SILENTLY.** [tests/domain/genreAxis.test.ts](tests/domain/genreAxis.test.ts) is the model: skip the alias before the whitelist check and `Suspense` is misfiled as a theme on 1,000+ titles, with no crash, no build error and nothing visibly wrong on screen. A test that merely restates what the types already guarantee is noise. Tests needing a store on disk are a harder, separate thing — `DATA_PATH` is a module-init const in `jsonStore.ts` and `readJsonFile`'s parse cache is module-level, so a fixture must be written through `writeJsonFile` (which evicts) and `DATA_PATH` set before the module is imported. The suite stays on pure functions until that is worth solving. **A function in an `fs` module that takes its data as arguments is still pure** — importing the module reads nothing (perf logging only runs under `NEXT_RUNTIME`; `DATA_PATH` is resolved, not opened). [tests/reco/profileRanking.test.ts](tests/reco/profileRanking.test.ts) runs the real `rankBoxCandidates` that way, handing it fixture rows and `groups: []`, and points `DATA_PATH` at a missing folder before a dynamic `import()` so a future edit that makes it read the store sees an empty one rather than the owner's.
 
-**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting), `reco/staffFields` (the reco-profile craft families: every boundary docs/recoProfiles/DESIGN.md §3 rejected, dub credits out, one person once per family, `denomFor` routing a family to `PROFILE_DENOM` and a metadata field to `MATCH_DENOM_FLOOR`, the family-scoped IDF, and a per-episode credit counting by its SHARE of the title on both the profile and the candidate side), `reco/profileWeights` (`anilistStaff` forced to 0 whenever a family is on — even when set explicitly — each ranker overriding only its own base's keys, sparse-by-intent sanitizing, presets stating their zero, `mintProfileId` never re-minting a dead id a box still names, and `resolveProfileOver`'s base < profile < URL order with the zeroing holding AFTER the URL), `reco/profileRanking` (a box's profile reaching the rankers: families built only when non-zero, scored through `denomFor` never plain `fieldMatch`, an explain line naming the credit that puts the person IN the family, `scoreWithBreakdown` explaining every term it sums, and the real `rankBoxCandidates` on fixture rows — lifting a shared director, listing the family in `matched`, zeroing `anilistStaff`), `reco/profilePreview` (the preview pool IS the « Recommandé » mark's population, a 👎 reaches it with the same row array — so it must not be memoized on it — the unseen pool still skips members and écartés, the §8 diagnostic counting recurrence across UNITS, and every static route under `api/anime/profiles/` being a reserved profile id), `reco/profileBaseline` (the profile page's "against Défaut" framing: a re-faced franchise group found again rather than counted `nouveau`, and "tunes nothing" decided on the pool's RESOLVED weights, not the stored keys), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `reco/markHistory` (`first` written once, `ep3` only off a day-precise date and only inside its window, pre-air read at the date's own precision), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/slug`'s `mintGroupId` (a dead group id a box still declares is never re-minted — `mintProfileId`'s rule for regroupements), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), `reco/favSeiyuu` (a favourite counts once per title at their best role, the noisy-OR never letting bit parts overtake a lead, the cast slice unioned in by person, AniList-then-MAL resolution, the list filter MAIN-only), `domain/characterFavorites` (the favourite-character join: the cast slice winning over the stored copy so a refill reaches the registry, the stored copy surviving a title that LEFT the slice, an unresolvable title left undefined rather than invented, and each favourite from a shared title keeping its own identity), `domain/leanRow`'s `sortLeanRows` (unrated last in BOTH score directions, undated last in `feed`, ties keep the input order), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
+**What is covered today**, so a ⚠️ below can be traced to the test holding it: `genreAxis` (the alias before the whitelist), `staffRole` (the three qualifier rules, and each of the two trims the lookup depends on), `url/animeParams` (the encode/decode round-trip, driven off a `AnimeFiltersState`-typed sample so a new filter is a compile error there), `providers/discrepancy` (the progress exception and the asymmetric presence rule), `reco/scoring` (`popularityScale` spanning [0,1], `fieldMatch`'s divide-by-value-count, the discriminative netting, and an UNWATCHED title feeding neither taste profile — the floor that keeps « Ignorer » a pure subtraction), `reco/staffFields` (the reco-profile craft families: every boundary docs/recoProfiles/DESIGN.md §3 rejected, dub credits out, one person once per family, `denomFor` routing a family to `PROFILE_DENOM` and a metadata field to `MATCH_DENOM_FLOOR`, the family-scoped IDF, and a per-episode credit counting by its SHARE of the title on both the profile and the candidate side), `reco/profileWeights` (`anilistStaff` forced to 0 whenever a family is on — even when set explicitly — each ranker overriding only its own base's keys, sparse-by-intent sanitizing, presets stating their zero, `mintProfileId` never re-minting a dead id a box still names, and `resolveProfileOver`'s base < profile < URL order with the zeroing holding AFTER the URL), `reco/profileRanking` (a box's profile reaching the rankers: families built only when non-zero, scored through `denomFor` never plain `fieldMatch`, an explain line naming the credit that puts the person IN the family, `scoreWithBreakdown` explaining every term it sums, and the real `rankBoxCandidates` on fixture rows — lifting a shared director, listing the family in `matched`, zeroing `anilistStaff`), `reco/profilePreview` (the preview pool IS the « Recommandé » mark's population, an « Ignorer » reaches it with the same row array — so it must not be memoized on it — the unseen pool still skips members and écartés, the §8 diagnostic counting recurrence across UNITS, and every static route under `api/anime/profiles/` being a reserved profile id), `reco/profileBaseline` (the profile page's "against Défaut" framing: a re-faced franchise group found again rather than counted `nouveau`, and "tunes nothing" decided on the pool's RESOLVED weights, not the stored keys), `reco/affinity` (the scoreable-only threshold population, the eligibility set, the denominator floor, and anticipation's within-season cohort), `reco/markHistory` (`first` written once, `ep3` only off a day-precise date and only inside its window, pre-air read at the date's own precision), `reco/recoCredit` (the credited-but-never-started bucket, `plan_to_watch` counting as not started, a scored ABANDONMENT staying out of the satisfaction comparison, and the control holding every other scored completion — four ways to make the feed look better than it is, all silent), `mcp/tools`' `projectWhy` (the per-sign trim), `domain/franchiseOrder` (the undated-entry sentinel, naming after the earliest AIRED member, and what "watch next" steps over), `domain/boxUnits` (only DECLARED groups collapse, every unit sums to one vote, a duplicate id is one node — asserted on the WEIGHT, since the count alone cannot see it — and the source pane keeps a partially-filed show's card while a lone title stays a chip), `domain/slug`'s `mintGroupId` (a dead group id a box still declares is never re-minted — `mintProfileId`'s rule for regroupements), `domain/boxWrites` (excluding also unfiles; declaring never files; « Créer et ajouter » skips écartés and unwatched titles), `domain/boxComposition` (every tally counts UNITS, not entries), `reco/favSeiyuu` (a favourite counts once per title at their best role, the noisy-OR never letting bit parts overtake a lead, the cast slice unioned in by person, AniList-then-MAL resolution, the list filter MAIN-only), `domain/characterFavorites` (the favourite-character join: the cast slice winning over the stored copy so a refill reaches the registry, the stored copy surviving a title that LEFT the slice, an unresolvable title left undefined rather than invented, and each favourite from a shared title keeping its own identity), `domain/leanRow`'s `sortLeanRows` (unrated last in BOTH score directions, undated last in `feed`, ties keep the input order), and the two i18n files above. **Every one of them was verified by breaking the thing it guards** — if you add a test here, do that too: a test that has never failed has proved nothing.
 
 **Pick the `data:copy*` variant by destination, not by guessing.** The two scripts are identical apart from the target — office is `E:\Workspace\local\AnimeTracker\data`, salon is `D:\Workspaces\local\AnimeTracker\data`. Whichever of the two already exists is the machine you're on. Run it before measuring anything against real store data; both mirror with `/PURGE`, which the layout guard depends on (a half-migrated store makes the first read throw).
 
@@ -29,7 +29,7 @@ npm run screenshots  # Playwright capture into docs/screenshots
 
 **`scripts/lib/ts-loader.js` lets a plain `node scripts/*.js` import the app's own TypeScript**, so a measurement script exercises the REAL engine instead of a JS re-implementation that would drift from it. It registers a `module.registerHooks()` pair — ⚠️ **which is why this repo needs node >= 22.15** (`engines` declares it, and `.github/workflows/ci.yml` pins the runner to 22): on node 20 the loader dies with `registerHooks is not a function`, and since `prebuild` runs the test suite through it, that takes the whole build down. The CI runner was on 20 and green until the suite was wired in, because nothing in a build had ever loaded this file. The pair is: one resolving the `@/` alias and the omitted extensions `moduleResolution: bundler` allows, one running each file through `ts.transpileModule`. ⚠️ The transpile is not decoration — node's built-in type stripping cannot tell a type from a value, so `feed.ts`'s opening `import { AnimeRecord, … } from '@/models/anime'` (all interfaces, imported as values) would fail to link; TS elides exactly the imports never used in a value position. It also hands back bare `.json` imports as modules, since `src/locales/*.json` is imported without the attribute node's ESM loader demands.
 
-**`node scripts/backtest-reco.js --cutoff YYYY-MM-DD` is how a ranking change gets justified** — see "Measuring a ranking change" below. Its sibling `node scripts/probe-affinity.js --season YYYY-season` does the same job for the main list's « Recommandé » mark, and `node scripts/probe-marks.js` reads what the mark ACTUALLY said before air (see "Mark history" below); all three MEASURE rather than assert, and none is a test.
+**`node scripts/backtest-reco.js --cutoff YYYY-MM-DD` is how a ranking change gets justified** — see "Measuring a ranking change" below. Its sibling `node scripts/probe-affinity.js --season YYYY-season` does the same job for the main list's « Recommandé » mark, `node scripts/probe-marks.js` reads what the mark ACTUALLY said before air (see "Mark history" below), and `node scripts/probe-reco-credit.js` reads what the feed actually DELIVERED (see « Vu grâce à la reco » below); all four MEASURE rather than assert, and none is a test.
 
 ## Project posture — a single-user hobby app
 
@@ -45,7 +45,7 @@ One person's anime tracker, running on their own NAS, for themselves. No other u
 
 **The costs that are real**, and the only ones worth designing around:
 
-- **Durable user data** — `personal/local.json`, `user/hidden.json`, `user/reco_feedback.json`, `user/rating_intent.json`, `user/boxes.json`, `history/affinity_marks.json` (a past observation, unrepeatable), and any score/status that lives only here. Not refetchable; resolve-before-mint in the registry exists for exactly this. `npm run data:copy*` before anything destructive, and **ask before an operation that can lose it** (spending CPU time needs no permission).
+- **Durable user data** — `personal/local.json`, `user/hidden.json`, `user/reco_ignored.json`, `user/rating_intent.json`, `user/reco_credit.json` (a statement about the owner's own behaviour, unrepeatable), `user/boxes.json`, `history/affinity_marks.json` (a past observation, unrepeatable), and any score/status that lives only here. Not refetchable; resolve-before-mint in the registry exists for exactly this. `npm run data:copy*` before anything destructive, and **ask before an operation that can lose it** (spending CPU time needs no permission).
 - **Someone else's API** — AniList's ~30 req/min, SIMKL's 20s write lock + 1 req/s, MAL's limits. Wall-clock time is free; hammering a free public API is not.
 - **Hot-path latency** — work paid on *every* row build, request or page load. Several notes below are justified by cost (the cast slice off the seven-slice join, the parse/row caches, the MAL personal/catalog split). Those are this category, not migration cost — don't generalize them into a rule against restructuring, and don't read this section as licensing their removal.
 
@@ -85,7 +85,8 @@ Two files sit at the root, for reasons: `settings.json` (tier-1 config, read bef
 - `auth/mal.json` — MAL OAuth token + user data (its peers: `auth/simkl.json`, `auth/anilist.json`, and the three transient `auth/oauth_state_*.json` CSRF files)
 - `sync/mal_seasons.json` — set of historical seasons already crawled (keyed as `"YYYY-season"`) — the seasonal-crawl checkpoint, sitting next to `sync/simkl_checkpoint.json` (all-items watermark + `lastRatedAt`), `sync/anilist_import.json` and `sync/anilist_years.json` (AniList's back-catalog checkpoint, `{ syncedYears: number[] }` — a year is never re-crawled, so re-running the window means deleting the file).
 - `sync/cron_health.json` — the cron watermark: last scheduled arrival, last scheduled run, last MANUAL run (recorded but never counted), last rejection. Feeds the `/connections` freshness indicator; see "Scheduled sync". Rebuildable in the sense that a deleted file simply reports `unknown` until the next tick.
-- `user/reco_feedback.json` — "Pour toi" thumbs, `{ canonicalId: 'up' | 'down' }` (see the "Pour toi" section)
+- `user/reco_credit.json` — « Vu grâce à la reco »: `{ canonicalId: { at } }`, the owner crediting the engine for a title (see the section below). ⚠️ Durable user data; it is EVALUATION data and never a ranking input
+- `user/reco_ignored.json` — « Ignorer »: a bare `string[]` of canonical ids no recommendation surface proposes again (see the "Pour toi" section). It replaced the 👍/👎 thumbs' `user/reco_feedback.json`; `node scripts/migrate-reco-ignored.js` folds an old file's BOTH sides into it (each thumb already hard-excluded its title) and deletes it
 - `user/rating_intent.json` — why a completed title is deliberately unscored, `{ canonicalId: 'rewatch' | 'no_opinion' }` (see "Rating intent" below)
 - `user/boxes.json` — « Mes boîtes »: hand-drawn taste axes, a bare `Box[]` whose `members` are canonical ids, plus the optional `excluded` (« écartés ») and `groups` (which regroupements collapse HERE) — see the "/boxes" section
 - `user/groups.json` — « Mes regroupements »: a bare `UserGroup[]`, the owner's own statements that several titles are ONE thing. Global definitions; a box declares which of them apply to it. ⚠️ Durable user data like `boxes.json` — no provider can re-supply it
@@ -112,7 +113,7 @@ The store is keyed by a **synthetic canonical id** (`a_<n>`), not the MAL id —
 
 ```ts
 interface AnimeRecord {
-  id: string;                 // canonical id — the ONLY id, outward and internal (URLs, routes, React keys, hidden/feedback keys)
+  id: string;                 // canonical id — the ONLY id, outward and internal (URLs, routes, React keys, hidden/ignored keys)
   crosswalk: SourceIds;       // { mal?, anilist?, simkl?, ... } — provider ids, for API calls / external links only
   catalog: AnimeCatalog;      // hydrated across providers (MAL-first by default)
   personal: AnimePersonal;    // hydrated across providers (SIMKL > MAL > AniList)
@@ -164,11 +165,11 @@ The recommendation feed is a **computed candidate set + affinity ranking**, whic
 
 It renders **the same `AnimeListHeader` as `/`** (see "Key data flow" above), so the two pages read as one app: cards-per-row and the "show all explains" toggle live in that bar rather than in a sidebar `Affichage` section. What differs is passed as slots — a `title` (which names the feed, or the review list), a `count` that swaps to a back button in the `rev` sub-views, and the toggle as `children`. It passes **no `sort`**: the feed's order *is* the affinity ranking, so a sort control would contradict the page. **`sort` and `display` are both optional groups** (`/tier` fills neither — its rows are wrapped thumbnails, not a card grid), and the header places dividers *between whichever groups a page filled* rather than hardcoding one after `sort`, which with two optional groups would be orphaned or missing depending on the combination. Making the header's shell fixed and its content slot-driven is deliberate — the earlier version had each page style its own bar, and they drifted (one bordered panel, one bare row).
 
-Ranking + fetch logic live in `src/lib/reco/`, split along the engine's own seam — the expensive **fetch** ([refresh.ts](src/lib/reco/refresh.ts)) writes `cache/recommendations.json` ([data.ts](src/lib/reco/data.ts)); the cheap **ranking** ([feed.ts](src/lib/reco/feed.ts)) recomputes the whole feed live from it, so changing a knob never triggers a re-fetch. The scoring math itself is the **client-safe** [scoring.ts](src/lib/reco/scoring.ts) (IDF, taste profiles, `fieldMatch`, `isPrematureSequel`, and `TUNING` — every knob in one place), shared with [anchored.ts](src/lib/reco/anchored.ts) (the N-anchor ranker behind "Plus comme ça" and `/mix` — see below); [feedback.ts](src/lib/reco/feedback.ts) owns the 👍/👎 store. Endpoints under `src/pages/api/anime/recommendations/` (GET feed, POST refresh via SSE, POST/DELETE `feedback/[id]`).
+Ranking + fetch logic live in `src/lib/reco/`, split along the engine's own seam — the expensive **fetch** ([refresh.ts](src/lib/reco/refresh.ts)) writes `cache/recommendations.json` ([data.ts](src/lib/reco/data.ts)); the cheap **ranking** ([feed.ts](src/lib/reco/feed.ts)) recomputes the whole feed live from it, so changing a knob never triggers a re-fetch. The scoring math itself is the **client-safe** [scoring.ts](src/lib/reco/scoring.ts) (IDF, taste profiles, `fieldMatch`, `isPrematureSequel`, and `TUNING` — every knob in one place), shared with [anchored.ts](src/lib/reco/anchored.ts) (the N-anchor ranker behind "Plus comme ça" and `/mix` — see below); [ignored.ts](src/lib/reco/ignored.ts) owns the « Ignorer » store. Endpoints under `src/pages/api/anime/recommendations/` (GET feed, POST refresh via SSE, POST/DELETE `ignore/[id]`).
 
 **The refresh runs with or without a MAL account** (B4 — docs/DECISIONS.md). `performRecommendationsRefresh` takes `accessToken: string | null`; with `null` the two MAL sources (crowd edges, personal suggestions) and the niche 2-hop are skipped, and the anonymous `anilistCrowd` source carries the feed alone. **Candidate hydration follows the same rule and is the load-bearing half** — `computeFeed` drops any candidate with no local record, so a keyless run hydrates through `fetchAnilistCatalog` (AniList queries by its OWN id, 50 per request, landing as a `catalog` block via `upsertAnilistCatalogFields`) instead of MAL's one-at-a-time `fetchAnimeDetail`. Every run returns a per-source `RecoRefreshSources` outcome map, also attached to the terminal SSE `complete` event, so a degraded run is declared rather than merely thinner. Don't reintroduce a `requireMalAuth` gate here: the engine needs MAL *ids* (which AniList supplies free), not a MAL *session* — that distinction is the whole of B4, and B3 is the unrelated one. The *narrowing* filters that DO apply to the feed (media type, search, `mean` score range, release-year range, genres) go through the shared `applyNarrowingFilters` in [src/lib/domain/animeUtils.ts](src/lib/domain/animeUtils.ts) — the same function the main `/api/anime/animes` handler uses, so there is one filter implementation, not two. Status filter and sort do NOT apply (replaced by the hard "unseen" filter and affinity ranking).
 
-**Scoring model (weighted sources).** `computeFeed` scores each candidate as an additive weighted sum `score = Σ weight · normalizedSourceValue`, where each source value is normalized to `[0,1]`. Sources: `crowd` (MAL crowd recos from seeds — the anchor), `suggestions` (MAL suggestions endpoint), `feedback` (affinity to the user's 👍 set — see below), `genre`/`studio`/`nsfw`/`rating`/`anilistTags`/`anilistStaff` (IDF-weighted taste-profile affinity — rare values carry more signal), plus `communityScore` (the crowd's VERDICT — `catalog.mean` as a percentile of the pool — as opposed to `crowd`'s adjacency), plus `rejection`, `crowdRejection` and `popularity` which default to **negative** weights. The candidate set stays anchored to crowd-edge targets + suggestions; the metadata sources only re-rank within it (they never inject new candidates). Each card carries a per-source `recoMeta.breakdown` powering the on-demand "Pourquoi ?" explain. Per-source weights are the tunable knobs, persisted in the URL as a single packed `w=crowd:1,studio:.8` param. **`DEFAULT_WEIGHTS`, the URL (de)serialization, and the UI metadata all live in the client-safe [src/lib/reco/weights.ts](src/lib/reco/weights.ts)** — never import them from the `fs`-bound reco modules (`feed.ts` / `refresh.ts` / `similar.ts`). Sidebar sliders in `RecoWeightsSection` commit to the URL on release (not per-tick) to avoid history spam.
+**Scoring model (weighted sources).** `computeFeed` scores each candidate as an additive weighted sum `score = Σ weight · normalizedSourceValue`, where each source value is normalized to `[0,1]`. Sources: `crowd` (MAL crowd recos from seeds — the anchor), `suggestions` (MAL suggestions endpoint), `genre`/`studio`/`nsfw`/`rating`/`anilistTags`/`anilistStaff` (IDF-weighted taste-profile affinity — rare values carry more signal), plus `communityScore` (the crowd's VERDICT — `catalog.mean` as a percentile of the pool — as opposed to `crowd`'s adjacency), plus `rejection`, `crowdRejection` and `popularity` which default to **negative** weights. The candidate set stays anchored to crowd-edge targets + suggestions; the metadata sources only re-rank within it (they never inject new candidates). Each card carries a per-source `recoMeta.breakdown` powering the on-demand "Pourquoi ?" explain. Per-source weights are the tunable knobs, persisted in the URL as a single packed `w=crowd:1,studio:.8` param. **`DEFAULT_WEIGHTS`, the URL (de)serialization, and the UI metadata all live in the client-safe [src/lib/reco/weights.ts](src/lib/reco/weights.ts)** — never import them from the `fs`-bound reco modules (`feed.ts` / `refresh.ts` / `similar.ts`). Sidebar sliders in `RecoWeightsSection` commit to the URL on release (not per-tick) to avoid history spam.
 
 ⚠️ **`communityScore` ships at 0 and the measurement is why — it is a KNOB, not a recommendation (2026-10-29).** It was added to answer "the feed ranks on crowd adjacency and taste overlap but ignores the crowd's actual verdict", after `catalog.mean` measured an **AUC of 0.690** separating the owner's 8+ from their 6-7 over their 535 scored completions (against `num_list_users` at 0.533 and episode count at 0.544 — i.e. nothing). ⚠️ **That AUC does not survive conditioning on the pool.** The feed's candidates are already crowd-recommended, so they are already mean-selected, and backtested at three cutoffs the source lifts the held-out 6-7s **more** than the held-out 8+: positives' MRR stays flat (0.0406→0.0421, 0.0499→0.0500, 0.0741→0.0759 at w=0.2) while the 6-7s' rises 19-33% (0.0216→0.0287), and their `recall@10` goes 2→3 where the positives' does not move. What it genuinely does is rescue good titles from the TAIL — positives' `recall@50` 13→17 and median rank 192→123 at w=1 — so read it as "surface the well-regarded ones I have not reached", never as "predict what I will love". On the case that motivated it (*Eden of The East*, `mean` 7.72, finished at 6) it moves #5 → #8 only at w=1, because 7.72 is still the **73rd percentile** of a pool the crowd pre-filtered. ⚠️ It must never be given to `buildAffinityIndex`: the « Recommandé » mark's population is pre-air, where `mean` is null by construction, so every candidate would score the floor at once — which is also why `AFFINITY_WEIGHTS` is `Record<MetaField, number>` and cannot name it.
 
@@ -187,7 +188,7 @@ Ranking + fetch logic live in `src/lib/reco/`, split along the engine's own seam
 
 ⚠️ **Two changes from that audit were built, measured WORSE, and reverted. Do not re-add them without re-running the harness.**
 
-- **Negative crowd seeds** — fetching the crowd edges OF the dislike set (dropped / scored <= 5 / 👎) and subtracting them, which the audit ranked as its highest-leverage item. Built end to end and measured against a real refresh (144 disliked titles, 842 MAL + 1,916 AniList edges): **every non-zero weight scored worse than zero, monotonically**, MRR falling at all three cutoffs (0.0547→0.0484, 0.0467→0.0401, 0.0505→0.0432 at -0.4). The reason is that the crowd graph is largely an adjacency/popularity graph, so the dislike neighbourhood is *not* orthogonal to the seed neighbourhood — measured Pearson **r = +0.34** between the positive and negative crowd values, and the top-100 candidates by `crowd` carry nearly double the pool's mean negative value (0.326 vs 0.178). It does not add a signal; it partially cancels `crowd`, the feed's anchor. Note the content-based `rejection` profile does not have this problem because `buildDiscriminativeProfiles` NETS the two sides — the crowd graph has no such netting, which is precisely what is missing. Also worth weighing against a retry: it cost 143 extra MAL requests per refresh.
+- **Negative crowd seeds** — fetching the crowd edges OF the dislike set (dropped / scored <= 5) and subtracting them, which the audit ranked as its highest-leverage item. Built end to end and measured against a real refresh (144 disliked titles, 842 MAL + 1,916 AniList edges): **every non-zero weight scored worse than zero, monotonically**, MRR falling at all three cutoffs (0.0547→0.0484, 0.0467→0.0401, 0.0505→0.0432 at -0.4). The reason is that the crowd graph is largely an adjacency/popularity graph, so the dislike neighbourhood is *not* orthogonal to the seed neighbourhood — measured Pearson **r = +0.34** between the positive and negative crowd values, and the top-100 candidates by `crowd` carry nearly double the pool's mean negative value (0.326 vs 0.178). It does not add a signal; it partially cancels `crowd`, the feed's anchor. Note the content-based `rejection` profile does not have this problem because `buildDiscriminativeProfiles` NETS the two sides — the crowd graph has no such netting, which is precisely what is missing. Also worth weighing against a retry: it cost 143 extra MAL requests per refresh.
 - **Narrowing the positive `anilistStaff` source to T1** — see the ⚠️ on `staffT1Extractor` in `scoring.ts`.
 
 ⚠️ **The audit's two wrong claims were both caused by the MCP surface, not by the reader, and both are now fixed** — a defective explanation surface produces confident wrong conclusions, so treat these as bugs of the same weight as a scoring bug.
@@ -208,18 +209,152 @@ The audit's remaining ideas were assessed and not built: a **predicted-rating mo
 
 ⚠️ **Do not mistake that MRR bump for "rejection is too strong" either** — measured in control, `rejection: 0` does NOT reproduce it (0.0410→0.0413, 0.0500→0.0493, 0.0750→0.0738), so the band genuinely reshapes the negative profile, just not usefully. And the term it was reaching for is a different one: Eden scored **85% crowd** (`crowd` 0.918 + `anilistCrowd` 0.468 of a 1.62 net score, every metadata source under 0.11, its two top backers *Mirai Nikki (TV)* at 74 and *Zankyou no Terror* at 27), so no content-profile change can move a crowd-driven card at all. The lever for that class of near-miss is the owner's own **seed mute**, which is exactly why that annotation exists and why no harness can grade it.
 
-`TUNING.GENRE_WEIGHT`/`STUDIO_WEIGHT` (0.6/0.4) now serve **only** the 👍 `feedback` profile — they are not the rejection mix.
+### « Ignorer » — one control on a feed card, and it moves no ranking
 
-**Feedback (👍 "bonne pioche" / 👎 "pas pour moi").** Durable standalone store `user/reco_feedback.json` (`id → 'up'|'down'`) in `DATA_PATH`, decoupled from the transient feed. Thumbing a feed card files the verdict and removes it; **both** up and down ids are hard-excluded from the feed server-side in `computeFeed` (a 👍'd title isn't in the MAL list, so without this it would resurrect on reload). Two effects: (1) **re-rank** — the `feedback` source is an IDF-weighted genre+studio profile over the 👍 set (own tunable slider, shows in the explain as "Comme tes bonnes pioches …"); 👎 items fold into the existing `rejection` profile (hide + negative taste, no separate slider — an intentional 👍/👎 asymmetry). (2) **reshape** — at refresh, 👍 anime join the crowd **seeds** (synthetic `FEEDBACK_SEED_WEIGHT`, no MAL score) so their MAL crowd recos pull *new* candidates into the feed. The `dismissed` sub-view is replaced by two review-and-undo lists (`?rev=up` / `?rev=down`). URL key `rev`. The legacy pure-hide `user/reco_dismissed.json` is **gone** — it was kept read-only "so dismissed titles stay excluded", but no such file existed on the live store, so the exclusion and its MAL-keyed lookup were dead weight.
+`user/reco_ignored.json`, a bare `string[]` of canonical ids, store
+[reco/ignored.ts](src/lib/reco/ignored.ts) (filed in `reco/` for `seedMutes.ts`'
+reason — an engine annotation off the seven-slice join, so a write here cannot
+change an assembled row). An ignored title keeps its score and status, keeps
+counting in `/stats`, stays in its boxes, stays in the main list; all it loses is
+the right to be shown as a recommendation. Route is
+`POST`/`DELETE /api/anime/recommendations/ignore/[id]`, body-less — there is one
+verdict to record — and the review-and-undo list is `?rev=1` (« Ignorés »).
+
+⚠️ **It replaced the 👍/👎 thumbs, and the removal was measured.** « Bonne
+pioche » / « Pas pour moi » asked a PREDICTIVE question — *will you like this
+title you have not watched?* — which is the one thing the owner cannot answer:
+before watching there is nothing to judge, and a title they have started has
+already left the feed as already-seen. The live store agreed, flatly:
+`user/reco_feedback.json` held **2 entries after fifteen months**, both `down`,
+written the same day. So the `feedback` source scored a flat 0 on every candidate
+the feed ever ranked, the 👍-as-crowd-seed path never once fired, and the 👎 fold
+added 2 titles to a 163-title dislike set. Removed with it: the `feedback`
+`RecoSource` and its slider, `TUNING.GENRE_WEIGHT`/`STUDIO_WEIGHT` (they served
+only that profile), `TUNING.FEEDBACK_SEED_WEIGHT` and both crowd loops' seed
+fallback, the `downIds` parameter threaded through
+`buildDiscriminativeProfiles`/`discriminativeProfilesBuilder`, and the `rev=up` /
+`rev=down` pair. ⚠️ Do NOT read any of that as evidence that hand-labeling fails
+— « Mes boîtes » is the same owner labeling hundreds of titles happily, because a
+box asks a RETROSPECTIVE question about shows already watched. It is evidence
+that *pre-watch* labeling fails, which is the same finding the boxes section
+already records about the thumbs.
+
+⚠️ **It is NOT `user/hidden.json`**, and the two must not be merged. A hide takes
+a title out of the catalog list — "I do not want this in my app". An ignore is
+scoped to the reco surfaces: the title stays browsable, searchable and
+filterable. Collapsing them would make dismissing one feed card quietly delete a
+row from `/`.
+
+⚠️ **It asserts nothing about taste**, which is the whole point and the owner's
+own requirement. Nothing an ignore writes may reach the dislike profile — that
+set is decided by WATCH HISTORY alone (dropped, or scored <= 5). Re-wiring the
+ignored set back into `buildDiscriminativeProfiles` is the one "obvious
+improvement" here, and it would break the promise SILENTLY: dismissing a card
+would start penalizing everything resembling it, with nothing on screen to say
+so. Pinned from the floor in
+[tests/reco/scoring.test.ts](tests/reco/scoring.test.ts) — an unwatched title
+feeds neither profile. It is also `seedMutes.ts`' design rule on the candidate
+side: subtracting a disliked set's crowd edges was built, measured monotonically
+worse at all three cutoffs and reverted (see the ⚠️ above), because that
+neighbourhood correlates with the positive one and cancels `crowd`.
+
+**The exclusion is every reco surface, not just the feed** — `computeFeed` (both
+pools), `computeAnchored` (so `/mix`, « Plus comme ça » and the box recos tab),
+the « Recommandé » mark's eligibility and the reco-profile preview's pool. That
+is the `RatingIntent` reading, not the already-seen one: an ignore is the owner
+saying *stop putting this in front of me*, which holds however narrow the pool
+is, so it sits beside `hidden` rather than behind `excludeSeen`.
+
+**The card's button is `secondary`, not `primary-negative`.** The control says
+nothing about the show, and dressing it as a verdict is exactly what made the old
+👎 read like one. ⚠️ Ignoring drops the card **client-side** rather than
+refetching — the opposite of a seed mute, and for a stated reason: an ignore
+changes nothing about how the other candidates score, so re-ranking the whole
+feed would move cards the reader was not acting on.
+
+**The MCP cannot write it** — `addIgnored` / `removeIgnored` are in
+[eslint.config.mjs](eslint.config.mjs)' MCP write-block list, `addSeedMute`'s
+objection in weaker form (a subtraction the owner sees only as an absence).
+
+The legacy pure-hide `user/reco_dismissed.json` was **already gone** before this
+— kept read-only "so dismissed titles stay excluded", but no such file existed on
+the live store, so the exclusion and its MAL-keyed lookup were dead weight.
+
+### « Vu grâce à la reco » — the one thing no harness can reconstruct
+
+`user/reco_credit.json`, `{ canonicalId: { at } }`. Pure half
+[reco/recoCredit.ts](src/lib/reco/recoCredit.ts) (client-safe), `fs` half
+[reco/recoCreditStore.ts](src/lib/reco/recoCreditStore.ts) — `markHistory.ts` /
+`markHistoryStore.ts`'s split, and `seedMutes.ts`' filing: an engine annotation
+off the seven-slice join, so a write cannot change an assembled row. Route is
+`POST`/`DELETE /api/anime/animes/[id]/reco-credit`, read by
+`node scripts/probe-reco-credit.js`.
+
+**Why it exists.** `scripts/backtest-reco.js` grades the engine on "titles the
+owner went on to complete and score >= 8" — which scores a lucky ranking exactly
+like a causal one. Nothing in the store says *the feed is why I watched this*,
+and nothing can work it out afterwards. Same argument `markHistory.ts` makes for
+the mark, and the gap `probe-marks.js` already names ("a ★ is more likely to be
+started").
+
+⚠️ **It is EVALUATION data and must never become a ranking input.** Three
+reasons, in order of force:
+- **It is circular.** A title watched BECAUSE the feed ranked it high is by
+  construction one the feed already liked; weighting it feeds the engine's prior
+  back into itself and the ranking narrows onto what it already surfaces.
+  Structurally the mirror of the negative-crowd-seeds experiment — there the
+  signal was not orthogonal to `crowd` and CANCELLED it (r = +0.34); here it is
+  not orthogonal either, so it AMPLIFIES.
+- **The label can only exist on titles the feed surfaced**, so it says nothing
+  about what the feed MISSED — the error that actually matters.
+- **No volume, and the useful part is redundant.** Measured: 41 scored
+  completions in 2023, 43 in 2024, 79 in 2025 (2026's 191 is inflated by SIMKL
+  import dates). A third of that is ~15-25 rows a year against **322** seeds —
+  and the ones worth learning from are scored >= 8, hence already seeds.
+
+⚠️ **ONE control, one meaning, every surface** — feed card and detail page fire
+the same route and write the same thing. An earlier design had two buttons, the
+card's capturing a `recoMeta` snapshot the detail page could not; it was dropped
+because it made "the same button" behave differently depending on where the
+owner happened to be, and in practice the detail page IS the common path (two
+episodes in, the title has already left the feed on `SEEN_STATUSES`). The
+snapshot that design wanted is a separate, optional future piece — a daily
+impression log written by the cron, `affinity_marks.json`'s exact shape, which
+the flag would JOIN against instead of capturing. Nothing here blocks it.
+
+**Two behaviours that look like oversights and are not.** The card does **not**
+move on a click (unlike « Ignorer »): the flag records the past rather than
+changing what should be shown, and a card vanishing mid-playlist would both lose
+the reader's place and read as a dismissal. And `addRecoCredit` is ⚠️ idempotent
+**on the date** — re-crediting keeps the first `at`, because that date is the one
+unrecoverable field here and overwriting it would turn an old pick into a new one
+in every per-period count.
+
+**What the probe reports**, and the three readings that keep it honest:
+- ⚠️ **« jamais lancé » is the bucket not to look away from.** It exists only
+  because the flag can be filed before watching. Joining the credit map against
+  the watched list — the obvious tidy-up — measures the feed on the titles it
+  succeeded with, which is survivorship bias and makes it look perfect. Pinned.
+- ⚠️ **The control is contaminated, in the feed's disfavour.** « autrement » is
+  titles found alone PLUS every pick the owner forgot to flag, and a forgotten
+  pick drags it UP — so a credited-vs-other gap is a LOWER bound. Do NOT "fix"
+  this by reading an absent flag as "found alone".
+- **It starts empty**, like the mark history: a row needs a pick, weeks of
+  watching, then a score. First useful numbers a season or two out.
+
+**The MCP cannot write it** — `@/lib/reco/recoCreditStore` is in the MCP
+write-block list. `deleteBox`'s objection rather than `addSeedMute`'s: nothing
+ranks on this, but it is the owner's own statement about their own behaviour and
+a model inventing one would corrupt the only yardstick the engine has.
 
 ### « Ne plus partir de ce titre » — seed mutes
 
 A durable set of canonical ids that stop acting as SEEDS, in `user/seed_mutes.json`
-(a bare `string[]`, beside `hidden.json` / `reco_feedback.json` / `rating_intent.json`).
+(a bare `string[]`, beside `hidden.json` / `reco_ignored.json` / `rating_intent.json`).
 The title keeps its score, keeps counting in `/stats`, stays in its boxes and stays
 excluded from the feed as already-seen — all it loses is the right to project crowd
 edges and to feed the positive taste profile. Store is
-[reco/seedMutes.ts](src/lib/reco/seedMutes.ts), filed in `reco/` for `feedback.ts`'s
+[reco/seedMutes.ts](src/lib/reco/seedMutes.ts), filed in `reco/` for `ignored.ts`'s
 reason: it is an engine annotation, off the seven-slice join, so a write here cannot
 change an assembled row and does not invalidate the row cache.
 
@@ -244,10 +379,13 @@ ranking's taste profiles AND `refresh.ts`'s fetch from one filter (the seed defi
 is one function) — but `computeFeed` does not read `getSeeds` for the crowd
 accumulation, it iterates `data.seeds` from the **cache**, whose edges were fetched
 before the mute existed. So both crowd loops carry their own `continue`, and it sits
-**before the weight branches**: inside the threshold branch, a muted title that is
-also 👍'd would fall through to the fallback and keep seeding at `FEEDBACK_SEED_WEIGHT`.
-Verified by measurement — 0 of 704 topSeed attributions name a muted seed, in normal
-and niche mode, with the muted titles thumbed-up.
+**before the threshold check**, so a muted seed is dropped whatever its score.
+(It used to have to sit before a *branch*: a muted title that was also 👍'd would
+fall through to the thumbs' seed fallback and keep seeding at
+`FEEDBACK_SEED_WEIGHT`. That fallback went with the thumbs — see « Ignorer » — so
+the ordering is now merely tidy rather than load-bearing. Keep it anyway: a
+second way to become a seed would restore the hazard.) Verified by measurement —
+0 of 704 topSeed attributions name a muted seed, in normal and niche mode.
 
 ⚠️ **`anchored.ts` deliberately does NOT honour it.** On `/mix`, `/boxes`' recos tab and
 « Plus comme ça » the anchor is something the reader just picked; silencing it there
@@ -306,7 +444,7 @@ at". `rev` wins over `sc` in the API; the page clears one when it sets the other
 - **Every drop is a candidate**, not only the crowd-edge targets (66 of 120 on the live
   store when this shipped). An unreached drop scores 0 on `crowd` and ranks on its
   metadata; hiding it would claim the crowd had judged titles it never mentioned.
-  `isPrematureSequel`, hidden and 👎 still exclude, as in the feed.
+  `isPrematureSequel`, hidden and « Ignorer » still exclude, as in the feed.
 - ⚠️ **Leave-one-out on the netted pair is mandatory, not polish.** A drop is itself in
   the dislike set, so judged against the shared profile it partly penalizes ITSELF — a
   director credited on that one drop alone fires `rejection` at full strength on the
@@ -315,10 +453,12 @@ at". `rev` wins over `sc` in the API; the page clears one when it sets the other
   `buildDiscriminativeProfiles` is its no-omit call) computes the liked rates and the
   dislike list once and rebuilds only the dislike rates per omitted id: ~340 ms warm vs
   ~170 ms for the feed. Pinned in [tests/reco/scoring.test.ts](tests/reco/scoring.test.ts).
-- **The cards carry 👎 only** (`feedbackMode: 'secondChance'`). A 👍 makes a title a
-  crowd SEED, so it would pull the drop's neighbours into « Pour toi » — a verdict
-  nobody gave. The 👎 changes no ranking (a drop is already a rejection) and only
-  removes the card; undo is in « Pas pour moi ».
+- **The cards carry « Ignorer », the same control as the feed** (`ignoreMode:
+  'offer'`). It used to be a 👎-only pair — the 👍 was withheld because it made a
+  title a crowd SEED and would have pulled the drop's neighbours into « Pour toi »,
+  a verdict nobody gave, while the 👎 "changed no ranking and only removed the
+  card". That last sentence is now simply what the single button does everywhere,
+  so the special case is gone; undo is in « Ignorés ».
 - **Two signals deliberately NOT used.** The owner's score on a drop (117 of 120 are
   scored, almost all 4-5, so it separates nothing) and time since the drop: 94 of 120
   carry a 2025-2026 SIMKL `watched_at`, which reads as import dates, not drop dates.
@@ -386,7 +526,7 @@ joined onto the row as `AnimeRecord.ratingIntent` exactly like `hidden`.
   provider — `personal.status` is untouched — so `/stats`, `/catch-up`'s anchor
   rule, the reco seeds and every provider write behave exactly as before. What
   the annotation adds is a local judgement no provider has a field for, which is
-  why it lives in `user/` beside `hidden.json` and `reco_feedback.json`, off
+  why it lives in `user/` beside `hidden.json` and `reco_ignored.json`, off
   personal precedence entirely, and never reaches `writers.ts`.
 - **It REPLACES the status wherever the status is a chip**, via the one function
   `getStatusFilterKey` in `domain/animeUtils.ts` — the status filter, the card
@@ -424,7 +564,7 @@ joined onto the row as `AnimeRecord.ratingIntent` exactly like `hidden`.
   tier board, which is the bulk surface — see below.
 - **Excluded from every recommendation surface.** `computeFeed` and
   `computeAnchored` both drop an intent-marked title. In `anchored.ts` the check
-  sits with `hidden` and 👎 and is ⚠️ **deliberately NOT behind `excludeSeen`**:
+  sits with `hidden` and « Ignorer » and is ⚠️ **deliberately NOT behind `excludeSeen`**:
   "Plus comme ça" keeps seen titles on purpose (its pool is ~25 edges and
   dropping them would gut the block), but an intent is not a watch status — it
   is the owner saying *stop putting this in front of me*, which holds however
@@ -788,7 +928,7 @@ Two badges on the card in [AnimeCardView](src/components/anime/AnimeCardView.tsx
 - ⚠️ **Those numbers are a ceiling, because AniList tags accumulate as a show airs.** Live-measured: an aired season carries a median 12 tags (8 above rank 60) and 20 staff credits; the NEXT season carries **4 / 1 / 8**, with 32 of 72 TV titles holding no strong tag at all. `--thin` truncates candidates to that density and costs about a fifth of the recall. Two consequences: the mark is *sparse at announcement and fills in over the first weeks* (free — the list re-scores every request), and the tier cuts drift downward the thinner the population is. Live on the store, the four most recent seasons' median affinity ran 0.044 → 0.096 → 0.202 → 0.302 as their density ran 11 → 18 → 25 → 27; that is the metadata arriving, not taste changing.
 - ⚠️ **The floor is mandatory here, not tidy.** `MATCH_DENOM_FLOOR` + `flooredFieldMatch` moved from `boxes.ts` into [scoring.ts](src/lib/reco/scoring.ts) so both rankers share one measured constant (the feed still does NOT use it — there `crowd` anchors the ranking, so a sparse title cannot ride one tag to the top). Season-start titles are *the* evidence-poor population, so without the floor the badge would preferentially mark the thinnest new entries — the *LONA* failure the box ranker measured.
 - ⚠️ **The tier cut is a percentile of the SCOREABLE UNSEEN CATALOG — a fixed population, never the current view.** A cut over whatever is filtered on screen badges the same share of every screen and therefore asserts nothing; a weak season must be allowed to come out with two marks. And "scoreable" is load-bearing: ~40% of unseen rows carry no AniList entry and score a flat 0, so a percentile over all of them lands inside a block of zeros and badges everything. That is `popularityScale`'s lesson in threshold form, and it is pinned in [tests/reco/affinity.test.ts](tests/reco/affinity.test.ts).
-- **Eligibility follows the feed's `SEEN_STATUSES`, not "has any status"** — `plan_to_watch` is a title you flagged, not one you judged, and both `computeFeed` and `/mix` count it as unseen. Also excluded: hidden, 👎, and **premature sequels** (a season is mostly sequels, and ★ on part 3 of a show never started would discredit the mark on sight). ⚠️ **It is exported, and the reco-profile preview's catalog pool is exactly it** (`isUnseenCandidate` → `isScoreable` → `isPrematureSequel`, composed by `buildUnseenPool` in the mark's own order — as TWO predicates, because the first alone decides `coverage.unseen`). Pinned by comparing the two populations. The preview borrows the population only: no profile ever reaches the mark (docs/recoProfiles/DESIGN.md §10).
+- **Eligibility follows the feed's `SEEN_STATUSES`, not "has any status"** — `plan_to_watch` is a title you flagged, not one you judged, and both `computeFeed` and `/mix` count it as unseen. Also excluded: hidden, ignored, and **premature sequels** (a season is mostly sequels, and ★ on part 3 of a show never started would discredit the mark on sight). ⚠️ **It is exported, and the reco-profile preview's catalog pool is exactly it** (`isUnseenCandidate` → `isScoreable` → `isPrematureSequel`, composed by `buildUnseenPool` in the mark's own order — as TWO predicates, because the first alone decides `coverage.unseen`). Pinned by comparing the two populations. The preview borrows the population only: no profile ever reaches the mark (docs/recoProfiles/DESIGN.md §10).
 - ⚠️ **MAL member counts are NOT in the score, and that is a measurement rule.** `num_list_users` is the one crowd figure that exists pre-air (2026-fall TV: zero titles with a `mean`, but a median 5,006 members, p90 35,463) and it is real anticipation — so `buildAnticipationIndex` surfaces it as a 🔥 chip **in the score's slot, only while there is no `mean`**, ranked **within the title's own season** (counts grow with age, so cross-season ranking measures age, not hype). It cannot enter the *ranking* because the store keeps only a present-day snapshot: Dandadan carries 1,019,332 members today, 23× its season's median, precisely BECAUSE it was a hit — a backtest would "discover" pure hindsight. Making it scoreable needs a member-count history the store does not keep. Same class as the rejected `num_episodes` knob: a preference the harness cannot falsify.
 - **Computed catalog-wide, memoized on the row array's identity** (the `byCredits` / `getFranchiseIndex` WeakMap trick, so it self-invalidates with the store) — the cut needs the whole population, the route returns 200 rows. ~400 ms per store change, then a Map lookup. ⚠️ Marks ride on a **copy** (`AnimeListRow`), never written onto the record: `getAnimeForDisplay()` hands back the shared cache array.
 - ⚠️ **The mark is the main list's and is NOT threaded into `/recommendations` or `/mix`**, which render the same `AnimeCardView`. Those already answer "why is this here" with `recoMeta`, and a second verdict derived from different evidence (metadata-only vs crowd-anchored) reads as a contradiction the moment the two disagree. A ★ title therefore shows nothing there — deliberate, not an oversight. Eligibility also excludes a `RatingIntent` (« À revoir » / « Sans avis ») outright rather than relying on those riding on a `completed` status, so moving where the intent is stored cannot put « Recommandé » on a show the owner watched and declined to score.
@@ -826,9 +966,9 @@ needs a snapshot taken at the time.
 
 The detail page's second reco block ([MoreLikeThis.tsx](src/components/anime/MoreLikeThis.tsx)), backed by `GET /api/anime/recommendations/similar/[id]` and `computeSimilarTo` in [similar.ts](src/lib/reco/similar.ts). It flips the feed's question from "what fits my taste" to "what resembles THIS title", by running the **same weighted-source machinery** (`computeIdf` / `buildFieldProfile` / `fieldMatch` / `isPrematureSequel` / the additive `Σ weight · value` + `RecoContribution[]` breakdown) with **one anchor instead of the user's whole seed set**. Consequences, all deliberate:
 
-- **The positive taste profiles are built from the target anime alone**, so a source scores "shares a *rare* genre/tag/studio/creator with this title". `suggestions` and `feedback` are user-global and have no per-title meaning, so `ANCHORED_WEIGHTS` forces them to `0`; `rejection` and `popularity` stay on (they hold for any candidate). ⚠️ `anchored.ts` calls `buildDiscriminativeProfiles` **without** a `liked` set, so the netting reference is the user's global likes: netting the dislikes against a one-title anchor profile would assert "this anchor's genres aren't rejections", which is not a claim about the user. Its positive profiles stay un-netted for the same reason — here they mean "shares a rare value with what you picked", not "fits your taste".
+- **The positive taste profiles are built from the target anime alone**, so a source scores "shares a *rare* genre/tag/studio/creator with this title". `suggestions` is user-global and has no per-title meaning, so `ANCHORED_WEIGHTS` forces it to `0`; `rejection` and `popularity` stay on (they hold for any candidate). ⚠️ `anchored.ts` calls `buildDiscriminativeProfiles` **without** a `liked` set, so the netting reference is the user's global likes: netting the dislikes against a one-title anchor profile would assert "this anchor's genres aren't rejections", which is not a claim about the user. Its positive profiles stay un-netted for the same reason — here they mean "shares a rare value with what you picked", not "fits your taste".
 - **Candidate set = the target's crowd edges only** (MAL `fetchRecoEdges` ∪ AniList `fetchAnilistRecommendations`, fetched in parallel, each non-fatal with a per-source outcome in the response). That fetch-and-resolve orchestration lives in [similarFetch.ts](src/lib/reco/similarFetch.ts), not in the route — lifted out when the MCP `similar_to` tool needed the same thing, so the two callers cannot drift on which sources are asked or how edges are resolved. It is the **ingest boundary** (E9): each provider is asked with its OWN id and every edge is converted to a canonical id there, resolve-only. Metadata only *re-ranks* within that set, never injects — which is exactly what keeps this block distinct from the sibling **"Dans le même studio / staff"** block ([similarByCredits.ts](src/lib/reco/byCredits.ts)), a pure catalog-wide credit similarity computed in `getServerSideProps`.
-- **Seen titles are NOT excluded** (unlike `computeFeed`). The pool is ≤ ~25 edges before filtering, so hard-dropping seen titles guts the block for a heavy watcher; they're returned with their effective `status` and marked "👁 Déjà vu". Still excluded: the target + its `related_anime`, hidden, 👎, premature sequels.
+- **Seen titles are NOT excluded** (unlike `computeFeed`). The pool is ≤ ~25 edges before filtering, so hard-dropping seen titles guts the block for a heavy watcher; they're returned with their effective `status` and marked "👁 Déjà vu". Still excluded: the target + its `related_anime`, hidden, ignored, premature sequels.
 - **Stateless and hydration-free.** It never reads or writes `RecommendationsData`, and a crowd edge pointing at a title absent from the local catalog is simply skipped (no metadata to rank on) rather than triggering a MAL detail fetch.
 - **Click-to-load**, because the detail page otherwise makes zero external calls and this block costs a MAL + an AniList round-trip.
 
@@ -842,7 +982,7 @@ The detail page's second reco block ([MoreLikeThis.tsx](src/components/anime/Mor
 - **Seen titles ARE excluded by default** (`excludeSeen`, toggle in the header), the opposite of the drill-down: the pool is N anchors wide, so it can afford it, and the question is what to watch *next*. `plan_to_watch` still counts as unseen.
 - **The fetch is its own module, and edges are cached per anchor** ([reco/mixFetch.ts](src/lib/reco/mixFetch.ts): `boxAnchorIds`, `loadMixEdges`, process-lifetime, no TTL). It was the route's half until `scripts/probe-profile.js --rank --pool anchored` needed the exact same anchors and edges — `similarFetch.ts`' reason; the route ([mix.ts](src/pages/api/anime/recommendations/mix.ts)) keeps the request parsing, the weights' precedence and the card projection. The page refetches on every add/remove; without the cache, adding a 5th anchor would re-ask MAL about the other four. Crowd edges move on a scale of months, and only successful fetches are cached, so a dead source retries. MAL costs one request per anchor, AniList one for all of them (`id_in`) — cost scales with anchors *added*, not anchor count. `MAX_MIX_ANCHORS = 12` is a guard on that cost.
 - **Weights resolve against `ANCHORED_WEIGHTS`, not `DEFAULT_WEIGHTS`** — client-side too, which is why that constant and `ANCHORED_SOURCES` live in the client-safe [weights.ts](src/lib/reco/weights.ts) rather than in `fs`-bound `anchored.ts`. `encodeSourceWeights`/`resolveWeights` take the base as a parameter so the `w` param stays sparse on both surfaces; `RecoWeightsSection` takes an optional `sources` list and renders only the anchored ones.
-- **No 👍/👎 on the cards.** The thumbs reshape the *global* feed (they re-seed `refresh.ts`), which would be a surprising side effect of tuning a throwaway mix. 👎'd and hidden titles are still excluded, as everywhere.
+- **No « Ignorer » on the cards.** A mix is a throwaway question, and silencing a title on every *other* reco surface would be a surprising side effect of asking it. Already-ignored and hidden titles are still excluded, as everywhere.
 
 ### "/boxes" — « Mes boîtes », hand-drawn taste axes
 
@@ -855,7 +995,7 @@ docs/boxesV2/PLAN.md records what each phase measured.
 
 - **Why it exists: the feed's positive signal is derived entirely from SCORES.** Every
   seed is a `completed` title scored >= 8, so nothing records *why* one was liked. The
-  👍/👎 store was the earlier attempt and goes unused, correctly — it asks a
+  👍/👎 thumbs were the earlier attempt and went unused, correctly — they asked a
   **predictive** question ("will you like this unwatched title?"), which is the one thing
   the owner cannot answer. A box asks a **retrospective** one, against ~712 titles that
   can answer it. Do not read the thumbs' disuse as evidence that hand-labeling fails;
@@ -1111,7 +1251,7 @@ the resolved units, the écartés rows and the composition block.
 - ⚠️ **`Box.excluded` will contain UNWATCHED ids** — the recos tab surfaces unseen candidates and
   « Non » files them — so nothing that renders or counts that list may join it against the
   watched list. Same failure shape as deriving a seiyuu filmography from the cast slice. It is
-  **box-local and must never reach the global feed**: not a 👎, not a hide, not a seed mute.
+  **box-local and must never reach the global feed**: not an « Ignorer », not a hide, not a seed mute.
   Excluding also drops the title from `members`; un-excluding is deliberately **not** symmetric.
 
 **Toggles, not drag-and-drop, for the per-title chips.** `/tier` drags because a score is
@@ -1861,7 +2001,7 @@ meets on the site most of these titles come from.
 
 Everything under [src/lib/store/](src/lib/store/) uses Node.js `fs`/`path` (via `jsonStore.ts`) and must never be bundled client-side. Only **pages** (`getServerSideProps`, API routes) import it, and always as values, since they run server-side. Client **components** never need it — they get their types (`AnimeRecord`, `UserAnimeStatus`, etc.) from [@/models/anime](src/models/anime/index.ts), which has no `fs` dependency and is safe to import as values from either side.
 
-**This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers,cronSync}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{anchored,boxes,data,feed,feedback,groups,markHistoryStore,mixFetch,profilePreview,profiles,refresh,seiyuuFavorites,similar}`, `@/lib/user/**` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits,staffFields,profileWeights,profileDiagnostic,profileBaseline,affinity,markHistory,favSeiyuu}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
+**This is enforced, not merely conventional** (docs/DECISIONS.md). A `files`-scoped block in [eslint.config.mjs](eslint.config.mjs) fails `npm run lint` — and `npm run build`, whose `prebuild` step runs the linter — when anything under `src/components/`, `src/hooks/` or `src/models/` imports a server-only path as a **value**: `@/lib/store/**`, `@/lib/config/{settings,connectionLog}`, `@/lib/providers/{registry,status,writers,cronSync}`, `@/lib/providers/{mal,simkl,anilist}/**`, `@/lib/reco/{anchored,boxes,data,feed,groups,ignored,markHistoryStore,mixFetch,profilePreview,profiles,recoCreditStore,refresh,seiyuuFavorites,similar}`, `@/lib/user/**` (each pattern doubled as `**/lib/…` so a relative path can't dodge the `@/` alias). It uses `@typescript-eslint/no-restricted-imports` **specifically for `allowTypeImports: true`** — the ~10 existing `import type` uses (e.g. `SimilarItem` from `reco/similar` in `MoreLikeThis`) are legitimate and erased at compile time; the base ESLint rule cannot tell the two apart. The client-safe set is the complement: `@/lib/domain/**`, `@/lib/url/**`, `@/lib/i18n`, `@/lib/reco/{weights,scoring,byCredits,staffFields,profileWeights,profileDiagnostic,profileBaseline,affinity,markHistory,recoCredit,favSeiyuu}`, `@/lib/providers/{capabilities,personalState,discrepancy}`, `@/lib/redirectUri`. `src/pages/**` is deliberately unguarded — it is the sanctioned seam. If you add a client-safe module to a guarded folder's reach, keep it out of the pattern list; if you make a listed module client-safe, remove it rather than adding an eslint-disable.
 
 **Next 16 removed `next lint`, and `next build` no longer lints at all**, so the guard's enforcement is deliberately re-wired through `prebuild` (`css:types && lint && test`) — that script is the only reason a build still fails on a bad import, and now the only reason it fails on a broken invariant. Don't "simplify" `prebuild` back to `css:types` alone. **CI is `npm run build` and nothing else** ([.github/workflows/ci.yml](.github/workflows/ci.yml), push to main; no `pull_request` — this repo commits straight to main), so a check that belongs in CI belongs in `prebuild`, where local and CI cannot disagree. ⚠️ The sibling `copilot-setup-steps.yml` keeps its filename and job id because **both are reserved** — GitHub's Copilot coding agent runs that exact job to prepare its environment, so renaming it unhooks the agent silently. That is why the build moved into `ci.yml` instead of that file being renamed. The config is flat (`eslint.config.mjs`, ESLint 9); the parser/plugin come from the `typescript-eslint` meta package rather than the two `@typescript-eslint/*` packages, which is also what `eslint-config-next` itself depends on. Two rules from `eslint-plugin-react-hooks` v7 (the React Compiler set: `set-state-in-effect`, `refs`) are downgraded to **warnings** there — they flag ~26 long-standing fetch-in-effect patterns that are perf advisories, not bugs, and silencing them as errors is what keeps the real errors visible. There is a **second `files` block** in the same config, unrelated to client safety: it keeps `src/lib/mcp/**` and `api/anime/mcp.ts` from importing any write path, so the MCP surface stays read-only by build failure rather than by discipline.
 

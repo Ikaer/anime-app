@@ -45,6 +45,19 @@ interface Props {
   /** The owner's « pourquoi pas de note » annotation, if any. Not provider
    *  state — see `RatingIntent`. */
   ratingIntent?: RatingIntent;
+  /**
+   * « Vu grâce à la reco » — whether the owner has credited the engine for this
+   * title (see `reco/recoCredit.ts`). Not provider state either, and unlike
+   * `ratingIntent` it is not joined onto the record: the flag is deliberately
+   * off the seven-slice join, so the page reads it separately and passes it in.
+   *
+   * ⚠️ **The SAME control as the feed card's, on purpose.** The snapshot a card
+   * could take and this page cannot was the only thing that ever argued for two
+   * different buttons, and that argument was dropped: one act, one meaning,
+   * wherever the owner happens to be when they remember. Here is where it gets
+   * used in practice — two episodes in, the title has left the feed.
+   */
+  recoCredited?: boolean;
   /** Re-run the page's `getServerSideProps` so the effective values re-read. */
   onWritten: () => void;
 }
@@ -52,7 +65,7 @@ interface Props {
 type Patch = { status?: UserAnimeStatus | null; score?: number; progress?: number };
 
 export default function PersonalStateEditor({
-  animeId, status, score, progress, numEpisodes, canClearStatus, ratingIntent, onWritten,
+  animeId, status, score, progress, numEpisodes, canClearStatus, ratingIntent, recoCredited, onWritten,
 }: Props) {
   const t = useT();
   const [busy, setBusy] = useState(false);
@@ -110,6 +123,34 @@ export default function PersonalStateEditor({
         return;
       }
       if (data.outcomes) setOutcomes(data.outcomes);
+      onWritten();
+    } catch {
+      setError(t('personalEdit.writeFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Credit / un-credit the engine. Its own route, not a `PersonalPatch`
+   * dimension, for `sendIntent`'s reason — no provider has a field for it.
+   *
+   * ⚠️ It calls `onWritten()` like the others even though no record field
+   * changed: the flag arrives as a prop resolved in `getServerSideProps`, so
+   * without the re-render the chip would stay on its old state until a manual
+   * reload and the click would look like it did nothing.
+   */
+  async function sendRecoCredit(next: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/anime/animes/${animeId}/reco-credit`, {
+        method: next ? 'POST' : 'DELETE',
+      });
+      if (!res.ok) {
+        setError(t('personalEdit.writeFailed'));
+        return;
+      }
       onWritten();
     } catch {
       setError(t('personalEdit.writeFailed'));
@@ -189,6 +230,25 @@ export default function PersonalStateEditor({
               {t('personalEdit.clearScore')}
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Always offered, unlike the intent row above: "where did I find this"
+          has an answer at every stage — before starting, two episodes in, or
+          years later — and a control that appeared only sometimes would be the
+          surface-dependent behaviour this flag exists without. */}
+      <div className={styles.row}>
+        <span className={styles.label}>{t('personalEdit.fromReco')}</span>
+        <div className={styles.controls}>
+          <button
+            type="button"
+            disabled={busy}
+            className={`${styles.chip} ${recoCredited ? styles.active : ''}`}
+            title={t('personalEdit.fromRecoHint')}
+            onClick={() => sendRecoCredit(!recoCredited)}
+          >
+            {t('personalEdit.fromRecoChip')}
+          </button>
         </div>
       </div>
 

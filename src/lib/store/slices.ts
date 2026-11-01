@@ -69,7 +69,7 @@ function assertMigratedMalStore(animes?: Record<string, MALAnime>): void {
 // Rating intent — why a completed title is deliberately unrated
 // ============================================================================
 //
-// A `user/` annotation like `hidden.json` and `reco_feedback.json`, NOT provider
+// A `user/` annotation like `hidden.json` and `reco_ignored.json`, NOT provider
 // state: `RatingIntent` is not a sixth `UserAnimeStatus` (see the type's own
 // note), so it never reaches a writer and never enters personal precedence.
 // Keyed by canonical id, values 'rewatch' | 'no_opinion'.

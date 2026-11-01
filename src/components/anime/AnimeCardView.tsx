@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
-import { AnimeRecord, AffinityMark, AnticipationMark, RecoMeta, RecoVerdict } from '@/models/anime';
+import { AnimeRecord, AffinityMark, AnticipationMark, RecoMeta } from '@/models/anime';
 import { getStatusFilterKey, getPrimaryTitle, getSecondaryTitle, getEffectiveStatus } from '@/lib/domain/animeUtils';
 import { SEEN_STATUSES } from '@/lib/reco/scoring';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
@@ -24,19 +24,41 @@ interface AnimeCardViewProps {
     /** Forced number of cards per row; null/undefined = adaptive (auto-fill). */
     cardsPerRow?: number | null;
     onHideToggle?: (animeId: string, hide: boolean) => void;
-    onFeedback?: (animeId: string, verdict: RecoVerdict) => void;
-    onRemoveFeedback?: (animeId: string) => void;
+    onIgnore?: (animeId: string) => void;
+    onRestoreIgnored?: (animeId: string) => void;
     /**
-     * 'feed' = show 👍/👎; 'up'/'down' = review list (show ↩ Remettre);
-     * 'secondChance' = 👎 only; null = hide toggle.
+     * « Vu grâce à la reco » — the owner crediting the engine for a title (see
+     * `reco/recoCredit.ts`). Passed only where the engine is the one proposing;
+     * the detail page carries the same control for every other case.
      *
-     * « Seconde chance » drops the 👍 on purpose: a thumbed-up title becomes a
-     * crowd SEED, so a 👍 on a drop would start pulling that show's neighbours
-     * into « Pour toi » — a verdict nobody gave. The 👎 is safe there: a drop is
-     * already in the dislike set, so it changes no ranking and only takes the
-     * card out of the view (undone from « Pas pour moi »).
+     * ⚠️ **It is not a verdict and must never become one.** `onIgnore` removes
+     * a card, `onBoxVerdict` files a title: both change what is shown next.
+     * This one changes NOTHING — not the ranking, not the pool, not even this
+     * card's position. It only records that the feed was the reason, which is
+     * the one thing no harness can reconstruct afterwards. So the card stays
+     * exactly where it is on a click: a pick is still a pick, and making it
+     * disappear would quietly turn the flag into a second « Ignorer ».
      */
-    feedbackMode?: 'feed' | 'secondChance' | RecoVerdict | null;
+    onRecoCredit?: (animeId: string, credited: boolean) => void;
+    /** Ids already credited — off the row join (no row-cache invalidation), so it rides beside the cards. */
+    creditedIds?: ReadonlySet<string>;
+    /**
+     * 'offer' = show « Ignorer »; 'review' = the « Ignorés » list (show
+     * ↩ Remettre); null = no reco control (the hide toggle instead).
+     *
+     * ⚠️ **One control, and the 👍/👎 pair it replaced is not coming back.**
+     * The thumbs asked a predictive question — "will you like this title you
+     * have not watched?" — and the owner's answer was that they cannot judge a
+     * show before watching it, while a show they have started has already left
+     * the feed as seen. Fifteen months of the live store agreed: two entries,
+     * both 👎. « Ignorer » asks only "stop showing me this card", which is the
+     * one thing the reader of a feed actually knows. See `reco/ignored.ts`.
+     *
+     * « Seconde chance » and the feed share the mode on purpose: the old 👎
+     * there "changed no ranking and only took the card out of the view", which
+     * is now simply what the single button does everywhere.
+     */
+    ignoreMode?: 'offer' | 'review' | null;
     /** When true, every card's "Pourquoi ?" breakdown is expanded (global override). */
     allExplainsOpen?: boolean;
     /**
@@ -49,13 +71,12 @@ interface AnimeCardViewProps {
     /**
      * « Oui, c'est ça » / « Non » — the box recos tab's LABELING pair.
      *
-     * ⚠️ **Deliberately not `onFeedback`, and the two must never be merged.**
-     * The thumbs write `user/reco_feedback.json`, which reshapes the GLOBAL feed
-     * (👍 titles become crowd seeds, 👎 ones join the rejection profile). A box
-     * verdict is box-local: « oui » files the title in this box, « non » adds it
-     * to this box's « écartés » and says nothing about any other surface. Wiring
-     * the box's buttons to the thumbs would let a judgement about one taste axis
-     * silently re-rank « Pour toi ».
+     * ⚠️ **Deliberately not `onIgnore`, and the two must never be merged.**
+     * « Ignorer » writes `user/reco_ignored.json`, which silences a title on
+     * EVERY reco surface. A box verdict is box-local: « oui » files the title in
+     * this box, « non » adds it to this box's « écartés » and says nothing about
+     * any other surface. Wiring the box's buttons to the global control would
+     * let a judgement about one taste axis quietly empty « Pour toi ».
      */
     onBoxVerdict?: (animeId: string, verdict: 'yes' | 'no') => void;
 }
@@ -124,9 +145,11 @@ export default function AnimeCardView({
     animes,
     cardsPerRow,
     onHideToggle,
-    onFeedback,
-    onRemoveFeedback,
-    feedbackMode,
+    onIgnore,
+    onRestoreIgnored,
+    ignoreMode,
+    onRecoCredit,
+    creditedIds,
     onBoxVerdict,
     allExplainsOpen,
     onMuteSeed
@@ -472,54 +495,54 @@ export default function AnimeCardView({
                             whether a SIMKL slice existed, which hid the row from every
                             AniList-only or local-only user even though DiscrepancyBadge
                             had something to render for them. */}
-                        {(feedbackMode || onBoxVerdict || anime.discrepancy || anime.personal.status || anime.personal.score) && (
+                        {(ignoreMode || onRecoCredit || onBoxVerdict || anime.discrepancy || anime.personal.status || anime.personal.score) && (
                         <div className={styles.actions}>
                             {/* Not on the box recos tab: there the row is the
                                 question and nothing else. The chip also carried
                                 `white-space: nowrap` wide enough to push both
                                 verdict buttons off every watched card. */}
                             {!onBoxVerdict && <DiscrepancyBadge anime={anime} />}
-                            {feedbackMode === 'up' || feedbackMode === 'down' ? (
+                            {ignoreMode === 'review' ? (
                                 <Button
-                                    onClick={() => onRemoveFeedback?.(anime.id)}
+                                    onClick={() => onRestoreIgnored?.(anime.id)}
                                     variant="secondary"
                                     size="xs"
                                     className={styles.actionButton}
                                 >
                                     {t('card.putBack')}
                                 </Button>
-                            ) : feedbackMode === 'secondChance' ? (
+                            ) : ignoreMode === 'offer' ? (
+                                /* `secondary`, not `primary-negative`: the button
+                                   says nothing about the show, so dressing it as a
+                                   verdict is what made the old 👎 feel like one. */
                                 <Button
-                                    onClick={() => onFeedback?.(anime.id, 'down')}
-                                    variant="primary-negative"
+                                    onClick={() => onIgnore?.(anime.id)}
+                                    variant="secondary"
                                     size="xs"
                                     className={styles.actionButton}
-                                    title={t('card.notForMeSecondChanceTitle')}
+                                    title={t('card.ignoreTitle')}
                                 >
-                                    {t('card.notForMe')}
+                                    {t('card.ignore')}
                                 </Button>
-                            ) : feedbackMode === 'feed' ? (
-                                <>
-                                    <Button
-                                        onClick={() => onFeedback?.(anime.id, 'up')}
-                                        variant="primary-positive"
-                                        size="xs"
-                                        className={styles.actionButton}
-                                        title={t('card.goodPickTitle')}
-                                    >
-                                        {t('card.goodPick')}
-                                    </Button>
-                                    <Button
-                                        onClick={() => onFeedback?.(anime.id, 'down')}
-                                        variant="primary-negative"
-                                        size="xs"
-                                        className={styles.actionButton}
-                                        title={t('card.notForMeTitle')}
-                                    >
-                                        {t('card.notForMe')}
-                                    </Button>
-                                </>
                             ) : null}
+                            {/* A toggle, not a one-way act: mis-crediting a
+                                title is the easiest slip here, and leaving it
+                                filed would quietly inflate every count the
+                                probe reports. */}
+                            {onRecoCredit && ignoreMode !== 'review' && (() => {
+                                const credited = creditedIds?.has(anime.id) ?? false;
+                                return (
+                                    <Button
+                                        onClick={() => onRecoCredit(anime.id, !credited)}
+                                        variant={credited ? 'primary-positive' : 'secondary'}
+                                        size="xs"
+                                        className={styles.actionButton}
+                                        title={t(credited ? 'card.fromRecoOnTitle' : 'card.fromRecoTitle')}
+                                    >
+                                        {t(credited ? 'card.fromRecoOn' : 'card.fromReco')}
+                                    </Button>
+                                );
+                            })()}
                             {/* The box recos tab, with seen titles left in: each
                                 card is a question about THIS box, and answering
                                 it either way removes the card from the list.

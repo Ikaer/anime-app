@@ -13,6 +13,7 @@ import type { TitleLanguage } from '@/lib/url/viewDefaults';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
 import { canClearStatus } from '@/lib/providers/registry';
+import { getRecoCreditSet } from '@/lib/reco/recoCreditStore';
 import { RefreshButton } from '@/components/shared';
 import { MoreLikeThis, PersonalStateEditor, CastSection, ProvenanceChip } from '@/components/anime';
 import AnimeBoxChips from '@/components/anime/boxes/AnimeBoxChips';
@@ -63,6 +64,9 @@ interface Props {
   /** No writable external provider connected — gates the status "clear"
    *  affordance (see `PersonalPatch`). */
   canClearStatus: boolean;
+  /** « Vu grâce à la reco » — read here rather than off the record, because the
+   *  flag is deliberately off the seven-slice join (see `reco/recoCredit.ts`). */
+  recoCredited: boolean;
   /**
    * `{ staffId: count }` — how many of the user's statused titles each headline
    * (T1) credit on this title also holds a T1 credit on, for the "N dans ta
@@ -143,7 +147,7 @@ function discLine(
     .join(' · ');
 }
 
-export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, staffAffinity, titleLang, franchiseSize }: Props) {
+export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, recoCredited, staffAffinity, titleLang, franchiseSize }: Props) {
   const t = useT();
   const router = useRouter();
   const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
@@ -465,6 +469,7 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
             progress={effProgress}
             numEpisodes={anime.catalog.numEpisodes}
             canClearStatus={canClearStatus}
+            recoCredited={recoCredited}
             ratingIntent={anime.ratingIntent}
             onWritten={() => router.replace(router.asPath, undefined, { scroll: false })}
           />
@@ -964,6 +969,9 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       // local is the only one on. MAL models a clear as a list DELETE and SIMKL
       // is score-only, so neither can express it without losing the score.
       canClearStatus: canClearStatus(),
+      // A separate read, not `anime.recoCredited`: keeping the flag off the
+      // record is what stops a write here from invalidating the row cache.
+      recoCredited: getRecoCreditSet().has(anime.id),
       // "N dans ta liste" on the headline credits — deliberately EMPTY once the
       // title is statused. Measured, the mark fires on 56% of T1 rows on a
       // watched title (its staff recur in your list by definition) against 15.8%

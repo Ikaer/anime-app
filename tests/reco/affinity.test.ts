@@ -80,22 +80,22 @@ test('an unseen title with no AniList entry is never marked, and never counted i
   assert.ok(index.thresholds.notable > 0, 'the bar must be a real score, not a floor of zeros');
 });
 
-test('the mark is for unseen, unhidden, un-thumbed-down titles only', () => {
+test('the mark is for unseen, unhidden, un-ignored titles only', () => {
   const all = [
     ...seeds(),
     anime('seen', { status: 'completed', score: 6, genres: ['Action'], tags: ['Space'] }),
     anime('planned', { status: 'plan_to_watch', genres: ['Action'], tags: ['Space'] }),
     anime('hidden', { hidden: true, genres: ['Action'], tags: ['Space'] }),
-    anime('down', { genres: ['Action'], tags: ['Space'] }),
+    anime('ignored', { genres: ['Action'], tags: ['Space'] }),
     anime('fresh', { genres: ['Action'], tags: ['Space'] }),
   ];
-  const index = buildAffinityIndex(all, { downIds: new Set(['down']) });
+  const index = buildAffinityIndex(all, { ignoredIds: new Set(['ignored']) });
 
   assert.equal(index.marks.has('fresh'), true, 'the eligible one is marked');
   // `plan_to_watch` is NOT a status you have judged the show by — it stays
   // eligible, the same reading `/mix`'s excludeSeen uses.
   assert.equal(index.marks.has('planned'), true);
-  for (const id of ['seen', 'hidden', 'down']) {
+  for (const id of ['seen', 'hidden', 'ignored']) {
     assert.equal(index.marks.has(id), false, `${id} must not be marked`);
     assert.equal(index.scores.has(id), false, `${id} must not be scored`);
   }

@@ -3,7 +3,7 @@
  *
  * Every slice file under `DATA_PATH` is keyed by a canonical id (`a_<n>`) minted
  * or resolved here, and the canonical id is also the OUTWARD id (URLs, API route
- * params, hidden/feedback keys). Each provider's own id survives only in the
+ * params, hidden/ignored keys). Each provider's own id survives only in the
  * crosswalk, for API calls and links out.
  *
  * The app's central identity invariant lives in this file and nowhere else:
@@ -137,7 +137,7 @@ export function toNum(v: number | string | undefined): number | undefined {
  *
  * Resolve-before-mint is mandatory: a title the registry already anchors under
  * ANY provider id is never re-minted, so durable user data keyed by canonical id
- * (feedback/hidden) can't silently reattach to the wrong title on a rebuild.
+ * (ignored/hidden) can't silently reattach to the wrong title on a rebuild.
  * Returns the resolved canonical ids parallel to the input, plus mint/resolve
  * counts for the caller to log. One registry read + at most one write.
  */

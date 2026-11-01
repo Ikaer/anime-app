@@ -141,7 +141,7 @@ export function captureMarks(
   all: AnimeRecord[],
   index: AffinityIndex,
   history: MarkHistory,
-  options: { now: Date; downIds: ReadonlySet<string> },
+  options: { now: Date; ignoredIds: ReadonlySet<string> },
 ): { history: MarkHistory; written: { first: number; preAir: number; ep3: number } } {
   const today = isoDay(options.now);
   const next: MarkHistory = { ...history };
@@ -153,7 +153,7 @@ export function captureMarks(
 
     if (isPreAir(anime, today)) {
       // Only what the badge could have been on: unseen and not refused.
-      if (!isUnseenCandidate(anime, options.downIds)) continue;
+      if (!isUnseenCandidate(anime, options.ignoredIds)) continue;
       const p = point(anime, index, today);
       next[anime.id] = {
         ...prev,

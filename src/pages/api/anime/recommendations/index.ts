@@ -1,8 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { computeFeed } from '@/lib/reco/feed';
-import { getFeedbackAnime } from '@/lib/reco/feedback';
+import { getIgnoredAnime } from '@/lib/reco/ignored';
 import { getRecommendationsData } from '@/lib/reco/data';
 import { getMutedSeedAnime } from '@/lib/reco/seedMutes';
+import { getRecoCredits } from '@/lib/reco/recoCreditStore';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { parseSourceWeights } from '@/lib/reco/weights';
 import { getTitleLanguage } from '@/lib/config/settings';
@@ -31,10 +32,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         : undefined,
     };
 
-    // Review lists: "Bonnes pioches" (👍) / "Pas pour moi" (👎) — no ranking, same narrowing.
-    if (review === 'up' || review === 'down') {
-      const animes = applyNarrowingFilters(getFeedbackAnime(review), narrowing);
-      return res.json({ animes, total: animes.length, review });
+    // « Ignorés » — the review-and-undo list. No ranking (the order the owner
+    // dismissed them in is the only one that means anything), same narrowing.
+    if (review === '1') {
+      const animes = applyNarrowingFilters(getIgnoredAnime(), narrowing);
+      return res.json({ animes, total: animes.length, review: true });
     }
 
     const niche = typeof nicheMode === 'string' && nicheMode.toLowerCase() === 'true';
@@ -78,6 +80,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       mutedSeeds: getMutedSeedAnime()
         .map(a => ({ id: a.id, title: getPrimaryTitle(a, titleLang) }))
         .sort((x, y) => x.title.localeCompare(y.title)),
+      /**
+       * Which of these cards the owner has already credited (« Vu grâce à la
+       * reco »). Sent whole rather than folded onto each card: the flag is off
+       * the seven-slice join on purpose, so putting it ON a row would be the
+       * one place a reader could mistake it for record state.
+       */
+      credited: Object.keys(getRecoCredits()),
     });
   } catch (error) {
     console.error('Get recommendations feed error:', error);

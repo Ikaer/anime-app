@@ -8,7 +8,7 @@
  */
 import { readJsonFile, writeJsonFile, dataFile } from '@/lib/store/jsonStore';
 import { getAnimeForDisplay } from '@/lib/store';
-import { getFeedback, feedbackIds } from '@/lib/reco/feedback';
+import { getIgnoredIdSet } from '@/lib/reco/ignored';
 import { buildAffinityIndex } from '@/lib/reco/affinity';
 import { captureMarks, type MarkHistory } from '@/lib/reco/markHistory';
 
@@ -25,9 +25,9 @@ export function getMarkHistory(): MarkHistory {
  */
 export function captureAffinityMarks(now = new Date()) {
   const all = getAnimeForDisplay();
-  const downIds = feedbackIds(getFeedback(), 'down');
-  const index = buildAffinityIndex(all, { downIds });
-  const { history, written } = captureMarks(all, index, getMarkHistory(), { now, downIds });
+  const ignoredIds = getIgnoredIdSet();
+  const index = buildAffinityIndex(all, { ignoredIds });
+  const { history, written } = captureMarks(all, index, getMarkHistory(), { now, ignoredIds });
   if (written.first + written.preAir + written.ep3 > 0) writeJsonFile(MARK_HISTORY_FILE, history);
   return { written, tracked: Object.keys(history).length, seedCount: index.seedCount };
 }

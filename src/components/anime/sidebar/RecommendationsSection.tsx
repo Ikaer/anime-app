@@ -16,8 +16,8 @@ interface RecommendationsSectionProps {
   onNicheModeChange: (v: boolean) => void;
   onThresholdChange: (v: number | null) => void;
   onDiversityChange: (v: number | null) => void;
-  onShowLiked: () => void;
-  onShowDisliked: () => void;
+  /** « Ignorés » — the review-and-undo list for the cards dismissed from the feed. */
+  onShowIgnored: () => void;
   /** « Seconde chance » — the same ranking over the titles you dropped. */
   onShowSecondChance: () => void;
 }
@@ -36,8 +36,7 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   onNicheModeChange,
   onThresholdChange,
   onDiversityChange,
-  onShowLiked,
-  onShowDisliked,
+  onShowIgnored,
   onShowSecondChance,
 }) => {
   const t = useT();
@@ -115,11 +114,8 @@ const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
       </div>
 
       <div className={styles.reviewLinks}>
-        <Button onClick={onShowLiked} variant="secondary" size="xs">
-          {t('reco.goodPicks')}
-        </Button>
-        <Button onClick={onShowDisliked} variant="secondary" size="xs">
-          {t('reco.notForMe')}
+        <Button onClick={onShowIgnored} variant="secondary" size="xs" title={t('reco.ignoredHint')}>
+          {t('reco.ignored')}
         </Button>
         <Button onClick={onShowSecondChance} variant="secondary" size="xs" title={t('reco.secondChanceHint')}>
           {t('reco.secondChance')}

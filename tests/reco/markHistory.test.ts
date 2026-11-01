@@ -29,7 +29,7 @@ const index = (bump = 0): AffinityIndex => ({
   percentileOf: () => 0.5,
 });
 
-const at = (day: string) => ({ now: new Date(`${day}T02:00:00Z`), downIds: new Set<string>() });
+const at = (day: string) => ({ now: new Date(`${day}T02:00:00Z`), ignoredIds: new Set<string>() });
 
 test('first is written once; preAir follows the title until it airs', () => {
   const show = anime('show', { start: '2026-10-20' });
@@ -64,7 +64,7 @@ test('a title that aired long before capture started gets no fake J+21', () => {
   const late = anime('late', { start: '2026-09-01', mean: 8 });
   const day = EP3_DAY_OFFSET + EP3_WINDOW_DAYS + 1;
   const now = new Date(Date.parse('2026-09-01T02:00:00Z') + day * 86_400_000);
-  assert.equal(captureMarks([late], index(), {}, { now, downIds: new Set() }).history.late, undefined);
+  assert.equal(captureMarks([late], index(), {}, { now, ignoredIds: new Set() }).history.late, undefined);
 });
 
 test('an imprecise start date never anchors J+21', () => {

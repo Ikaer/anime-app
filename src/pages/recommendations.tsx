@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import { AnimePageLayout, AnimeListHeader, AnimeCardView } from '@/components/anime';
 import {
@@ -26,6 +26,8 @@ export default function RecommendationsPage() {
   // Feed data.
   const [animes, setAnimes] = useState<RecoCard[]>([]);
   const [mutedSeeds, setMutedSeeds] = useState<MutedSeed[]>([]);
+  /** Ids the owner has credited the engine for — « Vu grâce à la reco ». */
+  const [credited, setCredited] = useState<ReadonlySet<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -47,7 +49,20 @@ export default function RecommendationsPage() {
   // No MAL auth probe on mount: nothing on this page is gated on it any more.
   // The refresh route decides per source what it can run.
 
+  /**
+   * ⚠️ **Last request wins, not last response.** Several loads are in flight at
+   * once in normal use — the effect refires as `useViewDefaults` resolves, and
+   * again on every URL change — and they do NOT come back in order: the
+   * « Ignorés » list is a plain store read while the feed is a full ranking, so
+   * switching to the list resolved first and a feed response still in flight
+   * then overwrote it. Live symptom: « Ignorés » rendered the whole feed, every
+   * card offering « ↩ Remettre » on a title that was never ignored. Nothing
+   * errored, so the only trace was two extra 200s in the network log.
+   */
+  const loadSeq = useRef(0);
+
   const loadFeed = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
       setIsLoading(true);
       setError('');
@@ -69,7 +84,7 @@ export default function RecommendationsPage() {
       params.set('lang', lang);
 
       if (state.review) {
-        params.set('review', state.review);
+        params.set('review', '1');
       } else {
         if (state.secondChance) params.set('pool', 'dropped');
         if (state.nicheMode) params.set('nicheMode', 'true');
@@ -78,19 +93,22 @@ export default function RecommendationsPage() {
       }
 
       const res = await fetch(`/api/anime/recommendations?${params.toString()}`);
+      if (seq !== loadSeq.current) return; // superseded — keep the newer answer
       if (res.ok) {
         const data = await res.json();
+        if (seq !== loadSeq.current) return;
         setAnimes(data.animes || []);
         setMutedSeeds(data.mutedSeeds || []);
+        setCredited(new Set<string>(data.credited || []));
         if (!state.review) setRecoLastRefresh(data.lastRefresh ?? null);
       } else {
         const errorData = await res.json().catch(() => ({}));
         setError(errorData.error || t('reco.loadFailed'));
       }
     } catch {
-      setError(t('reco.loadFailed'));
+      if (seq === loadSeq.current) setError(t('reco.loadFailed'));
     } finally {
-      setIsLoading(false);
+      if (seq === loadSeq.current) setIsLoading(false);
     }
   }, [state, lang, t]);
 
@@ -142,21 +160,55 @@ export default function RecommendationsPage() {
     }
   };
 
-  // 👍/👎 on a feed card: persist the verdict and drop it from the live list.
-  const handleFeedback = async (animeId: string, verdict: 'up' | 'down') => {
+  /**
+   * « Vu grâce à la reco » on a feed card.
+   *
+   * ⚠️ The card does NOT move. Unlike the ignore right below, this records
+   * something about the past rather than changing what should be shown — and a
+   * pick is usually made alongside four others, so a card vanishing under the
+   * cursor would both lose the reader's place and read as a dismissal.
+   * Optimistic, with a revert: the write is a single durable id and the toggle
+   * must feel instant while the playlist is being built.
+   */
+  const handleRecoCredit = async (animeId: string, credited: boolean) => {
+    setCredited(prev => {
+      const next = new Set(prev);
+      if (credited) next.add(animeId); else next.delete(animeId);
+      return next;
+    });
     try {
-      const response = await fetch(`/api/anime/recommendations/feedback/${animeId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verdict }),
+      const res = await fetch(`/api/anime/animes/${animeId}/reco-credit`, {
+        method: credited ? 'POST' : 'DELETE',
       });
+      if (!res.ok) throw new Error('failed');
+    } catch {
+      setCredited(prev => {
+        const next = new Set(prev);
+        if (credited) next.delete(animeId); else next.add(animeId);
+        return next;
+      });
+      setError(t('reco.recoCreditFailed'));
+    }
+  };
+
+  /**
+   * « Ignorer » on a feed card: file the id and drop the card locally.
+   *
+   * Local drop rather than a refetch, and that is the difference from a seed
+   * mute right below: an ignore changes nothing about how the other candidates
+   * score, so re-ranking the whole feed would move cards the reader was not
+   * acting on. A mute genuinely re-ranks and therefore has to refetch.
+   */
+  const handleIgnore = async (animeId: string) => {
+    try {
+      const response = await fetch(`/api/anime/recommendations/ignore/${animeId}`, { method: 'POST' });
       if (response.ok) {
         setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
-        setError(t('reco.feedbackSaveFailed'));
+        setError(t('reco.ignoreSaveFailed'));
       }
     } catch {
-      setError(t('reco.feedbackSaveFailed'));
+      setError(t('reco.ignoreSaveFailed'));
     }
   };
 
@@ -184,19 +236,19 @@ export default function RecommendationsPage() {
     }
   };
 
-  // ↩ Remettre from a review list: clear the verdict and drop it from the list.
-  const handleRemoveFeedback = async (animeId: string) => {
+  // ↩ Remettre from the « Ignorés » list: un-ignore and drop it from the list.
+  const handleRestoreIgnored = async (animeId: string) => {
     try {
-      const response = await fetch(`/api/anime/recommendations/feedback/${animeId}`, {
+      const response = await fetch(`/api/anime/recommendations/ignore/${animeId}`, {
         method: 'DELETE',
       });
       if (response.ok) {
         setAnimes(prev => prev.filter(a => a.id !== animeId));
       } else {
-        setError(t('reco.feedbackRemoveFailed'));
+        setError(t('reco.ignoreRemoveFailed'));
       }
     } catch {
-      setError(t('reco.feedbackRemoveFailed'));
+      setError(t('reco.ignoreRemoveFailed'));
     }
   };
 
@@ -215,9 +267,8 @@ export default function RecommendationsPage() {
           onNicheModeChange={(v) => update({ nicheMode: v })}
           onThresholdChange={(v) => update({ threshold: v })}
           onDiversityChange={(v) => update({ diversity: v })}
-          onShowLiked={() => update({ review: 'up', secondChance: false })}
-          onShowDisliked={() => update({ review: 'down', secondChance: false })}
-          onShowSecondChance={() => update({ secondChance: true, review: null })}
+          onShowIgnored={() => update({ review: true, secondChance: false })}
+          onShowSecondChance={() => update({ secondChance: true, review: false })}
         />
       </CollapsibleSection>
 
@@ -225,8 +276,8 @@ export default function RecommendationsPage() {
         <RecoWeightPresetsSection onApply={(w) => update({ weights: w })} />
       </CollapsibleSection>
 
-      {/* Only on the feed itself — the review sub-views (`rev=up` / `rev=down`)
-          are flat lists with no seeds behind them, so the tally would read 0. */}
+      {/* Only on the feed itself — the « Ignorés » sub-view (`rev=1`) is a flat
+          list with no seeds behind it, so the tally would read 0. */}
       {!state.review && (
         <CollapsibleSection
           title={mutedSeeds.length > 0
@@ -296,14 +347,13 @@ export default function RecommendationsPage() {
               feed's order IS the affinity ranking. */}
           <AnimeListHeader
             title={
-              state.review === 'up' ? t('reco.goodPicks')
-                : state.review === 'down' ? t('reco.notForMe')
-                  : state.secondChance ? t('reco.secondChance')
-                    : t('nav.forYou')
+              state.review ? t('reco.ignored')
+                : state.secondChance ? t('reco.secondChance')
+                  : t('nav.forYou')
             }
             count={state.review
               ? (
-                <Button variant="secondary" size="xs" onClick={() => update({ review: null })}>
+                <Button variant="secondary" size="xs" onClick={() => update({ review: false })}>
                   {t('reco.backToRecos')}
                 </Button>
               )
@@ -334,9 +384,11 @@ export default function RecommendationsPage() {
               <AnimeCardView
                 animes={animes}
                 cardsPerRow={state.cardsPerRow}
-                onFeedback={handleFeedback}
-                onRemoveFeedback={handleRemoveFeedback}
-                feedbackMode={state.review ?? (state.secondChance ? 'secondChance' : 'feed')}
+                onIgnore={handleIgnore}
+                onRestoreIgnored={handleRestoreIgnored}
+                ignoreMode={state.review ? 'review' : 'offer'}
+                onRecoCredit={state.review ? undefined : handleRecoCredit}
+                creditedIds={credited}
                 allExplainsOpen={showAllExplains}
                 onMuteSeed={state.review ? undefined : (seedId) => setSeedMute(seedId, true)}
               />

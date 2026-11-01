@@ -6,13 +6,13 @@
  *
  * **Why a box exists at all.** The feed's positive signal is derived entirely
  * from scores — every seed is a `completed` title scored >= 8 — so nothing in the
- * store records *why* one was liked. The 👍/👎 store was the earlier attempt and
+ * store records *why* one was liked. The 👍/👎 thumbs were the earlier attempt and
  * goes unused for a good reason: it asks a PREDICTIVE question ("will you like
  * this unwatched title?"), which is the one thing the owner can't answer. A box
  * asks a retrospective one ("what was that, for you?") against 712 titles that
  * can answer it.
  *
- * **Why it lives beside `feedback.ts` rather than in `store/`.** Same shape and
+ * **Why it lives beside `seedMutes.ts` rather than in `store/`.** Same shape and
  * same reason: durable `user/` data that is deliberately NOT joined into
  * `AnimeRecord`. Joining it would tax every row build and change the row-cache
  * key for data two pages read — the same argument that keeps the cast slice off

@@ -21,12 +21,13 @@ const SERVER_ONLY = [
   '@/lib/reco/boxes',
   '@/lib/reco/data',
   '@/lib/reco/feed',
-  '@/lib/reco/feedback',
   '@/lib/reco/groups',
+  '@/lib/reco/ignored',
   '@/lib/reco/markHistoryStore',
   '@/lib/reco/mixFetch',
   '@/lib/reco/profilePreview',
   '@/lib/reco/profiles',
+  '@/lib/reco/recoCreditStore',
   '@/lib/reco/refresh',
   '@/lib/reco/seiyuuFavorites',
   '@/lib/reco/similar',
@@ -74,7 +75,8 @@ const WRITE_MODULES = [
   '@/lib/providers/*/sync',
   '@/lib/providers/*/personalSync',
   '@/lib/reco/refresh',
-  '@/lib/reco/feedback',
+  '@/lib/reco/ignored',
+  '@/lib/reco/recoCreditStore',
 ].flatMap((p) => [p, p.replace(/^@\/lib\//, '**/'), p.replace(/^@\//, '**/')]);
 
 const GROUP_DELETE_MESSAGE =

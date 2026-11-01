@@ -106,7 +106,7 @@ export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' |
  *                  is *declined* — which is not a verdict on the show.
  *
  * So it lives in `user/rating_intent.json` beside `user/hidden.json` and
- * `user/reco_feedback.json`, off provider precedence entirely, and surfaces as
+ * `user/reco_ignored.json`, off provider precedence entirely, and surfaces as
  * a status-like chip. It is meaningful only while the title is unrated — a
  * score write clears it (see `writePersonal`).
  */
@@ -762,7 +762,6 @@ export type RecoSource =
   | 'crowd'        // MAL crowd recommendations from the user's high-scored seeds
   | 'anilistCrowd' // AniList crowd recommendations from the user's high-scored seeds
   | 'suggestions'  // MAL personal "suggestions" endpoint
-  | 'feedback'     // taste-profile affinity on the user's 👍 "bonne pioche" set
   | 'genre'        // taste-profile affinity on genres (IDF-weighted)
   | 'studio'       // taste-profile affinity on studios (IDF-weighted)
   | 'nsfw'         // taste-profile affinity on the nsfw flag (IDF-weighted)
@@ -771,14 +770,11 @@ export type RecoSource =
   | 'anilistStaff' // taste-profile affinity on AniList staff/creators (IDF-weighted)
   | 'favSeiyuu'    // a favourite seiyuu voices this title (noisy-OR by role — see reco/favSeiyuu.ts)
   | 'communityScore' // the crowd's VERDICT (catalog.mean), as a percentile of the pool
-  | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored / 👎)
+  | 'rejection'    // overlap with the "disliked" profile (dropped / low-scored)
   | 'popularity';  // MAL popularity — negative weight makes the feed nichier
 
 /** Per-source weight configuration (the tunable knobs, all live in the URL). */
 export type SourceWeights = Record<RecoSource, number>;
-
-/** A user's explicit thumb on a recommendation: 👍 keep / 👎 not for me. */
-export type RecoVerdict = 'up' | 'down';
 
 // ---------------------------------------------------------------------------
 // « Recommandé » — the taste mark on the main list (see lib/reco/affinity.ts)
@@ -863,7 +859,7 @@ export interface Box {
    * made a seiyuu filmography derived from the cast slice return only titles
    * already watched.
    *
-   * ⚠️ **Box-local, and it must never reach the global feed.** It is not a 👎,
+   * ⚠️ **Box-local, and it must never reach the global feed.** It is not an ignore,
    * not a hide and not a seed mute: excluded from `Absolute cinema` says
    * nothing about `/recommendations`.
    *

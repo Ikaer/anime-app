@@ -6,7 +6,7 @@
  *    transcriptions of a five-condition eligibility rule is the drift bug this
  *    repo keeps refusing: the day one of them learns about a new exclusion, the
  *    preview proposes titles the mark would never touch, and nothing errors.
- *  - A 👎 must reach the pool on the next request. The 👎 store is off the
+ *  - An « Ignorer » must reach the pool on the next request. That store is off the
  *    seven-slice join, so a pool cached on the row array would go stale with no
  *    new array to invalidate it.
  *  - In an UNSEEN pool a box's « écartés » are reachable (the recos tab files
@@ -68,7 +68,7 @@ const world = () => [
   anime('seen', { status: 'completed', score: 6, tags: ['Space'] }),
   anime('planned', { status: 'plan_to_watch', tags: ['Space'] }),
   anime('hidden', { hidden: true, tags: ['Space'] }),
-  anime('down', { tags: ['Space'] }),
+  anime('ignored', { tags: ['Space'] }),
   anime('intent', { ratingIntent: 'no_opinion', tags: ['Space'] }),
   anime('bare'),
   anime('sequel', { title: 'Space Opera 2nd Season', tags: ['Space'] }),
@@ -77,16 +77,16 @@ const world = () => [
 
 test('the preview pool is exactly the « Recommandé » mark\'s population', () => {
   const all = world();
-  const downIds = new Set(['down']);
-  const pool = buildUnseenPool(all, downIds);
-  const mark = buildAffinityIndex(all, { downIds });
+  const ignoredIds = new Set(['ignored']);
+  const pool = buildUnseenPool(all, ignoredIds);
+  const mark = buildAffinityIndex(all, { ignoredIds });
 
   assert.deepEqual([...pool.eligible].sort(), [...mark.scores.keys()].sort(), 'one rule, not two');
   assert.equal(pool.unseen, mark.coverage.unseen, 'the same coverage count');
   assert.deepEqual([...pool.eligible].sort(), ['fresh', 'planned'], 'the cases themselves, stated');
 });
 
-test('a 👎 reaches the pool with the SAME row array', () => {
+test('an ignore reaches the pool with the SAME row array', () => {
   const all = world();
   assert.ok(buildUnseenPool(all, new Set()).eligible.has('fresh'));
   assert.equal(buildUnseenPool(all, new Set(['fresh'])).eligible.has('fresh'), false,

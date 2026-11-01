@@ -54,7 +54,7 @@ test('the trim is per sign, not one ranked cut', () => {
     contribution('anilistTags', 0.31),
     contribution('studio', 0.22),
     contribution('suggestions', 0.18),
-    contribution('feedback', 0.11),
+    contribution('suggestions', 0.11),
     contribution('rejection', -0.031),
     contribution('popularity', -0.020),
     contribution('crowdRejection', -0.011),

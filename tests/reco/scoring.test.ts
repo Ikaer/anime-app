@@ -159,7 +159,7 @@ test('a value equally present in likes and dislikes scores on neither side', () 
     anime(id, { status: 'dropped', genres: ['Action', 'Ecchi'] }));
   const all = [...liked, ...disliked];
 
-  const profiles = buildDiscriminativeProfiles(all, new Set(), computeIdfSet(all));
+  const profiles = buildDiscriminativeProfiles(all, computeIdfSet(all));
 
   assert.equal(profiles.posGenre.weights.has('Action'), false, 'netted out of the positive side');
   assert.equal(profiles.negGenre.weights.has('Action'), false, 'netted out of the rejection side');
@@ -181,20 +181,28 @@ test('DISCRIMINATION ships at full netting', () => {
 });
 
 /**
- * The dislike set is dropped ∪ scored-low ∪ 👎. The thumbs arm is the one that
- * reaches titles with no watch history at all, so it cannot be inferred from
- * status and is the easiest of the three to drop by accident.
+ * ⚠️ **The dislike set is decided by WATCH HISTORY alone** — dropped, or scored
+ * <= `NEGATIVE_SCORE_THRESHOLD`. Nothing a pre-watch control writes may reach
+ * it. The 👎 thumb used to union in here, and removing it was the owner's own
+ * ruling: they cannot judge a show before watching it, so the thumb recorded a
+ * guess and spent it as a verdict on genre, studio and T1 staff.
+ *
+ * « Ignorer » replaced it and must stay a pure subtraction (see
+ * `reco/ignored.ts`). Re-wiring the ignored set into this builder is the one
+ * "obvious improvement" that would break that promise, and it would break it
+ * SILENTLY: dismissing a card would start penalizing everything resembling it,
+ * with nothing on screen to say so. This pins the floor — an unwatched title
+ * contributes to NEITHER side, whatever any annotation says about it.
  */
-test('a thumbs-down title joins the rejection profile even when never watched', () => {
+test('an unwatched title feeds neither taste profile', () => {
   const liked = ['l1', 'l2'].map(id => anime(id, { status: 'completed', score: 9, genres: ['Mecha'] }));
-  const thumbed = anime('x', { genres: ['Ecchi'] });
-  const all = [...liked, thumbed];
+  const unwatched = anime('x', { genres: ['Ecchi'] });
+  const all = [...liked, unwatched];
 
-  const without = buildDiscriminativeProfiles(all, new Set(), computeIdfSet(all));
-  const withThumb = buildDiscriminativeProfiles(all, new Set(['x']), computeIdfSet(all));
+  const profiles = buildDiscriminativeProfiles(all, computeIdfSet(all));
 
-  assert.equal(without.negGenre.weights.has('Ecchi'), false);
-  assert.equal(withThumb.negGenre.weights.has('Ecchi'), true);
+  assert.equal(profiles.negGenre.weights.has('Ecchi'), false, 'no watch history, no rejection');
+  assert.equal(profiles.posGenre.weights.has('Ecchi'), false, 'and no endorsement either');
 });
 
 /**
@@ -208,14 +216,14 @@ test('a completed-but-low-scored title is a rejection; an unrated one is not', (
   const lowScored = anime('x', { status: 'completed', score: TUNING.NEGATIVE_SCORE_THRESHOLD, genres: ['Ecchi'] });
   const withLow = [...base, lowScored];
   assert.equal(
-    buildDiscriminativeProfiles(withLow, new Set(), computeIdfSet(withLow)).negGenre.weights.has('Ecchi'),
+    buildDiscriminativeProfiles(withLow, computeIdfSet(withLow)).negGenre.weights.has('Ecchi'),
     true,
   );
 
   const unrated = anime('y', { status: 'completed', score: 0, genres: ['Ecchi'] });
   const withUnrated = [...base, unrated];
   assert.equal(
-    buildDiscriminativeProfiles(withUnrated, new Set(), computeIdfSet(withUnrated)).negGenre.weights.has('Ecchi'),
+    buildDiscriminativeProfiles(withUnrated, computeIdfSet(withUnrated)).negGenre.weights.has('Ecchi'),
     false,
     'score 0 means unrated, not a rating of zero',
   );
@@ -234,7 +242,7 @@ test('omitting a dropped title removes what only it contributed to the rejection
   const lone = anime('x', { status: 'dropped', genres: ['Ecchi', 'Horror'] });
   const all = [...liked, ...shared, lone];
 
-  const discFor = discriminativeProfilesBuilder(all, new Set(), computeIdfSet(all));
+  const discFor = discriminativeProfilesBuilder(all, computeIdfSet(all));
 
   assert.equal(discFor().negGenre.weights.has('Horror'), true, 'the plain pass still counts it');
   assert.equal(discFor('x').negGenre.weights.has('Horror'), false, 'its own contribution is gone');

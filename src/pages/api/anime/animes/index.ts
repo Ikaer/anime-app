@@ -3,7 +3,7 @@ import { getAnimeForDisplay } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { applyNarrowingFilters, getStatusFilterKey, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
 import { buildAffinityIndex, buildAnticipationIndex, type AffinityIndex } from '@/lib/reco/affinity';
-import { getFeedback, feedbackIds } from '@/lib/reco/feedback';
+import { getIgnoredIdSet } from '@/lib/reco/ignored';
 import { getFavSeiyuuIndex } from '@/lib/reco/seiyuuFavorites';
 import { hasMainFavSeiyuu, type FavSeiyuuIndex } from '@/lib/reco/favSeiyuu';
 import { AnimeRecord, AnticipationMark, SortColumn, SortDirection, AnimeListResponse, AnimeListRow } from '@/models/anime';
@@ -33,7 +33,7 @@ function getMarks(all: AnimeRecord[]) {
   const hit = affinityCache.get(all);
   if (hit && hit.favSeiyuu === favSeiyuu) return hit;
   const built = {
-    affinity: buildAffinityIndex(all, { downIds: feedbackIds(getFeedback(), 'down'), favSeiyuu }),
+    affinity: buildAffinityIndex(all, { ignoredIds: getIgnoredIdSet(), favSeiyuu }),
     anticipation: buildAnticipationIndex(all),
     favSeiyuu,
   };

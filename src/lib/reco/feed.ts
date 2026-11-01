@@ -9,7 +9,7 @@
  *
  * **Canonical ids throughout** (E9). Crowd edges arrive from MAL and AniList in
  * their own id spaces, but `refresh.ts` converts them at ingest, so nothing here
- * speaks a provider id: candidates, seeds, suggestions, the hidden/feedback
+ * speaks a provider id: candidates, seeds, suggestions, the hidden/ignored
  * exclusions and each item's `.id` are all `a_<n>`. Relation edges are the one
  * provider-id payload left, and they are resolved to records by
  * `domain/relations.ts` rather than compared as ids.
@@ -23,11 +23,9 @@ import { getAnimeForDisplay, getHiddenAnimeIds } from '@/lib/store';
 import { DEFAULT_WEIGHTS } from '@/lib/reco/weights';
 import {
   TUNING,
-  FIELD_EXTRACTORS,
   computeIdfSet,
   popularityScale,
   meanScale,
-  buildFieldProfile,
   buildFieldProfileSet,
   discriminativeProfilesBuilder,
   fieldMatch,
@@ -38,7 +36,7 @@ import {
   SEEN_STATUSES,
 } from '@/lib/reco/scoring';
 import { getRecommendationsData } from '@/lib/reco/data';
-import { feedbackIds, getFeedback } from '@/lib/reco/feedback';
+import { getIgnoredIdSet } from '@/lib/reco/ignored';
 import { getSeedMuteSet } from '@/lib/reco/seedMutes';
 import { getFavSeiyuuIndex } from '@/lib/reco/seiyuuFavorites';
 import { favSeiyuuValue, describeFavSeiyuu } from '@/lib/reco/favSeiyuu';
@@ -212,9 +210,12 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const rank = suggestionRank.get(candId);
     return rank && rank > 0 ? 1 / Math.log2(1 + rank) : 0;
   };
-  const feedback = getFeedback();
-  const upIds = feedbackIds(feedback, 'up');
-  const downIds = feedbackIds(feedback, 'down');
+  /**
+   * « Ignorer » — cards the owner dismissed. A pure subtraction: it excludes the
+   * candidate below and feeds no profile, no seed and no weight (see
+   * `reco/ignored.ts`, which replaced the 👍/👎 thumbs).
+   */
+  const ignored = getIgnoredIdSet();
   /**
    * « Ne plus partir de ce titre ». `getSeeds` already drops these from the
    * taste profiles, but the two crowd loops below iterate the CACHE — whose
@@ -240,21 +241,13 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   };
 
   for (const [seedId, edges] of Object.entries(data.seeds)) {
-    // ⚠️ Before the weight branches, not inside the threshold one: a muted title
-    // that is ALSO thumbed-up would otherwise fall through to the 👍 fallback
-    // and keep seeding at `FEEDBACK_SEED_WEIGHT`.
     if (mutedSeeds.has(seedId)) continue;
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
-    // Live threshold filter, with a fallback for 👍 seeds (no personal score).
-    let weight: number;
-    if (seed && typeof seedScore === 'number' && seedScore >= threshold) {
-      weight = seedWeight(seedScore, threshold) * seedGapBonus(seed, seedScore);
-    } else if (seed && upIds.has(seed.id)) {
-      weight = TUNING.FEEDBACK_SEED_WEIGHT; // 👍 "bonne pioche" acting as a seed
-    } else {
-      continue; // seed below threshold and not thumbed-up — dropped
-    }
+    // Live threshold filter: a seed IS a high-scored completion, and since the
+    // 👍 thumbs were removed there is no second way to become one.
+    if (!seed || typeof seedScore !== 'number' || seedScore < threshold) continue;
+    const weight = seedWeight(seedScore, threshold) * seedGapBonus(seed, seedScore);
     for (const edge of edges) {
       if (edge.hop === 2 && !options.nicheMode) continue; // 2-hop only in niche mode
       const lambda = edge.hop === 2 ? TUNING.NICHE_DAMPING : 1;
@@ -283,14 +276,8 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     if (mutedSeeds.has(seedId)) continue; // same gate, same reason as above
     const seed = byId.get(seedId);
     const seedScore = seed ? getEffectiveScore(seed) : undefined;
-    let weight: number;
-    if (seed && typeof seedScore === 'number' && seedScore >= threshold) {
-      weight = seedWeight(seedScore, threshold) * seedGapBonus(seed, seedScore);
-    } else if (seed && upIds.has(seed.id)) {
-      weight = TUNING.FEEDBACK_SEED_WEIGHT;
-    } else {
-      continue;
-    }
+    if (!seed || typeof seedScore !== 'number' || seedScore < threshold) continue;
+    const weight = seedWeight(seedScore, threshold) * seedGapBonus(seed, seedScore);
     for (const edge of edges) {
       bumpAnilist(edge.id, seedId, edge.num * weight, edge.num);
       if (!acc.has(edge.id)) acc.set(edge.id, { affinity: 0, perSeed: new Map() });
@@ -325,18 +312,9 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
   // dislikes) rather than the plain tally: a genre you complete and drop at the
   // same rate now scores on neither side instead of on both. The other four
   // fields have no negative counterpart and keep the plain profile.
-  const discFor = discriminativeProfilesBuilder(all, downIds, idf, { animes: seeds, weight: seedW });
+  const discFor = discriminativeProfilesBuilder(all, idf, { animes: seeds, weight: seedW });
   const disc = discFor();
   const pos = { ...buildFieldProfileSet(seeds, seedW, idf), genre: disc.posGenre, studio: disc.posStudio };
-  // 👍 "bonne pioche" profile (genre + studio, flat weight — a thumb has no
-  // numeric score). Its own weighted source, separate from the MAL-seed genre /
-  // studio profiles, so the user can dial their explicit likes independently.
-  const upAnime = all.filter(a => upIds.has(a.id));
-  const fb = {
-    genre: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.genre, idf.genre),
-    studio: buildFieldProfile(upAnime, () => 1, FIELD_EXTRACTORS.studio, idf.studio),
-  };
-
   // Pass 1: apply hard filters and gather the maxima used to normalize the
   // unbounded sources (crowd affinity, popularity) onto a common [0,1] scale.
   const eligible: { anime: AnimeRecord; a: Accumulator; candId: string }[] = [];
@@ -362,7 +340,7 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     // SEEN_STATUSES rather than something this line promises.
     if (getRatingIntent(anime)) continue;
     if (hidden.has(anime.id)) continue;
-    if (upIds.has(anime.id) || downIds.has(anime.id)) continue; // already thumbed
+    if (ignored.has(anime.id)) continue; // « Ignorer » — dismissed by the owner
     if (isPrematureSequel(anime, relations)) continue; // later season of an unwatched show
 
     eligible.push({ anime, a, candId });
@@ -398,8 +376,6 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
     const ratingM = fieldMatch(anime, pos.rating);
     const anilistTagsM = fieldMatch(anime, pos.anilistTags);
     const anilistStaffM = fieldMatch(anime, pos.anilistStaff);
-    const fbGenreM = fieldMatch(anime, fb.genre);
-    const fbStudioM = fieldMatch(anime, fb.studio);
     const negGenreM = fieldMatch(anime, negGenre);
     const negStudioM = fieldMatch(anime, negStudio);
     const negStaffM = fieldMatch(anime, negStaffT1);
@@ -411,7 +387,6 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       crowd: maxRaw > 0 ? Math.log(1 + a.affinity) / crowdDenom : 0,
       anilistCrowd: maxAnilistRaw > 0 ? Math.log(1 + anilistAffinity) / anilistCrowdDenom : 0,
       suggestions: suggestionValue(candId),
-      feedback: TUNING.GENRE_WEIGHT * fbGenreM.score + TUNING.STUDIO_WEIGHT * fbStudioM.score,
       genre: genreM.score,
       studio: studioM.score,
       nsfw: nsfwM.score,
@@ -455,13 +430,6 @@ export function computeFeed(options: FeedOptions): RecommendationItem[] {
       crowd: allSeedTitles.length ? t('recoDetail.crowd', { titles: allSeedTitles.join(', ') }) : undefined,
       anilistCrowd: anilistAllTitles.length ? t('recoDetail.anilistCrowd', { titles: anilistAllTitles.join(', ') }) : undefined,
       suggestions: values.suggestions ? t('recoDetail.suggestions') : undefined,
-      feedback: (() => {
-        const parts = [
-          ...(fbGenreM.matched as string[]),
-          ...fbStudioM.matched.map(k => studioNames.get(k as string) || String(k)),
-        ];
-        return parts.length ? t('recoDetail.feedback', { parts: parts.join(', ') }) : undefined;
-      })(),
       genre: genreM.matched.length ? (genreM.matched as string[]).join(', ') : undefined,
       studio: studioM.matched.length
         ? studioM.matched.map(k => studioNames.get(k as string) || String(k)).join(', ')

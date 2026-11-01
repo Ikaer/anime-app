@@ -26,15 +26,13 @@ import type { MetaField } from '@/lib/reco/scoring';
  * slider range sit an order of magnitude higher, not a typo.
  *
  * `nsfw` ships at 0 — with 2 values (~91% "white") it barely discriminates, so
- * it's available-but-off. `feedback` is dormant until 👍 thumbs accumulate.
- * The three AniList sources need a "Sync AniList" run to be populated (see the
+ * it's available-but-off. The three AniList sources need a "Sync AniList" run to be populated (see the
  * Connections page); on an unsynced install they simply score 0 (no penalty).
  */
 export const DEFAULT_WEIGHTS: SourceWeights = {
   crowd: 1.0,
   anilistCrowd: 0.7,
   suggestions: 0.35,
-  feedback: 0.5,
   genre: 0.2,
   studio: 0.15,
   nsfw: 0.0,
@@ -55,14 +53,14 @@ export const DEFAULT_WEIGHTS: SourceWeights = {
 
 /**
  * Base weights for an ANCHORED ranking — "Plus comme ça" and the "/mix" page.
- * `suggestions` and `feedback` are user-global sources with no per-anchor
- * meaning, so they are off; everything else holds for any candidate.
+ * `suggestions` is a user-global source with no per-anchor meaning, so it is
+ * off; everything else holds for any candidate.
  *
  * It lives here rather than in `reco/anchored.ts` for the reason the whole
  * module does: the "/mix" URL state and its sliders are client-side and need
  * the same base the server ranks with, and `anchored.ts` is `fs`-bound.
  */
-export const ANCHORED_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0, feedback: 0 };
+export const ANCHORED_WEIGHTS: SourceWeights = { ...DEFAULT_WEIGHTS, suggestions: 0 };
 
 /**
  * How a box's grow ranker (`rankBoxCandidates`) is weighted, and it is NOT the
@@ -107,12 +105,12 @@ export const BOX_WEIGHTS: Record<MetaField, number> = {
 };
 
 /**
- * The sources worth a slider on an anchored surface — the complement of the two
- * `ANCHORED_WEIGHTS` zeroes. Offering the other two would be a knob attached to
- * nothing (same argument as `CATALOG_CONTRIBUTORS` on the precedence editor).
+ * The sources worth a slider on an anchored surface — the complement of the
+ * `ANCHORED_WEIGHTS` zero. Offering it would be a knob attached to nothing
+ * (same argument as `CATALOG_CONTRIBUTORS` on the precedence editor).
  */
 export const ANCHORED_SOURCES: RecoSource[] = (Object.keys(ANCHORED_WEIGHTS) as RecoSource[])
-  .filter(src => src !== 'suggestions' && src !== 'feedback');
+  .filter(src => src !== 'suggestions');
 
 /**
  * Diversity re-rank (MMR) slider bound. `λ = 0` reproduces the pure affinity
@@ -138,7 +136,6 @@ export const SOURCE_META: SourceMeta[] = [
   { source: 'crowd', label: 'Recommandations MAL', hint: 'Fans de tes séries les mieux notées', min: 0, max: 2, step: 0.05 },
   { source: 'anilistCrowd', label: 'Recommandations AniList', hint: 'La communauté AniList des fans de tes séries les mieux notées — nécessite une sync', min: 0, max: 2, step: 0.05 },
   { source: 'suggestions', label: 'Suggestions MAL', hint: 'Le flux de suggestions perso de MAL', min: 0, max: 1, step: 0.05 },
-  { source: 'feedback', label: 'Tes retours 👍', hint: 'Similaire à tes « bonnes pioches »', min: 0, max: 2, step: 0.05 },
   { source: 'genre', label: 'Genres', hint: 'Affinité de genres (pondérée par rareté)', min: 0, max: 1, step: 0.05 },
   { source: 'studio', label: 'Studios', hint: 'Affinité de studios (pondérée par rareté)', min: 0, max: 1, step: 0.05 },
   { source: 'rating', label: 'Classification', hint: 'Âge conseillé (PG, R…), pondéré par rareté', min: 0, max: 1, step: 0.05 },
