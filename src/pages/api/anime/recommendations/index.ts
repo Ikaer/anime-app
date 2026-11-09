@@ -5,6 +5,10 @@ import { getRecommendationsData } from '@/lib/reco/data';
 import { getMutedSeedAnime } from '@/lib/reco/seedMutes';
 import { getRecoCredits } from '@/lib/reco/recoCreditStore';
 import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { buildRelationIndex } from '@/lib/domain/relations';
+import { filterQuickAnime } from '@/lib/domain/quickAnime';
+import { getAnimeForDisplay } from '@/lib/store';
+import type { AnimeRecord } from '@/models/anime';
 import { parseSourceWeights } from '@/lib/reco/weights';
 import { getTitleLanguage } from '@/lib/config/settings';
 
@@ -32,10 +36,23 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         : undefined,
     };
 
+    /**
+     * « Anime court » — the one narrowing dimension that cannot go through
+     * `applyNarrowingFilters`: "a single season" is a question about the
+     * relation GRAPH, and that function takes records alone (it also runs
+     * client-side on `/tier` and in box quick edit, over a subset of the
+     * catalog, where a graph built from what was fetched would answer wrong).
+     * The index is memoized on the row array's identity, so this costs nothing
+     * — `computeFeed` has already built the same one.
+     */
+    const quick = req.query.quick === '1';
+    const narrowQuick = <T extends AnimeRecord>(rows: T[]): T[] =>
+      quick ? filterQuickAnime(rows, buildRelationIndex(getAnimeForDisplay())) : rows;
+
     // « Ignorés » — the review-and-undo list. No ranking (the order the owner
     // dismissed them in is the only one that means anything), same narrowing.
     if (review === '1') {
-      const animes = applyNarrowingFilters(getIgnoredAnime(), narrowing);
+      const animes = narrowQuick(applyNarrowingFilters(getIgnoredAnime(), narrowing));
       return res.json({ animes, total: animes.length, review: true });
     }
 
@@ -61,7 +78,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       titleLang,
       pool,
     });
-    const animes = applyNarrowingFilters(ranked, narrowing);
+    const animes = narrowQuick(applyNarrowingFilters(ranked, narrowing));
 
     res.json({
       animes,

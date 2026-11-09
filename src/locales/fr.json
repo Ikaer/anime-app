@@ -631,6 +631,8 @@
   "reco.ignoredHint": "Les cartes que tu as écartées du flux — à remettre d'un clic",
   "reco.secondChance": "🔁 Seconde chance",
   "reco.secondChanceHint": "Tes animes abandonnés, classés par le même moteur : ceux que tes favoris recommandent le plus méritent peut-être une reprise",
+  "reco.quick": "Anime court",
+  "reco.quickHint": "≤ 15 épisodes, une seule saison",
   "reco.type": "Type :",
   "reco.malMean": "Note MAL (mean) :",
   "reco.year": "Année :",

@@ -155,3 +155,36 @@
 .yearInput::-moz-range-track {
   background: transparent;
 }
+
+/* « Anime court » shortcut: a toggle, not a checkbox — it stands for a pair of
+   conditions rather than a value, and the pressed state has to read at a glance
+   from across a room (the target is a TV at 300% zoom). */
+.shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shortcut:hover {
+  border-color: var(--accent-primary);
+}
+
+.shortcutOn {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.shortcutHint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}

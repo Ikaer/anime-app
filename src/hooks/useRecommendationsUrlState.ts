@@ -40,6 +40,13 @@ export interface RecoUrlState {
   /** MAL genre names (all three axes in one list) — AND semantics, empty = no filter. */
   genres: string[];
   /**
+   * « Anime court »: a known run of <= QUICK_MAX_EPISODES episodes AND no
+   * sequel/prequel in the catalog. A narrowing filter like the rest of this
+   * block, but it needs the relation graph, so it is applied server-side rather
+   * than through `applyNarrowingFilters` (see `domain/quickAnime.ts`).
+   */
+  quick: boolean;
+  /**
    * Forced cards per row; null = adaptive. NOT a URL key — it is a view default
    * (see lib/url/viewDefaults.ts), merged in here so the page reads one state
    * object. The `cpr` param was removed along with `/`'s.
@@ -61,6 +68,7 @@ export const RECO_DEFAULTS: RecoUrlState = {
   minYear: 2000,
   maxYear: null,
   genres: [],
+  quick: false,
   cardsPerRow: null,
 };
 
@@ -78,6 +86,7 @@ const KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   genres: 'g',
+  quick: 'qk',
 } as const;
 
 function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlState {
@@ -100,6 +109,7 @@ function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlSta
     minYear: params.has(KEYS.minYear) ? num(params.get(KEYS.minYear)) : RECO_DEFAULTS.minYear,
     maxYear: num(params.get(KEYS.maxYear)),
     genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
+    quick: params.get(KEYS.quick) === '1',
     cardsPerRow,
   };
 }
@@ -120,6 +130,7 @@ function encode(state: RecoUrlState): string {
   if (state.minYear !== null && state.minYear !== RECO_DEFAULTS.minYear) params.set(KEYS.minYear, String(state.minYear));
   if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
   if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
+  if (state.quick) params.set(KEYS.quick, '1');
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';
 }

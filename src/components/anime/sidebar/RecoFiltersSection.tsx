@@ -17,6 +17,14 @@ interface RecoFiltersSectionProps {
    */
   search?: string;
   onSearchChange?: (v: string) => void;
+  /**
+   * « Anime court » — one click for "<= 15 episodes and no sequel". Optional in
+   * the same way `search` is: a caller that does not pass the handler gets no
+   * control, because the condition is resolved server-side against the relation
+   * graph (see `domain/quickAnime.ts`) and only the feed asks for it.
+   */
+  quick?: boolean;
+  onQuickChange?: (v: boolean) => void;
   mediaTypes: string[];
   onMediaTypesChange: (v: string[]) => void;
   minScore: number | null;
@@ -101,6 +109,8 @@ const YearRange: React.FC<{
 const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   search,
   onSearchChange,
+  quick,
+  onQuickChange,
   mediaTypes,
   onMediaTypesChange,
   minScore,
@@ -121,6 +131,20 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
           onChange={onSearchChange}
           className={styles.searchInput}
         />
+      )}
+
+      {onQuickChange && (
+        <div className={styles.fieldGroup}>
+          <button
+            type="button"
+            className={`${styles.shortcut} ${quick ? styles.shortcutOn : ''}`}
+            aria-pressed={!!quick}
+            onClick={() => onQuickChange(!quick)}
+          >
+            ⚡ {t('reco.quick')}
+          </button>
+          <span className={styles.shortcutHint}>{t('reco.quickHint')}</span>
+        </div>
       )}
 
       <div className={styles.filterGroup}>

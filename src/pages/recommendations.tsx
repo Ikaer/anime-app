@@ -77,6 +77,8 @@ export default function RecommendationsPage() {
       if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
       // All three genre axes ride in one param — the split is presentation only.
       if (state.genres.length > 0) params.set('genres', state.genres.join(','));
+      // « Anime court » — resolved server-side (it needs the relation graph).
+      if (state.quick) params.set('quick', '1');
 
       // Per-source weights (only non-defaults are emitted).
       const wStr = encodeSourceWeights(state.weights);
@@ -306,6 +308,8 @@ export default function RecommendationsPage() {
         <RecoFiltersSection
           search={state.search}
           onSearchChange={(v) => update({ search: v })}
+          quick={state.quick}
+          onQuickChange={(v) => update({ quick: v })}
           mediaTypes={state.mediaTypes}
           onMediaTypesChange={(v) => update({ mediaTypes: v })}
           minScore={state.minScore}

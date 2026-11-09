@@ -8,6 +8,9 @@ declare const styles: {
   readonly "scoreInput": string;
   readonly "scoreRangeInputs": string;
   readonly "searchInput": string;
+  readonly "shortcut": string;
+  readonly "shortcutHint": string;
+  readonly "shortcutOn": string;
   readonly "yearFill": string;
   readonly "yearInput": string;
   readonly "yearInputMax": string;

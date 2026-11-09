@@ -631,6 +631,8 @@
   "reco.ignoredHint": "The cards you dismissed from the feed — put any of them back in one click",
   "reco.secondChance": "🔁 Second chance",
   "reco.secondChanceHint": "Your dropped anime, ranked by the same engine: the ones your favourites point to most may deserve another try",
+  "reco.quick": "Quick anime",
+  "reco.quickHint": "≤ 15 episodes, a single season",
   "reco.type": "Type:",
   "reco.malMean": "MAL score (mean):",
   "reco.year": "Year:",
