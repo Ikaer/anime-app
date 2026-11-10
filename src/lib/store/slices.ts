@@ -22,6 +22,7 @@ import { MALAnime, SyncMetadata, SimklPersonalEntry, AniListMetaEntry, AniListCa
 import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
 import { buildCrosswalkIndexes, getRegistry, resolveByMalId, resolveCanonicalIds, toNum } from '@/lib/store/registry';
 import { invalidateRecordCache } from '@/lib/store/recordCache';
+import { createIdSetStore } from '@/lib/store/idSet';
 import { getSeasonInfos } from '@/lib/domain/animeUtils';
 
 // Role folders, not filename prefixes. The same basename under catalog/ and
@@ -29,7 +30,6 @@ import { getSeasonInfos } from '@/lib/domain/animeUtils';
 // `personal/mal.json` its personal one.
 const ANIME_MAL_FILE = dataFile('catalog/mal.json');
 const ANIME_MAL_PERSONAL_FILE = dataFile('personal/mal.json');
-const ANIME_HIDDEN_FILE = dataFile('user/hidden.json');
 const RATING_INTENT_FILE = dataFile('user/rating_intent.json');
 const ANIME_SIMKL_FILE = dataFile('personal/simkl.json');
 const ANIME_ANILIST_META_FILE = dataFile('catalog/anilist.json');
@@ -98,25 +98,21 @@ export function setRatingIntent(canonicalId: string, intent: RatingIntent | null
 // Hidden anime ids
 // ============================================================================
 
+// On the seven-slice join (`hidden` rides on the row), so a change invalidates
+// the row cache — the one difference from the two `reco/` id sets.
+const hiddenIds = createIdSetStore('user/hidden.json', invalidateRecordCache);
+
 /** Canonical ids. */
 export function getHiddenAnimeIds(): string[] {
-  return readJsonFile<string[]>(ANIME_HIDDEN_FILE, []);
+  return hiddenIds.list();
 }
 
 export function addHiddenAnimeId(canonicalId: string): void {
-  const hiddenIds = getHiddenAnimeIds();
-  if (!hiddenIds.includes(canonicalId)) {
-    hiddenIds.push(canonicalId);
-    writeJsonFile(ANIME_HIDDEN_FILE, hiddenIds);
-    invalidateRecordCache();
-  }
+  hiddenIds.add(canonicalId);
 }
 
 export function removeHiddenAnimeId(canonicalId: string): void {
-  let hiddenIds = getHiddenAnimeIds();
-  hiddenIds = hiddenIds.filter(id => id !== canonicalId);
-  writeJsonFile(ANIME_HIDDEN_FILE, hiddenIds);
-  invalidateRecordCache();
+  hiddenIds.remove(canonicalId);
 }
 
 // ============================================================================

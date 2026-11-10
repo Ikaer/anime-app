@@ -45,32 +45,26 @@
 
 import { AnimeRecord } from '@/models/anime';
 import { getAnimeForDisplay } from '@/lib/store';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-
-const IGNORED_FILE = dataFile('user/reco_ignored.json');
+import { createIdSetStore } from '@/lib/store/idSet';
 
 /** A bare array of canonical ids, the shape `user/hidden.json` already uses. */
+const ignored = createIdSetStore('user/reco_ignored.json');
+
 export function getIgnoredIds(): string[] {
-  return readJsonFile<string[]>(IGNORED_FILE, []);
+  return ignored.list();
 }
 
 /** The same set, for the per-candidate membership tests in the ranking loops. */
 export function getIgnoredIdSet(): Set<string> {
-  return new Set(getIgnoredIds());
+  return ignored.set();
 }
 
 export function addIgnored(canonicalId: string): void {
-  const ids = getIgnoredIds();
-  if (!ids.includes(canonicalId)) {
-    ids.push(canonicalId);
-    writeJsonFile(IGNORED_FILE, ids);
-  }
+  ignored.add(canonicalId);
 }
 
 export function removeIgnored(canonicalId: string): void {
-  const ids = getIgnoredIds();
-  const next = ids.filter(id => id !== canonicalId);
-  if (next.length !== ids.length) writeJsonFile(IGNORED_FILE, next);
+  ignored.remove(canonicalId);
 }
 
 /**

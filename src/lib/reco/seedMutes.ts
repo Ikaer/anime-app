@@ -30,32 +30,26 @@
 
 import { AnimeRecord } from '@/models/anime';
 import { getAnimeForDisplay } from '@/lib/store';
-import { dataFile, readJsonFile, writeJsonFile } from '@/lib/store/jsonStore';
-
-const SEED_MUTES_FILE = dataFile('user/seed_mutes.json');
+import { createIdSetStore } from '@/lib/store/idSet';
 
 /** A bare array of canonical ids, the shape `user/hidden.json` already uses. */
+const mutes = createIdSetStore('user/seed_mutes.json');
+
 export function getSeedMutes(): string[] {
-  return readJsonFile<string[]>(SEED_MUTES_FILE, []);
+  return mutes.list();
 }
 
 /** The same set, for the per-candidate membership tests in the ranking loops. */
 export function getSeedMuteSet(): Set<string> {
-  return new Set(getSeedMutes());
+  return mutes.set();
 }
 
 export function addSeedMute(canonicalId: string): void {
-  const ids = getSeedMutes();
-  if (!ids.includes(canonicalId)) {
-    ids.push(canonicalId);
-    writeJsonFile(SEED_MUTES_FILE, ids);
-  }
+  mutes.add(canonicalId);
 }
 
 export function removeSeedMute(canonicalId: string): void {
-  const ids = getSeedMutes();
-  const next = ids.filter(id => id !== canonicalId);
-  if (next.length !== ids.length) writeJsonFile(SEED_MUTES_FILE, next);
+  mutes.remove(canonicalId);
 }
 
 /**
