@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { ConnectionBadges } from '@/components/anime';
@@ -100,6 +100,17 @@ function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 }
 
+/**
+ * The floor the measured room is clamped to: a menu squeezed to nothing would be
+ * worse than one that overflows. Unreachable in practice — the trigger sits in a
+ * header at the top of the viewport.
+ */
+const MIN_DROPDOWN_HEIGHT = 160;
+
+/** The menu's own `margin-top` (0.75rem), and a little air below it. */
+const MENU_GAP = 12;
+const MENU_AIR = 16;
+
 function LanguageToggle() {
   const { lang, setLang, t } = useI18n();
   const next: Lang = lang === 'fr' ? 'en' : 'fr';
@@ -121,8 +132,52 @@ function OthersDropdown() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  /** Undefined until measured — SSR and the first paint must not guess a height. */
+  const [maxHeight, setMaxHeight] = useState<number>();
 
   const isActive = OTHER_ROUTES.some(href => isRouteActive(router.pathname, href));
+
+  /**
+   * The menu scrolls INSIDE itself rather than overflowing the viewport, and the
+   * room it gets is measured rather than assumed.
+   *
+   * ⚠️ Not a hardcoded `calc(100vh - <header>)`: the header wraps to two lines at
+   * the real target width (4K TV at 300% zoom), i.e. exactly when a constant
+   * would be wrong — `GroupBlade` measures the header for the same reason.
+   *
+   * ⚠️ What it fixes is NOT merely a tall menu. `globals.css` sets
+   * `overflow-x: hidden` on html AND body, which makes `body` a scroll container,
+   * so `position: sticky` on `.header` is inert while the DOCUMENT scrolls (the
+   * header's scrollport is body, and body never moves). On a page whose content
+   * fits the viewport the document has no scroll range at all, so the menu's own
+   * overflow is what creates one — on BODY, where the sticky header finally does
+   * engage and pins itself, menu included. The scrollbar then moves the page
+   * under a menu that stays put, and its last entries are unreachable. Capping
+   * the height removes the overflow, so that scroll range is never created.
+   *
+   * ⚠️ Measured off the WRAPPER, not off the trigger button: the menu is
+   * `top: 100%` of `.nav-dropdown`, which is a centred flex box as tall as the
+   * nav row rather than as tall as its button. Measuring the button left the
+   * menu ~10px past the fold — right-looking, and wrong.
+   */
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const room = window.innerHeight - el.getBoundingClientRect().bottom - MENU_GAP - MENU_AIR;
+    setMaxHeight(Math.max(MIN_DROPDOWN_HEIGHT, room));
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    measure();
+    window.addEventListener('resize', measure);
+    // Capture phase: the scroller here may be `body` rather than the document.
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [open, measure]);
 
   // Close on outside click.
   useEffect(() => {
@@ -146,12 +201,15 @@ function OthersDropdown() {
         className={`nav-link nav-dropdown-trigger ${isActive ? 'active' : ''}`}
         aria-haspopup="true"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          if (!open) measure();
+          setOpen(o => !o);
+        }}
       >
         {t('nav.others')} <span className="nav-dropdown-caret">▾</span>
       </button>
       {open && (
-        <div className="nav-dropdown-menu" role="menu">
+        <div className="nav-dropdown-menu" role="menu" style={{ maxHeight }}>
           {OTHER_NAV_GROUPS.map((group, i) => (
             <div
               key={group.labelKey ?? `group-${i}`}
@@ -185,11 +243,41 @@ function OthersDropdown() {
 export default function Layout({ children }: LayoutProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const headerRef = useRef<HTMLElement>(null);
+
+  /**
+   * Publish the header's height as `--app-header-h` on the document root.
+   *
+   * The header is `position: sticky; top: 0`, so anything else that pins to the
+   * top of the viewport lands BEHIND it — `top: 0` is under the nav, not under
+   * the page. Every such rule offsets by this variable instead of a constant,
+   * for `GroupBlade`'s reason: the bar wraps to two lines at the TV target
+   * (4K at 300% zoom, ~1280 CSS px), i.e. exactly when a constant is wrong.
+   *
+   * ⚠️ One seam: three surfaces used to measure `.header` themselves. Read the
+   * variable rather than adding a fourth. The `0px` fallback in each consumer
+   * is the pre-measurement frame, not a default worth relying on.
+   */
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const apply = () => document.documentElement.style.setProperty('--app-header-h', `${el.offsetHeight}px`);
+    apply();
+    // The bar re-wraps on a width change, which a window resize does not always
+    // describe (a scrollbar appearing is one); observe the element itself.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    if (ro) ro.observe(el);
+    else window.addEventListener('resize', apply);
+    return () => {
+      if (ro) ro.disconnect();
+      else window.removeEventListener('resize', apply);
+    };
+  }, []);
 
   return (
     <div>
       <NavigationProgress />
-      <header className="header">
+      <header className="header" ref={headerRef}>
         <div className="container">
           <div className="header-content">
             <GlobalSearch />

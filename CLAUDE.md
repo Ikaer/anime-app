@@ -1856,6 +1856,58 @@ and `OTHER_NAV`, rather than a hand-written `<Link>` per entry as before.
 - **`/connections` sits in the dropdown**, which costs nothing because the three
   connection badges to the right of the bar are themselves links to it. The
   badges are the permanent entry point; the menu item is the discoverable one.
+- ⚠️ **`overflow-x: hidden` belongs to `html` ALONE, never to `html, body`**
+  (2026-11-10). On html it propagates to the viewport, clipping the horizontal
+  overflow while html itself computes `visible`, so the viewport stays the one
+  scroll container. On **body** the same declaration computes `overflow-y: auto`,
+  which makes body a scroll container — and `position: sticky` on `.header` then
+  resolves against BODY's scrollport, which never moves while the document
+  scrolls. So the sticky header **did nothing on every scrolling page** for as
+  long as that rule stood (live-measured: scrolling 200px put the header's rect
+  at -200), and three surfaces written to sit under it — `GroupBlade`,
+  `/profiles/[id]`'s slider column, `/settings`' section nav — were compensating
+  for a header that was not there. Splitting the selector fixed all four at once;
+  re-check `document.documentElement.scrollWidth === clientWidth` if a wide
+  element ever reappears, because the clipping now happens only at the viewport.
+- ⚠️ **Anything else that pins to the top offsets by `--app-header-h`, never by a
+  constant or by `top: 0`.** Layout publishes the header's own height on the
+  document root through a `ResizeObserver`; the header is opaque at `z-index:
+  100`, so `top: 0` now means *behind the nav*, which is invisible rather than
+  wrong-looking. ⚠️ **One seam** — `GroupBlade`, `/profiles/[id]` and `/settings`
+  each used to measure `.header` themselves; read the variable instead of adding
+  a fourth. Measured rather than hardcoded for `GroupBlade`'s original reason:
+  the bar wraps to two lines at the TV target, i.e. exactly where a 68px constant
+  would be wrong. The `0px` fallback each consumer carries is the pre-hydration
+  frame, not a default to rely on.
+- ⚠️ **The same trap sat one level down, in `AnimePageLayout.module.css`**, and
+  it was removed with the body one. That file declared `height: 100%` on the row
+  plus `overflow-y: auto` on both panes — the two-column layout where sidebar and
+  grid scroll independently. It never worked (no resolved height anywhere up the
+  chain, so `height: 100%` computed to `auto`), but it still made the main pane a
+  SCROLLPORT, which is what kept `/activity`'s day headers from pinning. Measured
+  on all eight pages that mount it before touching anything: `scrollWidth ===
+  clientWidth` AND `scrollHeight === clientHeight` on `.mainContent`, every one —
+  dead weight, not a feature. Geometry after removal is byte-identical page by
+  page, and the day headers now pin under the nav at every scroll offset.
+  ⚠️ **`min-width: 0` on `.mainContent` replaces something that `overflow` was
+  doing** and must stay: a flex item's `min-width: auto` floors it at its
+  content's intrinsic width *except* when its computed overflow is not `visible`,
+  so the scrollport was also what let that pane shrink. Without the line, one
+  intrinsically wide child would push the pane past the viewport and html's
+  `overflow-x: hidden` would CLIP it rather than scroll to it. ⚠️ Giving a pane a
+  real bounded height later is allowed, but it takes the viewport away from every
+  sticky inside it again — a single wide table wants an inner wrapper instead,
+  the way `/precedence` does it.
+- ⚠️ **The dropdown caps its own height and scrolls INSIDE itself**, measured off
+  the `.nav-dropdown` wrapper on open and on every resize/scroll. Without the cap
+  the menu overflowed the fold and its last entries were **unreachable on a short
+  page** — the overflow created a scroll range on *body* (back when body was a
+  scroll container), which is where the sticky header did engage, so the scrollbar
+  moved the page under a menu that stayed put. Live-measured 2026-11-10 on
+  `/discrepancies`: body scrolled 47px, exactly the menu's overflow, with the
+  header and menu rects unchanged. Both halves of that are now fixed, and the cap
+  stays because it is the right behaviour on its own: a menu taller than the room
+  below the bar scrolls itself rather than the page.
 - **The dropdown is grouped, and every entry carries an emoji.** At ten entries
   a flat list stopped being scannable, so `OTHER_NAV_GROUPS` splits it by what
   you are trying to do — *Explorer* (the three surfaces that were top-level

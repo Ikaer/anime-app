@@ -386,7 +386,9 @@ export default function ActivityPage() {
           border-bottom: 1px solid var(--border-color, #33373d);
           font-size: 1rem; font-weight: 600;
           color: var(--text-primary);
-          position: sticky; top: 0; z-index: 1;
+          /* Under the app header, which is sticky at 0 and opaque — a plain
+             top of 0 would pin this behind it, i.e. invisibly. */
+          position: sticky; top: var(--app-header-h, 0px); z-index: 1;
           background: var(--bg-primary, #1b1e23);
         }
         /* French writes weekdays and months lowercase, so only the first letter

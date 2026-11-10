@@ -17,9 +17,12 @@
 
 .blade {
   position: fixed;
-  /* `top` is set inline, measured off the app header: the blade sits UNDER the
-     site nav rather than over it, because the rest of the app stays usable. */
-  top: 0;
+  /* Under the app header, never over it: a blade exists so the rest of the app
+     stays usable. `--app-header-h` is published by Layout off the real element,
+     because the nav wraps to two lines on a narrow viewport — exactly where a
+     constant would be wrong. Found on screen before it was measured: the group
+     name input rendered half-hidden under the bar. */
+  top: var(--app-header-h, 0px);
   right: 0;
   bottom: 0;
   width: 420px;

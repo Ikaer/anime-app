@@ -1,6 +1,28 @@
+/*
+ * ⚠️ Neither pane scrolls on its own, and NONE of them may declare `overflow`.
+ *
+ * This file used to read `height: 100%` on the row plus `overflow-y: auto` on
+ * both panes — the two-column layout where the sidebar and the grid scroll
+ * independently. It never worked: `.layout`'s parent chain carries no resolved
+ * height, so `height: 100%` computed to `auto`, both panes grew to their
+ * content and neither ever had anything to scroll. Live-measured on the eight
+ * pages that mount this (2026-11-10): `scrollWidth === clientWidth` AND
+ * `scrollHeight === clientHeight` on `.mainContent`, every one of them.
+ *
+ * It was not merely inert, though. `overflow-y: auto` makes a box a SCROLLPORT
+ * whether or not it ever scrolls, so every `position: sticky` inside the main
+ * pane resolved against a container that never moves and silently did nothing —
+ * `/activity`'s day headers, for one. That is `globals.css`' body bug one level
+ * down, with an explicit declaration in place of a propagated one. See the
+ * header-navigation section of CLAUDE.md.
+ *
+ * So: if a pane ever genuinely needs to scroll by itself, give the row a REAL
+ * height first (`calc(100dvh - var(--app-header-h))`), and know that you are
+ * taking the viewport away from every sticky inside it. A single wide table
+ * wants its own inner wrapper instead, the way `/precedence` does it.
+ */
 .layout {
   display: flex;
-  height: 100%;
 }
 
 .sidebar {
@@ -9,12 +31,19 @@
   padding: 1rem;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
-  overflow-y: auto;
 }
 
 .mainContent {
   flex-grow: 1;
   padding: 1rem;
-  padding-top:0;
-  overflow-y: auto;
+  padding-top: 0;
+  /* ⚠️ `min-width: 0` REPLACES something the removed `overflow` was doing, and
+     is not tidiness. A flex item's `min-width: auto` floors it at its content's
+     intrinsic width — except when its computed overflow is not `visible`, where
+     the spec says the floor is 0. So the scrollport was also what let this pane
+     shrink; dropping it without this line would let one intrinsically wide child
+     push the pane past the viewport, and html's `overflow-x: hidden` would then
+     CLIP that content rather than scroll to it. Margin containment needs nothing
+     here — a flex item already establishes its own formatting context. */
+  min-width: 0;
 }

@@ -607,7 +607,9 @@ export default function SettingsPage() {
            wrapping row of chips — the TV target (4K at 300% zoom, about
            1280 CSS px) stays on the two-column form. */
         .layout { display: grid; grid-template-columns: 12.5rem 1fr; gap: 0 1.25rem; align-items: start; }
-        .nav { display: flex; flex-direction: column; gap: 0.25rem; position: sticky; top: 1rem; }
+        /* The 1rem of air is measured from the app header's underside, not from
+           the viewport — the header is sticky and opaque. */
+        .nav { display: flex; flex-direction: column; gap: 0.25rem; position: sticky; top: calc(var(--app-header-h, 0px) + 1rem); }
         .nav-item { text-align: left; background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--text-secondary); padding: 0.5rem 0.7rem; font-size: 0.9rem; font-family: inherit; cursor: pointer; }
         .nav-item:hover { color: var(--text-primary); background: var(--bg-secondary); }
         .nav-item.active { color: var(--text-primary); background: var(--bg-secondary); border-color: var(--border-color); font-weight: 600; }

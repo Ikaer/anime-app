@@ -40,11 +40,23 @@
 html,
 body {
   max-width: 100vw;
-  overflow-x: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
+}
+
+/* ⚠️ `overflow-x` belongs to html ALONE, never to body as well.
+   On html it propagates to the viewport, which clips the horizontal overflow
+   and leaves html itself computing `visible` — so the viewport stays the one
+   scroll container. On BODY the same declaration computes `overflow-y: auto`,
+   which makes body a scroll container of its own; `position: sticky` on
+   `.header` then resolves against BODY's scrollport, and body never moves
+   while the document scrolls, so the sticky header silently did nothing on
+   every scrolling page (live-measured 2026-11-10: scrolling 200px put the
+   header's rect at -200). Keep the two selectors apart. */
+html {
+  overflow-x: hidden;
 }
 
 body {
@@ -159,6 +171,13 @@ a:hover {
   z-index: 200;
   display: flex;
   flex-direction: column;
+  /* The menu takes its own scrollbar instead of overflowing the viewport; the
+     cap itself is measured in Layout.tsx (`max-height` inline) because the
+     header wraps to two lines at the TV target width. `contain` keeps a wheel
+     at the end of the list from chaining to the page behind it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 /* Grouped dropdown: a rule between groups, and a small heading above each

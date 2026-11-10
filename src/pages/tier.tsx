@@ -99,10 +99,12 @@ export default function TierPage() {
 
   // ---- Manual auto-scroll while dragging. Native HTML5 drag auto-scroll ----
   // doesn't fire reliably here, so we drive it ourselves. `scrollContainerRef`
-  // points at the layout's `<main>`, but its `overflow-y:auto` never actually
-  // engages (nothing in the ancestor chain gives it a bounded height, so the
-  // box just grows and the page/document scrolls instead) — so we scroll
-  // whichever of the two actually has overflow.
+  // points at the layout's `<main>`, which today scrolls nothing: it used to
+  // declare `overflow-y: auto` that never engaged, and that declaration is gone
+  // (it was a scrollport that never moved, so it silently disabled every
+  // `position: sticky` inside it — see AnimePageLayout.module.css). The runtime
+  // test below therefore always picks the document, and stays as the guard for
+  // the day a pane is given a real bounded height.
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const dragYRef = useRef<number | null>(null);
   const autoScrollRafRef = useRef<number | null>(null);

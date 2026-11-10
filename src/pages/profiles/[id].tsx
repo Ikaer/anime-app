@@ -280,18 +280,6 @@ export default function ProfilePage() {
     }
   };
 
-  /**
-   * The sticky slider column sits under the app header, which is itself sticky
-   * and wraps on a narrow viewport — measured, the group blade's reason.
-   */
-  const [headerH, setHeaderH] = useState(0);
-  useEffect(() => {
-    const measure = () => setHeaderH((document.querySelector('.header') as HTMLElement | null)?.offsetHeight ?? 0);
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
-
   if (notFound) {
     return (
       <div className="pf">
@@ -335,7 +323,7 @@ export default function ProfilePage() {
       {/* One string: React warns on (and drops) a <title> with several children. */}
       <Head><title>{`${profile ? `${profile.emoji ?? DEFAULT_PROFILE_EMOJI} ${profile.name}` : t('profiles.title')} — Anime Tracker`}</title></Head>
 
-      <div className="pf" style={{ ['--pf-top' as string]: `${headerH + 12}px` }}>
+      <div className="pf">
         <Link href="/profiles" className="pf-back">← {t('profiles.back')}</Link>
 
         {profile && (
@@ -632,8 +620,10 @@ export default function ProfilePage() {
         }
         .pf-side {
           position: sticky;
-          top: var(--pf-top, 12px);
-          max-height: calc(100vh - var(--pf-top, 12px) - 12px);
+          /* Under the sticky app header, measured by Layout — the group blade's
+             rule, and the same variable. */
+          top: calc(var(--app-header-h, 0px) + 12px);
+          max-height: calc(100vh - var(--app-header-h, 0px) - 24px);
           overflow-y: auto;
           padding-right: 8px;
           display: flex;

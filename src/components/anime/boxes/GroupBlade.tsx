@@ -103,31 +103,6 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
   /** Two clicks, the second in place — the same shape as the box page's delete. */
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  /**
-   * Where the app header stops.
-   *
-   * The blade must sit UNDER the site nav rather than over it — it is a blade,
-   * not a modal, so the rest of the app stays usable — but the header is
-   * `position: sticky; z-index: 100` and the blade is `fixed`, so a plain
-   * `top: 0` puts the blade's own title behind it. Found on screen: the group
-   * name input rendered half-hidden under the nav bar.
-   *
-   * Measured rather than hardcoded because the header's height is its padding
-   * plus its content, and that content WRAPS onto a second line on a narrow
-   * viewport — a 68px constant would be wrong exactly when the layout is
-   * tightest.
-   */
-  const [top, setTop] = useState(0);
-  useEffect(() => {
-    const measure = () => {
-      const rect = document.querySelector('.header')?.getBoundingClientRect();
-      setTop(rect ? Math.max(0, rect.bottom) : 0);
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
-
   // Escape closes. The blade is the topmost surface while open, so it owns the key.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -249,9 +224,9 @@ const GroupBlade: React.FC<GroupBladeProps> = ({ seedFrom, group, allGroups, onS
     <>
       {/* Click-outside closes, but the scrim is transparent: the pane behind must
           stay readable, which is the reason this is a blade at all. */}
-      <div className={styles.scrim} style={{ top }} onClick={onClose} aria-hidden="true" />
+      <div className={styles.scrim} onClick={onClose} aria-hidden="true" />
 
-      <aside className={styles.blade} style={{ top }} role="dialog" aria-label={t('groups.bladeTitle')}>
+      <aside className={styles.blade} role="dialog" aria-label={t('groups.bladeTitle')}>
         <header className={styles.head}>
           <h2 className={styles.title}>{group ? t('groups.editTitle') : t('groups.bladeTitle')}</h2>
           <button type="button" className={styles.close} onClick={onClose} aria-label={t('common.clear')}>×</button>
