@@ -27,8 +27,7 @@
  * Deliberately NOT translated, unlike the rest of the app. The content is field
  * identifiers (`numEpisodes`, `airingStatus`), provider ids and raw JSON — none
  * of it translatable — and the doc frames this as a debugging surface favouring
- * "dense raw-JSON legibility over the app's usual card styling". Same standing
- * exception as `/rate`'s rubric.
+ * "dense raw-JSON legibility over the app's usual card styling".
  */
 
 import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';

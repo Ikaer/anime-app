@@ -24,8 +24,9 @@ provider *fills a field*; join identity decides which key *groups records*.
 "Precedence has no exceptions" and "some things are legitimately MAL-keyed" are
 both true. Seeing `crosswalk.mal` in `feed.ts` is not evidence of unfinished work.
 
-**Three MAL-keyed spots are deliberate** (`CLAUDE.md` K4–K7 has the full table):
-`/rate?id=`, `getMalIdForCanonical`, the legacy URL redirects, and the "added to
+**Three MAL-keyed spots are deliberate** (`CLAUDE.md` K5–K7 has the full table;
+K4's `/rate?id=` went with the page):
+`getMalIdForCanonical`, the legacy URL redirects, and the "added to
 MAL" fields. Plus one live `Media(idMal:)` in `anilist/write.ts` — crosswalk
 resolution for a *write*, where refusing would drop a user's rating.
 

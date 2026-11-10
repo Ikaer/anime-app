@@ -17,7 +17,7 @@ import { buildProviderStates } from '@/lib/providers/personalState';
 import { toAnimeRecord, type CatalogPrecedenceOverrides } from '@/lib/domain/animeUtils';
 import { getCatalogPrecedenceByField } from '@/lib/config/settings';
 import { getResolvedPersonalPrecedence } from '@/lib/providers/registry';
-import { getRegistry, resolveByMalId, toNum } from '@/lib/store/registry';
+import { getRegistry, toNum } from '@/lib/store/registry';
 import { getCachedRows, setCachedRows, changedCacheInputs } from '@/lib/store/recordCache';
 import { beginRowsCall } from '@/lib/store/perf';
 import {
@@ -217,12 +217,3 @@ export function getAnimeByCanonicalId(canonicalId: string): AnimeRecord | undefi
   );
 }
 
-/**
- * MAL-id-keyed lookup, cache-bypassing like `getAnimeByCanonicalId` above.
- * Kept for the few remaining genuinely-MAL-id-keyed flows (`/rate?id=`) — new
- * call sites should prefer `getAnimeByCanonicalId`.
- */
-export function getAnimeByIdForDisplay(malId: number): AnimeRecord | undefined {
-  const canonicalId = resolveByMalId(malId);
-  return canonicalId ? getAnimeByCanonicalId(canonicalId) : undefined;
-}

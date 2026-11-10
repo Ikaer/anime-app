@@ -9,7 +9,6 @@
   "nav.group.sources": "Sources & données",
   "nav.others": "Autres",
   "nav.connections": "🔌 Connexions",
-  "nav.ratingCalculator": "🧮 Calculateur de note",
   "nav.discrepancies": "⚖️ Écarts entre sources",
   "nav.precedence": "🔍 Inspecteur de précédence",
   "nav.quickRate": "⚡ Notation rapide",
@@ -41,7 +40,6 @@
   "nav.stats": "📊 Statistiques",
   "nav.settings": "⚙️ Paramètres",
   "lang.switchTo": "Passer en {lang}",
-
   "settings.pageTitle": "Paramètres - MyHomeApp",
   "settings.metaDescription": "Configurer les identifiants MyAnimeList/SIMKL et les préférences de l'application",
   "settings.heading": "Paramètres",
@@ -109,7 +107,6 @@
   "settings.catalogPrecedence.default": "Défaut ({winner})",
   "settings.catalogPrecedence.changed": "modifié",
   "settings.catalogPrecedence.inspect": "Vérifier sur un titre dans l'inspecteur →",
-
   "onboarding.title": "Bienvenue 👋",
   "onboarding.intro": "Pour commencer, il faut charger le catalogue d'anime.",
   "onboarding.dataPath": "Par défaut, ton catalogue et tes données seront enregistrés ici :",
@@ -123,7 +120,6 @@
   "onboarding.done": "Catalogue chargé ! 🎉",
   "onboarding.startFailed": "Impossible de démarrer le chargement.",
   "onboarding.crawlFailed": "Le chargement a échoué. Réessaie, ou consulte le journal sur la page Connexions.",
-
   "common.loading": "Chargement…",
   "common.clear": "Effacer",
   "common.min": "Min",
@@ -132,22 +128,18 @@
   "common.tba": "À déf.",
   "common.noImage": "Pas d'image",
   "common.noGenres": "Aucun genre",
-
   "index.pageTitle": "Liste d'animes - MyHomeApp",
   "index.metaDescription": "Suivez les animes saisonniers avec l'intégration MyAnimeList",
   "index.loadFailed": "Échec du chargement de la liste d'animes",
   "index.hideFailed": "Échec du masquage de l'anime.",
   "index.unhideFailed": "Échec de l'affichage de l'anime.",
-
   "airing.currently_airing": "En diffusion",
   "airing.finished_airing": "Diffusion terminée",
   "airing.not_yet_aired": "À venir",
-
   "seasonName.spring": "Printemps",
   "seasonName.summer": "Été",
   "seasonName.fall": "Automne",
   "seasonName.winter": "Hiver",
-
   "season.current": "Actuelle",
   "season.currentPrev": "Actuelle + préc.",
   "season.next": "Prochaine",
@@ -163,7 +155,6 @@
   "season.modeAdvanced": "Mode avancé (plusieurs saisons)",
   "season.modeSimple": "Mode simple (une saison)",
   "season.simpleExtraIgnored": "+{count} autre(s) saison(s) sélectionnée(s) — passe en mode avancé pour les voir.",
-
   "table.image": "Image",
   "table.startingSeason": "Saison de début",
   "table.me": "Moi",
@@ -182,12 +173,10 @@
   "table.hide": "Masquer",
   "table.update": "Mettre à jour",
   "table.updatePersonalState": "Mettre à jour mon statut",
-
   "recoHint.recommendedBy": "Recommandé par les fans de {title}",
   "recoHint.andOther": " (+{count} autre anime)",
   "recoHint.andOthers": " (+{count} autres animes)",
   "recoHint.suggested": "Suggéré pour toi",
-
   "card.copyTitle": "Copier le titre",
   "card.copyAltTitle": "Copier le titre alternatif",
   "card.openMal": "Ouvrir sur MyAnimeList",
@@ -201,7 +190,6 @@
   "card.fromRecoOn": "✓ Grâce à la reco",
   "card.fromRecoOnTitle": "Marqué comme venant de la reco — cliquer pour retirer.",
   "card.ignore": "🚫 Ignorer",
-
   "mlt.title": "Plus comme ça",
   "mlt.sub": "Ce que les communautés MAL et AniList recommandent à partir de ce titre, re-classé par ce que chaque candidat partage avec lui.",
   "mlt.loadingBtn": "⏳ Chargement…",
@@ -211,7 +199,6 @@
   "mlt.empty": "Aucune recommandation exploitable pour ce titre.",
   "mlt.affinityScore": "Score d'affinité",
   "mlt.alreadySeen": "👁 Déjà vu",
-
   "field.title": "Titre",
   "field.score": "Score",
   "field.startDate": "Date de début",
@@ -222,7 +209,6 @@
   "field.users": "Membres",
   "field.scorers": "Votants",
   "field.affinity": "Affinité",
-
   "status.watching": "en cours",
   "status.completed": "terminé",
   "status.on_hold": "en pause",
@@ -231,11 +217,9 @@
   "status.not_defined": "Sans statut",
   "status.rewatch": "à revoir",
   "status.no_opinion": "sans avis",
-
   "display.cardsPerRow": "Cartes par ligne :",
   "display.auto": "Auto",
   "display.savedAsDefault": "Enregistré comme valeur par défaut, sur toutes les pages",
-
   "section.views": "Vues",
   "section.display": "Affichage",
   "section.filters": "Filtres",
@@ -246,13 +230,11 @@
   "section.weights": "Pondérations",
   "section.presets": "Préréglages",
   "section.thumbnailSize": "Taille des vignettes",
-
   "badge.connected": "{provider} : connecté",
   "badge.connectedAs": "{provider} : connecté ({name})",
   "badge.notConnected": "{provider} : non connecté",
   "badge.expired": "{provider} : session expirée, reconnectez-vous",
   "badge.localActive": "Local (dans l’app) : actif",
-
   "statusShort.watching": "En cours",
   "statusShort.completed": "Terminé",
   "statusShort.on_hold": "En pause",
@@ -260,7 +242,6 @@
   "statusShort.plan_to_watch": "Prévu",
   "statusShort.rewatch": "À revoir",
   "statusShort.no_opinion": "Sans avis",
-
   "disc.syncedFrom": "Valeur fournie par {provider}",
   "disc.mismatch": "Divergence entre tes sources",
   "disc.episodesShort": "ép",
@@ -269,11 +250,9 @@
   "disc.provider.simkl": "SIMKL",
   "disc.provider.local": "Local",
   "disc.provider.anilist": "AniList",
-
   "prov.settled": "{field} — fourni par {provider}, seule source à l'avoir",
   "prov.contested": "{field} — {provider} l'emporte sur les autres sources",
   "prov.union": "{field} — fusion de toutes les sources, sans arbitrage",
-
   "discPage.countOne": "{count} titre",
   "discPage.countOther": "{count} titres",
   "discPage.empty": "Aucun écart entre tes sources. 🎉",
@@ -291,7 +270,6 @@
   "discPage.applySimkl": "Appliquer SIMKL",
   "discPage.applying": "Envoi…",
   "discPage.applyFailed": "Échec de l'application",
-
   "conn.pageTitle": "Connexions - MyHomeApp",
   "conn.metaDescription": "Gérer les sources de catalogue et de listes personnelles",
   "conn.catalogRole": "Catalogue",
@@ -299,7 +277,6 @@
   "conn.personalRole": "Mes listes",
   "conn.personalRoleHint": "Où sont conservés vos statuts, vos notes et votre progression.",
   "conn.accountManagedBelow": "Utilise le même compte que la liste personnelle ci-dessous.",
-
   "syncNow.title": "Tout synchroniser",
   "syncNow.hint": "Lance maintenant la synchro programmée de 2 h : toutes les sources, dans l’ordre.",
   "syncNow.button": "Lancer",
@@ -307,7 +284,6 @@
   "syncNow.running": "Synchro en cours — suivez le détail dans le journal.",
   "syncNow.done": "Synchro lancée — suivez le détail dans le journal.",
   "syncNow.error": "Impossible de lancer la synchro.",
-
   "cronFreshness.title": "Synchro planifiée (2 h)",
   "cronFreshness.level.ok": "Le job de 2 h tourne normalement.",
   "cronFreshness.level.rejected": "Le cron appelle l’app mais se fait rejeter — aucun run n’a lieu.",
@@ -321,19 +297,8 @@
   "cronFreshness.rejectedSince": "Rejeté {when} : {reason}.",
   "cronFreshness.failedSteps": "Étapes en échec : {steps}.",
   "cronFreshness.manualRun": "Dernier lancement manuel {when} — il ne compte pas pour le job planifié.",
-
   "connLog.title": "Journal de connexion et de synchro",
   "connLog.empty": "Aucune activité pour l'instant.",
-
-  "calc.pageTitle": "Calculateur de note d'anime",
-  "calc.grid": "Grille",
-  "calc.reset": "Réinitialiser",
-  "calc.pickAnime": "Quel anime noter ?",
-  "calc.pickAnimePrompt": "Cherche un titre dans ta liste pour commencer à le noter.",
-  "calc.searchPlaceholder": "Rechercher un anime…",
-  "calc.noResults": "Aucun résultat.",
-  "calc.changeAnime": "Changer d'anime",
-
   "tierWord.10": "Chef-d’œuvre",
   "tierWord.9": "Excellent",
   "tierWord.8": "Très bien",
@@ -344,7 +309,6 @@
   "tierWord.3": "Très mauvais",
   "tierWord.2": "Horrible",
   "tierWord.1": "Abominable",
-
   "tierGap.p5": "Mes pépites",
   "tierGap.p4": "Bien plus haut",
   "tierGap.p3": "Bien plus haut",
@@ -356,7 +320,6 @@
   "tierGap.m3": "Bien plus bas",
   "tierGap.m4": "Surcoté",
   "tierGap.m5": "Surcoté",
-
   "tier.pageTitle": "Tier list - Anime List",
   "tier.loadFailed": "Impossible de charger la liste.",
   "tier.saveFailed": "Échec de l’enregistrement",
@@ -380,7 +343,6 @@
   "tier.readOnlyNote": "Lecture seule : seules mes notes sont modifiables.",
   "tier.gapChipHint": "Ma note − moyenne {provider}",
   "tier.hoverMine": "moi {score}",
-
   "catchUp.pageTitle": "À rattraper - Anime List",
   "catchUp.loadFailed": "Impossible de charger les franchises.",
   "catchUp.empty": "Rien à rattraper avec ces filtres.",
@@ -399,7 +361,6 @@
   "catchUp.pageOf": "page {page} / {total}",
   "catchUp.prevPage": "Précédent",
   "catchUp.nextPage": "Suivant",
-
   "quickRate.pageTitle": "Notation rapide - Anime List",
   "quickRate.loadFailed": "Impossible de charger les franchises.",
   "quickRate.saveFailed": "Échec de l’enregistrement",
@@ -417,10 +378,8 @@
   "quickRate.writeSection": "Notation",
   "quickRate.autoComplete": "Marquer comme terminé en notant",
   "quickRate.autoCompleteHint": "Uniquement sur cette page : noter ici passe le titre en « terminé » avec tous les épisodes vus.",
-
   "detail.pageTitle": "{title} — Détails locaux",
   "detail.back": "← Retour",
-  "detail.rate": "Noter",
   "detail.alsoKnown": "Aussi : {names}",
   "detail.hidden": "Masqué",
   "detail.sameStudioStaff": "Dans le même studio / staff",
@@ -488,7 +447,6 @@
   "personalEdit.writeFailed": "Échec de l'écriture",
   "personalEdit.providerFailed": "{provider} n'a pas pris l'écriture :",
   "personalEdit.providerUnsupported": "{provider} ne gère pas : {dimensions} — non transmis.",
-
   "credits.pageTitle": "{name} — Anime",
   "credits.studioHeading": "Anime produits par {name}",
   "credits.staffHeading": "Anime avec {name}",
@@ -510,7 +468,6 @@
   "credits.countFiltered": "{count} sur {total} anime",
   "credits.statusFilter": "Mon statut",
   "credits.empty": "Aucun anime ne correspond aux filtres.",
-
   "search.placeholder": "Rechercher un anime, un studio, un staff…",
   "search.group.anime": "Anime",
   "search.group.studios": "Studios",
@@ -520,18 +477,14 @@
   "search.noResults": "Aucun résultat",
   "search.searching": "Recherche…",
   "search.approx": "Correspondance approximative",
-
   "refresh.title": "Rafraîchir depuis MAL / AniList / SIMKL",
   "refresh.refreshing": "⏳ Rafraîchissement…",
   "refresh.refresh": "🔄 Rafraîchir",
   "refresh.failed": "Échec du rafraîchissement",
-
   "sort.sortBy": "Trier par :",
   "sort.asc": "Croiss.",
   "sort.desc": "Décroiss.",
-
   "stats.totalAnime": "Total anime : {count}",
-
   "filters.season": "Saison :",
   "filters.mediaType": "Type de média :",
   "filters.genreSearch": "Filtrer les genres…",
@@ -546,7 +499,6 @@
   "filters.favSeiyuuOnlyHint": "Un de tes seiyuu favoris y tient un rôle principal",
   "filters.scoreRange": "Plage de score :",
   "filters.searchPlaceholder": "Rechercher un anime...",
-
   "account.disconnect": "Se déconnecter",
   "account.connectProvider": "Se connecter à {provider}",
   "account.reconnectProvider": "Se reconnecter à {provider}",
@@ -582,7 +534,6 @@
   "anilistPush.summary": "{differing} titres sur {statused} diffèrent de votre liste AniList.",
   "anilistPush.running": "Envoi en cours : {index}/{total} titres traités…",
   "anilistPush.inSync": "Votre liste AniList est à jour.",
-
   "dataSync.syncing": "Synchronisation…",
   "dataSync.syncMal": "Synchroniser MAL",
   "dataSync.bigSyncing": "Grande synchro…",
@@ -616,7 +567,6 @@
   "dataSync.anilistImportNoAuth": "Connectez votre compte AniList pour importer votre liste",
   "dataSync.anilistImportNotFound": "Compte AniList introuvable",
   "dataSync.anilistImportError": "Échec de l'import AniList",
-
   "reco.refreshing": "Rafraîchissement...",
   "reco.refresh": "↻ Rafraîchir les recos",
   "reco.seedThreshold": "Seuil de note des graines :",
@@ -663,7 +613,6 @@
   "reco.ignoreRemoveFailed": "Impossible de remettre ce titre.",
   "reco.refreshStartFailed": "Impossible de démarrer le rafraîchissement des recommandations.",
   "reco.refreshFailed": "Échec du rafraîchissement",
-
   "reco.source.crowd.label": "Recommandations MAL",
   "reco.source.crowd.hint": "Fans de tes séries les mieux notées",
   "reco.source.anilistCrowd.label": "Recommandations AniList",
@@ -721,7 +670,6 @@
   "recoDetail.closeToRejects": "Proche de tes rejets : {parts}",
   "recoDetail.mixCrowd": "Recommandé par les fans de {titles}",
   "recoDetail.mixAnilistCrowd": "Recommandé sur AniList depuis {titles}",
-
   "mix.pageTitle": "Mon mix - Anime List",
   "mix.section.anchors": "Mes choix",
   "mix.searchPlaceholder": "Ajouter un anime…",
@@ -737,14 +685,12 @@
   "mix.includeSeenHint": "Par défaut, les titres déjà regardés sont exclus",
   "mix.loadFailed": "Échec du calcul du mix",
   "mix.sourceDown": "{source} n'a rien renvoyé : {error}",
-
   "reco.source.communityScore.label": "Note communautaire",
   "reco.source.communityScore.hint": "Le verdict de la foule : la note moyenne MAL, en percentile du pool — pas son adjacence",
   "reco.source.rejection.label": "Rejet",
   "reco.source.rejection.hint": "Pénalise ce qui ressemble à tes abandons / notes basses",
   "reco.source.popularity.label": "Popularité",
   "reco.source.popularity.hint": "Négatif = feed plus niche",
-
   "reco.preset.sur.label": "Sûr",
   "reco.preset.sur.hint": "Consensus des deux communautés (MAL + AniList) ; ignore les profils de goût fins",
   "reco.preset.decouverte.label": "Découverte",
@@ -753,7 +699,6 @@
   "reco.preset.createurs.hint": "Plus des réalisateurs, compositeurs et studios que tu aimes (signal staff AniList)",
   "reco.preset.defaut.label": "Défaut",
   "reco.preset.defaut.hint": "Revient à la pondération de base",
-
   "views.new_season_strict.label": "Nouvelle saison (strict)",
   "views.new_season_strict.description": "Saison en cours uniquement",
   "views.new_season.label": "Nouvelle saison",
@@ -776,7 +721,6 @@
   "views.plan_to_watch.description": "Séries prévues",
   "views.hidden.label": "Masqués",
   "views.hidden.description": "Séries masquées uniquement",
-
   "stats.pageTitle": "Statistiques - Anime List",
   "stats.heading": "Statistiques",
   "stats.subtitle": "Répartition sur {count} séries avec un statut",
@@ -808,69 +752,6 @@
   "stats.dim.producers": "Producteurs",
   "stats.dim.tags": "Tags",
   "stats.dim.genres": "Genres",
-
-  "graph.pageTitle": "Graphe des connexions",
-  "graph.heading": "Graphe",
-  "graph.countOne": "1 voisin",
-  "graph.countOther": "{count} voisins",
-  "graph.loading": "Chargement…",
-  "graph.pickSomething": "Cherche un anime pour commencer.",
-  "graph.openDetail": "Ouvrir la fiche",
-  "graph.svgLabel": "Graphe des connexions de {name}",
-  "graph.overflow": "(+{count})",
-  "graph.colourBy": "Couleur",
-  "graph.collapseFranchise": "Regrouper par franchise",
-  "graph.colour.kind": "Type de nœud",
-  "graph.colour.status": "Mon statut",
-  "graph.focalType.anime": "Anime",
-  "graph.focalType.seiyuu": "Seiyuu",
-  "graph.focalType.staff": "Staff",
-  "graph.group.cast.main": "Rôles principaux",
-  "graph.group.cast.supporting": "Rôles secondaires",
-  "graph.group.cast.background": "Arrière-plan",
-  "graph.group.cast.other": "Autres rôles",
-  "graph.group.roles.main": "Rôles principaux",
-  "graph.group.roles.supporting": "Rôles secondaires",
-  "graph.group.roles.background": "Arrière-plan",
-  "graph.group.roles.other": "Autres rôles",
-  "graph.group.staff.t1": "Auteurs",
-  "graph.group.staff.t2": "Chefs de poste",
-  "graph.group.staff.t3": "Équipe & production",
-  "graph.group.staff.t4": "Crédits périphériques",
-  "graph.group.credit.t1": "Crédits d’auteur",
-  "graph.group.credit.t2": "Chef de poste",
-  "graph.group.credit.t3": "Équipe & production",
-  "graph.group.credit.t4": "Crédits périphériques",
-  "graph.group.studio": "Studio",
-  "graph.group.relation": "Anime liés",
-  "graph.role.main": "Principal",
-  "graph.role.supporting": "Secondaire",
-  "graph.role.background": "Arrière-plan",
-  "graph.tier.1": "Auteurs",
-  "graph.tier.2": "Chefs de poste",
-  "graph.tier.3": "Équipe & production",
-  "graph.tier.4": "Périphériques",
-  "graph.filters.focalType": "Centre",
-  "graph.filters.roles": "Type de rôle",
-  "graph.filters.tiers": "Niveaux de staff",
-  "graph.filters.tierHint": "Par défaut, les auteurs seulement — la liste complète compte près de 300 000 crédits. Ajoute un niveau pour élargir.",
-  "graph.filters.tag": "Tag AniList",
-  "graph.filters.anyTag": "Tous les tags",
-  "graph.filters.mediaTypes": "Type de média",
-  "graph.filters.inList": "Uniquement dans ma liste",
-  "graph.filters.inListNoop": "Sans effet ici : les seiyuu ne sont connus que pour les séries de ta liste.",
-  "graph.coverage.cast": "Casting : {covered}/{total} séries",
-  "graph.coverage.staff": "Staff : {covered}/{total}",
-  "graph.coverage.focalMissing": "Le casting de cette série n’a jamais été récupéré — lance le balayage pour voir ses seiyuu.",
-  "graph.coverage.sweep": "Compléter les castings",
-  "graph.coverage.sweeping": "Balayage lancé…",
-  "graph.legend.unseen": "Pas vu",
-  "graph.legend.studio": "Studio",
-  "graph.picker.heading": "Chercher un anime",
-  "graph.picker.placeholder": "Titre…",
-  "nav.graph": "🕸️ Graphe",
-  "graph.resetView": "Recadrer",
-
   "nav.boxes": "📦 Mes boîtes",
   "nav.characters": "🎭 Mes personnages",
   "boxes.title": "Mes boîtes",
@@ -996,7 +877,6 @@
   "groups.deleting": "Suppression…",
   "groups.deleteError": "Suppression impossible.",
   "boxes.loadError": "Chargement impossible.",
-
   "franchise.pageTitle": "{name} — dans l'ordre - Anime List",
   "franchise.kicker": "Franchise",
   "franchise.entryCount": "{count} entrées",
@@ -1118,7 +998,6 @@
   "boxReco.profileStaffZeroed": "« Staff AniList » remplacé par ses familles staff",
   "mix.testProfile": "Tester un profil",
   "mix.testProfileHint": "Essayer un profil de recos sur cette sélection",
-
   "nav.favorites": "⭐ Seiyuu favoris",
   "favorites.pageTitle": "Seiyuu favoris",
   "favorites.heading": "Mes seiyuu favoris",
@@ -1131,7 +1010,6 @@
   "favorites.incomplete": "Filmographie tronquée aux rôles les plus récents.",
   "favorites.todoHeading": "Rôles principaux pas encore vus ({count})",
   "favorites.todoNone": "Tu as vu tous ses rôles principaux connus.",
-
   "characters.title": "Mes personnages favoris",
   "characters.heading": "Mes personnages favoris",
   "characters.count": "{count} personnages",

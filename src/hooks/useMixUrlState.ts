@@ -1,7 +1,7 @@
 /**
  * URL state for the "/mix" page — recommendations anchored on a hand-picked set.
  *
- * Its own hook for the reason `/recommendations`, `/tier` and `/graph` have
+ * Its own hook for the reason `/recommendations` and `/tier` have
  * theirs: the state shape is genuinely different (a chosen anchor SET plus the
  * narrowing filters), and it has no business in `AnimeFiltersState`. The anchors
  * live in the URL like everything else, so a mix is bookmarkable and shareable

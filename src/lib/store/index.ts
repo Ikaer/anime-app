@@ -77,5 +77,4 @@ export {
 export {
   getAnimeForDisplay,
   getAnimeByCanonicalId,
-  getAnimeByIdForDisplay,
 } from '@/lib/store/record';

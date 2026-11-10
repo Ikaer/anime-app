@@ -251,7 +251,6 @@ export default function AnimeDetailPage({ anime, similar, related, cast, origins
         <div className="topbar">
           <Link href="/" className="back">{t('detail.back')}</Link>
           <div className="ext-links">
-            <Link href={`/rate?id=${crosswalk.mal}`} className="ext-link">{t('detail.rate')}</Link>
             <RefreshButton
               animeId={anime.id}
               onRefreshed={() => {

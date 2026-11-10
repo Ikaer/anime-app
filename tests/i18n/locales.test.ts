@@ -65,8 +65,7 @@ test('every key interpolates the same placeholders in both languages', () => {
  *
  * ⚠️ "A glyph" is not enough: it must RENDER as a colour emoji. 🎛 🎚 🕸 are
  * text-presentation by default, and without a trailing U+FE0F Windows draws them
- * as grey outlines among colour icons — live-seen on `/mix`, `/graph` and
- * `/profiles`, which a non-ASCII check passed for months.
+ * as grey outlines among colour icons — live-seen on `/mix` and `/profiles`, which a non-ASCII check passed for months.
  */
 test('every nav destination label leads with an emoji, in both languages', () => {
   const isHeading = (key: string) => key.startsWith('nav.group.') || key === 'nav.others';

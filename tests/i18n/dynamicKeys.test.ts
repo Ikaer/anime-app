@@ -35,7 +35,6 @@ import { GENRE_AXES } from '@/lib/domain/genreAxis';
 import { STAFF_ROLE_TIERS } from '@/lib/domain/staffRole';
 import { TITLE_LANGUAGES } from '@/lib/url/viewDefaults';
 import { STATS_DIMENSIONS } from '@/lib/domain/stats';
-import { GRAPH_FOCAL_TYPES } from '@/lib/domain/animeGraph';
 import { CRON_FRESHNESS_LEVELS, type CronRejectionReason } from '@/lib/domain/cronFreshness';
 import { RATING_INTENTS } from '@/models/anime';
 import type { UserAnimeStatus, SeasonName } from '@/models/anime';
@@ -157,8 +156,6 @@ family('views.*.description', VIEW_PRESETS.map(p => p.key), k => `views.${k}.des
 family('filters.genreAxis.*', GENRE_AXES, a => `filters.genreAxis.${a}`);
 family('titleLanguage.*', TITLE_LANGUAGES, t => `titleLanguage.${t}`);
 family('stats.dim.*', STATS_DIMENSIONS, d => `stats.dim.${d}`);
-family('graph.focalType.*', GRAPH_FOCAL_TYPES, t => `graph.focalType.${t}`);
-family('graph.tier.*', STAFF_ROLE_TIERS, t => `graph.tier.${t}`);
 family('tier.axis.*', TIER_AXES, a => `tier.axis.${a}`);
 family('tier.vs.*', TIER_VERSUS, v => `tier.vs.${v}`);
 
@@ -178,7 +175,6 @@ family('tierWord.*', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], n => `tierWord.${n}`);
  * the detail page labels only T2 and T3 through the dynamic key — T1 has its
  * own section heading and T4 is folded into `detail.staffTierMore` ("Autres
  * crédits ({count})"). Asserting the full union here would demand two keys
- * nothing renders, which is why `/graph` gave itself a complete `graph.tier.*`
- * set above rather than reusing this one.
+ * nothing renders.
  */
 family('detail.staffTier.* (T2/T3 only)', [2, 3], t => `detail.staffTier.${t}`);

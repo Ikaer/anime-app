@@ -66,8 +66,6 @@ const OTHER_NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.analyse',
     items: [
       { href: '/stats', key: 'nav.stats' },
-      { href: '/graph', key: 'nav.graph' },
-      { href: '/rate', key: 'nav.ratingCalculator' },
     ],
   },
   {
@@ -86,8 +84,8 @@ const OTHER_NAV_GROUPS: NavGroup[] = [
 /**
  * DERIVED, never hand-written — flattened through the groups so regrouping an
  * entry cannot change which routes light the trigger. This list used to be
- * maintained separately and had silently drifted: `/graph` and `/precedence`
- * were in the menu but not in the list, so the parent read as inactive on both.
+ * maintained separately and had silently drifted: `/precedence` was in the
+ * menu but not in the list, so the parent read as inactive there.
  */
 const OTHER_ROUTES: string[] = OTHER_NAV_GROUPS.flatMap(g => g.items).map(item => item.href);
 

@@ -133,13 +133,12 @@ interface AnimeRecord {
 - **`getEffectiveStatus`/`getEffectiveScore`/`getEffectiveProgress`** in `domain/animeUtils.ts` are now thin reads of the already-hydrated `record.personal.*` — the SIMKL>MAL>AniList precedence itself lives in the hydration engine above, not in these three helpers. They're kept as the read seam: every personal read used for filtering, seeding, or exclusion still goes through them rather than reading `.sources.*` directly.
 - **Provider ids are converted to canonical ids AT THE BOUNDARY, and nothing downstream speaks a provider id.** External data arriving keyed by a provider id (crowd edges as MAL ids, AniList recommendation edges as AniList ids) is resolved via `buildCrosswalkIndexes()` where it enters — `refresh.ts` for the feed, the `similar/[id]` route for the drill-down. Past that boundary `computeFeed` / `computeSimilarTo` / `byCredits` and `cache/recommendations.json` are all canonical. Each provider method still takes **its own** id out of the crosswalk (AniList methods take AniList ids, MAL methods take MAL ids), and **if the crosswalk holds no id for a provider, that provider simply does not enrich that title** — no gap-bridging, no foreign key promoted to a primary key. *This supersedes the older "the reco engine stays MAL-keyed internally by design" stance (B3), which was right that crowd edges ARRIVE as MAL ids and wrong to let them stay that way; E8–E11 did the conversion (docs/DECISIONS.md).* The conversion is **resolve-only, never mint**: minting for an unhydratable edge would seed `registry.json` with entries no slice backs, and `getAnimeForDisplay` unions the registry's keys, so each would surface as a phantom row.
 - **Relation edges are the one provider-id payload left, and they are resolved, not compared.** [src/lib/domain/relations.ts](src/lib/domain/relations.ts) is the single seam: `buildRelationIndex(records)` + `resolveRelations(anime, index)` union MAL's `catalog.relatedAnime` with AniList's `sources.anilist.relations`, normalize AniList's vocabulary into MAL's, and hand back the **target record** rather than an id. Every consumer goes through it — the detail page's relations section, `isPrematureSequel`, the franchise exclusions in `similar.ts`/`byCredits.ts`, and `groupIntoFranchises`. Reading `catalog.relatedAnime` directly is the bug it exists to prevent: MAL only returns relations from its single-title *detail* endpoint, so that field alone is populated on **48 of 25,391** titles against AniList's 11,419 — every relation-dependent behaviour was silently dead. Do NOT "fix" this by merging AniList into `catalog.relatedAnime`: that field's `node` carries a MAL id plus a title and picture, which an `AniListRelationEntry` has not got.
-- Legacy MAL-numeric-id URLs (bookmarks predating the cutover) resolve via `resolveByMalId()` and redirect to the canonical URL — a **convenience for one user's bookmarks, not an invariant**; it can go the day it costs something. `/rate?id=` is the one remaining genuinely-MAL-id-keyed route (`getAnimeByIdForDisplay()`), by design.
+- Legacy MAL-numeric-id URLs (bookmarks predating the cutover) resolve via `resolveByMalId()` and redirect to the canonical URL — a **convenience for one user's bookmarks, not an invariant**; it can go the day it costs something.
 
-**Deliberate MAL couplings that STAY — stop re-flagging these** (K4–K7). Each is join identity or a provider-specific datum, not a precedence exception, and the distinction is the whole point (docs/DECISIONS.md): *"precedence has no exceptions" and "some things are legitimately MAL-keyed" are both true, because they operate on different layers* — precedence decides which provider **fills a field**, join identity decides which key **groups records**.
+**Deliberate MAL couplings that STAY — stop re-flagging these** (K5–K7; K4, the `/rate?id=` Rating Calculator, was removed with the page). Each is join identity or a provider-specific datum, not a precedence exception, and the distinction is the whole point (docs/DECISIONS.md): *"precedence has no exceptions" and "some things are legitimately MAL-keyed" are both true, because they operate on different layers* — precedence decides which provider **fills a field**, join identity decides which key **groups records**.
 
 | # | Item | Where | Why it stays |
 |---|---|---|---|
-| K4 | `/rate?id=` is MAL-id-keyed | `pages/rate.tsx` | The Rating Calculator is a MAL-scale tool; genuinely MAL-keyed by design |
 | K5 | `getMalIdForCanonical` consults the MAL catalog slice | `store/slices.ts` | A crosswalk read; the registry must stay *below* the slices so slice writes can resolve ids without a cycle |
 | K6 | Legacy MAL-numeric-id URL redirects | `resolveByMalId()` | Bookmark compatibility |
 | K7 | "Added to MAL" / "Updated on MAL" on the detail page | `anime/[id].tsx` | A provider-specific datum with no neutral equivalent — see the E7 rule on `AnimeSources` |
@@ -1332,7 +1331,7 @@ the box's recos tab as it will rank. docs/recoProfiles/PLAN.md phase 6 has the d
 
 ### Tier list rating board — a dedicated page that WRITES scores
 
-A drag-and-drop rating surface at [src/pages/tier.tsx](src/pages/tier.tsx) (route `/tier`; note `/rate` is the unrelated Rating Calculator). Like `/recommendations` it's its own route with its own lean URL state ([useTierUrlState](src/hooks/useTierUrlState.ts)), **not** a third layout of the main list — it has editing semantics the main `AnimeFiltersState` shouldn't carry. Its sidebar is `RecoFiltersSection` and nothing else; every display control sits in `AnimeListHeader` (see below).
+A drag-and-drop rating surface at [src/pages/tier.tsx](src/pages/tier.tsx) (route `/tier`). Like `/recommendations` it's its own route with its own lean URL state ([useTierUrlState](src/hooks/useTierUrlState.ts)), **not** a third layout of the main list — it has editing semantics the main `AnimeFiltersState` shouldn't carry. Its sidebar is `RecoFiltersSection` and nothing else; every display control sits in `AnimeListHeader` (see below).
 
 - **A tier IS a score.** Ten rows (10→1, colored green→red with MAL's word labels) plus an "à noter" tray (unrated). Dropping a card into a row sets that MAL/personal score; dropping into the tray clears it (score 0).
 - **Two further rows on the `me` axis are NOT scores: « À revoir » and « Sans avis »** (see "Rating intent" above). They make the board the bulk surface for the annotation — the detail page sets one title at a time, this sets a pile. Dropping into them writes the intent instead of a score, so `TierRow` is `number | RatingIntent` and the write queue carries a discriminated union: a score and an intent go to **different endpoints**, and they share one serial queue precisely because they are mutually exclusive destinations on the same board — two queues would let a score land after the intent write meant to replace it. Set off from the 10→1 ladder with a dashed border and a gap, the same visual language as the tray, which is the other "no number here" destination.
@@ -1555,49 +1554,6 @@ genres.
 - Staff rows link to `/credits/staff/[id]`; **seiyuu rows deliberately do not** —
   that page scans production credits, which never contain voice actors (see the
   Cast section above).
-
-### "/graph" — an ego explorer, not a catalog map
-
-[/graph](src/pages/graph.tsx) over [api/anime/graph](src/pages/api/anime/graph.ts), pure logic in
-[animeGraph.ts](src/lib/domain/animeGraph.ts) + [graphLayout.ts](src/lib/domain/graphLayout.ts).
-One focal node, its direct neighbours, and **re-centring as the only expansion**.
-
-- **The whole-catalog graph does not exist and must not be materialized.** Measured: "two anime
-  share a voice actor" is **82,196 edges over just 674 cast-swept titles**; tags are 419 nodes
-  each touching hundreds; staff is 298,362 credits. No layout renders that — it is a grey disc.
-  An ego turns that latent density into the asset (a seiyuu ego is ~10 anime, an anime ego ~40
-  people). Tags are a *filter* on that ego, which is what they are actually good for.
-- **Nodes are anime, NOT franchises** — asked and measured, because collapsing looks tempting on
-  a prolific seiyuu (Nobuhiko Okamoto: 64 titles → 36 franchises). It loses coherence (median
-  voice-cast Jaccard **0.30** between two members of the same franchise over 532 pairs;
-  `FRANCHISE_RELATIONS` chains Gundam SEED, 00, Iron-Blooded Orphans and Witch from Mercury into
-  ONE 128-member component whose casts are disjoint), erases the **147 characters recast across
-  their own franchise** — exactly what a connection chart should reveal — and does not even solve
-  the problem it was reached for, since 36 nodes is no more drawable in one radial ego than 64.
-  Franchise survives as a *clustering hint* (`franchiseKey` on an anime node), grouping siblings
-  into one expandable arc segment while keeping every node's identity, so a recast still renders
-  as two edges to two characters.
-- **Three focal types** (`anime` | `seiyuu` | `staff`), deliberately. `studio` and `character` are
-  reachable as neighbours and link out, but neither makes a useful centre — a studio ego is a
-  filtered catalog list (which `/credits/studio/[name]` already is), and a character's
-  neighbourhood is one anime plus one seiyuu.
-- **Layout is deterministic sectors, not a force simulation** — the target is a 4K TV at 300% zoom
-  (~1280 CSS px) where the binding constraint is **label collision, not node count**. A simulation
-  reflows on every interaction, so the same graph never looks the same twice and a screenshot
-  can't be compared to the last one; it would also be the app's first layout dependency, in a repo
-  that hand-rolled `/tier`'s drag-and-drop to avoid exactly that. Each group owns an angular wedge,
-  so label space is *allocated* rather than negotiated, and a dense group grows outward into extra
-  rings instead of crowding its neighbours. `MAX_NODES_PER_GROUP = 24` per arc; groups report
-  `total` so the overflow is **stated, never silently dropped**.
-- **Computed server-side**, for the `/stats` and `/quick-rate` reason only more so: the reverse
-  indexes span the whole catalog (49,897 staff people, 2,255 seiyuu) and never cross the wire —
-  one neighbourhood of a few hundred lean nodes does. The cast slice is read separately, since it
-  is deliberately not in `getAnimeForDisplay()`'s join. **Nothing here calls a provider**; the
-  graph is entirely a read of the local store, which is what makes it browsable at page speed.
-- **`GraphCoverage` is the honesty block.** Seiyuu edges come from the lazily-filled cast slice, so
-  `focalCastMissing` distinguishes "this title has a thin neighbourhood" from "the sweep has not
-  reached it" — the same declare-the-degraded-mode posture as `RecoRefreshSources` (B4) and
-  `/activity`'s `available: false`.
 
 ### "/connections" — split by ROLE, one card shape per provider
 
@@ -1847,8 +1803,8 @@ and `OTHER_NAV`, rather than a hand-written `<Link>` per entry as before.
   measured, the reorganised bar is one 26px row.
 - ⚠️ **`OTHER_ROUTES` is `OTHER_NAV.map(i => i.href)`, never a literal.** It
   decides whether the dropdown trigger highlights, and as a separately
-  maintained list it had already drifted: `/graph` and `/precedence` were in the
-  menu but absent from the list, so the parent read as inactive on both pages.
+  maintained list it had already drifted: `/precedence` was in the
+  menu but absent from the list, so the parent read as inactive there.
   Deriving it makes that unrepresentable — adding a menu entry cannot forget it.
   An entry also owns its sub-routes (`isRouteActive`: exact, or `href + '/'`
   prefix, `/` exact-only), so `/boxes/[id]` and `/profiles/[id]` light it too —
@@ -1938,9 +1894,9 @@ A lightweight, dependency-free i18n built for GitHub visibility (the app is sing
 
 - **`fr` is the canonical key set.** `TranslationKey = keyof typeof fr`, and `DICTS` is typed `Record<Lang, Record<TranslationKey, string>>` so a key present in `fr.json` but missing from `en.json` is a **compile error**. A contributor adds a language by copying a JSON file and registering it in `DICTS`.
 - **Active language lives in `localStorage`** (`anime-app.lang`), not the URL. To stay hydration-safe, the **server and first client render always use `DEFAULT_LANG` (`fr`)**; `I18nProvider`'s mount effect then reads `localStorage` and swaps. So EN only ever appears after client hydration — SSR HTML is always FR. `LanguageToggle` (in [Layout.tsx](src/components/Layout.tsx)) flips + persists.
-- **Client usage:** `useT()` → `t(key, params?)`; `{name}` placeholders interpolate via the `params` object. **Dynamic keys** built from stable data ids use a cast: `` t(`statusShort.${status}` as TranslationKey) `` — the cast **bypasses the missing-key compile check**, so those families (`airing.*`, `seasonName.*`, `status.*`/`statusShort.*`, `field.*`, `reco.source.*` (the `RecoSource`s AND the eight staff craft families a reco profile scores — both render as « Pourquoi ? » rows), `reco.preset.*`, `profiles.preset.*`/`profiles.presetHint.*`, `profiles.verdict.*`, `profiles.pool.*`/`profiles.poolHint.*`, `views.*`, `tierWord.*`, `tierGap.*`, `tier.axis.*`, `tier.vs.*`, `detail.staffTier.*`) must be kept exhaustive by hand. **That is now enforced** by [tests/i18n/dynamicKeys.test.ts](tests/i18n/dynamicKeys.test.ts), which drives each family from the id source its call site uses — an exported constant where one exists, otherwise a `satisfies Record<Union, 0>` literal, so growing the union is a compile error in the test until the key is added. Two caveats worth knowing before trusting it: `airing.*` is transcribed rather than derived (MAL types `airingStatus` as a bare `string`, so there is no union to grow), and `detail.staffTier.*` is asserted for **T2/T3 only** because the family is partial by design — T1 has its own heading and T4 folds into `detail.staffTierMore`, which is exactly why `/graph` gave itself a complete `graph.tier.*` set instead of reusing it. Whole-dictionary invariants the typing cannot see — orphaned `en` keys, empty strings, `{placeholder}` drift between languages, and the nav-emoji rule — are in [tests/i18n/locales.test.ts](tests/i18n/locales.test.ts). The shared data files (`reco/weights.ts` `SOURCE_META`, `url/animeParams.ts` `VIEW_PRESETS`) are **not** translated — keys are derived from their stable `source`/`key` fields in the rendering components, keeping those modules server-safe.
+- **Client usage:** `useT()` → `t(key, params?)`; `{name}` placeholders interpolate via the `params` object. **Dynamic keys** built from stable data ids use a cast: `` t(`statusShort.${status}` as TranslationKey) `` — the cast **bypasses the missing-key compile check**, so those families (`airing.*`, `seasonName.*`, `status.*`/`statusShort.*`, `field.*`, `reco.source.*` (the `RecoSource`s AND the eight staff craft families a reco profile scores — both render as « Pourquoi ? » rows), `reco.preset.*`, `profiles.preset.*`/`profiles.presetHint.*`, `profiles.verdict.*`, `profiles.pool.*`/`profiles.poolHint.*`, `views.*`, `tierWord.*`, `tierGap.*`, `tier.axis.*`, `tier.vs.*`, `detail.staffTier.*`) must be kept exhaustive by hand. **That is now enforced** by [tests/i18n/dynamicKeys.test.ts](tests/i18n/dynamicKeys.test.ts), which drives each family from the id source its call site uses — an exported constant where one exists, otherwise a `satisfies Record<Union, 0>` literal, so growing the union is a compile error in the test until the key is added. Two caveats worth knowing before trusting it: `airing.*` is transcribed rather than derived (MAL types `airingStatus` as a bare `string`, so there is no union to grow), and `detail.staffTier.*` is asserted for **T2/T3 only** because the family is partial by design — T1 has its own heading and T4 folds into `detail.staffTierMore`. Whole-dictionary invariants the typing cannot see — orphaned `en` keys, empty strings, `{placeholder}` drift between languages, and the nav-emoji rule — are in [tests/i18n/locales.test.ts](tests/i18n/locales.test.ts). The shared data files (`reco/weights.ts` `SOURCE_META`, `url/animeParams.ts` `VIEW_PRESETS`) are **not** translated — keys are derived from their stable `source`/`key` fields in the rendering components, keeping those modules server-safe.
 - **Server usage:** `translate(lang, key, params?)` / `makeT(lang)` are framework-free (no React context) for the reco **"Pourquoi ?"** detail strings built in [feed.ts](src/lib/reco/feed.ts) / [similar.ts](src/lib/reco/similar.ts) (`computeFeed` / `computeSimilarTo` take a `lang`, keyed `recoDetail.*`). The client passes `?lang=` to `/api/anime/recommendations` and `…/similar/[id]`; both default to `fr`.
-- **Deliberately left French-only:** the `/rate` rubric ([ratingGrids.ts](src/lib/domain/ratingGrids.ts), subjective prose) — only the calculator's chrome is translated. `formatUserStatus` is still used for the catalog `source` field (language-neutral prettify), not for watch statuses.
+- `formatUserStatus` is still used for the catalog `source` field (language-neutral prettify), not for watch statuses.
 
 ### Title language — a display preference that is ALSO read server-side
 
@@ -1985,15 +1941,11 @@ meets on the site most of these titles come from.
   default means "not yet threaded", never "deliberately English".** It exists so
   that ~47 call sites could be converted without a flag day. A new call site
   that omits it is a bug that will not announce itself — pass the preference.
-- **Three places read a title WITHOUT going through a type error, so they were
+- **Two places read a title WITHOUT going through a type error, so they were
   found by grep, not by the compiler** — check them if a title ever looks wrong.
   `sortAnimeRecords`' `case 'title'` (an alphabetical sort computed on English
   titles while the grid renders romaji reads as a broken sort, hence its
-  `titleLang` is required, not defaulted); `animeGraph.ts`'s node and franchise
-  labels, which used raw `catalog.title` and so showed romaji while the rest of
-  the app showed English — the preference now rides ON the `GraphIndex` and is
-  part of `getGraphIndex`'s WeakMap key, or a changed preference would serve
-  stale labels for the life of the record array. The third is an exemption:
+  `titleLang` is required, not defaulted). The second is an exemption:
 - ⚠️ **The Google/JustWatch links deliberately do NOT follow the preference.**
   `searchTitle` in `AnimeCardView` and on the detail page stays English-then-
   romaji, because building a *search query* is a different question from naming
