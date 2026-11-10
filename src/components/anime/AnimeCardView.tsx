@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Image from 'next/image';
 import { AnimeRecord, AffinityMark, AnticipationMark, RecoMeta } from '@/models/anime';
-import { getStatusFilterKey, getPrimaryTitle, getSecondaryTitle, getEffectiveStatus } from '@/lib/domain/animeUtils';
+import { posterUrl, getStatusFilterKey, getPrimaryTitle, getSecondaryTitle, getEffectiveStatus } from '@/lib/domain/animeUtils';
 import { SEEN_STATUSES } from '@/lib/reco/scoring';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
@@ -294,12 +294,13 @@ export default function AnimeCardView({
             {animes.map((anime) => {
                 const primaryTitle = getPrimaryTitle(anime, titleLang);
                 const secondaryTitle = getSecondaryTitle(anime, titleLang);
+                const poster = posterUrl(anime.catalog, 'large');
                 return (
                 <div key={anime.id} className={styles.card}>
                     <div className={styles.imageContainer}>
-                        {anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium ? (
+                        {poster ? (
                             <Image
-                                src={anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium}
+                                src={poster}
                                 alt={primaryTitle}
                                 className={styles.animeImage}
                                 fill

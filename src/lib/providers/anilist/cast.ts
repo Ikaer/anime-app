@@ -9,7 +9,7 @@
  * file). A title is fetched the first time someone opens its detail page, and
  * then never again unless explicitly refreshed.
  */
-import { getAllAnilistCast, getAnilistCast, upsertAnilistCast } from '@/lib/store';
+import { getAllAnilistCast, getAnilistCast, toNum, upsertAnilistCast } from '@/lib/store';
 import { appendLog } from '@/lib/config/connectionLog';
 import { anilistFetch, graphqlErrorMessage, httpErrorMessage } from '@/lib/providers/anilist/client';
 import { AniListCastEntry, AniListCastStudioEntry, AniListCharacterEntry, AniListVoiceActorEntry, AnimeRecord } from '@/models/anime';
@@ -284,15 +284,6 @@ export async function getOrFetchAnilistCast(
 // cost paid once, not per page view. The pacing itself is not this loop's
 // business: `client.ts` throttles every AniList request process-wide.
 
-/** `SourceIds` values may arrive as strings (SIMKL mirrors some as such). */
-function toNum(value: number | string | undefined): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
 
 /**
  * The ids to fetch one record's cast with. `anilistId` is the QUERY key (E8);

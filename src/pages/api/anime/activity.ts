@@ -34,6 +34,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
 import {
+  posterUrl,
   applyNarrowingFilters,
   getEffectiveScore,
   getEffectiveStatus,
@@ -97,7 +98,7 @@ function toEntry(a: AnimeRecord, watchedAt: string, titleLang: TitleLanguage): A
   return {
     id: a.id,
     title: getPrimaryTitle(a, titleLang),
-    picture: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
+    picture: posterUrl(a.catalog),
     watchedAt,
     status: getEffectiveStatus(a),
     score: getEffectiveScore(a) ?? undefined,

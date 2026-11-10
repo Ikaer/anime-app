@@ -22,7 +22,7 @@
 
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
-import { getPrimaryTitle, getEffectiveStatus, getEffectiveScore, getLastWatchedAt } from '@/lib/domain/animeUtils';
+import { posterUrl, getPrimaryTitle, getEffectiveStatus, getEffectiveScore, getLastWatchedAt } from '@/lib/domain/animeUtils';
 
 /** Everything a franchise-group card needs, and nothing else. */
 export interface LeanAnimeRow {
@@ -42,7 +42,7 @@ export interface LeanAnimeRow {
 export const toLeanRow = (a: AnimeRecord, titleLang: TitleLanguage): LeanAnimeRow => ({
   id: a.id,
   title: getPrimaryTitle(a, titleLang),
-  picture: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
+  picture: posterUrl(a.catalog),
   numEpisodes: a.catalog.numEpisodes,
   mean: a.catalog.mean,
   year: a.catalog.startSeason?.year,

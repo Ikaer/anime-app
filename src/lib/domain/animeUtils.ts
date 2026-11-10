@@ -71,6 +71,19 @@ export function getCatalogPrimaryTitle(c: CatalogTitleFields, pref: TitleLanguag
   return titleCandidates(c, pref).find(t => t) || c.title;
 }
 
+/**
+ * The poster to show for a title: the asked-for size, falling back to the
+ * other one (AniList-only titles often carry just one). `medium` for cards and
+ * thumbnails, `large` where the poster is the page's hero or a hover zoom.
+ */
+export function posterUrl(
+  c: { mainPicture?: { medium?: string; large?: string } },
+  size: 'medium' | 'large' = 'medium',
+): string | undefined {
+  const p = c.mainPicture;
+  return size === 'large' ? p?.large || p?.medium : p?.medium || p?.large;
+}
+
 // ============================================================================
 // Narrowing filters (shared by /api/anime/animes and /api/anime/recommendations)
 // ============================================================================

@@ -47,6 +47,7 @@
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 import {
+  posterUrl,
   getEffectiveStatus,
   getEffectiveScore,
   getEffectiveProgress,
@@ -154,7 +155,7 @@ export function buildFranchiseView(
   const entries: FranchiseEntry[] = ordered.map((m, i) => ({
     id: m.id,
     title: getPrimaryTitle(m, titleLang),
-    picture: m.catalog.mainPicture?.medium || m.catalog.mainPicture?.large,
+    picture: posterUrl(m.catalog),
     startDate: m.catalog.startDate,
     mediaType: m.catalog.mediaType,
     airing: m.catalog.airingStatus,

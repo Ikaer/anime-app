@@ -13,7 +13,7 @@
  */
 
 import type { AniListCastEntry, AniListSeiyuuEntry, AnimeRecord } from '@/models/anime';
-import { getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
+import { posterUrl, getCatalogPrimaryTitle } from '@/lib/domain/animeUtils';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface AnimeSearchHit {
@@ -104,7 +104,7 @@ function toAnimeHit(a: AnimeRecord, titleLang: TitleLanguage, fuzzy?: boolean): 
     id: a.id,
     title: primary,
     secondary: original && original !== primary ? original : undefined,
-    poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
+    poster: posterUrl(a.catalog),
     year: a.catalog.startSeason?.year,
     mediaType: a.catalog.mediaType,
     mean: a.catalog.mean ?? null,

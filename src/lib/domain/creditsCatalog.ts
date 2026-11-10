@@ -23,7 +23,7 @@
  */
 
 import type { AniListCastEntry, AniListSeiyuuCredit, AniListSeiyuuEntry, AnimeRecord } from '@/models/anime';
-import { getCatalogPrimaryTitle, getEffectiveScore, getEffectiveStatus } from '@/lib/domain/animeUtils';
+import { posterUrl, getCatalogPrimaryTitle, getEffectiveScore, getEffectiveStatus } from '@/lib/domain/animeUtils';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
 export interface CreditedAnime {
@@ -101,7 +101,7 @@ export function toCredited(a: CreditedRecord, titleLang: TitleLanguage): Credite
   return {
     id: a.id,
     title: getCatalogPrimaryTitle(a.catalog, titleLang),
-    poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
+    poster: posterUrl(a.catalog),
     mean: a.catalog.mean ?? null,
     mediaType: a.catalog.mediaType,
     year: a.catalog.startSeason?.year,

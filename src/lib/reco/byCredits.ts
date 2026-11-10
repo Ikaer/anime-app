@@ -16,7 +16,7 @@
  */
 
 import type { AnimeRecord } from '@/models/anime';
-import { getCatalogPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
+import { posterUrl, getCatalogPrimaryTitle, catalogNameKey } from '@/lib/domain/animeUtils';
 import { buildRelationIndex, resolveRelations } from '@/lib/domain/relations';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -168,7 +168,7 @@ export function computeSimilarByCredits(
     scored.push({
       id: cand.id,
       title: getCatalogPrimaryTitle(cand.catalog, titleLang),
-      poster: cand.catalog.mainPicture?.medium || cand.catalog.mainPicture?.large,
+      poster: posterUrl(cand.catalog),
       score,
       sharedStudios,
       sharedStaff,

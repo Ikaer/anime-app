@@ -7,7 +7,7 @@ import SeasonFilter from '@/components/anime/SeasonFilter';
 import filterStyles from '@/components/anime/sidebar/RecoFiltersSection.module.css';
 import { Button, CollapsibleSection } from '@/components/shared';
 import { AnimeRecord, ImageSize, RATING_INTENTS, type RatingIntent } from '@/models/anime';
-import { applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle, getRatingIntent } from '@/lib/domain/animeUtils';
+import { posterUrl, applyNarrowingFilters, getEffectiveScore, getEffectiveStatus, getPrimaryTitle, getRatingIntent } from '@/lib/domain/animeUtils';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import {
   GAP_MAX, GAP_ROWS, TIER_BOARD_STATUSES, TIER_SCORES, TIER_STATUSES,
@@ -519,7 +519,7 @@ export default function TierPage() {
   );
 
   const renderCard = (a: AnimeRecord) => {
-    const thumb = a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large || '';
+    const thumb = posterUrl(a.catalog) || '';
     const isSaving = saving.has(a.id);
     const fail = failed.get(a.id);
     const gap = showChip ? gapOf(a.id) : null;
@@ -758,7 +758,7 @@ export default function TierPage() {
 
       {preview && (
         <div className="hover-preview" style={{ left: preview.x, top: preview.y }}>
-          <img src={preview.anime.catalog.mainPicture?.large || preview.anime.catalog.mainPicture?.medium || ''} alt="" />
+          <img src={posterUrl(preview.anime.catalog, 'large') || ''} alt="" />
           <div className="hover-title">{getPrimaryTitle(preview.anime, titleLang)}</div>
           <div className="hover-mean">
             {[

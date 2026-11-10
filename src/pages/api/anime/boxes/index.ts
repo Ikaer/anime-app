@@ -4,7 +4,7 @@ import { getGroups } from '@/lib/reco/groups';
 import { getAnimeForDisplay } from '@/lib/store';
 import { beginRequest } from '@/lib/store/perf';
 import { getTitleLanguage } from '@/lib/config/settings';
-import { getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { posterUrl, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { resolveBoxUnits, liveDeclared } from '@/lib/domain/boxUnits';
 import { toLeanRow, type LeanAnimeRow } from '@/lib/domain/leanRow';
 import { DEFAULT_BOX_EMOJI, type AnimeRecord } from '@/models/anime';
@@ -152,7 +152,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             ...(box.profileId ? { profileId: box.profileId } : {}),
             top,
             covers: resolved
-              .map(a => a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large)
+              .map(a => posterUrl(a.catalog))
               .filter((p): p is string => !!p)
               .slice(0, COVER_COUNT),
             ...(resolved[0] ? { sample: getPrimaryTitle(resolved[0], titleLang) } : {}),

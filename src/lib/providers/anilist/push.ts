@@ -26,18 +26,9 @@ import { appendLog } from '@/lib/config/connectionLog';
 import { getAnilistAccessToken } from '@/lib/providers/anilist/auth';
 import { fetchAuthenticatedAnilistList, AniListRemoteEntry } from '@/lib/providers/anilist/personalSync';
 import { pushAnilistEntry } from '@/lib/providers/anilist/write';
-import { upsertAnilistPersonalEntries } from '@/lib/store';
+import { toNum, upsertAnilistPersonalEntries } from '@/lib/store';
 import { AniListPersonalEntry, AnimeRecord, UserAnimeStatus } from '@/models/anime';
 
-/** `SourceIds` values may arrive as strings (SIMKL mirrors some as such). */
-function toNum(value: number | string | undefined): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
 
 /** The id pair to address one record by, preferring AniList's own resolved id. */
 function pushIdsFor(anime: AnimeRecord): { malId?: number; anilistId?: number } {

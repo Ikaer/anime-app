@@ -18,6 +18,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getAnimeForDisplay } from '@/lib/store';
 import {
+  posterUrl,
   applyNarrowingFilters,
   getEffectiveScore,
   getEffectiveStatus,
@@ -28,6 +29,8 @@ import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 import { parseNarrowingQuery, parseUrlList, parseUrlNumber } from '@/lib/url/narrowingParams';
+// Airing order within a franchise — the one `/boxes`' group summaries use too.
+import { byAirDate } from '@/lib/domain/leanRow';
 
 /** Everything a catch-up row needs, and nothing else. */
 export interface CatchUpEntry {
@@ -86,7 +89,7 @@ const NEVER_A_HOLE = new Set(['pv', 'cm']);
 const toEntry = (a: AnimeRecord, titleLang: TitleLanguage): CatchUpEntry => ({
   id: a.id,
   title: getPrimaryTitle(a, titleLang),
-  picture: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large,
+  picture: posterUrl(a.catalog),
   numEpisodes: a.catalog.numEpisodes,
   mean: a.catalog.mean,
   year: a.catalog.startSeason?.year,
@@ -95,14 +98,6 @@ const toEntry = (a: AnimeRecord, titleLang: TitleLanguage): CatchUpEntry => ({
   status: getEffectiveStatus(a),
   score: getEffectiveScore(a),
 });
-
-/** Airing order within a franchise: earliest first, undated last. */
-const byAirDate = (titleLang: TitleLanguage) => (a: AnimeRecord, b: AnimeRecord): number => {
-  const ta = a.catalog.startDate ? new Date(a.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
-  const tb = b.catalog.startDate ? new Date(b.catalog.startDate).getTime() : Number.MAX_SAFE_INTEGER;
-  if (ta !== tb) return ta - tb;
-  return getPrimaryTitle(a, titleLang).localeCompare(getPrimaryTitle(b, titleLang));
-};
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {

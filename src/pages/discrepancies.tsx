@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import styles from './discrepancies.module.css';
 import { RefreshButton } from '@/components/shared';
 import type { AnimeRecord, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
-import { getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { posterUrl, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { useTitleLanguage } from '@/hooks/useViewDefaults';
 import { computeDiscrepancy } from '@/lib/providers/discrepancy';
 import { useT, type TFunction, type TranslationKey } from '@/lib/i18n';
@@ -303,7 +303,7 @@ export default function DiscrepanciesPage() {
               </thead>
               <tbody>
                 {rows.map(({ anime, disc: d }) => {
-                  const img = anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large;
+                  const img = posterUrl(anime.catalog);
                   const subRows = providerRows(d);
                   const absent = d.presence?.absent ?? [];
 

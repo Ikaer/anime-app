@@ -16,7 +16,7 @@
 import { computeAnchored, type AnchoredEdge } from '@/lib/reco/anchored';
 import type { RecoContribution } from '@/models/anime';
 import type { RecoEdge } from '@/lib/reco/data';
-import { getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { posterUrl, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { DEFAULT_LANG, type Lang } from '@/lib/i18n';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
 
@@ -80,7 +80,7 @@ export function computeSimilarTo(
     .map(({ anime, score, breakdown, status, seen }) => ({
       id: anime.id,
       title: getPrimaryTitle(anime, titleLang),
-      poster: anime.catalog.mainPicture?.medium || anime.catalog.mainPicture?.large,
+      poster: posterUrl(anime.catalog),
       mean: anime.catalog.mean,
       mediaType: anime.catalog.mediaType,
       year: anime.catalog.startSeason?.year,

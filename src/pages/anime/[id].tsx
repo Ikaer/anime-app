@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { getAnimeByCanonicalId, getAnimeForDisplay, resolveByMalId, isCanonicalId, getAnilistCast } from '@/lib/store';
 import type { AnimeRecord, AnimeCatalog, AniListCharacterEntry, AniListStaffEntry, Discrepancy, ProvenanceSource, ProviderPersonalState } from '@/models/anime';
-import { getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle, catalogFieldOrigins, type CatalogFieldOrigin } from '@/lib/domain/animeUtils';
+import { posterUrl, getEffectiveStatus, getEffectiveScore, getEffectiveProgress, formatUserStatus, formatSeason, getPrimaryTitle, getSecondaryTitle, catalogFieldOrigins, type CatalogFieldOrigin } from '@/lib/domain/animeUtils';
 import { groupStaffByTier, getStaffAffinity, pickStaffAffinity, type StaffRoleTier } from '@/lib/domain/staffRole';
 import { getCatalogPrecedenceByField, getTitleLanguage } from '@/lib/config/settings';
 import { generateGoogleORQuery, generateJustWatchQuery } from '@/lib/domain/searchLinks';
@@ -150,7 +150,7 @@ function discLine(
 export default function AnimeDetailPage({ anime, similar, related, cast, origins, canClearStatus, recoCredited, staffAffinity, titleLang, franchiseSize }: Props) {
   const t = useT();
   const router = useRouter();
-  const poster = anime.catalog.mainPicture?.large || anime.catalog.mainPicture?.medium || '';
+  const poster = posterUrl(anime.catalog, 'large') || '';
   const en = anime.catalog.alternativeTitles?.en;
   const ja = anime.catalog.alternativeTitles?.ja;
   const synonyms = anime.catalog.alternativeTitles?.synonyms || [];

@@ -4,7 +4,7 @@ import { computeAnchored } from '@/lib/reco/anchored';
 import { getBox } from '@/lib/reco/boxes';
 import { getGroups } from '@/lib/reco/groups';
 import { boxAnchorIds, boxAnsweredIds, loadMixEdges, MAX_MIX_ANCHORS } from '@/lib/reco/mixFetch';
-import { applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
+import { posterUrl, applyNarrowingFilters, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { parseSourceWeights, ANCHORED_WEIGHTS } from '@/lib/reco/weights';
 import { getBoxProfile } from '@/lib/reco/profiles';
 import { resolveProfile, resolveProfileOver } from '@/lib/reco/profileWeights';
@@ -69,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     : present.slice(0, MAX_MIX_ANCHORS);
   const anchors = anchorIds.map(id => {
     const a = byId.get(id)!;
-    return { id, title: getPrimaryTitle(a, titleLang), poster: a.catalog.mainPicture?.medium || a.catalog.mainPicture?.large };
+    return { id, title: getPrimaryTitle(a, titleLang), poster: posterUrl(a.catalog) };
   });
 
   if (anchorIds.length === 0) {
