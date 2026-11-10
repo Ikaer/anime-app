@@ -17,14 +17,13 @@
  */
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlList, parseUrlNumber, NARROWING_API_KEYS,
+  NARROWING_FIELDS_NO_GENRES, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 
-export interface ActivityUrlState {
-  search: string;
-  mediaTypes: string[];
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
+/** No genre filter on this page — the narrowing set minus `genres`. */
+export interface ActivityUrlState extends Omit<NarrowingUrlState, 'genres'> {
   /** Effective personal statuses to keep; empty = all of them. */
   statuses: string[];
   /** 0-based page. Server-side, like the filters. */
@@ -50,13 +49,8 @@ export const ACTIVITY_DEFAULTS: ActivityUrlState = {
   groupBy: 'day',
 };
 
+/** This page's own keys; the narrowing ones are `NARROWING_URL_KEYS`. */
 const KEYS = {
-  search: 'q',
-  mediaType: 'mt',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
   statuses: 'st',
   page: 'p',
   groupBy: 'grp',
@@ -68,34 +62,16 @@ const FILTER_KEYS = [
 ] as const satisfies readonly (keyof ActivityUrlState)[];
 
 function decode(params: URLSearchParams): ActivityUrlState {
-  const num = (v: string | null): number | null => {
-    if (v === null || v.trim() === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  const csv = (v: string | null): string[] =>
-    (v || '').split(',').map(s => s.trim()).filter(Boolean);
   return {
-    search: params.get(KEYS.search) || '',
-    mediaTypes: csv(params.get(KEYS.mediaType)),
-    minScore: num(params.get(KEYS.minScore)),
-    maxScore: num(params.get(KEYS.maxScore)),
-    minYear: num(params.get(KEYS.minYear)),
-    maxYear: num(params.get(KEYS.maxYear)),
-    statuses: csv(params.get(KEYS.statuses)),
-    page: Math.max(0, Math.floor(num(params.get(KEYS.page)) ?? 0)),
+    ...decodeNarrowing(params, NARROWING_FIELDS_NO_GENRES),
+    statuses: parseUrlList(params.get(KEYS.statuses)),
+    page: Math.max(0, Math.floor(parseUrlNumber(params.get(KEYS.page)) ?? 0)),
     groupBy: params.get(KEYS.groupBy) === 'franchise' ? 'franchise' : 'day',
   };
 }
 
 function encode(state: ActivityUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set(KEYS.search, state.search);
-  if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS_NO_GENRES);
   if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
   if (state.page > 0) params.set(KEYS.page, String(state.page));
   if (state.groupBy !== 'day') params.set(KEYS.groupBy, state.groupBy);
@@ -109,13 +85,7 @@ function encode(state: ActivityUrlState): string {
  * rows exist and how they page, so it is the server's.
  */
 export function toActivityQuery(state: ActivityUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set('search', state.search);
-  if (state.mediaTypes.length > 0) params.set('mediaType', state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set('minScore', String(state.minScore));
-  if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
-  if (state.minYear !== null) params.set('minYear', String(state.minYear));
-  if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS_NO_GENRES, NARROWING_API_KEYS);
   if (state.statuses.length > 0) params.set('status', state.statuses.join(','));
   if (state.page > 0) params.set('page', String(state.page));
   if (state.groupBy === 'franchise') params.set('group', 'franchise');

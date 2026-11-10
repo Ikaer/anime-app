@@ -22,6 +22,7 @@ import { toLeanRow, byAirDate, type LeanAnimeRow } from '@/lib/domain/leanRow';
 import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
+import { parseNarrowingQuery, parseUrlList, parseUrlNumber } from '@/lib/url/narrowingParams';
 
 /**
  * Everything a quick-rate card needs, and nothing else — the shared lean row.
@@ -54,15 +55,6 @@ export interface QuickRateResponse {
  */
 const PAGE_SIZE = 20;
 
-const csv = (v: unknown): string[] =>
-  typeof v === 'string' && v.trim() !== '' ? v.split(',').map(s => s.trim()).filter(Boolean) : [];
-
-const num = (v: unknown): number | null => {
-  if (typeof v !== 'string' || v.trim() === '') return null;
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : null;
-};
-
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
@@ -70,29 +62,22 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, status, page } = req.query;
+    const { status, page } = req.query;
+    const narrowing = parseNarrowingQuery(req.query);
     const titleLang = getTitleLanguage();
     // Indexed on the row-cache array itself (see getFranchiseIndex), so hidden
     // titles are dropped at seed/member level rather than by copying the array.
     const catalog = getAnimeForDisplay();
     const index = getFranchiseIndex(catalog);
 
-    const wantedTypes = csv(mediaType).map(s => s.toLowerCase());
+    const wantedTypes = (narrowing.mediaTypes ?? []).map(s => s.toLowerCase());
 
     // ---- Seeds: the narrowing filters select which titles you're rating. ----
-    let seeds = applyNarrowingFilters(catalog.filter(a => !a.hidden), {
-      search: typeof search === 'string' ? search : undefined,
-      mediaTypes: wantedTypes.length > 0 ? wantedTypes : undefined,
-      minScore: num(minScore),
-      maxScore: num(maxScore),
-      minYear: num(minYear),
-      maxYear: num(maxYear),
-      genres: csv(genres).length > 0 ? csv(genres) : undefined,
-    });
+    let seeds = applyNarrowingFilters(catalog.filter(a => !a.hidden), narrowing);
 
     // Personal-status filter, OR semantics, `not_defined` = unstatused. Unlike
     // the tier board this deliberately reaches unstatused titles, so no default.
-    const statuses = csv(status);
+    const statuses = parseUrlList(status);
     if (statuses.length > 0) {
       seeds = seeds.filter(a => {
         const s = getEffectiveStatus(a);
@@ -136,7 +121,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
     // Clamp rather than 404: a filter change that shrinks the result set can
     // leave a stale page number in the URL.
-    const pageNum = Math.min(Math.max(Math.floor(num(page) ?? 0), 0), totalPages - 1);
+    const pageNum = Math.min(Math.max(Math.floor(parseUrlNumber(page) ?? 0), 0), totalPages - 1);
     const slice = groups.slice(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE);
 
     const response: QuickRateResponse = {

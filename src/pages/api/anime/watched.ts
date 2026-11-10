@@ -3,6 +3,7 @@ import { getAnimeForDisplay } from '@/lib/store';
 import { applyNarrowingFilters, getEffectiveStatus, getEffectiveScore } from '@/lib/domain/animeUtils';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { toLeanRow, byAirDate, type LeanAnimeRow } from '@/lib/domain/leanRow';
+import { parseNarrowingQuery, parseUrlList, parseUrlNumber } from '@/lib/url/narrowingParams';
 
 /**
  * GET /api/anime/watched — the STATUSED list, flat, filterable, unpaginated.
@@ -47,15 +48,6 @@ export interface WatchedResponse {
   total: number;
 }
 
-const csv = (v: unknown): string[] =>
-  typeof v === 'string' && v.trim() !== '' ? v.split(',').map(s => s.trim()).filter(Boolean) : [];
-
-const num = (v: unknown): number | null => {
-  if (typeof v !== 'string' || v.trim() === '') return null;
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : null;
-};
-
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
@@ -63,21 +55,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, status } = req.query;
+    const { status } = req.query;
     const titleLang = getTitleLanguage();
     const all = getAnimeForDisplay();
 
-    let rows = applyNarrowingFilters(all.filter(a => !a.hidden && !!getEffectiveStatus(a)), {
-      search: typeof search === 'string' ? search : undefined,
-      mediaTypes: csv(mediaType).length > 0 ? csv(mediaType).map(s => s.toLowerCase()) : undefined,
-      minScore: num(minScore),
-      maxScore: num(maxScore),
-      minYear: num(minYear),
-      maxYear: num(maxYear),
-      genres: csv(genres).length > 0 ? csv(genres) : undefined,
-    });
+    let rows = applyNarrowingFilters(
+      all.filter(a => !a.hidden && !!getEffectiveStatus(a)),
+      parseNarrowingQuery(req.query),
+    );
 
-    const statuses = csv(status);
+    const statuses = parseUrlList(status);
     if (statuses.length > 0) {
       rows = rows.filter(a => {
         const s = getEffectiveStatus(a);

@@ -10,6 +10,7 @@ import { getBoxProfile } from '@/lib/reco/profiles';
 import { resolveProfile, resolveProfileOver } from '@/lib/reco/profileWeights';
 import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord, RecoMeta } from '@/models/anime';
+import { parseNarrowingQuery } from '@/lib/url/narrowingParams';
 
 /**
  * "Mon mix" — crowd recommendations anchored on a HAND-PICKED SET of anime,
@@ -105,20 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // here stays off: `/mix` is a different question.
   const includeSeen = req.query.includeSeen === 'true';
 
-  const { mediaType, search, minScore, maxScore, minYear, maxYear, genres } = req.query;
-  const narrowing = {
-    mediaTypes: typeof mediaType === 'string' && mediaType.trim() !== ''
-      ? mediaType.split(',').map(t => t.trim()).filter(Boolean)
-      : undefined,
-    search: typeof search === 'string' ? search : undefined,
-    minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
-    maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
-    minYear: typeof minYear === 'string' ? parseInt(minYear, 10) : null,
-    maxYear: typeof maxYear === 'string' ? parseInt(maxYear, 10) : null,
-    genres: typeof genres === 'string' && genres.trim() !== ''
-      ? genres.split(',').map(g => g.trim()).filter(Boolean)
-      : undefined,
-  };
+  const narrowing = parseNarrowingQuery(req.query);
 
   try {
     const { sources, malEdges, anilistEdges } = await loadMixEdges(anchorIds);

@@ -15,6 +15,7 @@ import { AnimeRecord } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useRecommendationsUrlState } from '@/hooks';
 import { encodeSourceWeights } from '@/lib/reco/weights';
+import { encodeNarrowing, NARROWING_API_KEYS, NARROWING_FIELDS } from '@/lib/url/narrowingParams';
 import { useI18n } from '@/lib/i18n';
 
 type RecoCard = AnimeRecord & { recoMeta?: RecoMeta };
@@ -69,14 +70,7 @@ export default function RecommendationsPage() {
 
       const params = new URLSearchParams();
       // Narrowing filters (shared with the main list, applied after ranking).
-      if (state.mediaTypes.length > 0) params.set('mediaType', state.mediaTypes.join(','));
-      if (state.search) params.set('search', state.search);
-      if (state.minScore !== null) params.set('minScore', String(state.minScore));
-      if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
-      if (state.minYear !== null) params.set('minYear', String(state.minYear));
-      if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
-      // All three genre axes ride in one param — the split is presentation only.
-      if (state.genres.length > 0) params.set('genres', state.genres.join(','));
+      encodeNarrowing(params, state, NARROWING_FIELDS, NARROWING_API_KEYS);
       // « Anime court » — resolved server-side (it needs the relation graph).
       if (state.quick) params.set('quick', '1');
 

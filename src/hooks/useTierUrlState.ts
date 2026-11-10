@@ -39,20 +39,15 @@ const CODE_TO_SEASON: Record<string, SeasonName> = {
  * `tier_list` tool needs the same union without importing a hook.
  */
 import type { TierAxis } from '@/lib/domain/tierGap';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlList, NARROWING_FIELDS, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 export type { TierAxis };
 
 /** Which community mean the per-card gap chip (and the `gap` axis) compares to. */
 export type TierVersus = 'none' | 'mal' | 'anilist';
 
-export interface TierUrlState {
-  search: string;
-  mediaTypes: string[];
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
-  /** MAL genre names (not AniList tags) — AND semantics, empty = no filter. */
-  genres: string[];
+export interface TierUrlState extends NarrowingUrlState {
   /** Effective (SIMKL-first) personal status — OR semantics, empty = no filter (show all). */
   statuses: string[];
   /** Start-season filter, OR semantics, empty = no filter. Matches `catalog.startSeason`. */
@@ -83,14 +78,8 @@ export const TIER_DEFAULTS: TierUrlState = {
 const AXES: readonly TierAxis[] = ['me', 'mal', 'anilist', 'gap'];
 const VERSUS: readonly TierVersus[] = ['none', 'mal', 'anilist'];
 
+/** This page's own keys; the narrowing ones are `NARROWING_URL_KEYS`. */
 const KEYS = {
-  search: 'q',
-  mediaType: 'mt',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
-  genres: 'g',
   statuses: 'st',
   seasons: 'sn',
   thumbSize: 'ts',
@@ -117,20 +106,9 @@ function decodeSeasons(value: string | null): SeasonInfo[] {
 }
 
 function decode(params: URLSearchParams): TierUrlState {
-  const num = (v: string | null): number | null => {
-    if (v === null || v.trim() === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
   return {
-    search: params.get(KEYS.search) || '',
-    mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
-    minScore: num(params.get(KEYS.minScore)),
-    maxScore: num(params.get(KEYS.maxScore)),
-    minYear: num(params.get(KEYS.minYear)),
-    maxYear: num(params.get(KEYS.maxYear)),
-    genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
-    statuses: (params.get(KEYS.statuses) || '').split(',').map(s => s.trim()).filter(Boolean),
+    ...decodeNarrowing(params, NARROWING_FIELDS),
+    statuses: parseUrlList(params.get(KEYS.statuses)),
     seasons: decodeSeasons(params.get(KEYS.seasons)),
     thumbSize: params.has(KEYS.thumbSize)
       ? (parseInt(params.get(KEYS.thumbSize)!, 10) as ImageSize)
@@ -146,14 +124,7 @@ function oneOf<T extends string>(value: string | null, allowed: readonly T[], fa
 }
 
 function encode(state: TierUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set(KEYS.search, state.search);
-  if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
-  if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS);
   if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
   const encodedSeasons = encodeSeasons(state.seasons);
   if (encodedSeasons) params.set(KEYS.seasons, encodedSeasons);

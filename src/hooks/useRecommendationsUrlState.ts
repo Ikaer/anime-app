@@ -12,8 +12,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SourceWeights } from '@/models/anime';
 import { DEFAULT_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/reco/weights';
 import useViewDefaults from '@/hooks/useViewDefaults';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlNumber, NARROWING_DEFAULTS, NARROWING_FIELDS,
+  NARROWING_URL_KEYS, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 
-export interface RecoUrlState {
+/** The narrowing filters (`NarrowingUrlState`) share semantics with the main list. */
+export interface RecoUrlState extends NarrowingUrlState {
   /** Engine: include 2-hop edges (damped) in the ranking. */
   nicheMode: boolean;
   /** Engine: ranking-time seed threshold override (null = stored default). */
@@ -30,15 +35,6 @@ export interface RecoUrlState {
    * (`review`) wins over it — both are ways out of the feed.
    */
   secondChance: boolean;
-  /** Narrowing filters (shared semantics with the main list). */
-  mediaTypes: string[];
-  search: string;
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
-  /** MAL genre names (all three axes in one list) — AND semantics, empty = no filter. */
-  genres: string[];
   /**
    * « Anime court »: a known run of <= QUICK_MAX_EPISODES episodes AND no
    * sequel/prequel in the catalog. A narrowing filter like the rest of this
@@ -61,13 +57,8 @@ export const RECO_DEFAULTS: RecoUrlState = {
   diversity: null,
   review: false,
   secondChance: false,
-  mediaTypes: [],
-  search: '',
-  minScore: null,
-  maxScore: null,
+  ...NARROWING_DEFAULTS,
   minYear: 2000,
-  maxYear: null,
-  genres: [],
   quick: false,
   cardsPerRow: null,
 };
@@ -79,22 +70,11 @@ const KEYS = {
   diversity: 'div',
   review: 'rev',
   secondChance: 'sc',
-  mediaType: 'mt',
-  search: 'q',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
-  genres: 'g',
   quick: 'qk',
 } as const;
 
 function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlState {
-  const num = (v: string | null): number | null => {
-    if (v === null || v.trim() === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
+  const num = parseUrlNumber;
   return {
     nicheMode: params.get(KEYS.niche) === '1',
     threshold: num(params.get(KEYS.threshold)),
@@ -102,13 +82,8 @@ function decode(params: URLSearchParams, cardsPerRow: number | null): RecoUrlSta
     diversity: num(params.get(KEYS.diversity)),
     review: params.get(KEYS.review) === '1',
     secondChance: params.get(KEYS.secondChance) === '1',
-    mediaTypes: (params.get(KEYS.mediaType) || '').split(',').map(s => s.trim()).filter(Boolean),
-    search: params.get(KEYS.search) || '',
-    minScore: num(params.get(KEYS.minScore)),
-    maxScore: num(params.get(KEYS.maxScore)),
-    minYear: params.has(KEYS.minYear) ? num(params.get(KEYS.minYear)) : RECO_DEFAULTS.minYear,
-    maxYear: num(params.get(KEYS.maxYear)),
-    genres: (params.get(KEYS.genres) || '').split(',').map(s => s.trim()).filter(Boolean),
+    // An absent `miny` falls back to the feed's 2000 default.
+    ...decodeNarrowing(params, NARROWING_FIELDS, RECO_DEFAULTS),
     quick: params.get(KEYS.quick) === '1',
     cardsPerRow,
   };
@@ -123,13 +98,7 @@ function encode(state: RecoUrlState): string {
   if (state.diversity !== null && state.diversity > 0) params.set(KEYS.diversity, String(state.diversity));
   if (state.review) params.set(KEYS.review, '1');
   if (state.secondChance) params.set(KEYS.secondChance, '1');
-  if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.search) params.set(KEYS.search, state.search);
-  if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null && state.minYear !== RECO_DEFAULTS.minYear) params.set(KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
-  if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
+  encodeNarrowing(params, state, NARROWING_FIELDS, NARROWING_URL_KEYS, RECO_DEFAULTS);
   if (state.quick) params.set(KEYS.quick, '1');
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/recommendations?${qs}` : '/recommendations';

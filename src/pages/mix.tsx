@@ -31,6 +31,7 @@ import { AnimeRecord } from '@/models/anime';
 import type { RecoMeta } from '@/models/anime';
 import { useMixUrlState, MAX_ANCHORS } from '@/hooks';
 import { encodeSourceWeights, ANCHORED_WEIGHTS, ANCHORED_SOURCES } from '@/lib/reco/weights';
+import { encodeNarrowing, NARROWING_API_KEYS, NARROWING_FIELDS } from '@/lib/url/narrowingParams';
 import { DEFAULT_PROFILE_EMOJI } from '@/lib/reco/profileWeights';
 import { useI18n } from '@/lib/i18n';
 
@@ -74,13 +75,7 @@ export default function MixPage() {
       const params = new URLSearchParams();
       params.set('ids', anchorKey);
       if (state.includeSeen) params.set('includeSeen', 'true');
-      if (state.mediaTypes.length > 0) params.set('mediaType', state.mediaTypes.join(','));
-      if (state.search) params.set('search', state.search);
-      if (state.minScore !== null) params.set('minScore', String(state.minScore));
-      if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
-      if (state.minYear !== null) params.set('minYear', String(state.minYear));
-      if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
-      if (state.genres.length > 0) params.set('genres', state.genres.join(','));
+      encodeNarrowing(params, state, NARROWING_FIELDS, NARROWING_API_KEYS);
       const wStr = encodeSourceWeights(state.weights, ANCHORED_WEIGHTS);
       if (wStr) params.set('w', wStr);
       params.set('lang', lang);

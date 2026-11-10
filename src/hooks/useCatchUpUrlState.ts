@@ -12,14 +12,13 @@
  */
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlNumber, NARROWING_API_KEYS, NARROWING_DEFAULTS,
+  NARROWING_FIELDS_NO_GENRES, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 
-export interface CatchUpUrlState {
-  search: string;
-  mediaTypes: string[];
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
+/** No genre filter on this page — the narrowing set minus `genres`. */
+export interface CatchUpUrlState extends Omit<NarrowingUrlState, 'genres'> {
   /** List entries that haven't aired yet. Default OFF. */
   unaired: boolean;
   /**
@@ -32,7 +31,7 @@ export interface CatchUpUrlState {
 }
 
 export const CATCH_UP_DEFAULTS: CatchUpUrlState = {
-  search: '',
+  search: NARROWING_DEFAULTS.search,
   mediaTypes: [],
   minScore: null,
   maxScore: null,
@@ -43,13 +42,8 @@ export const CATCH_UP_DEFAULTS: CatchUpUrlState = {
   page: 0,
 };
 
+/** This page's own keys; the narrowing ones are `NARROWING_URL_KEYS`. */
 const KEYS = {
-  search: 'q',
-  mediaType: 'mt',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
   unaired: 'ua',
   direct: 'dr',
   page: 'p',
@@ -65,35 +59,17 @@ const FILTER_KEYS = [
 ] as const satisfies readonly (keyof CatchUpUrlState)[];
 
 function decode(params: URLSearchParams): CatchUpUrlState {
-  const num = (v: string | null): number | null => {
-    if (v === null || v.trim() === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  const csv = (v: string | null): string[] =>
-    (v || '').split(',').map(s => s.trim()).filter(Boolean);
   return {
-    search: params.get(KEYS.search) || '',
-    mediaTypes: csv(params.get(KEYS.mediaType)),
-    minScore: num(params.get(KEYS.minScore)),
-    maxScore: num(params.get(KEYS.maxScore)),
-    minYear: num(params.get(KEYS.minYear)),
-    maxYear: num(params.get(KEYS.maxYear)),
+    ...decodeNarrowing(params, NARROWING_FIELDS_NO_GENRES),
     // Default-off, so only the ON state is written to the URL.
     unaired: params.get(KEYS.unaired) === '1',
     direct: params.get(KEYS.direct) === '1',
-    page: Math.max(0, Math.floor(num(params.get(KEYS.page)) ?? 0)),
+    page: Math.max(0, Math.floor(parseUrlNumber(params.get(KEYS.page)) ?? 0)),
   };
 }
 
 function encode(state: CatchUpUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set(KEYS.search, state.search);
-  if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS_NO_GENRES);
   if (state.unaired) params.set(KEYS.unaired, '1');
   if (state.direct) params.set(KEYS.direct, '1');
   if (state.page > 0) params.set(KEYS.page, String(state.page));
@@ -103,13 +79,7 @@ function encode(state: CatchUpUrlState): string {
 
 /** The query string the API cares about — here, all of it. */
 export function toCatchUpQuery(state: CatchUpUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set('search', state.search);
-  if (state.mediaTypes.length > 0) params.set('mediaType', state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set('minScore', String(state.minScore));
-  if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
-  if (state.minYear !== null) params.set('minYear', String(state.minYear));
-  if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS_NO_GENRES, NARROWING_API_KEYS);
   if (state.unaired) params.set('unaired', '1');
   if (state.direct) params.set('direct', '1');
   if (state.page > 0) params.set('page', String(state.page));

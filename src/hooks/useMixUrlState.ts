@@ -17,23 +17,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SourceWeights } from '@/models/anime';
 import { ANCHORED_WEIGHTS, parseSourceWeights, encodeSourceWeights, resolveWeights } from '@/lib/reco/weights';
 import useViewDefaults from '@/hooks/useViewDefaults';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlList, NARROWING_FIELDS, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 
-export interface MixUrlState {
+/** The narrowing filters (`NarrowingUrlState`) share semantics with the main list. */
+export interface MixUrlState extends NarrowingUrlState {
   /** Canonical ids of the picked anime, in pick order. The whole point of the page. */
   anchors: string[];
   /** Engine: per-source weights (anchored base merged with URL overrides). */
   weights: SourceWeights;
   /** Keep titles already watched in the results (off by default). */
   includeSeen: boolean;
-  /** Narrowing filters (shared semantics with the main list). */
-  mediaTypes: string[];
-  search: string;
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
-  /** MAL genre names (all three axes in one list) — AND semantics, empty = no filter. */
-  genres: string[];
   /** Forced cards per row in card layout; null = adaptive (auto-fill). */
   cardsPerRow: number | null;
 }
@@ -60,34 +55,14 @@ const KEYS = {
   anchors: 'a',
   weights: 'w',
   includeSeen: 'seen',
-  mediaType: 'mt',
-  search: 'q',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
-  genres: 'g',
 } as const;
 
-const list = (v: string | null): string[] => (v || '').split(',').map(s => s.trim()).filter(Boolean);
-
 function decode(params: URLSearchParams, cardsPerRow: number | null): MixUrlState {
-  const num = (v: string | null): number | null => {
-    if (v === null || v.trim() === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
   return {
-    anchors: list(params.get(KEYS.anchors)),
+    anchors: parseUrlList(params.get(KEYS.anchors)),
     weights: resolveWeights(parseSourceWeights(params.get(KEYS.weights)), ANCHORED_WEIGHTS),
     includeSeen: params.get(KEYS.includeSeen) === '1',
-    mediaTypes: list(params.get(KEYS.mediaType)),
-    search: params.get(KEYS.search) || '',
-    minScore: num(params.get(KEYS.minScore)),
-    maxScore: num(params.get(KEYS.maxScore)),
-    minYear: num(params.get(KEYS.minYear)),
-    maxYear: num(params.get(KEYS.maxYear)),
-    genres: list(params.get(KEYS.genres)),
+    ...decodeNarrowing(params, NARROWING_FIELDS),
     cardsPerRow,
   };
 }
@@ -98,13 +73,7 @@ function encode(state: MixUrlState): string {
   const wStr = encodeSourceWeights(state.weights, ANCHORED_WEIGHTS);
   if (wStr) params.set(KEYS.weights, wStr);
   if (state.includeSeen) params.set(KEYS.includeSeen, '1');
-  if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.search) params.set(KEYS.search, state.search);
-  if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
-  if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
+  encodeNarrowing(params, state, NARROWING_FIELDS);
   const qs = params.toString().replace(/%2C/g, ',').replace(/%3A/g, ':');
   return qs ? `/mix?${qs}` : '/mix';
 }

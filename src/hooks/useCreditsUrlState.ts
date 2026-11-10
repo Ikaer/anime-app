@@ -16,16 +16,11 @@
 import { useRouter } from 'next/router';
 import { useCallback, useMemo } from 'react';
 import { SortColumn, SortDirection } from '@/models/anime';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlList, NARROWING_FIELDS, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 
-export interface CreditsUrlState {
-  search: string;
-  mediaTypes: string[];
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
-  /** MAL genre names — AND semantics, empty = no filter. */
-  genres: string[];
+export interface CreditsUrlState extends NarrowingUrlState {
   /** Effective personal status, `not_defined` included — OR semantics, empty = no filter. */
   statuses: string[];
   sortBy: SortColumn;
@@ -55,14 +50,8 @@ const SORT_COLUMNS: readonly SortColumn[] = [
 ];
 const SORT_DIRECTIONS: readonly SortDirection[] = ['asc', 'desc'];
 
-export const CREDITS_KEYS = {
-  search: 'q',
-  mediaType: 'mt',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
-  genres: 'g',
+/** This page's own keys; the narrowing ones are `NARROWING_URL_KEYS`. */
+const CREDITS_KEYS = {
   statuses: 'st',
   sortBy: 'sort',
   sortDir: 'dir',
@@ -73,15 +62,6 @@ function oneOf<T extends string>(value: string | null, allowed: readonly T[], fa
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-function num(v: string | null): number | null {
-  if (v === null || v.trim() === '') return null;
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-const csv = (v: string | null): string[] =>
-  (v || '').split(',').map(s => s.trim()).filter(Boolean);
-
 /**
  * Decode the filter state out of a query bag. Shared with `getServerSideProps`,
  * which is where the filters are actually applied — one decoder, so the sidebar
@@ -89,28 +69,15 @@ const csv = (v: string | null): string[] =>
  */
 export function decodeCreditsState(params: URLSearchParams): CreditsUrlState {
   return {
-    search: params.get(CREDITS_KEYS.search) || '',
-    mediaTypes: csv(params.get(CREDITS_KEYS.mediaType)),
-    minScore: num(params.get(CREDITS_KEYS.minScore)),
-    maxScore: num(params.get(CREDITS_KEYS.maxScore)),
-    minYear: num(params.get(CREDITS_KEYS.minYear)),
-    maxYear: num(params.get(CREDITS_KEYS.maxYear)),
-    genres: csv(params.get(CREDITS_KEYS.genres)),
-    statuses: csv(params.get(CREDITS_KEYS.statuses)),
+    ...decodeNarrowing(params, NARROWING_FIELDS),
+    statuses: parseUrlList(params.get(CREDITS_KEYS.statuses)),
     sortBy: oneOf(params.get(CREDITS_KEYS.sortBy), SORT_COLUMNS, CREDITS_DEFAULTS.sortBy),
     sortDir: oneOf(params.get(CREDITS_KEYS.sortDir), SORT_DIRECTIONS, CREDITS_DEFAULTS.sortDir),
   };
 }
 
 function encode(basePath: string, state: CreditsUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set(CREDITS_KEYS.search, state.search);
-  if (state.mediaTypes.length > 0) params.set(CREDITS_KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set(CREDITS_KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(CREDITS_KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(CREDITS_KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(CREDITS_KEYS.maxYear, String(state.maxYear));
-  if (state.genres.length > 0) params.set(CREDITS_KEYS.genres, state.genres.join(','));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS);
   if (state.statuses.length > 0) params.set(CREDITS_KEYS.statuses, state.statuses.join(','));
   if (state.sortBy !== CREDITS_DEFAULTS.sortBy) params.set(CREDITS_KEYS.sortBy, state.sortBy);
   if (state.sortDir !== CREDITS_DEFAULTS.sortDir) params.set(CREDITS_KEYS.sortDir, state.sortDir);

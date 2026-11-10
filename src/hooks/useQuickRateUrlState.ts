@@ -10,15 +10,12 @@
  */
 import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  decodeNarrowing, encodeNarrowing, parseUrlList, parseUrlNumber, NARROWING_API_KEYS,
+  NARROWING_FIELDS, type NarrowingUrlState,
+} from '@/lib/url/narrowingParams';
 
-export interface QuickRateUrlState {
-  search: string;
-  mediaTypes: string[];
-  minScore: number | null;
-  maxScore: number | null;
-  minYear: number | null;
-  maxYear: number | null;
-  genres: string[];
+export interface QuickRateUrlState extends NarrowingUrlState {
   /** Effective personal status; `not_defined` = unstatused. Empty = no filter. */
   statuses: string[];
   /** Rating a title also marks it completed at full progress. Default ON. */
@@ -40,14 +37,8 @@ export const QUICK_RATE_DEFAULTS: QuickRateUrlState = {
   page: 0,
 };
 
+/** This page's own keys; the narrowing ones are `NARROWING_URL_KEYS`. */
 const KEYS = {
-  search: 'q',
-  mediaType: 'mt',
-  minScore: 'min',
-  maxScore: 'max',
-  minYear: 'miny',
-  maxYear: 'maxy',
-  genres: 'g',
   statuses: 'st',
   autoComplete: 'ac',
   page: 'p',
@@ -64,37 +55,17 @@ const FILTER_KEYS = [
 ] as const satisfies readonly (keyof QuickRateUrlState)[];
 
 function decode(params: URLSearchParams): QuickRateUrlState {
-  const num = (v: string | null): number | null => {
-    if (v === null || v.trim() === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  const csv = (v: string | null): string[] =>
-    (v || '').split(',').map(s => s.trim()).filter(Boolean);
   return {
-    search: params.get(KEYS.search) || '',
-    mediaTypes: csv(params.get(KEYS.mediaType)),
-    minScore: num(params.get(KEYS.minScore)),
-    maxScore: num(params.get(KEYS.maxScore)),
-    minYear: num(params.get(KEYS.minYear)),
-    maxYear: num(params.get(KEYS.maxYear)),
-    genres: csv(params.get(KEYS.genres)),
-    statuses: csv(params.get(KEYS.statuses)),
+    ...decodeNarrowing(params, NARROWING_FIELDS),
+    statuses: parseUrlList(params.get(KEYS.statuses)),
     // Default-on, so only the OFF state is written to the URL.
     autoComplete: params.get(KEYS.autoComplete) !== '0',
-    page: Math.max(0, Math.floor(num(params.get(KEYS.page)) ?? 0)),
+    page: Math.max(0, Math.floor(parseUrlNumber(params.get(KEYS.page)) ?? 0)),
   };
 }
 
 function encode(state: QuickRateUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set(KEYS.search, state.search);
-  if (state.mediaTypes.length > 0) params.set(KEYS.mediaType, state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set(KEYS.minScore, String(state.minScore));
-  if (state.maxScore !== null) params.set(KEYS.maxScore, String(state.maxScore));
-  if (state.minYear !== null) params.set(KEYS.minYear, String(state.minYear));
-  if (state.maxYear !== null) params.set(KEYS.maxYear, String(state.maxYear));
-  if (state.genres.length > 0) params.set(KEYS.genres, state.genres.join(','));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS);
   if (state.statuses.length > 0) params.set(KEYS.statuses, state.statuses.join(','));
   if (!state.autoComplete) params.set(KEYS.autoComplete, '0');
   if (state.page > 0) params.set(KEYS.page, String(state.page));
@@ -104,14 +75,7 @@ function encode(state: QuickRateUrlState): string {
 
 /** The query string the API cares about — everything but the write-behavior toggle. */
 export function toQuickRateQuery(state: QuickRateUrlState): string {
-  const params = new URLSearchParams();
-  if (state.search) params.set('search', state.search);
-  if (state.mediaTypes.length > 0) params.set('mediaType', state.mediaTypes.join(','));
-  if (state.minScore !== null) params.set('minScore', String(state.minScore));
-  if (state.maxScore !== null) params.set('maxScore', String(state.maxScore));
-  if (state.minYear !== null) params.set('minYear', String(state.minYear));
-  if (state.maxYear !== null) params.set('maxYear', String(state.maxYear));
-  if (state.genres.length > 0) params.set('genres', state.genres.join(','));
+  const params = encodeNarrowing(new URLSearchParams(), state, NARROWING_FIELDS, NARROWING_API_KEYS);
   if (state.statuses.length > 0) params.set('status', state.statuses.join(','));
   if (state.page > 0) params.set('page', String(state.page));
   return params.toString();

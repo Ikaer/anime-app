@@ -27,6 +27,7 @@ import { getFranchiseIndex } from '@/lib/domain/franchise';
 import { getTitleLanguage } from '@/lib/config/settings';
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
+import { parseNarrowingQuery, parseUrlList, parseUrlNumber } from '@/lib/url/narrowingParams';
 
 /** Everything a catch-up row needs, and nothing else. */
 export interface CatchUpEntry {
@@ -82,15 +83,6 @@ const PAGE_SIZE = 20;
  */
 const NEVER_A_HOLE = new Set(['pv', 'cm']);
 
-const csv = (v: unknown): string[] =>
-  typeof v === 'string' && v.trim() !== '' ? v.split(',').map(s => s.trim()).filter(Boolean) : [];
-
-const num = (v: unknown): number | null => {
-  if (typeof v !== 'string' || v.trim() === '') return null;
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : null;
-};
-
 const toEntry = (a: AnimeRecord, titleLang: TitleLanguage): CatchUpEntry => ({
   id: a.id,
   title: getPrimaryTitle(a, titleLang),
@@ -119,8 +111,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { search, mediaType, minScore, maxScore, minYear, maxYear, genres, unaired, direct, page } =
-      req.query;
+    const { search, unaired, direct, page } = req.query;
     const includeUnaired = unaired === '1';
     const titleLang = getTitleLanguage();
 
@@ -146,14 +137,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // type a franchise name, so it matches any member (`seen` included) and
     // keeps the whole group.
     const term = typeof search === 'string' ? search.trim().toLowerCase() : '';
-    const holeFilters = {
-      mediaTypes: csv(mediaType).length > 0 ? csv(mediaType).map(s => s.toLowerCase()) : undefined,
-      minScore: num(minScore),
-      maxScore: num(maxScore),
-      minYear: num(minYear),
-      maxYear: num(maxYear),
-      genres: csv(genres).length > 0 ? csv(genres) : undefined,
-    };
+    const holeFilters = { ...parseNarrowingQuery(req.query), search: undefined };
 
     interface Built { group: CatchUpGroup; sortScore: number; sortMean: number }
     const built: Built[] = [];
@@ -235,7 +219,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const totalPages = Math.max(1, Math.ceil(built.length / PAGE_SIZE));
     // Clamp rather than 404: a filter change that shrinks the result set can
     // leave a stale page number in the URL.
-    const pageNum = Math.min(Math.max(Math.floor(num(page) ?? 0), 0), totalPages - 1);
+    const pageNum = Math.min(Math.max(Math.floor(parseUrlNumber(page) ?? 0), 0), totalPages - 1);
 
     const response: CatchUpResponse = {
       groups: built.slice(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE).map(b => b.group),

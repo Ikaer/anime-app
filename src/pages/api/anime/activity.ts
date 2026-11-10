@@ -44,6 +44,7 @@ import { getTitleLanguage } from '@/lib/config/settings';
 import { getFranchiseIndex } from '@/lib/domain/franchise';
 import type { AnimeRecord } from '@/models/anime';
 import type { TitleLanguage } from '@/lib/url/viewDefaults';
+import { parseNarrowingQuery, parseUrlList, parseUrlNumber } from '@/lib/url/narrowingParams';
 
 /** Everything one feed row needs, and nothing else. */
 export interface ActivityEntry {
@@ -113,14 +114,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const q = req.query;
     const str = (v: string | string[] | undefined): string =>
       (typeof v === 'string' ? v : '').trim();
-    const csv = (v: string | string[] | undefined): string[] =>
-      str(v).split(',').map(s => s.trim()).filter(Boolean);
-    const num = (v: string | string[] | undefined): number | null => {
-      const s = str(v);
-      if (!s) return null;
-      const n = parseFloat(s);
-      return Number.isFinite(n) ? n : null;
-    };
 
     const all = getAnimeForDisplay();
 
@@ -128,22 +121,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // user has a status. Hidden titles stay hidden here as everywhere.
     const statused = all.filter(a => !a.hidden && getEffectiveStatus(a));
 
-    const wantedStatuses = csv(q.status);
+    const wantedStatuses = parseUrlList(q.status);
     const byStatus = wantedStatuses.length > 0
       ? statused.filter(a => wantedStatuses.includes(getEffectiveStatus(a) || ''))
       : statused;
 
     // The same shared narrowing implementation every other surface uses, so
     // there is one filter behaviour rather than a second one that drifts.
-    const filtered = applyNarrowingFilters(byStatus, {
-      search: str(q.search),
-      mediaTypes: csv(q.mediaType),
-      minScore: num(q.minScore),
-      maxScore: num(q.maxScore),
-      minYear: num(q.minYear),
-      maxYear: num(q.maxYear),
-      genres: csv(q.genres),
-    });
+    const filtered = applyNarrowingFilters(byStatus, parseNarrowingQuery(q));
 
     const dated: { record: AnimeRecord; watchedAt: string }[] = [];
     let undated = 0;
@@ -182,7 +167,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const total = rows.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const page = Math.min(Math.max(0, Math.floor(num(q.page) ?? 0)), totalPages - 1);
+    const page = Math.min(Math.max(0, Math.floor(parseUrlNumber(q.page) ?? 0)), totalPages - 1);
     const slice = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
     const titleLang = getTitleLanguage();

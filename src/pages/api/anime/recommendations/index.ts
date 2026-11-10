@@ -11,6 +11,7 @@ import { getAnimeForDisplay } from '@/lib/store';
 import type { AnimeRecord } from '@/models/anime';
 import { parseSourceWeights } from '@/lib/reco/weights';
 import { getTitleLanguage } from '@/lib/config/settings';
+import { parseNarrowingQuery } from '@/lib/url/narrowingParams';
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -19,22 +20,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
-    const { nicheMode, threshold, review, mediaType, search, minScore, maxScore, minYear, maxYear, genres } = req.query;
+    const { nicheMode, threshold, review } = req.query;
 
     // Narrowing filters shared with /api/anime/animes (media type / search / mean range / year range / genres).
-    const narrowing = {
-      mediaTypes: typeof mediaType === 'string' && mediaType.trim() !== ''
-        ? mediaType.split(',').map(t => t.trim()).filter(Boolean)
-        : undefined,
-      search: typeof search === 'string' ? search : undefined,
-      minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
-      maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
-      minYear: typeof minYear === 'string' ? parseInt(minYear, 10) : null,
-      maxYear: typeof maxYear === 'string' ? parseInt(maxYear, 10) : null,
-      genres: typeof genres === 'string' && genres.trim() !== ''
-        ? genres.split(',').map(g => g.trim()).filter(Boolean)
-        : undefined,
-    };
+    const narrowing = parseNarrowingQuery(req.query);
 
     /**
      * « Anime court » — the one narrowing dimension that cannot go through
