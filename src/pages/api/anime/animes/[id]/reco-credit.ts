@@ -12,34 +12,12 @@
  * the detail page two weeks later as from the card — one route for one meaning,
  * whatever surface the click came from.
  */
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { isCanonicalId } from '@/lib/store';
 import { addRecoCredit, removeRecoCredit } from '@/lib/reco/recoCreditStore';
+import { idToggleRoute } from '@/lib/api/idToggleRoute';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { id } = req.query;
-  const animeId = typeof id === 'string' ? id : '';
-
-  if (!isCanonicalId(animeId)) {
-    return res.status(400).json({ error: 'Invalid anime ID' });
-  }
-
-  try {
-    switch (req.method) {
-      case 'POST':
-        addRecoCredit(animeId);
-        res.status(200).json({ ok: true, credited: true });
-        break;
-      case 'DELETE':
-        removeRecoCredit(animeId);
-        res.status(200).json({ ok: true, credited: false });
-        break;
-      default:
-        res.setHeader('Allow', ['POST', 'DELETE']);
-        res.status(405).end(`Method ${req.method} Not Allowed`);
-    }
-  } catch (error) {
-    console.error(`Error updating reco credit for ${animeId}:`, error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-}
+export default idToggleRoute({
+  on: addRecoCredit,
+  off: removeRecoCredit,
+  body: (credited) => ({ ok: true, credited }),
+  label: 'reco credit',
+});
