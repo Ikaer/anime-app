@@ -40,6 +40,7 @@ export type ActivityGroupBy = 'day' | 'franchise';
 export const ACTIVITY_DEFAULTS: ActivityUrlState = {
   search: '',
   mediaTypes: [],
+  nsfw: [],
   minScore: null,
   maxScore: null,
   minYear: null,

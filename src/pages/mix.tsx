@@ -125,6 +125,8 @@ export default function MixPage() {
           onSearchChange={(v) => update({ search: v })}
           mediaTypes={state.mediaTypes}
           onMediaTypesChange={(v) => update({ mediaTypes: v })}
+          nsfw={state.nsfw}
+          onNsfwChange={(v) => update({ nsfw: v })}
           minScore={state.minScore}
           onMinScoreChange={(v) => update({ minScore: v })}
           maxScore={state.maxScore}

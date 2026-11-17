@@ -33,6 +33,7 @@ export interface CatchUpUrlState extends Omit<NarrowingUrlState, 'genres'> {
 export const CATCH_UP_DEFAULTS: CatchUpUrlState = {
   search: NARROWING_DEFAULTS.search,
   mediaTypes: [],
+  nsfw: [],
   minScore: null,
   maxScore: null,
   minYear: null,

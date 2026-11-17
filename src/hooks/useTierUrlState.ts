@@ -63,6 +63,7 @@ export interface TierUrlState extends NarrowingUrlState {
 export const TIER_DEFAULTS: TierUrlState = {
   search: '',
   mediaTypes: [],
+  nsfw: [],
   minScore: null,
   maxScore: null,
   minYear: null,

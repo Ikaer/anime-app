@@ -1021,6 +1021,7 @@ export interface AnimeListResponse {
     search: string | null;
     season: string | null;
     mediaType: string | null;
+    nsfw: string | null;
     hidden: string | null;
     discrepancies: string | null;
     favSeiyuu: string | null;

@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { parseUrlList } from '@/lib/url/narrowingParams';
 import { getAnimeForDisplay } from '@/lib/store';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { applyNarrowingFilters, getStatusFilterKey, getEffectiveScore, sortAnimeRecords } from '@/lib/domain/animeUtils';
@@ -57,6 +58,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       maxScore,
       season,
       mediaType,
+      nsfw,
       hidden,
       discrepancies,
       favSeiyuu: favSeiyuuParam,
@@ -129,6 +131,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       search: typeof search === 'string' ? search : undefined,
       minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
       maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
+      nsfw: parseUrlList(nsfw),
     });
 
     // Apply hidden filter (NEW)
@@ -243,6 +246,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         search: (typeof search === 'string' ? search : null),
         season: (typeof season === 'string' ? season : null),
         mediaType: (typeof mediaType === 'string' ? mediaType : null),
+        nsfw: (typeof nsfw === 'string' ? nsfw : null),
         hidden: (typeof hidden === 'string' ? hidden : null),
         discrepancies: (typeof discrepancies === 'string' ? discrepancies : null),
         favSeiyuu: (typeof favSeiyuuParam === 'string' ? favSeiyuuParam : null),

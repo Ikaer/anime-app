@@ -27,6 +27,7 @@ export interface QuickRateUrlState extends NarrowingUrlState {
 export const QUICK_RATE_DEFAULTS: QuickRateUrlState = {
   search: '',
   mediaTypes: [],
+  nsfw: [],
   minScore: null,
   maxScore: null,
   minYear: null,

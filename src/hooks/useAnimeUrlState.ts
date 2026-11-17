@@ -160,6 +160,7 @@ export function useAnimeUrlState(): UseAnimeUrlStateReturn {
     seasons: currentState.seasons,
     mediaTypes: currentState.mediaTypes,
     genres: currentState.genres,
+    nsfw: currentState.nsfw,
     hiddenOnly: currentState.hiddenOnly,
     discrepanciesOnly: currentState.discrepanciesOnly,
     favSeiyuuOnly: currentState.favSeiyuuOnly,

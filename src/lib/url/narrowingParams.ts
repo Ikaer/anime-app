@@ -32,6 +32,8 @@ export interface NarrowingUrlState {
   maxYear: number | null;
   /** MAL genre names — AND semantics, see `applyNarrowingFilters`. */
   genres: string[];
+  /** MAL content-rating levels (`NSFW_LEVELS`) — OR semantics. */
+  nsfw: string[];
 }
 
 export type NarrowingField = keyof NarrowingUrlState;
@@ -44,6 +46,7 @@ export const NARROWING_DEFAULTS: NarrowingUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  nsfw: [],
 };
 
 export const NARROWING_URL_KEYS = {
@@ -54,6 +57,7 @@ export const NARROWING_URL_KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   genres: 'g',
+  nsfw: 'ns',
 } as const satisfies Record<NarrowingField, string>;
 
 export const NARROWING_API_KEYS = {
@@ -64,6 +68,7 @@ export const NARROWING_API_KEYS = {
   minYear: 'minYear',
   maxYear: 'maxYear',
   genres: 'genres',
+  nsfw: 'nsfw',
 } as const satisfies Record<NarrowingField, string>;
 
 export const NARROWING_FIELDS = Object.keys(NARROWING_DEFAULTS) as NarrowingField[];
@@ -75,7 +80,7 @@ export const NARROWING_FIELDS_NO_GENRES = NARROWING_FIELDS.filter(f => f !== 'ge
 >[];
 
 const NUMBER_FIELDS = new Set<NarrowingField>(['minScore', 'maxScore', 'minYear', 'maxYear']);
-const LIST_FIELDS = new Set<NarrowingField>(['mediaTypes', 'genres']);
+const LIST_FIELDS = new Set<NarrowingField>(['mediaTypes', 'genres', 'nsfw']);
 
 /**
  * A URL number: empty or non-numeric is `null`, never `NaN`. Takes `unknown`
@@ -165,5 +170,6 @@ export function parseNarrowingQuery(query: Query): NarrowingFilters {
     minYear: num('minYear'),
     maxYear: num('maxYear'),
     genres: list('genres'),
+    nsfw: list('nsfw'),
   };
 }

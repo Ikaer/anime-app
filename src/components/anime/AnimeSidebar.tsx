@@ -25,6 +25,8 @@ interface AnimeSidebarProps {
   onSeasonsChange: (v: SeasonInfo[]) => void;
   mediaTypes: string[];
   onMediaTypesChange: (v: string[]) => void;
+  nsfw: string[];
+  onNsfwChange: (v: string[]) => void;
   genres: string[];
   onGenresChange: (v: string[]) => void;
   hiddenOnly: boolean;
@@ -48,6 +50,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   searchQuery, onSearchChange,
   seasons, onSeasonsChange,
   mediaTypes, onMediaTypesChange,
+  nsfw, onNsfwChange,
   genres, onGenresChange,
   hiddenOnly, onHiddenOnlyChange,
   discrepanciesOnly, onDiscrepanciesOnlyChange,
@@ -93,6 +96,8 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
           onSeasonsChange={onSeasonsChange}
           mediaTypes={mediaTypes}
           onMediaTypesChange={onMediaTypesChange}
+          nsfw={nsfw}
+          onNsfwChange={onNsfwChange}
           hiddenOnly={hiddenOnly}
           onHiddenOnlyChange={onHiddenOnlyChange}
           discrepanciesOnly={discrepanciesOnly}

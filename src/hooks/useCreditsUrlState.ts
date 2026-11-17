@@ -34,6 +34,7 @@ export interface CreditsUrlState extends NarrowingUrlState {
 export const CREDITS_DEFAULTS: CreditsUrlState = {
   search: '',
   mediaTypes: [],
+  nsfw: [],
   minScore: null,
   maxScore: null,
   minYear: null,

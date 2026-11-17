@@ -97,6 +97,24 @@ export interface NarrowingFilters {
   maxYear?: number | null;
   /** MAL genre names (not AniList tags) — AND semantics: every listed genre must be present. */
   genres?: string[];
+  /** MAL content-rating levels (`NSFW_LEVELS`) — OR semantics, see `getNsfwLevel`. */
+  nsfw?: string[];
+}
+
+/**
+ * MAL's three-value content rating (`white` safe, `gray` suggestive, `black`
+ * explicit) plus `unknown`. MAL is the only provider supplying it, so every
+ * AniList-only title is `unknown` (1,716 of 27,636 on the live store, against
+ * 23,376 white / 2,544 gray / 0 black). `unknown` is its own chip rather than
+ * being folded into `white`: "only safe" must not silently admit titles nobody
+ * rated, and "hide gray" must not silently drop them either.
+ */
+export const NSFW_LEVELS = ['white', 'gray', 'black', 'unknown'] as const;
+export type NsfwLevel = typeof NSFW_LEVELS[number];
+
+export function getNsfwLevel(a: AnimeRecord): NsfwLevel {
+  const v = a.catalog.nsfw;
+  return v === 'white' || v === 'gray' || v === 'black' ? v : 'unknown';
 }
 
 /** Release year, preferring the season year, falling back to the start date. */
@@ -163,6 +181,11 @@ export function applyNarrowingFilters<T extends AnimeRecord>(
       const names = new Set((a.catalog.genres || []).map(g => g.name));
       return wanted.every(g => names.has(g));
     });
+  }
+
+  if (f.nsfw && f.nsfw.length > 0) {
+    const wanted = new Set(f.nsfw);
+    out = out.filter(a => wanted.has(getNsfwLevel(a)));
   }
 
   return out;

@@ -42,6 +42,8 @@ export interface AnimeFiltersState {
    * into genre/theme/demographic is presentation, see `domain/genreAxis.ts`.
    */
   genres: string[];
+  /** MAL content-rating levels (`NSFW_LEVELS`), OR'd; empty = no filter. */
+  nsfw: string[];
   hiddenOnly: boolean;
   discrepanciesOnly: boolean;
   /** A favourite seiyuu holds a MAIN role (reco/favSeiyuu.ts). */
@@ -159,6 +161,7 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   seasons: [],
   mediaTypes: [],
   genres: [],
+  nsfw: [],
   hiddenOnly: false,
   discrepanciesOnly: false,
   favSeiyuuOnly: false,
@@ -226,6 +229,7 @@ const PARAM_KEYS = {
   seasons: 'sn',
   mediaType: 'mt',
   genres: 'g',
+  nsfw: 'ns',
   hidden: 'h',
   discrepancies: 'disc',
   favSeiyuu: 'fv',
@@ -294,6 +298,10 @@ function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchPa
   if (filters.mediaTypes !== undefined) {
     const encoded = encodeMediaTypes(filters.mediaTypes);
     if (encoded) params.set(PARAM_KEYS.mediaType, encoded);
+  }
+
+  if (filters.nsfw !== undefined && filters.nsfw.length > 0) {
+    params.set(PARAM_KEYS.nsfw, filters.nsfw.join(','));
   }
 
   if (filters.genres !== undefined) {
@@ -393,6 +401,7 @@ function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     seasons: decodeSeasons(params.get(PARAM_KEYS.seasons)),
     mediaTypes: decodeMediaTypes(params.get(PARAM_KEYS.mediaType)),
     genres: decodeGenres(params.get(PARAM_KEYS.genres)),
+    nsfw: decodeGenres(params.get(PARAM_KEYS.nsfw)),
     hiddenOnly: params.get(PARAM_KEYS.hidden) === '1',
     discrepanciesOnly: params.get(PARAM_KEYS.discrepancies) === '1',
     favSeiyuuOnly: params.get(PARAM_KEYS.favSeiyuu) === '1',
@@ -440,6 +449,8 @@ export interface PresetConfig {
 export const PERSISTENT_UI_KEYS: (keyof AnimeUrlState)[] = [
   'minScore',
   'maxScore',
+  // A content preference, not a view's question — a preset must not reset it.
+  'nsfw',
 ];
 
 export const VIEW_PRESETS: PresetConfig[] = [

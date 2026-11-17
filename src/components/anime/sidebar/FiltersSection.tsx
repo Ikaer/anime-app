@@ -5,6 +5,8 @@ import SeasonFilter from '../SeasonFilter';
 import type { SeasonInfo } from '@/models/anime';
 import { useT, type TranslationKey } from '@/lib/i18n';
 import { ALL_STATUSES, MEDIA_TYPES } from '@/lib/url/animeParams';
+import { NSFW_LEVELS } from '@/lib/domain/animeUtils';
+import { NSFW_LABEL } from './RecoFiltersSection';
 
 interface FiltersSectionProps {
   statusFilters: StatusFilterValue[];
@@ -13,6 +15,8 @@ interface FiltersSectionProps {
   onSeasonsChange: (seasons: SeasonInfo[]) => void;
   mediaTypes: string[];
   onMediaTypesChange: (mediaTypes: string[]) => void;
+  nsfw: string[];
+  onNsfwChange: (v: string[]) => void;
   hiddenOnly: boolean;
   onHiddenOnlyChange: (hiddenOnly: boolean) => void;
   discrepanciesOnly: boolean;
@@ -32,6 +36,8 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
   onSeasonsChange,
   mediaTypes,
   onMediaTypesChange,
+  nsfw,
+  onNsfwChange,
   hiddenOnly,
   onHiddenOnlyChange,
   discrepanciesOnly,
@@ -78,6 +84,19 @@ const FiltersSection: React.FC<FiltersSectionProps> = ({
                 onMediaTypesChange(next);
               }}
             /> {mt.toUpperCase()}
+          </label>
+        ))}
+      </div>
+
+      <div className={styles.filterGroup}>
+        <label className={styles.label}>{t('reco.nsfw')}</label>
+        {NSFW_LEVELS.map(lvl => (
+          <label key={lvl} className={styles.checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={nsfw.includes(lvl)}
+              onChange={(e) => onNsfwChange(e.target.checked ? [...nsfw, lvl] : nsfw.filter(x => x !== lvl))}
+            /> {t(NSFW_LABEL[lvl])}
           </label>
         ))}
       </div>

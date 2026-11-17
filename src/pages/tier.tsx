@@ -274,6 +274,7 @@ export default function TierPage() {
       minYear: state.minYear,
       maxYear: state.maxYear,
       genres: state.genres,
+      nsfw: state.nsfw,
     });
     if (state.statuses.length > 0) {
       const wanted = new Set(state.statuses);
@@ -290,7 +291,7 @@ export default function TierPage() {
       });
     }
     return out;
-  }, [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres, state.statuses, state.seasons]);
+  }, [animes, state.search, state.mediaTypes, state.minScore, state.maxScore, state.minYear, state.maxYear, state.genres, state.nsfw, state.statuses, state.seasons]);
 
   // Distinct MAL genre names (not AniList tags) across the loaded list, alphabetized.
   const availableGenres = useMemo(() => {
@@ -567,6 +568,8 @@ export default function TierPage() {
           onSearchChange={(v: string) => update({ search: v })}
           mediaTypes={state.mediaTypes}
           onMediaTypesChange={(v: string[]) => update({ mediaTypes: v })}
+          nsfw={state.nsfw}
+          onNsfwChange={(v: string[]) => update({ nsfw: v })}
           minScore={state.minScore}
           onMinScoreChange={(v: number | null) => update({ minScore: v })}
           maxScore={state.maxScore}

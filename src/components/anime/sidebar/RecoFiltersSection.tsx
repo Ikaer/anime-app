@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import styles from './RecoFiltersSection.module.css';
 import { useT } from '@/lib/i18n';
 import { DebouncedSearchInput } from '@/components/shared';
+import { NSFW_LEVELS } from '@/lib/domain/animeUtils';
+import type { TranslationKey } from '@/lib/i18n';
 
 /**
  * Narrowing filters that make sense on the ranked recommendations feed:
@@ -35,7 +37,20 @@ interface RecoFiltersSectionProps {
   maxYear: number | null;
   /** Both bounds committed together (single URL update — avoids clobbering). */
   onYearChange: (min: number | null, max: number | null) => void;
+  /**
+   * MAL content-rating levels. Optional like `search`: box quick edit filters
+   * lean rows client-side and carries no rating, so it passes no handler.
+   */
+  nsfw?: string[];
+  onNsfwChange?: (v: string[]) => void;
 }
+
+export const NSFW_LABEL = {
+  white: 'reco.nsfw.white',
+  gray: 'reco.nsfw.gray',
+  black: 'reco.nsfw.black',
+  unknown: 'reco.nsfw.unknown',
+} satisfies Record<(typeof NSFW_LEVELS)[number], TranslationKey>;
 
 const MEDIA_TYPES = ['tv', 'movie', 'ona', 'ova', 'special', 'music'];
 
@@ -120,6 +135,8 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
   minYear,
   maxYear,
   onYearChange,
+  nsfw,
+  onNsfwChange,
 }) => {
   const t = useT();
   return (
@@ -197,6 +214,24 @@ const RecoFiltersSection: React.FC<RecoFiltersSectionProps> = ({
         maxYear={maxYear}
         onYearChange={onYearChange}
       />
+
+      {onNsfwChange && (
+        <div className={styles.filterGroup}>
+          <label className={styles.label}>{t('reco.nsfw')}</label>
+          {NSFW_LEVELS.map(lvl => (
+            <label key={lvl} className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={(nsfw ?? []).includes(lvl)}
+                onChange={(e) => {
+                  const cur = nsfw ?? [];
+                  onNsfwChange(e.target.checked ? [...cur, lvl] : cur.filter(x => x !== lvl));
+                }}
+              /> {t(NSFW_LABEL[lvl])}
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

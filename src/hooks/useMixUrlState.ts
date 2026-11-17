@@ -42,6 +42,7 @@ export const MIX_DEFAULTS: MixUrlState = {
   weights: ANCHORED_WEIGHTS,
   includeSeen: false,
   mediaTypes: [],
+  nsfw: [],
   search: '',
   minScore: null,
   maxScore: null,

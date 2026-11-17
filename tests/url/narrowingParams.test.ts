@@ -26,6 +26,7 @@ const SAMPLE: NarrowingUrlState = {
   minYear: 1998,
   maxYear: 2011,
   genres: ['Sci-Fi', 'Suspense'],
+  nsfw: ['white', 'unknown'],
 };
 
 const toQuery = (p: URLSearchParams) => Object.fromEntries(p.entries());
@@ -52,7 +53,7 @@ test('defaults stay out of the URL, and an empty filter reads as no filter', () 
   assert.equal(encodeNarrowing(new URLSearchParams(), NARROWING_DEFAULTS, NARROWING_FIELDS).toString(), '');
   assert.deepEqual(parseNarrowingQuery({}), {
     search: undefined, mediaTypes: undefined, minScore: null, maxScore: null,
-    minYear: null, maxYear: null, genres: undefined,
+    minYear: null, maxYear: null, genres: undefined, nsfw: undefined,
   });
 });
 

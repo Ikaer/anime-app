@@ -58,6 +58,9 @@ export default function AnimePage() {
         params.set('genres', filters.genres.join(','));
       }
 
+      // MAL content rating
+      if (filters.nsfw.length > 0) params.set('nsfw', filters.nsfw.join(','));
+
       // Hidden
       params.set('hidden', filters.hiddenOnly ? 'true' : 'false');
 
@@ -124,6 +127,10 @@ export default function AnimePage() {
     updateFilters({ genres });
   };
 
+  const handleNsfwChange = (nsfw: string[]) => {
+    updateFilters({ nsfw });
+  };
+
   const handleHiddenOnlyChange = (hiddenOnly: boolean) => {
     updateFilters({ hiddenOnly });
   };
@@ -186,6 +193,8 @@ export default function AnimePage() {
       onSeasonsChange={handleSeasonsChange}
       mediaTypes={filters.mediaTypes}
       onMediaTypesChange={handleMediaTypesChange}
+      nsfw={filters.nsfw}
+      onNsfwChange={handleNsfwChange}
       genres={filters.genres}
       onGenresChange={handleGenresChange}
       hiddenOnly={filters.hiddenOnly}

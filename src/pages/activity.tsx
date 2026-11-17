@@ -247,6 +247,8 @@ export default function ActivityPage() {
           onSearchChange={(v: string) => update({ search: v })}
           mediaTypes={state.mediaTypes}
           onMediaTypesChange={(v: string[]) => update({ mediaTypes: v })}
+          nsfw={state.nsfw}
+          onNsfwChange={(v: string[]) => update({ nsfw: v })}
           minScore={state.minScore}
           onMinScoreChange={(v: number | null) => update({ minScore: v })}
           maxScore={state.maxScore}
