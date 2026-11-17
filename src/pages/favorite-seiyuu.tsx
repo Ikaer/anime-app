@@ -1,5 +1,5 @@
 /**
- * /favorites — « Mes seiyuu favoris ».
+ * /favorite-seiyuu — « Mes seiyuu favoris ».
  *
  * One block per favourite seiyuu (`user/seiyuu_favorites.json`): who they are,
  * how much of their work you have seen, and the MAIN roles you have not — the
@@ -21,8 +21,14 @@ import Link from 'next/link';
 import type { GetServerSideProps } from 'next';
 import { getAnimeForDisplay, getAllAnilistCast, getAllAnilistSeiyuu } from '@/lib/store';
 import { getFavSeiyuuIndex, getSeiyuuFavorites } from '@/lib/reco/seiyuuFavorites';
+import { useState } from 'react';
 import type { SeiyuuRole } from '@/lib/reco/favSeiyuu';
-import { SEEN_STATUSES } from '@/lib/reco/scoring';
+import { findCrossings, type CrossingCandidate } from '@/lib/reco/favSeiyuuCrossings';
+import { SEEN_STATUSES, isPrematureSequel } from '@/lib/reco/scoring';
+import { isUnseenCandidate } from '@/lib/reco/affinity';
+import { getIgnoredIdSet } from '@/lib/reco/ignored';
+import { buildRelationIndex } from '@/lib/domain/relations';
+import { getFranchiseIndex } from '@/lib/domain/franchise';
 import { getEffectiveStatus, getEffectiveScore, getPrimaryTitle } from '@/lib/domain/animeUtils';
 import { getTitleLanguage } from '@/lib/config/settings';
 import { useSeiyuuFavorites } from '@/hooks/useSeiyuuFavorites';
@@ -30,6 +36,20 @@ import { useT, type TranslationKey } from '@/lib/i18n';
 
 /** How many unseen lead roles each block shows before linking out. */
 const MAX_TODO = 10;
+/** Crossing rows shown before « Voir tout ». */
+const CROSSINGS_FOLD = 12;
+
+interface CrossingRow {
+  id: string;
+  title: string;
+  image: string | null;
+  year: string | null;
+  mediaType: string | null;
+  mean: number | null;
+  others: number;
+  sequel: boolean;
+  people: { id: number; name: string; role: SeiyuuRole; character: string | null }[];
+}
 
 interface FavTitle {
   id: string;
@@ -62,11 +82,21 @@ interface FavBlock {
 
 interface Props {
   blocks: FavBlock[];
+  crossings: CrossingRow[];
 }
 
-export default function FavoritesPage({ blocks }: Props) {
+export default function FavoriteSeiyuuPage({ blocks, crossings }: Props) {
   const t = useT();
   const favs = useSeiyuuFavorites();
+  const [allCrossings, setAllCrossings] = useState(false);
+  // An unstar here drops that person from the rows at once; a row left with
+  // fewer than two people is no longer a crossing.
+  const liveCrossings = (favs.loaded
+    ? crossings
+      .map(c => ({ ...c, people: c.people.filter(p => favs.isFavorite(p.id)) }))
+      .filter(c => c.people.length >= 2)
+    : crossings);
+  const shownCrossings = allCrossings ? liveCrossings : liveCrossings.slice(0, CROSSINGS_FOLD);
   // Once the client store has loaded, it is the truth: an unstar here removes
   // the block at once instead of waiting for a reload.
   const shown = favs.loaded ? blocks.filter(b => favs.isFavorite(b.id)) : blocks;
@@ -88,6 +118,58 @@ export default function FavoritesPage({ blocks }: Props) {
       </header>
 
       {shown.length === 0 && <p className="empty">{t('favorites.empty')}</p>}
+
+      {liveCrossings.length > 0 && (
+        <section className="block">
+          <div>
+            <h2 className="cross-title">{t('favorites.crossHeading', { count: liveCrossings.length })}</h2>
+            <p className="sub">{t('favorites.crossSub')}</p>
+          </div>
+          <div className="cross-grid">
+            {shownCrossings.map(c => (
+              <div key={c.id} className="cross">
+                <Link className="cross-poster" href={`/anime/${c.id}`}>
+                  {c.image
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={c.image} alt={c.title} loading="lazy" />
+                    : <span className="poster-fallback" />}
+                </Link>
+                <div className="cross-body">
+                  <Link className="cross-name" href={`/anime/${c.id}`}>{c.title}</Link>
+                  <span className="card-meta">
+                    {[c.year, c.mediaType ? c.mediaType.toUpperCase() : null].filter(Boolean).join(' · ')}
+                    {c.mean !== null && <> · ★ {c.mean.toFixed(2)}</>}
+                  </span>
+                  {(c.sequel || c.others > 0) && (
+                    <span className="note">
+                      {c.sequel && t('favorites.crossSequel')}
+                      {c.sequel && c.others > 0 && ' · '}
+                      {c.others > 0 && (
+                        <Link className="to-franchise" href={`/franchise/${c.id}`}>
+                          {t(c.others === 1 ? 'favorites.crossOthersOne' : 'favorites.crossOthers', { count: c.others })}
+                        </Link>
+                      )}
+                    </span>
+                  )}
+                  <ul className="people">
+                    {c.people.map(p => (
+                      <li key={p.id} className={p.role === 'MAIN' ? 'lead' : ''}>
+                        <Link className="person" href={`/credits/seiyuu/${p.id}`}>{p.name}</Link>
+                        {p.character && <span className="as"> · {p.character}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+          {liveCrossings.length > CROSSINGS_FOLD && (
+            <button type="button" className="more-btn" onClick={() => setAllCrossings(v => !v)}>
+              {allCrossings ? t('favorites.crossLess') : t('favorites.crossAll', { count: liveCrossings.length })}
+            </button>
+          )}
+        </section>
+      )}
 
       {shown.map(b => (
         <section key={b.id} className="block">
@@ -200,6 +282,31 @@ export default function FavoritesPage({ blocks }: Props) {
         .row :global(.card.more) { align-items: center; justify-content: center; aspect-ratio: 2 / 3;
           border: 1px dashed var(--border-color); border-radius: 6px; color: var(--text-secondary); font-size: 1.1rem; }
         .row :global(.card.more):hover { border-color: var(--accent-primary); color: var(--text-primary); }
+
+        .cross-title { margin: 0; font-size: 1.15rem; color: var(--text-primary); }
+        .cross-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0.75rem; }
+        .cross { display: flex; gap: 0.75rem; min-width: 0; padding: 0.5rem; border-radius: 8px;
+          background: var(--bg-tertiary); border: 1px solid var(--border-color); }
+        .cross-grid :global(.cross-poster) { flex: none; width: 72px; }
+        .cross-grid :global(.cross-poster) img, .cross-grid :global(.cross-poster) .poster-fallback { width: 72px;
+          aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; display: block; background: var(--bg-secondary); }
+        .cross-grid :global(.cross-poster):hover img { outline: 2px solid var(--accent-primary); }
+        .cross-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .cross-grid :global(.cross-name) { color: var(--text-primary); font-size: 0.85rem; font-weight: 600;
+          text-decoration: none; line-height: 1.2; }
+        .cross-grid :global(.cross-name):hover { text-decoration: underline; }
+        .cross-grid :global(.to-franchise) { color: inherit; }
+        .cross-grid :global(.to-franchise):hover { color: var(--text-primary); }
+        .people { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px;
+          font-size: 0.75rem; color: var(--text-muted); }
+        .people li { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .people :global(.person) { color: var(--text-secondary); text-decoration: none; }
+        .people li.lead :global(.person) { color: #f5c518; font-weight: 600; }
+        .people :global(.person):hover { text-decoration: underline; }
+        .more-btn { align-self: center; cursor: pointer; font: inherit; font-size: 0.8rem; padding: 0.35rem 0.9rem;
+          border-radius: 999px; background: var(--bg-tertiary); border: 1px solid var(--border-color);
+          color: var(--text-secondary); }
+        .more-btn:hover { border-color: var(--accent-primary); color: var(--text-primary); }
       `}</style>
     </div>
   );
@@ -207,7 +314,7 @@ export default function FavoritesPage({ blocks }: Props) {
 
 export const getServerSideProps: GetServerSideProps<Props> = async () => {
   const favorites = getSeiyuuFavorites();
-  if (favorites.length === 0) return { props: { blocks: [] } };
+  if (favorites.length === 0) return { props: { blocks: [], crossings: [] } };
 
   const titleLang = getTitleLanguage();
   const index = getFavSeiyuuIndex();
@@ -284,5 +391,49 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   });
 
   blocks.sort((a, b) => b.seen - a.seen || a.name.localeCompare(b.name));
-  return { props: { blocks } };
+
+  // Crossings: the « Recommandé » mark's notion of unseen (hidden, « Ignorer »
+  // and a rating intent all refuse), the wide franchise scope, and the mark's
+  // premature-sequel test to pick each row's entry point.
+  const rows = getAnimeForDisplay();
+  const ignored = getIgnoredIdSet();
+  const franchises = getFranchiseIndex(rows);
+  const relations = buildRelationIndex(rows);
+  const candidates: CrossingCandidate[] = [];
+  for (const [animeId, hits] of index.byAnime) {
+    if (hits.length < 2) continue;
+    const record = byId.get(animeId);
+    if (!record || !isUnseenCandidate(record, ignored)) continue;
+    candidates.push({
+      id: record.id,
+      hits,
+      mediaType: record.catalog.mediaType,
+      startDate: record.catalog.startDate,
+      mean: record.catalog.mean ?? null,
+      franchiseKey: franchises.get(record.id)?.[0]?.id ?? record.id,
+      sequel: isPrematureSequel(record, relations),
+    });
+  }
+  const names = new Map(blocks.map(b => [b.id, b.name]));
+  const crossings: CrossingRow[] = findCrossings(candidates).map(c => {
+    const record = byId.get(c.id)!;
+    return {
+      id: c.id,
+      title: getPrimaryTitle(record, titleLang),
+      image: record.catalog.mainPicture?.medium ?? null,
+      year: record.catalog.startDate?.slice(0, 4) ?? null,
+      mediaType: record.catalog.mediaType ?? null,
+      mean: c.mean,
+      others: c.others,
+      sequel: c.sequel,
+      people: c.hits.map(h => ({
+        id: h.staffId,
+        name: names.get(h.staffId) || h.name,
+        role: h.role,
+        character: h.characters[0] ?? null,
+      })),
+    };
+  });
+
+  return { props: { blocks, crossings } };
 };
