@@ -123,8 +123,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       }
     }
 
-    // Media type + search + score range are shared with the recommendations feed.
+    // Media type + search + score range + genres are shared with the
+    // recommendations feed. Genres are AND (every listed genre present) — this
+    // route used to refilter them itself with an OR, so the same `g=` meant two
+    // different things on `/` and on every other page.
     animeList = applyNarrowingFilters(animeList, {
+      genres: typeof genres === 'string' && genres.trim() !== ''
+        ? genres.split(',').map(g => g.trim()).filter(Boolean)
+        : undefined,
       mediaTypes: typeof mediaType === 'string' && mediaType.trim() !== ''
         ? mediaType.split(',').map(t => t.trim()).filter(Boolean)
         : undefined,
@@ -161,13 +167,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       animeList = animeList.filter(anime => hasMainFavSeiyuu(marks.favSeiyuu.byAnime.get(anime.id)));
     }
 
-    // Apply genre filter
-    if (genres && typeof genres === 'string') {
-      const genreList = genres.split(',').map(g => g.trim().toLowerCase());
-      animeList = animeList.filter(anime =>
-        (anime.catalog.genres || []).some(genre => genreList.includes((genre.name || '').toLowerCase()))
-      );
-    }
 
     // Apply status filter. `getStatusFilterKey` — not `getEffectiveStatus` —
     // because a rating intent REPLACES the status here: a title marked
