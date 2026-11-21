@@ -281,7 +281,7 @@ export function buildServer(): McpServer {
         'whether they are a generous or harsh rater overall. Scope is watching/completed/on_hold/' +
         'dropped — plan_to_watch is excluded, since an unwatched title has no score. ' +
         'IMPORTANT — the filters do not all reach the same fields. statuses/genres/mediaTypes/' +
-        'minYear/maxYear select the board itself, so `distribution`, `gapSummary`, `total` and ' +
+        'minYear/maxYear/seasons select the board itself, so `distribution`, `gapSummary`, `total` and ' +
         '`items` all describe that same narrowed set. minGap/maxGap instead narrow ONLY `total` ' +
         'and `items`: `distribution` and `gapSummary` still describe the whole board, because ' +
         'the shape answers "what does their board look like" while the gap bounds answer "show ' +
@@ -303,6 +303,8 @@ export function buildServer(): McpServer {
         mediaTypes: z.array(z.string()).optional().describe('e.g. "tv", "movie", "ova".'),
         minYear: z.number().int().optional().describe('Earliest release year, inclusive.'),
         maxYear: z.number().int().optional().describe('Latest release year, inclusive.'),
+        seasons: z.array(z.string().regex(/^\d{4}-(winter|spring|summer|fall)$/)).optional()
+          .describe('Premiere seasons as "YYYY-season" (winter|spring|summer|fall), e.g. ["2024-fall"]. Any listed season matches. A title belongs to the season it STARTED airing in, so a two-cour show is not in its second cour\'s season. Selects the board, so `distribution`/`gapSummary` describe the season. For "my tier list of a season" use axis "me".'),
         search: z.string().optional().describe('Substring match on the title.'),
         sortBy: z.enum(['gap', 'abs_gap', 'my_score', 'mean', 'title']).optional()
           .describe('Default "gap" (signed). "abs_gap" ranks by disagreement size regardless of direction.'),

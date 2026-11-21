@@ -816,6 +816,12 @@ export interface TierListParams {
   mediaTypes?: string[];
   minYear?: number;
   maxYear?: number;
+  /**
+   * Premiere seasons as `"YYYY-season"` keys (`seasonKey`'s format, e.g.
+   * `"2024-fall"`). A title matches on `catalog.startSeason`, the main list's
+   * season filter — so a two-cour show belongs to the season it STARTED in.
+   */
+  seasons?: string[];
   search?: string;
   /** `gap` (default) is signed: desc surfaces where the owner is most generous. */
   sortBy?: 'gap' | 'abs_gap' | 'my_score' | 'mean' | 'title';
@@ -865,6 +871,16 @@ export function tierList(params: TierListParams, titleLang: TitleLanguage): Tier
     minScore: null,
     maxScore: null,
   });
+
+  // Applied with the board-selecting filters, so `distribution` and `gapSummary`
+  // describe the season too — unlike minGap/maxGap, which narrow `items` only.
+  if (params.seasons && params.seasons.length > 0) {
+    const wanted = new Set(params.seasons);
+    rows = rows.filter(a => {
+      const s = a.catalog.startSeason;
+      return s != null && wanted.has(`${s.year}-${s.season}`);
+    });
+  }
 
   // Build every entry once; the axis decides which value places it in a row.
   const built = rows.map(a => {
