@@ -26,6 +26,7 @@ const SAMPLE: NarrowingUrlState = {
   minYear: 1998,
   maxYear: 2011,
   genres: ['Sci-Fi', 'Suspense'],
+  tags: ['Time Manipulation', 'Male Protagonist'],
   nsfw: ['white', 'unknown'],
 };
 
@@ -53,7 +54,7 @@ test('defaults stay out of the URL, and an empty filter reads as no filter', () 
   assert.equal(encodeNarrowing(new URLSearchParams(), NARROWING_DEFAULTS, NARROWING_FIELDS).toString(), '');
   assert.deepEqual(parseNarrowingQuery({}), {
     search: undefined, mediaTypes: undefined, minScore: null, maxScore: null,
-    minYear: null, maxYear: null, genres: undefined, nsfw: undefined,
+    minYear: null, maxYear: null, genres: undefined, tags: undefined, nsfw: undefined,
   });
 });
 
@@ -78,9 +79,10 @@ test('garbage numbers decode to null, never NaN', () => {
   assert.equal(q.minYear, null);
 });
 
-test('a page without genres neither reads nor writes them', () => {
-  const params = new URLSearchParams({ g: 'Drama', q: 'x' });
+test('a page without genres neither reads nor writes them, nor tags', () => {
+  const params = new URLSearchParams({ g: 'Drama', tg: 'Tragedy', q: 'x' });
   const state = decodeNarrowing(params, NARROWING_FIELDS_NO_GENRES);
   assert.equal('genres' in state, false);
+  assert.equal('tags' in state, false);
   assert.equal(state.search, 'x');
 });

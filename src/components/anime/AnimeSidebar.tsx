@@ -7,7 +7,8 @@ import { useT } from '@/lib/i18n';
 import {
   ViewsSection,
   FiltersSection,
-  GenresSection
+  GenresSection,
+  TagsSection
 } from './sidebar';
 
 /**
@@ -29,6 +30,8 @@ interface AnimeSidebarProps {
   onNsfwChange: (v: string[]) => void;
   genres: string[];
   onGenresChange: (v: string[]) => void;
+  tags: string[];
+  onTagsChange: (v: string[]) => void;
   hiddenOnly: boolean;
   onHiddenOnlyChange: (v: boolean) => void;
   discrepanciesOnly: boolean;
@@ -52,6 +55,7 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
   mediaTypes, onMediaTypesChange,
   nsfw, onNsfwChange,
   genres, onGenresChange,
+  tags, onTagsChange,
   hiddenOnly, onHiddenOnlyChange,
   discrepanciesOnly, onDiscrepanciesOnlyChange,
   favSeiyuuOnly, onFavSeiyuuOnlyChange,
@@ -120,6 +124,15 @@ const AnimeSidebar: React.FC<AnimeSidebarProps> = ({
         onToggle={() => toggle('genres')}
       >
         <GenresSection genres={genres} onGenresChange={onGenresChange} />
+      </CollapsibleSection>
+
+      {/* AniList tags: ~400 values, so its own collapsible section too. */}
+      <CollapsibleSection
+        title={t('section.tags')}
+        isExpanded={sidebarExpanded.tags}
+        onToggle={() => toggle('tags')}
+      >
+        <TagsSection tags={tags} onTagsChange={onTagsChange} />
       </CollapsibleSection>
     </div>
   );

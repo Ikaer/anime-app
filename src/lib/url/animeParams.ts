@@ -42,6 +42,8 @@ export interface AnimeFiltersState {
    * into genre/theme/demographic is presentation, see `domain/genreAxis.ts`.
    */
   genres: string[];
+  /** AniList tag names, AND'd, rank >= `TAG_FILTER_MIN_RANK` (`domain/tagVocabulary.ts`). */
+  tags: string[];
   /** MAL content-rating levels (`NSFW_LEVELS`), OR'd; empty = no filter. */
   nsfw: string[];
   hiddenOnly: boolean;
@@ -161,6 +163,7 @@ export const DEFAULT_FILTERS: AnimeFiltersState = {
   seasons: [],
   mediaTypes: [],
   genres: [],
+  tags: [],
   nsfw: [],
   hiddenOnly: false,
   discrepanciesOnly: false,
@@ -229,6 +232,7 @@ const PARAM_KEYS = {
   seasons: 'sn',
   mediaType: 'mt',
   genres: 'g',
+  tags: 'tg',
   nsfw: 'ns',
   hidden: 'h',
   discrepancies: 'disc',
@@ -307,6 +311,11 @@ function encodeFiltersToParams(filters: Partial<AnimeFiltersState>): URLSearchPa
   if (filters.genres !== undefined) {
     const encoded = encodeGenres(filters.genres);
     if (encoded) params.set(PARAM_KEYS.genres, encoded);
+  }
+
+  if (filters.tags !== undefined) {
+    const encoded = encodeGenres(filters.tags);
+    if (encoded) params.set(PARAM_KEYS.tags, encoded);
   }
 
   if (filters.hiddenOnly) {
@@ -401,6 +410,7 @@ function decodeUrlToFilters(params: URLSearchParams): AnimeFiltersState {
     seasons: decodeSeasons(params.get(PARAM_KEYS.seasons)),
     mediaTypes: decodeMediaTypes(params.get(PARAM_KEYS.mediaType)),
     genres: decodeGenres(params.get(PARAM_KEYS.genres)),
+    tags: decodeGenres(params.get(PARAM_KEYS.tags)),
     nsfw: decodeGenres(params.get(PARAM_KEYS.nsfw)),
     hiddenOnly: params.get(PARAM_KEYS.hidden) === '1',
     discrepanciesOnly: params.get(PARAM_KEYS.discrepancies) === '1',

@@ -49,6 +49,7 @@ export const MIX_DEFAULTS: MixUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  tags: [],
   cardsPerRow: null,
 };
 

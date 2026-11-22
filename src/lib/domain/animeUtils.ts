@@ -6,6 +6,7 @@ import type {
 import type { TFunction, TranslationKey } from '@/lib/i18n';
 import { buildProviderStates, toAnimePersonal } from '@/lib/providers/personalState';
 import { SHIPPED_TITLE_LANGUAGE, type TitleLanguage } from '@/lib/url/viewDefaults';
+import { filterTagNames } from '@/lib/domain/tagVocabulary';
 
 // ============================================================================
 // Display titles
@@ -97,6 +98,11 @@ export interface NarrowingFilters {
   maxYear?: number | null;
   /** MAL genre names (not AniList tags) — AND semantics: every listed genre must be present. */
   genres?: string[];
+  /**
+   * AniList tag names — AND semantics like `genres`, and a title answers to a
+   * tag only at `TAG_FILTER_MIN_RANK` or above (`domain/tagVocabulary.ts`).
+   */
+  tags?: string[];
   /** MAL content-rating levels (`NSFW_LEVELS`) — OR semantics, see `getNsfwLevel`. */
   nsfw?: string[];
 }
@@ -180,6 +186,14 @@ export function applyNarrowingFilters<T extends AnimeRecord>(
     out = out.filter(a => {
       const names = new Set((a.catalog.genres || []).map(g => g.name));
       return wanted.every(g => names.has(g));
+    });
+  }
+
+  if (f.tags && f.tags.length > 0) {
+    const wanted = f.tags;
+    out = out.filter(a => {
+      const names = filterTagNames(a);
+      return wanted.every(t => names.has(t));
     });
   }
 

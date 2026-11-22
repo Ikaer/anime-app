@@ -40,6 +40,7 @@ export const CREDITS_DEFAULTS: CreditsUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  tags: [],
   statuses: [],
   sortBy: 'start_date',
   sortDir: 'desc',

@@ -19,11 +19,11 @@ import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   decodeNarrowing, encodeNarrowing, parseUrlList, parseUrlNumber, NARROWING_API_KEYS,
-  NARROWING_FIELDS_NO_GENRES, type NarrowingUrlState,
+  NARROWING_FIELDS_NO_GENRES, type NarrowingUrlState, type VocabularyField,
 } from '@/lib/url/narrowingParams';
 
 /** No genre filter on this page — the narrowing set minus `genres`. */
-export interface ActivityUrlState extends Omit<NarrowingUrlState, 'genres'> {
+export interface ActivityUrlState extends Omit<NarrowingUrlState, VocabularyField> {
   /** Effective personal statuses to keep; empty = all of them. */
   statuses: string[];
   /** 0-based page. Server-side, like the filters. */

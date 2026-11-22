@@ -40,6 +40,8 @@ export const DEFAULT_SIDEBAR_EXPANDED: Record<string, boolean> = {
   // Collapsed by default: it is the tallest section in the sidebar, and the
   // default view (current-season TV) is not a genre-driven one.
   genres: false,
+  // Collapsed for the same reason, and taller still.
+  tags: false,
   sort: true,
   stats: true,
   simkl: true,

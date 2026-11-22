@@ -2,7 +2,7 @@
  * The narrowing-filter dimensions, encoded ONCE.
  *
  * `applyNarrowingFilters` is the one filter implementation (search, media type,
- * `mean` range, release-year range, genres). Its parameters used to be decoded
+ * `mean` range, release-year range, genres, AniList tags). Its parameters used to be decoded
  * by hand in seven URL hooks and six API routes, each with its own `num`/`csv`
  * — so adding a dimension meant thirteen edits, and forgetting one was silent:
  * the control moved, the list rendered, the filter just never reached the
@@ -32,6 +32,8 @@ export interface NarrowingUrlState {
   maxYear: number | null;
   /** MAL genre names — AND semantics, see `applyNarrowingFilters`. */
   genres: string[];
+  /** AniList tag names, rank >= `TAG_FILTER_MIN_RANK` — AND semantics. */
+  tags: string[];
   /** MAL content-rating levels (`NSFW_LEVELS`) — OR semantics. */
   nsfw: string[];
 }
@@ -46,6 +48,7 @@ export const NARROWING_DEFAULTS: NarrowingUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  tags: [],
   nsfw: [],
 };
 
@@ -57,6 +60,7 @@ export const NARROWING_URL_KEYS = {
   minYear: 'miny',
   maxYear: 'maxy',
   genres: 'g',
+  tags: 'tg',
   nsfw: 'ns',
 } as const satisfies Record<NarrowingField, string>;
 
@@ -68,19 +72,22 @@ export const NARROWING_API_KEYS = {
   minYear: 'minYear',
   maxYear: 'maxYear',
   genres: 'genres',
+  tags: 'tags',
   nsfw: 'nsfw',
 } as const satisfies Record<NarrowingField, string>;
 
 export const NARROWING_FIELDS = Object.keys(NARROWING_DEFAULTS) as NarrowingField[];
 
-/** Every field but `genres` — what `/activity` and `/catch-up` offer. */
-export const NARROWING_FIELDS_NO_GENRES = NARROWING_FIELDS.filter(f => f !== 'genres') as Exclude<
-  NarrowingField,
-  'genres'
->[];
+/** The two vocabulary filters (genres, AniList tags) that `/activity` and `/catch-up` do not offer. */
+export type VocabularyField = 'genres' | 'tags';
+
+/** Every field but `genres` and `tags` — what `/activity` and `/catch-up` offer. */
+export const NARROWING_FIELDS_NO_GENRES = NARROWING_FIELDS.filter(
+  f => f !== 'genres' && f !== 'tags',
+) as Exclude<NarrowingField, VocabularyField>[];
 
 const NUMBER_FIELDS = new Set<NarrowingField>(['minScore', 'maxScore', 'minYear', 'maxYear']);
-const LIST_FIELDS = new Set<NarrowingField>(['mediaTypes', 'genres', 'nsfw']);
+const LIST_FIELDS = new Set<NarrowingField>(['mediaTypes', 'genres', 'tags', 'nsfw']);
 
 /**
  * A URL number: empty or non-numeric is `null`, never `NaN`. Takes `unknown`
@@ -170,6 +177,7 @@ export function parseNarrowingQuery(query: Query): NarrowingFilters {
     minYear: num('minYear'),
     maxYear: num('maxYear'),
     genres: list('genres'),
+    tags: list('tags'),
     nsfw: list('nsfw'),
   };
 }

@@ -53,6 +53,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const { 
       search, 
       genres, 
+      tags,
       status, 
       minScore,
       maxScore,
@@ -138,6 +139,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       minScore: typeof minScore === 'string' ? parseFloat(minScore) : null,
       maxScore: typeof maxScore === 'string' ? parseFloat(maxScore) : null,
       nsfw: parseUrlList(nsfw),
+      tags: parseUrlList(tags),
     });
 
     // Apply hidden filter (NEW)
@@ -251,6 +253,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         favSeiyuu: (typeof favSeiyuuParam === 'string' ? favSeiyuuParam : null),
         unrated: (typeof unrated === 'string' ? unrated : null),
         genres: (typeof genres === 'string' ? genres : null),
+        tags: (typeof tags === 'string' ? tags : null),
         status: (typeof status === 'string' ? status : null),
         minScore: (typeof minScore === 'string' ? minScore : null),
         maxScore: (typeof maxScore === 'string' ? maxScore : null)

@@ -8,6 +8,7 @@ import {
   RecoWeightsSection,
   RecoSeedsSection,
   GenresSection,
+  TagsSection,
 } from '@/components/anime/sidebar';
 import type { MutedSeed } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
@@ -43,7 +44,7 @@ export default function RecommendationsPage() {
 
   // Sidebar collapse state (local — not URL-persisted on this page).
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    recos: true, views: true, seeds: false, weights: false, filters: true, genres: false, display: true,
+    recos: true, views: true, seeds: false, weights: false, filters: true, genres: false, tags: false, display: true,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -324,6 +325,9 @@ export default function RecommendationsPage() {
           collapsed — this page's headline controls are the engine knobs. */}
       <CollapsibleSection title={t('section.genres')} isExpanded={expanded.genres} onToggle={() => toggle('genres')}>
         <GenresSection genres={state.genres} onGenresChange={(v) => update({ genres: v })} />
+      </CollapsibleSection>
+      <CollapsibleSection title={t('section.tags')} isExpanded={expanded.tags} onToggle={() => toggle('tags')}>
+        <TagsSection tags={state.tags} onTagsChange={(v) => update({ tags: v })} />
       </CollapsibleSection>
 
     </div>

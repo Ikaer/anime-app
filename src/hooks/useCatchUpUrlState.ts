@@ -14,11 +14,11 @@ import { useRouter } from 'next/router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   decodeNarrowing, encodeNarrowing, parseUrlNumber, NARROWING_API_KEYS, NARROWING_DEFAULTS,
-  NARROWING_FIELDS_NO_GENRES, type NarrowingUrlState,
+  NARROWING_FIELDS_NO_GENRES, type NarrowingUrlState, type VocabularyField,
 } from '@/lib/url/narrowingParams';
 
 /** No genre filter on this page — the narrowing set minus `genres`. */
-export interface CatchUpUrlState extends Omit<NarrowingUrlState, 'genres'> {
+export interface CatchUpUrlState extends Omit<NarrowingUrlState, VocabularyField> {
   /** List entries that haven't aired yet. Default OFF. */
   unaired: boolean;
   /**

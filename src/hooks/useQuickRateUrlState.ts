@@ -33,6 +33,7 @@ export const QUICK_RATE_DEFAULTS: QuickRateUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  tags: [],
   statuses: [],
   autoComplete: true,
   page: 0,
@@ -52,7 +53,7 @@ const KEYS = {
  * so it deliberately preserves your position.)
  */
 const FILTER_KEYS = [
-  'search', 'mediaTypes', 'minScore', 'maxScore', 'minYear', 'maxYear', 'genres', 'statuses',
+  'search', 'mediaTypes', 'minScore', 'maxScore', 'minYear', 'maxYear', 'genres', 'tags', 'statuses',
 ] as const satisfies readonly (keyof QuickRateUrlState)[];
 
 function decode(params: URLSearchParams): QuickRateUrlState {

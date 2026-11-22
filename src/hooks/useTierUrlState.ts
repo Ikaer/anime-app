@@ -69,6 +69,7 @@ export const TIER_DEFAULTS: TierUrlState = {
   minYear: null,
   maxYear: null,
   genres: [],
+  tags: [],
   statuses: [],
   seasons: [],
   thumbSize: 1,

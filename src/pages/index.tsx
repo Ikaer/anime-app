@@ -58,6 +58,9 @@ export default function AnimePage() {
         params.set('genres', filters.genres.join(','));
       }
 
+      // AniList tags
+      if (filters.tags.length > 0) params.set('tags', filters.tags.join(','));
+
       // MAL content rating
       if (filters.nsfw.length > 0) params.set('nsfw', filters.nsfw.join(','));
 
@@ -125,6 +128,10 @@ export default function AnimePage() {
 
   const handleGenresChange = (genres: string[]) => {
     updateFilters({ genres });
+  };
+
+  const handleTagsChange = (tags: string[]) => {
+    updateFilters({ tags });
   };
 
   const handleNsfwChange = (nsfw: string[]) => {
@@ -197,6 +204,8 @@ export default function AnimePage() {
       onNsfwChange={handleNsfwChange}
       genres={filters.genres}
       onGenresChange={handleGenresChange}
+      tags={filters.tags}
+      onTagsChange={handleTagsChange}
       hiddenOnly={filters.hiddenOnly}
       onHiddenOnlyChange={handleHiddenOnlyChange}
       discrepanciesOnly={filters.discrepanciesOnly}

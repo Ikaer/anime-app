@@ -1027,6 +1027,7 @@ export interface AnimeListResponse {
     favSeiyuu: string | null;
     unrated: string | null;
     genres: string | null;
+    tags: string | null;
     status: string | null;
     minScore: string | null;
     maxScore: string | null;

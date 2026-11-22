@@ -57,6 +57,7 @@ const FULL: AnimeFiltersState = {
   seasons: [{ year: 2024, season: 'fall' }, { year: 1998, season: 'spring' }],
   mediaTypes: ['tv', 'ova'],
   genres: ['Action', 'Slice of Life', 'Sci-Fi'],
+  tags: ['Time Manipulation', 'Female Protagonist'],
   nsfw: ['white', 'unknown'],
   hiddenOnly: true,
   discrepanciesOnly: true,

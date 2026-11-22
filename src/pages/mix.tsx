@@ -24,6 +24,7 @@ import {
   RecoFiltersSection,
   RecoWeightsSection,
   GenresSection,
+  TagsSection,
   type MixAnchor,
 } from '@/components/anime/sidebar';
 import { Button, CollapsibleSection } from '@/components/shared';
@@ -57,7 +58,7 @@ export default function MixPage() {
   const [showAllExplains, setShowAllExplains] = useState(false);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    anchors: true, filters: true, genres: false, weights: false,
+    anchors: true, filters: true, genres: false, tags: false, weights: false,
   });
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -139,6 +140,9 @@ export default function MixPage() {
 
       <CollapsibleSection title={t('section.genres')} isExpanded={expanded.genres} onToggle={() => toggle('genres')}>
         <GenresSection genres={state.genres} onGenresChange={(v) => update({ genres: v })} />
+      </CollapsibleSection>
+      <CollapsibleSection title={t('section.tags')} isExpanded={expanded.tags} onToggle={() => toggle('tags')}>
+        <TagsSection tags={state.tags} onTagsChange={(v) => update({ tags: v })} />
       </CollapsibleSection>
 
       {/* Only the sources an anchored ranking actually uses — `suggestions` is

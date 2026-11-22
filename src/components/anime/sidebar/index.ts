@@ -7,6 +7,7 @@ export { default as RecoWeightPresetsSection } from './RecoWeightPresetsSection'
 export { default as DisplaySection } from './DisplaySection';
 export { default as FiltersSection } from './FiltersSection';
 export { default as GenresSection } from './GenresSection';
+export { default as TagsSection } from './TagsSection';
 export { default as RecoSeedsSection } from './RecoSeedsSection';
 export type { MutedSeed } from './RecoSeedsSection';
 export { default as MixAnchorsSection } from './MixAnchorsSection';
