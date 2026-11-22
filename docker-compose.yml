@@ -1,9 +1,10 @@
-version: '3.8'
-
 services:
   anime-tracker:
     image: anime-tracker:${BUILD_VERSION:-latest}
-    build: 
+    # Rebuild on every deploy, so a plain "Pull and redeploy" ships the new
+    # commit without bumping BUILD_VERSION (an existing tag is otherwise reused).
+    pull_policy: build
+    build:
       context: .
       args:
         - BUILD_DATE=2025-07-14-v4
@@ -20,8 +21,11 @@ services:
       # cron container below can never drift apart. NOTE: a `cronSecret` stored
       # in settings.json takes PRECEDENCE over this (resolveSetting reads stored
       # before env), so the two must hold the same value — or clear the stored
-      # one and let this be the single source.
-      - CRON_SECRET=${CRON_SECRET}
+      # one and let this be the single source. The stored one was cleared on
+      # 2026-11-22: leave the field empty in /settings so this stays the source.
+      # `:?` fails the deploy when the variable is missing: an empty CRON_SECRET
+      # would make /api/anime/cron-sync skip its auth check altogether.
+      - CRON_SECRET=${CRON_SECRET:?set CRON_SECRET in the stack variables}
     restart: unless-stopped
     container_name: anime-tracker
     user: "0:0"
@@ -34,7 +38,7 @@ services:
       # Same substitution as the app above, so the two still cannot drift. The
       # difference is what happens next: the value reaches the JOB through a
       # file, never through the crontab.
-      - CRON_SECRET=${CRON_SECRET}
+      - CRON_SECRET=${CRON_SECRET:?set CRON_SECRET in the stack variables}
     # ⚠️ The secret must never be interpolated into a `printf` FORMAT string,
     # and must never land in /etc/crontabs/root. Baking it in is what silently
     # killed the 02:00 tick (2026-08-24): a metacharacter in the value truncated
